@@ -80,11 +80,9 @@ type ExBudget struct {
 	cpu int64
 }
 
-func (ex ExBudget) occurrences(n uint32) ExBudget {
-	return ExBudget{
-		mem: ex.mem * int64(n),
-		cpu: ex.cpu * int64(n),
-	}
+func (ex *ExBudget) occurrences(n uint32) {
+	ex.mem *= int64(n)
+	ex.cpu *= int64(n)
 }
 
 var DefaultExBudget = ExBudget{
