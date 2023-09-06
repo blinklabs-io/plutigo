@@ -66,8 +66,21 @@ type Apply[T Binder] struct {
 	Argument Term[T]
 }
 
+// (builtin addInteger)
 type Builtin struct {
 	DefaultFunction
+}
+
+// (constr 0 (con integer 1) (con string "1234"))
+type Constr[T Binder] struct {
+	Tag    uint64
+	fields []Term[T]
+}
+
+// (case (constr 0) (constr 1 (con integer 1)))
+type Case[T Binder] struct {
+	Constr   Term[T]
+	Branches []Term[T]
 }
 
 type Error struct{}
