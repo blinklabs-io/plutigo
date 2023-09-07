@@ -30,7 +30,8 @@ jobs:
         uses: golangci/golangci-lint-action@v3
         with:
           version: v1.53.3 # current version at time of commit
-          args: --timeout=10m
+          # We disable the 'unused' linter check to avoid annoying linter warnings during initial development
+          args: --timeout=10m --disable unused
           only-new-issues: true
       - name: go-test
         run: go test ./...
