@@ -213,19 +213,21 @@ func CreateMachine(slippage uint32) Machine {
 
 func (m *Machine) Run(term *Term[NamedDeBruijn]) (Term[NamedDeBruijn], error) {
 	startupBudget := m.costs.machineCosts.startup
-	m.spendBudget(startupBudget)
+	if err := m.spendBudget(startupBudget); err != nil {
+		return nil, err
+	}
 
 	var state MachineState = Compute{ctx: NoFrame{}, env: make([]Value, 0), term: term}
 
 	var err error
 	for {
-		switch state.(type) {
+		switch v := state.(type) {
 		case Compute:
 			state, err = m.compute()
 		case Return:
 			state, err = m.returnCompute()
 		case Done:
-			return state.(Done).term, nil
+			return v.term, nil
 		}
 
 		if err != nil {
