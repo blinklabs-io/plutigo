@@ -27,7 +27,7 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v4
         with:
           version: v1.53.3 # current version at time of commit
           # We disable the 'unused' linter check to avoid annoying linter warnings during initial development
