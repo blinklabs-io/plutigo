@@ -1,4 +1,4 @@
-package plutus
+package pkg
 
 type Program[T Binder] struct {
 	version [3]uint32
