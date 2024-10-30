@@ -1,4 +1,4 @@
-package plutus
+package pkg
 
 import (
 	"errors"
