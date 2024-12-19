@@ -59,7 +59,9 @@ func (m *Machine) compute(
 
 	switch t := term.(type) {
 	case syn.Var[syn.NamedDeBruijn]:
-		m.stepAndMaybeSpend(ExVar)
+		if err := m.stepAndMaybeSpend(ExVar); err != nil {
+			return nil, err
+		}
 
 		value, exists := env.lookup(uint(t.Name.Index))
 
