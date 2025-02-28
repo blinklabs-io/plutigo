@@ -1,12 +1,12 @@
-# This is copied from upstream and modified slightly
-# https://github.com/andrewslotin/go-proxy-pull-action/blob/master/README.md
-
 on:
   release:
     types:
       - created
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  content: read
 
 jobs:
   build:
