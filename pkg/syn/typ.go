@@ -1,4 +1,4 @@
-package pkg
+package syn
 
 type Typ interface{}
 

@@ -1,4 +1,4 @@
-package pkg
+package syn
 
 import (
 	"math/big"
