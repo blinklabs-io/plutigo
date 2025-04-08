@@ -1,6 +1,10 @@
-package pkg
+package syn
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/blinklabs-io/plutigo/pkg/builtin"
+)
 
 type Term[T Binder] interface{}
 
@@ -68,7 +72,7 @@ type Apply[T Binder] struct {
 
 // (builtin addInteger)
 type Builtin struct {
-	DefaultFunction
+	builtin.DefaultFunction
 }
 
 // (constr 0 (con integer 1) (con string "1234"))

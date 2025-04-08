@@ -1,4 +1,4 @@
-package pkg
+package builtin
 
 type DefaultFunction uint8
 
