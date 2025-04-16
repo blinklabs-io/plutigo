@@ -31,7 +31,7 @@ func (m *Machine) Run(term *syn.Term[syn.NamedDeBruijn]) (syn.Term[syn.NamedDeBr
 		return nil, err
 	}
 
-	var state MachineState = Compute{ctx: NoFrame{}, env: make([]Value, 0), term: term}
+	var state MachineState = Compute{ctx: NoFrame{}, env: make([]Value, 0), term: *term}
 	var err error
 
 	for {
