@@ -1,11 +1,11 @@
 # Makefile for Go project
-.PHONY: test testrun fmt clean
+.PHONY: test test-one fmt clean
 
 test: ## Run tests
 	@echo "Running tests..."
 	@go test -v ./...
 
-test-one: ## Run specific tests (usage: make testrun TEST=TestName)
+test-one: ## Run specific tests (usage: make test-one TEST=TestName)
 	@echo "Running test: $(TEST)..."
 	@go test -run $(TEST) -v ./...
 
