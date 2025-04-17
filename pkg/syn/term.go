@@ -7,7 +7,7 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/builtin"
 )
 
-type Term[T Binder] interface {
+type Term[T any] interface {
 	fmt.Stringer
 	isTerm()
 }
@@ -136,7 +136,7 @@ func (v Builtin) String() string {
 // (constr 0 (con integer 1) (con string "1234"))
 type Constr[T Binder] struct {
 	Tag    uint64
-	fields []Term[T]
+	Fields *[]Term[T]
 }
 
 func (Constr[T]) isTerm() {}

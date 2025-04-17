@@ -1,276 +1,441 @@
 package syn
 
 import (
-	"errors"
 	"fmt"
 	"math/big"
-	"regexp"
 	"strconv"
-	"strings"
 
 	"github.com/blinklabs-io/plutigo/pkg/builtin"
+	"github.com/blinklabs-io/plutigo/pkg/syn/lex"
 )
 
+type Parser struct {
+	lexer         *lex.Lexer
+	curToken      lex.Token
+	peekToken     lex.Token
+	interned      map[string]Unique
+	uniqueCounter Unique
+}
+
+func NewParser(input string) *Parser {
+	p := &Parser{
+		lexer:         lex.NewLexer(input),
+		interned:      make(map[string]Unique),
+		uniqueCounter: 0,
+	}
+
+	p.nextToken()
+
+	return p
+}
+
+func (p *Parser) nextToken() {
+	p.curToken = p.peekToken
+
+	p.peekToken = p.lexer.NextToken()
+}
+
+func (p *Parser) expect(typ lex.TokenType) error {
+	if p.curToken.Type != typ {
+		return fmt.Errorf("expected %v, got %v at position %d", typ, p.curToken.Type, p.curToken.Position)
+	}
+
+	p.nextToken()
+
+	return nil
+}
+
+func (p *Parser) internName(text string) Name {
+	if unique, exists := p.interned[text]; exists {
+		return Name{Text: text, Unique: unique}
+	}
+
+	unique := p.uniqueCounter
+
+	p.interned[text] = unique
+
+	p.uniqueCounter++
+
+	return Name{Text: text, Unique: unique}
+}
+
 func Parse(input string) (*Program[Name], error) {
-	input = normalizeInput(input)
+	p := NewParser(input)
 
-	// debugLog(1, "Normalized input:\n%s", input)
-
-	if !strings.HasPrefix(input, "(program") {
-		return nil, fmt.Errorf("program must start with (program")
-	}
-
-	// Extract version and body
-	versionEnd := strings.Index(input, ")")
-	if versionEnd == -1 {
-		return nil, fmt.Errorf("missing closing parenthesis for program")
-	}
-
-	body := strings.TrimSpace(input[versionEnd+1:])
-	if len(body) == 0 {
-		return nil, fmt.Errorf("empty program body")
-	}
-
-	term, err := ParseTerm(body)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse program body: %w", err)
-	}
-
-	return &Program[Name]{Term: term}, nil
+	return p.ParseProgram()
 }
 
-func ParseTerm(input string) (Term[Name], error) {
-	input = strings.TrimSpace(input)
-
-	// debugLog(3, "ParseTerm input: %q", input)
-
-	// Handle parenthesized terms
-	if strings.HasPrefix(input, "(") && strings.HasSuffix(input, ")") {
-		inner := strings.TrimSpace(input[1 : len(input)-1])
-		return parseParenthesizedTerm(inner)
+func (p *Parser) ParseProgram() (*Program[Name], error) {
+	if err := p.expect(lex.TokenLParen); err != nil {
+		return nil, err
 	}
 
-	// Handle applications
-	if strings.HasPrefix(input, "[") {
-		return ParseApplication(input)
+	if err := p.expect(lex.TokenProgram); err != nil {
+		return nil, err
 	}
 
-	// Handle simple terms (variables, etc.)
-	return parseSimpleTerm(input)
-}
+	var version [3]uint32
 
-func parseParenthesizedTerm(input string) (Term[Name], error) {
-	parts := strings.SplitN(input, " ", 2)
-
-	if len(parts) == 0 {
-		return nil, fmt.Errorf("empty parenthesized term")
-	}
-
-	keyword := parts[0]
-
-	rest := ""
-
-	if len(parts) > 1 {
-		rest = strings.TrimSpace(parts[1])
-	}
-
-	switch keyword {
-	case "builtin":
-		return parseBuiltin(rest)
-	case "force":
-		return parseForce(rest)
-	case "delay":
-		return parseDelay(rest)
-	case "lam":
-		return parseLambda(rest)
-	case "con":
-		return parseConstant(rest)
-	default:
-		return nil, fmt.Errorf("unknown keyword in parenthesized term: %s", keyword)
-	}
-}
-
-func normalizeInput(input string) string {
-	// Remove comments
-	input = regexp.MustCompile(`--.*`).ReplaceAllString(input, "")
-
-	// Normalize whitespace
-	input = regexp.MustCompile(`\s+`).ReplaceAllString(input, " ")
-
-	// Trim leading/trailing whitespace
-	return strings.TrimSpace(input)
-}
-
-func parseBuiltin(input string) (Builtin, error) {
-	name := strings.TrimSpace(input)
-	if defaultFunction, ok := builtin.Builtins[name]; ok {
-		return Builtin{defaultFunction}, nil
-	}
-
-	return Builtin{}, fmt.Errorf("unknown builtin: %s", name)
-}
-
-func parseForce(input string) (Term[Name], error) {
-	term, err := ParseTerm(input)
-	if err != nil {
-		return nil, fmt.Errorf("force parse failed: %w", err)
-	}
-
-	return Force[Name]{Term: term}, nil
-}
-
-func parseDelay(input string) (Term[Name], error) {
-	term, err := ParseTerm(input)
-	if err != nil {
-		return nil, fmt.Errorf("delay parse failed: %w", err)
-	}
-	return Lambda[Name]{Body: term}, nil
-}
-
-func parseLambda(input string) (Term[Name], error) {
-	// Skip variable name (not used in De Bruijn indexing)
-	bodyStart := strings.Index(input, " ")
-	if bodyStart == -1 {
-		return nil, fmt.Errorf("invalid lambda format")
-	}
-	body := strings.TrimSpace(input[bodyStart:])
-
-	term, err := ParseTerm(body)
-	if err != nil {
-		return nil, fmt.Errorf("lambda body parse failed: %w", err)
-	}
-
-	v := Name{
-		Text:   "placeholder",
-		Unique: Unique(0),
-	}
-
-	return Lambda[Name]{ParameterName: v, Body: term}, nil
-}
-
-func parseConstant(input string) (Term[Name], error) {
-	parts := strings.SplitN(input, " ", 2)
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid constant format")
-	}
-
-	typ := parts[0]
-	value := strings.TrimSpace(parts[1])
-
-	switch typ {
-	case "integer":
-		val, ok := new(big.Int).SetString(value, 10)
-		if !ok {
-			return nil, fmt.Errorf("invalid integer: %s", value)
+	for i := 0; i < 3; i++ {
+		if p.curToken.Type != lex.TokenNumber {
+			return nil, fmt.Errorf("expected version number, got %v at position %d", p.curToken.Type, p.curToken.Position)
 		}
 
-		return Constant{Integer{Inner: val}}, nil
-	case "bool":
-		val, err := strconv.ParseBool(value)
+		n, err := strconv.ParseUint(p.curToken.Literal, 10, 32)
+
 		if err != nil {
-			return nil, fmt.Errorf("invalid bool: %w", err)
+			return nil, fmt.Errorf("invalid version number %s at position %d: %v", p.curToken.Literal, p.curToken.Position, err)
 		}
 
-		return Constant{Bool{Inner: val}}, nil
-	case "unit":
-		return Constant{Unit{}}, nil
-	default:
-		return nil, errors.New("unknown constant type")
-	}
-}
+		version[i] = uint32(n)
 
-func ParseApplication(input string) (Term[Name], error) {
-	if !strings.HasPrefix(input, "[") || !strings.HasSuffix(input, "]") {
-		return nil, fmt.Errorf("invalid application format")
-	}
+		p.nextToken()
 
-	inner := strings.TrimSpace(input[1 : len(input)-1])
-	if inner == "" {
-		return nil, fmt.Errorf("empty application")
-	}
-
-	terms, err := splitTerms(inner)
-	if err != nil {
-		return nil, fmt.Errorf("failed to split application terms: %w", err)
-	}
-
-	if len(terms) < 2 {
-		return nil, fmt.Errorf("application requires at least 2 terms")
-	}
-
-	fun, err := ParseTerm(terms[0])
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse function: %w", err)
-	}
-
-	var result Term[Name] = fun
-	for _, argStr := range terms[1:] {
-		arg, err := ParseTerm(argStr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse argument: %w", err)
-		}
-		result = Apply[Name]{Function: result, Argument: arg}
-	}
-
-	return result, nil
-}
-
-func splitTerms(input string) ([]string, error) {
-	var terms []string
-	var current strings.Builder
-	depth := 0
-
-	for _, r := range input {
-		switch r {
-		case '(', '[':
-			depth++
-			current.WriteRune(r)
-		case ')', ']':
-			depth--
-			current.WriteRune(r)
-		case ' ':
-			if depth == 0 {
-				if current.Len() > 0 {
-					terms = append(terms, current.String())
-					current.Reset()
-				}
-			} else {
-				current.WriteRune(r)
+		if i < 2 {
+			if err := p.expect(lex.TokenDot); err != nil {
+				return nil, err
 			}
-		default:
-			current.WriteRune(r)
 		}
 	}
 
-	if current.Len() > 0 {
-		terms = append(terms, current.String())
+	term, err := p.ParseTerm()
+
+	if err != nil {
+		return nil, err
 	}
 
-	return terms, nil
+	if err := p.expect(lex.TokenRParen); err != nil {
+		return nil, err
+	}
+
+	if p.curToken.Type != lex.TokenEOF {
+		return nil, fmt.Errorf("unexpected token %v after program at position %d", p.curToken.Type, p.curToken.Position)
+	}
+
+	return &Program[Name]{Version: version, Term: term}, nil
 }
 
-func parseSimpleTerm(input string) (Term[Name], error) {
-	input = strings.TrimSpace(input)
+func (p *Parser) ParseTerm() (Term[Name], error) {
+	switch p.curToken.Type {
+	case lex.TokenIdentifier:
+		name := p.internName(p.curToken.Literal)
 
-	// debugLog(3, "parseSimpleTerm input: %q", input)
+		p.nextToken()
 
-	if _, err := strconv.Atoi(input); err == nil {
-		index, err := strconv.Atoi(input)
+		return &Var[Name]{Name: name}, nil
+	case lex.TokenLParen:
+		p.nextToken()
+		switch p.curToken.Type {
+		case lex.TokenLam:
+			return p.parseLambda()
+		case lex.TokenDelay:
+			return p.parseDelay()
+		case lex.TokenForce:
+			return p.parseForce()
+		case lex.TokenBuiltin:
+			return p.parseBuiltin()
+		case lex.TokenConstr:
+			return p.parseConstr()
+		case lex.TokenCase:
+			return p.parseCase()
+		case lex.TokenCon:
+			return p.parseConstant()
+		case lex.TokenErrorTerm:
+			p.nextToken()
 
-		if err != nil {
-			return nil, fmt.Errorf("invalid variable index: %w", err)
+			if err := p.expect(lex.TokenRParen); err != nil {
+				return nil, err
+			}
+
+			return &Error{}, nil
+		default:
+			return nil, fmt.Errorf("unexpected token %v in term at position %d", p.curToken.Type, p.curToken.Position)
 		}
+	case lex.TokenLBracket:
+		return p.parseApply()
+	default:
+		return nil, fmt.Errorf("unexpected token %v in term at position %d", p.curToken.Type, p.curToken.Position)
+	}
+}
 
-		v := Var[Name]{
-			Name: Name{
-				Text:   "placeholder",
-				Unique: Unique(index),
-			},
-		}
-
-		return v, nil
+func (p *Parser) parseLambda() (Term[Name], error) {
+	if err := p.expect(lex.TokenLam); err != nil {
+		return nil, err
 	}
 
-	return nil, fmt.Errorf("unsupported term format: %q", input)
+	if p.curToken.Type != lex.TokenIdentifier {
+		return nil, fmt.Errorf("expected identifier, got %v at position %d", p.curToken.Type, p.curToken.Position)
+	}
+
+	name := p.internName(p.curToken.Literal)
+
+	p.nextToken()
+
+	body, err := p.ParseTerm()
+
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.expect(lex.TokenRParen); err != nil {
+		return nil, err
+	}
+
+	return &Lambda[Name]{ParameterName: name, Body: body}, nil
+}
+
+func (p *Parser) parseDelay() (Term[Name], error) {
+	if err := p.expect(lex.TokenDelay); err != nil {
+		return nil, err
+	}
+
+	term, err := p.ParseTerm()
+
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.expect(lex.TokenRParen); err != nil {
+		return nil, err
+	}
+
+	return &Delay[Name]{Term: term}, nil
+}
+
+func (p *Parser) parseForce() (Term[Name], error) {
+	if err := p.expect(lex.TokenForce); err != nil {
+		return nil, err
+	}
+
+	term, err := p.ParseTerm()
+
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.expect(lex.TokenRParen); err != nil {
+		return nil, err
+	}
+
+	return &Force[Name]{Term: term}, nil
+}
+
+func (p *Parser) parseBuiltin() (Term[Name], error) {
+	if err := p.expect(lex.TokenBuiltin); err != nil {
+		return nil, err
+	}
+
+	if p.curToken.Type != lex.TokenIdentifier {
+		return nil, fmt.Errorf("expected builtin name, got %v at position %d", p.curToken.Type, p.curToken.Position)
+	}
+
+	name := p.curToken.Literal
+
+	fn, ok := builtin.Builtins[name]
+
+	if !ok {
+		return nil, fmt.Errorf("unknown builtin function %s at position %d", name, p.curToken.Position)
+	}
+
+	p.nextToken()
+
+	if err := p.expect(lex.TokenRParen); err != nil {
+		return nil, err
+	}
+
+	return &Builtin{DefaultFunction: fn}, nil // Adjust based on builtin package
+}
+
+func (p *Parser) parseConstr() (Term[Name], error) {
+	if err := p.expect(lex.TokenConstr); err != nil {
+		return nil, err
+	}
+
+	if p.curToken.Type != lex.TokenNumber {
+		return nil, fmt.Errorf("expected tag number, got %v at position %d", p.curToken.Type, p.curToken.Position)
+	}
+
+	n, err := strconv.ParseUint(p.curToken.Literal, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid constr tag %s at position %d: %v", p.curToken.Literal, p.curToken.Position, err)
+	}
+
+	tag := n
+
+	p.nextToken()
+
+	var fields []Term[Name]
+
+	for p.curToken.Type != lex.TokenRParen {
+		term, err := p.ParseTerm()
+		if err != nil {
+			return nil, err
+		}
+
+		fields = append(fields, term)
+	}
+
+	if err := p.expect(lex.TokenRParen); err != nil {
+		return nil, err
+	}
+
+	return &Constr[Name]{Tag: tag, Fields: &fields}, nil
+}
+
+func (p *Parser) parseCase() (Term[Name], error) {
+	if err := p.expect(lex.TokenCase); err != nil {
+		return nil, err
+	}
+
+	constr, err := p.ParseTerm()
+	if err != nil {
+		return nil, err
+	}
+
+	var branches []Term[Name]
+
+	for p.curToken.Type != lex.TokenRParen {
+		branch, err := p.ParseTerm()
+		if err != nil {
+			return nil, err
+		}
+
+		branches = append(branches, branch)
+	}
+
+	if err := p.expect(lex.TokenRParen); err != nil {
+		return nil, err
+	}
+
+	return &Case[Name]{Constr: constr, Branches: branches}, nil
+}
+
+func (p *Parser) parseConstant() (Term[Name], error) {
+	if err := p.expect(lex.TokenCon); err != nil {
+		return nil, err
+	}
+
+	switch p.curToken.Type {
+	case lex.TokenIdentifier:
+		switch p.curToken.Literal {
+		case "integer":
+			p.nextToken()
+
+			if p.curToken.Type != lex.TokenNumber {
+				return nil, fmt.Errorf("expected integer value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+			}
+
+			n, ok := p.curToken.Value.(*big.Int)
+			if !ok {
+				return nil, fmt.Errorf("invalid integer value %s at position %d", p.curToken.Literal, p.curToken.Position)
+			}
+
+			p.nextToken()
+
+			if err := p.expect(lex.TokenRParen); err != nil {
+				return nil, err
+			}
+
+			return &Constant{IConstant: &Integer{Inner: n}}, nil
+		case "bytestring":
+			p.nextToken()
+
+			if p.curToken.Type != lex.TokenByteString {
+				return nil, fmt.Errorf("expected bytestring value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+			}
+
+			b, ok := p.curToken.Value.([]byte)
+			if !ok {
+				return nil, fmt.Errorf("invalid bytestring value %s at position %d", p.curToken.Literal, p.curToken.Position)
+			}
+
+			p.nextToken()
+
+			if err := p.expect(lex.TokenRParen); err != nil {
+				return nil, err
+			}
+			return &Constant{IConstant: &ByteString{Inner: b}}, nil
+		case "string":
+			p.nextToken()
+
+			if p.curToken.Type != lex.TokenString {
+				return nil, fmt.Errorf("expected string value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+			}
+
+			s, ok := p.curToken.Value.(string)
+			if !ok {
+				return nil, fmt.Errorf("invalid string value %s at position %d", p.curToken.Literal, p.curToken.Position)
+			}
+
+			p.nextToken()
+
+			if err := p.expect(lex.TokenRParen); err != nil {
+				return nil, err
+			}
+
+			return &Constant{IConstant: &String{Inner: s}}, nil
+		case "bool":
+			p.nextToken()
+
+			var b bool
+
+			if p.curToken.Type == lex.TokenTrue {
+				b = true
+			} else if p.curToken.Type == lex.TokenFalse {
+				b = false
+			} else {
+				return nil, fmt.Errorf("expected bool value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+			}
+
+			p.nextToken()
+
+			if err := p.expect(lex.TokenRParen); err != nil {
+				return nil, err
+			}
+
+			return &Constant{IConstant: &Bool{Inner: b}}, nil
+		case "unit":
+			p.nextToken()
+
+			if p.curToken.Type != lex.TokenUnit {
+				return nil, fmt.Errorf("expected unit value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+			}
+
+			p.nextToken()
+
+			if err := p.expect(lex.TokenRParen); err != nil {
+				return nil, err
+			}
+
+			return &Constant{IConstant: &Unit{}}, nil
+		default:
+			return nil, fmt.Errorf("unknown constant type %s at position %d", p.curToken.Literal, p.curToken.Position)
+		}
+	default:
+		return nil, fmt.Errorf("expected constant type, got %v at position %d", p.curToken.Type, p.curToken.Position)
+	}
+}
+
+func (p *Parser) parseApply() (Term[Name], error) {
+	if err := p.expect(lex.TokenLBracket); err != nil {
+		return nil, err
+	}
+
+	function, err := p.ParseTerm()
+
+	if err != nil {
+		return nil, err
+	}
+
+	argument, err := p.ParseTerm()
+
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.expect(lex.TokenRBracket); err != nil {
+		return nil, err
+	}
+
+	return &Apply[Name]{Function: function, Argument: argument}, nil
 }

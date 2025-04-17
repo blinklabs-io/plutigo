@@ -62,10 +62,14 @@ func TestParseApplication(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := syn.ParseApplication(tc.input)
+			parser := syn.NewParser(tc.input)
+
+			got, err := parser.ParseTerm()
+
 			if err != nil {
 				t.Fatalf("parseApplication(%q) failed: %v", tc.input, err)
 			}
+
 			if got.String() != tc.want {
 				t.Errorf("got %v, want %v", got.String(), tc.want)
 			}
@@ -118,10 +122,14 @@ func TestParseTerm(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := syn.ParseTerm(tc.input)
+			parser := syn.NewParser(tc.input)
+
+			got, err := parser.ParseTerm()
+
 			if err != nil {
 				t.Fatalf("parseTerm(%q) failed: %v", tc.input, err)
 			}
+
 			if got.String() != tc.want {
 				t.Errorf("got %v, want %v", got.String(), tc.want)
 			}
