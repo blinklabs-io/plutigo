@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -27,103 +28,114 @@ func debugLog(level int, format string, args ...interface{}) {
 
 // ==================== Test Cases ====================
 
-func TestParseApplication(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name:  "simple application",
-			input: "[ (builtin addInteger) (con integer 1) (con integer 2) ]",
-			want:  "App(App(Builtin(addInteger), Con(integer, 1)), Con(integer, 2))",
-		},
-		{
-			name:  "force application",
-			input: "[ (builtin force) (builtin f) ]",
-			want:  "App(Builtin(force), Builtin(f))",
-		},
-		{
-			name:  "nested application",
-			input: "[ [ (builtin addInteger) (con integer 1) ] [ (builtin subtractInteger) (con integer 2) ] ]",
-			want:  "App(App(Builtin(addInteger), Con(integer, 1)), App(Builtin(subtractInteger), Con(integer, 2)))",
-		},
-		{
-			name:  "lambda application",
-			input: "[ (lam x [ (builtin addInteger) x (con integer 1) ]) (con integer 5) ]",
-			want:  "App(Lam(App(App(Builtin(addInteger), Var(0)), Con(integer, 1))), Con(integer, 5))",
-		},
-		{
-			name:  "complex force expression",
-			input: "[ (force [ (builtin f) (con integer 1) ]) (con integer 2) ]",
-			want:  "App(App(Builtin(force), App(Builtin(f), Con(integer, 1))), Con(integer, 2))",
-		},
-	}
+func TestParse(t *testing.T) {
+	t.Run("program", func(t *testing.T) {
+		input := "(program 1.1.0 (con integer 1))"
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := syn.ParseApplication(tc.input)
-			if err != nil {
-				t.Fatalf("parseApplication(%q) failed: %v", tc.input, err)
-			}
-			if got.String() != tc.want {
-				t.Errorf("got %v, want %v", got.String(), tc.want)
-			}
-		})
-	}
+		program, err := syn.Parse(input)
+
+		if err != nil {
+			t.Fatalf("syn.Parse(%q) failed: %v", input, err)
+		}
+
+		want := syn.NewProgram(
+			[3]uint32{1, 1, 0},
+			syn.NewSimpleInteger(1),
+		)
+
+		if !reflect.DeepEqual(program, want) {
+			t.Errorf("got %+v, want %+v", program, want)
+		}
+	})
+
 }
 
 func TestParseTerm(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
-		want  string
+		want  syn.Term[syn.Name]
 	}{
 		{
 			name:  "builtin",
 			input: "(builtin addInteger)",
-			want:  "Builtin(addInteger)",
-		},
-		{
-			name:  "force",
-			input: "(force (builtin f))",
-			want:  "App(Builtin(force), Builtin(f))",
+			want:  syn.AddInteger(),
 		},
 		{
 			name:  "delay",
-			input: "(delay (builtin f))",
-			want:  "Lam(Builtin(f))",
-		},
-		{
-			name:  "lambda",
-			input: "(lam x (builtin f))",
-			want:  "Lam(Builtin(f))",
+			input: "(delay (builtin addInteger))",
+			want:  syn.NewDelay(syn.AddInteger()),
 		},
 		{
 			name:  "constant integer",
 			input: "(con integer 42)",
-			want:  "Con(integer, 42)",
+			want:  syn.NewSimpleInteger(42),
 		},
 		{
 			name:  "constant bool",
 			input: "(con bool True)",
-			want:  "Con(bool, true)",
+			want:  syn.NewBool(true),
 		},
 		{
-			name:  "nested force",
-			input: "(force (force (builtin f)))",
-			want:  "App(Builtin(force), App(Builtin(force), Builtin(f)))",
+			name:  "simple application",
+			input: "[[(builtin addInteger) (con integer 1)] (con integer 2)]",
+			want: syn.Intern(
+				syn.NewApply(
+					syn.NewApply(syn.AddInteger(), syn.NewSimpleInteger(1)),
+					syn.NewSimpleInteger(2),
+				),
+			),
+		},
+		{
+			name:  "force builtin",
+			input: "(force (builtin ifThenElse))",
+			want: syn.Intern(
+				syn.NewForce(syn.IfThenElse()),
+			),
+		},
+		{
+			name:  "nested application",
+			input: "[ [(builtin addInteger) (con integer 1)] [ (builtin subtractInteger) (con integer 2) (con integer 1) ] ]",
+			want: syn.Intern(
+				syn.NewApply(
+					syn.NewApply(syn.AddInteger(), syn.NewSimpleInteger(1)),
+					syn.NewApply(
+						syn.NewApply(syn.SubtractInteger(), syn.NewSimpleInteger(2)),
+						syn.NewSimpleInteger(1),
+					),
+				),
+			),
+		},
+		{
+			name:  "lambda application",
+			input: "[ (lam x [ (builtin addInteger) x (con integer 1) ]) (con integer 5) ]",
+			want: syn.Intern(
+				syn.NewApply(
+					syn.NewLambda(
+						syn.NewRawName("x"),
+						syn.NewApply(
+							syn.NewApply(syn.AddInteger(), syn.NewRawVar("x")),
+							syn.NewSimpleInteger(1),
+						),
+					),
+					syn.NewSimpleInteger(5),
+				),
+			),
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := syn.ParseTerm(tc.input)
+			parser := syn.NewParser(tc.input)
+
+			got, err := parser.ParseTerm()
+
 			if err != nil {
-				t.Fatalf("parseTerm(%q) failed: %v", tc.input, err)
+				t.Fatalf("parseApplication(%q) failed: %v", tc.input, err)
 			}
-			if got.String() != tc.want {
-				t.Errorf("got %v, want %v", got.String(), tc.want)
+
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("got %+v, want %+v", got, tc.want)
 			}
 		})
 	}
@@ -286,17 +298,17 @@ func alphaEquivalent(a syn.Term[syn.NamedDeBruijn], b syn.Term[syn.NamedDeBruijn
 		}
 	case syn.Constant:
 		if bTerm, ok := b.(syn.Constant); ok {
-			switch aConstant := aTerm.IConstant.(type) {
+			switch aConstant := aTerm.Con.(type) {
 			case syn.Integer:
-				if bConstant, ok := bTerm.IConstant.(syn.Integer); ok {
+				if bConstant, ok := bTerm.Con.(syn.Integer); ok {
 					return aConstant.Inner == bConstant.Inner
 				}
 			case syn.String:
-				if bConstant, ok := bTerm.IConstant.(syn.String); ok {
+				if bConstant, ok := bTerm.Con.(syn.String); ok {
 					return aConstant.Inner == bConstant.Inner
 				}
 			case syn.Bool:
-				if bConstant, ok := bTerm.IConstant.(syn.Bool); ok {
+				if bConstant, ok := bTerm.Con.(syn.Bool); ok {
 					return aConstant.Inner == bConstant.Inner
 				}
 			}
