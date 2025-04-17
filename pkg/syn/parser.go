@@ -24,7 +24,8 @@ func NewParser(input string) *Parser {
 		uniqueCounter: 0,
 	}
 
-	p.nextToken()
+	p.curToken = p.lexer.NextToken()
+	p.peekToken = p.lexer.NextToken()
 
 	return p
 }
@@ -307,7 +308,7 @@ func (p *Parser) parseCase() (Term[Name], error) {
 		return nil, err
 	}
 
-	return &Case[Name]{Constr: constr, Branches: branches}, nil
+	return &Case[Name]{Constr: constr, Branches: &branches}, nil
 }
 
 func (p *Parser) parseConstant() (Term[Name], error) {
@@ -336,7 +337,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				return nil, err
 			}
 
-			return &Constant{IConstant: &Integer{Inner: n}}, nil
+			return &Constant{Con: &Integer{Inner: n}}, nil
 		case "bytestring":
 			p.nextToken()
 
@@ -354,7 +355,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			if err := p.expect(lex.TokenRParen); err != nil {
 				return nil, err
 			}
-			return &Constant{IConstant: &ByteString{Inner: b}}, nil
+			return &Constant{Con: &ByteString{Inner: b}}, nil
 		case "string":
 			p.nextToken()
 
@@ -373,7 +374,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				return nil, err
 			}
 
-			return &Constant{IConstant: &String{Inner: s}}, nil
+			return &Constant{Con: &String{Inner: s}}, nil
 		case "bool":
 			p.nextToken()
 
@@ -393,7 +394,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				return nil, err
 			}
 
-			return &Constant{IConstant: &Bool{Inner: b}}, nil
+			return &Constant{Con: &Bool{Inner: b}}, nil
 		case "unit":
 			p.nextToken()
 
@@ -407,7 +408,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				return nil, err
 			}
 
-			return &Constant{IConstant: &Unit{}}, nil
+			return &Constant{Con: &Unit{}}, nil
 		default:
 			return nil, fmt.Errorf("unknown constant type %s at position %d", p.curToken.Literal, p.curToken.Position)
 		}
@@ -415,27 +416,28 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 		return nil, fmt.Errorf("expected constant type, got %v at position %d", p.curToken.Type, p.curToken.Position)
 	}
 }
-
 func (p *Parser) parseApply() (Term[Name], error) {
 	if err := p.expect(lex.TokenLBracket); err != nil {
 		return nil, err
 	}
-
-	function, err := p.ParseTerm()
-
-	if err != nil {
-		return nil, err
+	var terms []Term[Name]
+	for p.curToken.Type != lex.TokenRBracket {
+		term, err := p.ParseTerm()
+		if err != nil {
+			return nil, err
+		}
+		terms = append(terms, term)
 	}
-
-	argument, err := p.ParseTerm()
-
-	if err != nil {
-		return nil, err
+	if len(terms) < 2 {
+		return nil, fmt.Errorf("application requires at least two terms, got %d at position %d", len(terms), p.curToken.Position)
 	}
-
 	if err := p.expect(lex.TokenRBracket); err != nil {
 		return nil, err
 	}
-
-	return &Apply[Name]{Function: function, Argument: argument}, nil
+	// Build left-nested Apply structure
+	result := terms[0]
+	for i := 1; i < len(terms); i++ {
+		result = &Apply[Name]{Function: result, Argument: terms[i]}
+	}
+	return result, nil
 }

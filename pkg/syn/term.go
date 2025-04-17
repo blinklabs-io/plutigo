@@ -72,7 +72,7 @@ type Binder interface {
 }
 
 // x
-type Var[T Binder] struct {
+type Var[T any] struct {
 	Name T
 }
 
@@ -82,8 +82,8 @@ func (v Var[T]) String() string {
 }
 
 // (delay x)
-type Delay[T Binder] struct {
-	Term[T]
+type Delay[T any] struct {
+	Term Term[T]
 }
 
 func (Delay[T]) isTerm() {}
@@ -92,8 +92,8 @@ func (v Delay[T]) String() string {
 }
 
 // (force x)
-type Force[T Binder] struct {
-	Term[T]
+type Force[T any] struct {
+	Term Term[T]
 }
 
 func (Force[T]) isTerm() {}
@@ -102,7 +102,7 @@ func (v Force[T]) String() string {
 }
 
 // (lam x x)
-type Lambda[T Binder] struct {
+type Lambda[T any] struct {
 	ParameterName T
 	Body          Term[T]
 }
@@ -113,7 +113,7 @@ func (v Lambda[T]) String() string {
 }
 
 // [ (lam x x) (con integer 1) ]
-type Apply[T Binder] struct {
+type Apply[T any] struct {
 	Function Term[T]
 	Argument Term[T]
 }
@@ -134,7 +134,7 @@ func (v Builtin) String() string {
 }
 
 // (constr 0 (con integer 1) (con string "1234"))
-type Constr[T Binder] struct {
+type Constr[T any] struct {
 	Tag    uint64
 	Fields *[]Term[T]
 }
@@ -145,9 +145,9 @@ func (v Constr[T]) String() string {
 }
 
 // (case (constr 0) (constr 1 (con integer 1)))
-type Case[T Binder] struct {
+type Case[T any] struct {
 	Constr   Term[T]
-	Branches []Term[T]
+	Branches *[]Term[T]
 }
 
 func (Case[T]) isTerm() {}
@@ -165,7 +165,7 @@ func (v Error) String() string {
 
 // (con integer 1)
 type Constant struct {
-	IConstant
+	Con IConstant
 }
 
 func (Constant) isTerm() {}
