@@ -25,19 +25,19 @@ func NewMachine(slippage uint32) Machine {
 	}
 }
 
-func (m *Machine) Run(term *syn.Term[syn.NamedDeBruijn]) (syn.Term[syn.NamedDeBruijn], error) {
+func (m *Machine) Run(term syn.Term[syn.Eval]) (syn.Term[syn.Eval], error) {
 	startupBudget := m.costs.machineCosts.startup
 	if err := m.spendBudget(startupBudget); err != nil {
 		return nil, err
 	}
 
-	var state MachineState = Compute{ctx: NoFrame{}, env: make([]Value, 0), term: *term}
+	var state MachineState = Compute{Ctx: NoFrame{}, Env: Env([]Value{}), Term: term}
 	var err error
 
 	for {
 		switch v := state.(type) {
 		case Compute:
-			state, err = m.compute(v.ctx, v.env, v.term)
+			state, err = m.compute(v.Ctx, v.Env, v.Term)
 		case Return:
 			state, err = m.returnCompute()
 		case Done:
@@ -53,23 +53,156 @@ func (m *Machine) Run(term *syn.Term[syn.NamedDeBruijn]) (syn.Term[syn.NamedDeBr
 func (m *Machine) compute(
 	context MachineContext,
 	env Env,
-	term syn.Term[syn.NamedDeBruijn],
+	term syn.Term[syn.Eval],
 ) (MachineState, error) {
 	var state MachineState
 
 	switch t := term.(type) {
-	case syn.Var[syn.NamedDeBruijn]:
+	case syn.Var[syn.Eval]:
 		if err := m.stepAndMaybeSpend(ExVar); err != nil {
 			return nil, err
 		}
 
-		value, exists := env.lookup(uint(t.Name.Index))
+		value, exists := env.lookup(uint(t.Name.LookupIndex()))
 
 		if !exists {
 			return nil, errors.New("open term evaluated")
 		}
 
-		state = Return{ctx: context, value: value}
+		state = Return{Ctx: context, Value: *value}
+	case syn.Delay[syn.Eval]:
+		if err := m.stepAndMaybeSpend(ExDelay); err != nil {
+			return nil, err
+		}
+
+		value := Delay{
+			Body: t.Term,
+			Env:  env,
+		}
+
+		state = Return{Ctx: context, Value: value}
+	case syn.Lambda[syn.Eval]:
+		if err := m.stepAndMaybeSpend(ExLambda); err != nil {
+			return nil, err
+		}
+
+		value := Lambda{
+			ParameterName: t.ParameterName,
+			Body:          t.Body,
+			Env:           env,
+		}
+
+		state = Return{Ctx: context, Value: value}
+	case syn.Apply[syn.Eval]:
+		if err := m.stepAndMaybeSpend(ExApply); err != nil {
+			return nil, err
+		}
+
+		frame := FrameAwaitFunTerm{
+			Env:  env,
+			Term: t.Argument,
+			Ctx:  context,
+		}
+
+		state = Compute{
+			Ctx:  frame,
+			Env:  env,
+			Term: t.Function,
+		}
+	case syn.Constant:
+		if err := m.stepAndMaybeSpend(ExConstant); err != nil {
+			return nil, err
+		}
+
+		state = Return{
+			Ctx: context,
+			Value: Constant{
+				Constant: t.Con,
+			},
+		}
+
+	case syn.Force[syn.Eval]:
+		if err := m.stepAndMaybeSpend(ExForce); err != nil {
+			return nil, err
+		}
+
+		frame := FrameForce{
+			Ctx: context,
+		}
+
+		state = Compute{
+			Ctx:  frame,
+			Env:  env,
+			Term: t.Term,
+		}
+
+	case syn.Error:
+		return nil, errors.New("Eval Failure")
+
+	case syn.Builtin:
+		if err := m.stepAndMaybeSpend(ExBuiltin); err != nil {
+			return nil, err
+		}
+
+		state = Return{
+			Ctx: context,
+			Value: Builtin{
+				Func: t.DefaultFunction,
+				Args: []Value{},
+				// placeholder
+				Forces: 0,
+			},
+		}
+	case syn.Constr[syn.Eval]:
+		if err := m.stepAndMaybeSpend(ExConstr); err != nil {
+			return nil, err
+		}
+
+		fields := *t.Fields
+
+		if len(fields) == 0 {
+			state = Return{
+				Ctx: context,
+				Value: Constr{
+					Tag:    t.Tag,
+					Fields: []Value{},
+				},
+			}
+		} else {
+			first_field := fields[0]
+
+			rest := fields[1:]
+
+			frame := FrameConstr{
+				Ctx:            context,
+				Tag:            t.Tag,
+				Fields:         rest,
+				ResolvedFields: []Value{},
+				Env:            env,
+			}
+
+			state = Compute{
+				Ctx:  frame,
+				Env:  env,
+				Term: first_field,
+			}
+		}
+	case syn.Case[syn.Eval]:
+		if err := m.stepAndMaybeSpend(ExCase); err != nil {
+			return nil, err
+		}
+
+		frame := FrameCases{
+			Env:      env,
+			Ctx:      context,
+			Branches: *t.Branches,
+		}
+
+		state = Compute{
+			Ctx:  frame,
+			Env:  env,
+			Term: t.Constr,
+		}
 	}
 
 	return state, nil

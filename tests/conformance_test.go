@@ -229,7 +229,7 @@ func TestConformance(t *testing.T) {
 					t.Fatalf("Failed to convert program to DeBruijn: %v", err)
 				}
 
-				result, budget := mach.Run(&dProgram.Term)
+				result, budget := mach.Run(dProgram.Term)
 
 				debugLog(2, "Evaluation result: %s", result)
 				debugLog(2, "Remaining budget: %s", budget)
