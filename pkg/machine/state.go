@@ -7,8 +7,8 @@ type MachineState interface {
 }
 
 type Return struct {
-	ctx   MachineContext
-	value Value
+	Ctx   MachineContext
+	Value Value
 }
 
 func (r Return) isDone() bool {
@@ -16,9 +16,9 @@ func (r Return) isDone() bool {
 }
 
 type Compute struct {
-	ctx  MachineContext
-	env  Env
-	term syn.Term[syn.NamedDeBruijn]
+	Ctx  MachineContext
+	Env  Env
+	Term syn.Term[syn.Eval]
 }
 
 func (c Compute) isDone() bool {
@@ -26,7 +26,7 @@ func (c Compute) isDone() bool {
 }
 
 type Done struct {
-	term syn.Term[syn.NamedDeBruijn]
+	term syn.Term[syn.Eval]
 }
 
 func (d Done) isDone() bool {
