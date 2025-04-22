@@ -12,7 +12,7 @@ type MachineContext interface {
 }
 
 type FrameAwaitArg struct {
-	Value []Value
+	Value Value
 	Ctx   MachineContext
 }
 
@@ -35,7 +35,7 @@ func (f FrameAwaitFunTerm) String() string {
 func (f FrameAwaitFunTerm) isMachineContext() {}
 
 type FrameAwaitFunValue struct {
-	Value []Value
+	Value Value
 	Ctx   MachineContext
 }
 

@@ -57,6 +57,40 @@ func (b Builtin) String() string {
 
 func (b Builtin) isValue() {}
 
+func (b Builtin) NeedsForce() bool {
+	return b.Func.ForceCount() > int(b.Forces)
+}
+
+func (b Builtin) ConsumeForce() Builtin {
+	return Builtin{
+		Func:   b.Func,
+		Forces: b.Forces + 1,
+		Args:   b.Args,
+	}
+}
+
+func (b Builtin) ApplyArg(arg Value) Builtin {
+	args := make([]Value, len(b.Args)+1)
+	copy(args, b.Args)
+
+	args = append(args, arg)
+
+	return Builtin{
+		Func:   b.Func,
+		Forces: b.Forces,
+		Args:   args,
+	}
+
+}
+
+func (b Builtin) IsReady() bool {
+	return b.Func.Arity() == len(b.Args) && b.Func.ForceCount() == int(b.Forces)
+}
+
+func (b Builtin) IsArrow() bool {
+	return b.Func.Arity() > len(b.Args)
+}
+
 type Constr struct {
 	Tag    uint64
 	Fields []Value
