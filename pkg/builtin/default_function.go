@@ -149,3 +149,269 @@ var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
 	"mkNilData":     MkNilData,
 	"mkNilPairData": MkNilPairData,
 }
+
+func (f DefaultFunction) ForceCount() int {
+	switch f {
+	// Integer functions
+	case AddInteger:
+		return 0
+	case SubtractInteger:
+		return 0
+	case MultiplyInteger:
+		return 0
+	case DivideInteger:
+		return 0
+	case QuotientInteger:
+		return 0
+	case RemainderInteger:
+		return 0
+	case ModInteger:
+		return 0
+	case EqualsInteger:
+		return 0
+	case LessThanInteger:
+		return 0
+	case LessThanEqualsInteger:
+		return 0
+	// ByteString functions
+	case AppendByteString:
+		return 0
+	case ConsByteString:
+		return 0
+	case SliceByteString:
+		return 0
+	case LengthOfByteString:
+		return 0
+	case IndexByteString:
+		return 0
+	case EqualsByteString:
+		return 0
+	case LessThanByteString:
+		return 0
+	case LessThanEqualsByteString:
+		return 0
+	// Cryptography and hash functions
+	case Sha2_256:
+		return 0
+	case Sha3_256:
+		return 0
+	case Blake2b_256:
+		return 0
+	case VerifyEd25519Signature:
+		return 0
+	case VerifyEcdsaSecp256k1Signature:
+		return 0
+	case VerifySchnorrSecp256k1Signature:
+		return 0
+	// String functions
+	case AppendString:
+		return 0
+	case EqualsString:
+		return 0
+	case EncodeUtf8:
+		return 0
+	case DecodeUtf8:
+		return 0
+	// Bool function
+	case IfThenElse:
+		return 1
+	// Unit function
+	case ChooseUnit:
+		return 1
+	// Tracing function
+	case Trace:
+		return 1
+	// Pairs functions
+	case FstPair:
+		return 2
+	case SndPair:
+		return 2
+	// List functions
+	case ChooseList:
+		return 2
+	case MkCons:
+		return 1
+	case HeadList:
+		return 1
+	case TailList:
+		return 1
+	case NullList:
+		return 1
+	// Data functions
+	// It is convenient to have a "choosing" function for a data type that has more than two
+	// constructors to get pattern matching over it and we may end up having multiple such data
+	// types hence we include the name of the data type as a suffix.
+	case ChooseData:
+		return 1
+	case ConstrData:
+		return 0
+	case MapData:
+		return 0
+	case ListData:
+		return 0
+	case IData:
+		return 0
+	case BData:
+		return 0
+	case UnConstrData:
+		return 0
+	case UnMapData:
+		return 0
+	case UnListData:
+		return 0
+	case UnIData:
+		return 0
+	case UnBData:
+		return 0
+	case EqualsData:
+		return 0
+	case SerialiseData:
+		return 0
+	// Misc constructors
+	// Constructors that we need for constructing e.g. Data. Polymorphic builtin
+	// constructors are often problematic (See note [Representable built-in
+	// functions over polymorphic built-in types])
+	case MkPairData:
+		return 0
+	case MkNilData:
+		return 0
+	case MkNilPairData:
+		return 0
+
+	default:
+		panic("Forces")
+	}
+}
+
+func (f DefaultFunction) Arity() int {
+	switch f {
+	// Integer functions
+	case AddInteger:
+		return 2
+	case SubtractInteger:
+		return 2
+	case MultiplyInteger:
+		return 2
+	case DivideInteger:
+		return 2
+	case QuotientInteger:
+		return 2
+	case RemainderInteger:
+		return 2
+	case ModInteger:
+		return 2
+	case EqualsInteger:
+		return 2
+	case LessThanInteger:
+		return 2
+	case LessThanEqualsInteger:
+		return 2
+	// ByteString functions
+	case AppendByteString:
+		return 2
+	case ConsByteString:
+		return 2
+	case SliceByteString:
+		return 3
+	case LengthOfByteString:
+		return 1
+	case IndexByteString:
+		return 2
+	case EqualsByteString:
+		return 2
+	case LessThanByteString:
+		return 2
+	case LessThanEqualsByteString:
+		return 2
+	// Cryptography and hash functions
+	case Sha2_256:
+		return 1
+	case Sha3_256:
+		return 1
+	case Blake2b_256:
+		return 1
+	case VerifyEd25519Signature:
+		return 3
+	case VerifyEcdsaSecp256k1Signature:
+		return 3
+	case VerifySchnorrSecp256k1Signature:
+		return 3
+	// String functions
+	case AppendString:
+		return 2
+	case EqualsString:
+		return 2
+	case EncodeUtf8:
+		return 1
+	case DecodeUtf8:
+		return 1
+	// Bool function
+	case IfThenElse:
+		return 3
+	// Unit function
+	case ChooseUnit:
+		return 2
+	// Tracing function
+	case Trace:
+		return 2
+	// Pairs functions
+	case FstPair:
+		return 1
+	case SndPair:
+		return 1
+	// List functions
+	case ChooseList:
+		return 3
+	case MkCons:
+		return 2
+	case HeadList:
+		return 1
+	case TailList:
+		return 1
+	case NullList:
+		return 1
+	// Data functions
+	// It is convenient to have a "choosing" function for a data type that has more than two
+	// constructors to get pattern matching over it and we may end up having multiple such data
+	// types hence we include the name of the data type as a suffix.
+	case ChooseData:
+		return 6
+	case ConstrData:
+		return 1
+	case MapData:
+		return 1
+	case ListData:
+		return 1
+	case IData:
+		return 1
+	case BData:
+		return 1
+	case UnConstrData:
+		return 1
+	case UnMapData:
+		return 1
+	case UnListData:
+		return 1
+	case UnIData:
+		return 1
+	case UnBData:
+		return 1
+	case EqualsData:
+		return 2
+	case SerialiseData:
+		return 1
+	// Misc constructors
+	// Constructors that we need for constructing e.g. Data. Polymorphic builtin
+	// constructors are often problematic (See note [Representable built-in
+	// functions over polymorphic built-in types])
+	case MkPairData:
+		return 2
+	case MkNilData:
+		return 1
+	case MkNilPairData:
+		return 1
+
+	default:
+		panic("WTF")
+	}
+}

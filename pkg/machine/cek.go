@@ -39,7 +39,7 @@ func (m *Machine) Run(term syn.Term[syn.Eval]) (syn.Term[syn.Eval], error) {
 		case Compute:
 			state, err = m.compute(v.Ctx, v.Env, v.Term)
 		case Return:
-			state, err = m.returnCompute()
+			state, err = m.returnCompute(v.Ctx, v.Value)
 		case Done:
 			return v.term, nil
 		}
@@ -204,21 +204,203 @@ func (m *Machine) compute(
 			Term: t.Constr,
 		}
 	}
-
 	return state, nil
 }
 
-func (m *Machine) returnCompute() (MachineState, error) {
-	return nil, nil
+func (m *Machine) returnCompute(context MachineContext, value Value) (MachineState, error) {
+	var state MachineState
+	var err error
+
+	switch c := context.(type) {
+	case FrameAwaitArg:
+		state, err = m.applyEvaluate(c.Ctx, c.Value, value)
+
+		if err != nil {
+			return nil, err
+		}
+	case FrameAwaitFunTerm:
+		state = Compute{
+			Ctx: FrameAwaitArg{
+				Ctx:   c.Ctx,
+				Value: value,
+			},
+			Env:  c.Env,
+			Term: c.Term,
+		}
+	case FrameAwaitFunValue:
+		state, err = m.applyEvaluate(c.Ctx, value, c.Value)
+
+		if err != nil {
+			return nil, err
+		}
+	case FrameForce:
+		state, err = m.forceEvaluate(c.Ctx, value)
+
+		if err != nil {
+			return nil, err
+		}
+	case FrameConstr:
+		resolvedFields := append(c.ResolvedFields, value)
+
+		fields := c.Fields
+
+		if len(fields) == 0 {
+			state = Return{
+				Ctx: c.Ctx,
+				Value: Constr{
+					Tag:    c.Tag,
+					Fields: resolvedFields,
+				},
+			}
+		} else {
+			first_field := fields[0]
+			rest := fields[1:]
+
+			frame := FrameConstr{
+				Ctx:            context,
+				Tag:            c.Tag,
+				Fields:         rest,
+				ResolvedFields: resolvedFields,
+				Env:            c.Env,
+			}
+
+			state = Compute{
+				Ctx:  frame,
+				Env:  c.Env,
+				Term: first_field,
+			}
+		}
+	case FrameCases:
+		switch v := value.(type) {
+		case Constr:
+			if indexExists(c.Branches, int(v.Tag)) {
+				state = Compute{
+					Ctx:  transferArgStack(v.Fields, c.Ctx),
+					Env:  c.Env,
+					Term: c.Branches[v.Tag],
+				}
+			} else {
+				return nil, errors.New("MissingCaseBranch")
+			}
+		default:
+			return nil, errors.New("NonConstrScrutinized")
+		}
+	case NoFrame:
+		if m.unbudgetedSteps[9] > 0 {
+			if err := m.spendUnbudgetedSteps(); err != nil {
+				return nil, err
+			}
+		}
+
+		state = Done{
+			term: dischargeValue(value),
+		}
+	}
+	return state, nil
 }
 
-func (m *Machine) forceEvaluate() {}
+func (m *Machine) forceEvaluate(context MachineContext, value Value) (MachineState, error) {
 
-func (m *Machine) applyEvaluate() {}
+	var state MachineState
 
-func (m *Machine) evalBuiltinApp() {}
+	switch v := value.(type) {
+	case Delay:
+		state = Compute{
+			Ctx:  context,
+			Env:  v.Env,
+			Term: v.Body,
+		}
+	case Builtin:
+		if v.NeedsForce() {
+			var resolved Value
 
-func (m *Machine) lookupVar() {}
+			b := v.ConsumeForce()
+
+			if b.IsReady() {
+				var err error
+				resolved, err = b.evalBuiltinApp()
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				resolved = b
+			}
+
+			state = Return{
+				Ctx:   context,
+				Value: resolved,
+			}
+		} else {
+			return nil, errors.New("BuiltinTermArgumentExpected")
+		}
+	default:
+		return nil, errors.New("NonPolymorphicInstantiation")
+	}
+	return state, nil
+}
+
+func (m *Machine) applyEvaluate(context MachineContext, function Value, arg Value) (MachineState, error) {
+	var state MachineState
+
+	switch f := function.(type) {
+	case Lambda:
+		env := make(Env, len(f.Env)+1)
+		copy(env, f.Env)
+
+		env = append(env, arg)
+
+		state = Compute{
+			Ctx:  context,
+			Env:  env,
+			Term: f.Body,
+		}
+	case Builtin:
+		if !f.NeedsForce() && f.IsArrow() {
+			var resolved Value
+
+			b := f.ApplyArg(arg)
+
+			if b.IsReady() {
+				var err error
+				resolved, err = b.evalBuiltinApp()
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				resolved = b
+			}
+
+			state = Return{
+				Ctx:   context,
+				Value: resolved,
+			}
+		} else {
+			return nil, errors.New("UnexpectedBuiltinTermArgument")
+		}
+	default:
+		return nil, errors.New("NonFunctionalApplication")
+	}
+	return state, nil
+}
+
+func (b Builtin) evalBuiltinApp() (Value, error) {
+	panic("TODO")
+}
+
+func transferArgStack(fields []Value, ctx MachineContext) MachineContext {
+	c := ctx
+	for arg := len(fields) - 1; arg >= 0; arg-- {
+		c = FrameAwaitFunValue{
+			Ctx:   c,
+			Value: fields[arg],
+		}
+	}
+	return c
+}
+
+func dischargeValue(value Value) syn.Term[syn.Eval] {
+	panic("TODO")
+}
 
 func (m *Machine) stepAndMaybeSpend(step StepKind) error {
 	m.unbudgetedSteps[step] += 1
