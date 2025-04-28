@@ -54,7 +54,7 @@ func (n NamedDeBruijn) BinderDecode(d any) (*Binder, error) {
 }
 
 func (n NamedDeBruijn) TextName() string {
-	return n.Text
+	return fmt.Sprintf("%s_%d", n.Text, n.Index)
 }
 
 func (n NamedDeBruijn) String() string {

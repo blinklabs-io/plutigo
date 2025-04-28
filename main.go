@@ -32,7 +32,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	dProgram, err := program.Eval()
+	dProgram, err := program.ToEval()
 	if err != nil {
 		fmt.Printf("Error %v\n", err)
 		os.Exit(1)

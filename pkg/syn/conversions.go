@@ -5,10 +5,15 @@ import (
 	"fmt"
 )
 
-func (p *Program[Name]) Eval() (*Program[Eval], error) {
+func (p *Program[Name]) ToEval() (*Program[Eval], error) {
 	var converter converter
 
-	t, err := converter.nameToEval(p.Term)
+	t, err := nameToIndex(&converter, p.Term, func(s string, d DeBruijn) Eval {
+		return NamedDeBruijn{
+			Text:  s,
+			Index: d,
+		}
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -24,7 +29,12 @@ func (p *Program[Name]) Eval() (*Program[Eval], error) {
 func (p *Program[Name]) NamedDeBruijn() (*Program[NamedDeBruijn], error) {
 	var converter converter
 
-	t, err := converter.nameToNamedDebruijn(p.Term)
+	t, err := nameToIndex(&converter, p.Term, func(s string, d DeBruijn) NamedDeBruijn {
+		return NamedDeBruijn{
+			Text:  s,
+			Index: d,
+		}
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -47,8 +57,8 @@ type converter struct {
 	levels        []biMap
 }
 
-func (c *converter) nameToNamedDebruijn(term Term[Name]) (Term[NamedDeBruijn], error) {
-	var converted Term[NamedDeBruijn]
+func nameToIndex[T any](c *converter, term Term[Name], converter func(string, DeBruijn) T) (Term[T], error) {
+	var converted Term[T]
 
 	switch t := term.(type) {
 	case *Var[Name]:
@@ -57,19 +67,16 @@ func (c *converter) nameToNamedDebruijn(term Term[Name]) (Term[NamedDeBruijn], e
 			return nil, err
 		}
 
-		converted = &Var[NamedDeBruijn]{
-			Name: NamedDeBruijn{
-				Text:  t.Name.Text,
-				Index: index,
-			},
+		converted = &Var[T]{
+			Name: converter(t.Name.Text, index),
 		}
 	case *Delay[Name]:
-		inner, err := c.nameToNamedDebruijn(t.Term)
+		inner, err := nameToIndex(c, t.Term, converter)
 		if err != nil {
 			return nil, err
 		}
 
-		converted = &Delay[NamedDeBruijn]{
+		converted = &Delay[T]{
 			Term: inner,
 		}
 	case *Lambda[Name]:
@@ -82,7 +89,7 @@ func (c *converter) nameToNamedDebruijn(term Term[Name]) (Term[NamedDeBruijn], e
 
 		c.startScope()
 
-		body, err := c.nameToNamedDebruijn(t.Body)
+		body, err := nameToIndex(c, t.Body, converter)
 		if err != nil {
 			return nil, err
 		}
@@ -91,52 +98,45 @@ func (c *converter) nameToNamedDebruijn(term Term[Name]) (Term[NamedDeBruijn], e
 
 		c.removeUnique(t.ParameterName.Unique)
 
-		converted = &Lambda[NamedDeBruijn]{
-			ParameterName: NamedDeBruijn{
-				Text:  t.ParameterName.Text,
-				Index: index,
-			},
-			Body: body,
+		converted = &Lambda[T]{
+			ParameterName: converter(t.ParameterName.Text, index),
+			Body:          body,
 		}
 	case *Apply[Name]:
-
-		f, err := c.nameToNamedDebruijn(t.Function)
+		f, err := nameToIndex(c, t.Function, converter)
 		if err != nil {
 			return nil, err
 		}
 
-		arg, err := c.nameToNamedDebruijn(t.Argument)
+		arg, err := nameToIndex(c, t.Argument, converter)
 		if err != nil {
 			return nil, err
 		}
 
-		converted = &Apply[NamedDeBruijn]{
+		converted = &Apply[T]{
 			Function: f,
 			Argument: arg,
 		}
 	case *Constant:
 		converted = t
 	case *Force[Name]:
-		inner, err := c.nameToNamedDebruijn(t.Term)
+		inner, err := nameToIndex(c, t.Term, converter)
 		if err != nil {
 			return nil, err
 		}
 
-		converted = &Force[NamedDeBruijn]{
+		converted = &Force[T]{
 			Term: inner,
 		}
-
 	case *Error:
 		converted = t
-
 	case *Builtin:
 		converted = t
-
 	case *Constr[Name]:
-		var fields []Term[NamedDeBruijn]
+		var fields []Term[T]
 
 		for _, f := range *t.Fields {
-			item, err := c.nameToNamedDebruijn(f)
+			item, err := nameToIndex(c, f, converter)
 			if err != nil {
 				return nil, err
 			}
@@ -144,15 +144,15 @@ func (c *converter) nameToNamedDebruijn(term Term[Name]) (Term[NamedDeBruijn], e
 			fields = append(fields, item)
 		}
 
-		converted = &Constr[NamedDeBruijn]{
+		converted = &Constr[T]{
 			Tag:    t.Tag,
 			Fields: &fields,
 		}
 	case *Case[Name]:
-		var branches []Term[NamedDeBruijn]
+		var branches []Term[T]
 
 		for _, b := range *t.Branches {
-			item, err := c.nameToNamedDebruijn(b)
+			item, err := nameToIndex(c, b, converter)
 			if err != nil {
 				return nil, err
 			}
@@ -161,143 +161,12 @@ func (c *converter) nameToNamedDebruijn(term Term[Name]) (Term[NamedDeBruijn], e
 
 		}
 
-		constr, err := c.nameToNamedDebruijn(t.Constr)
+		constr, err := nameToIndex(c, t.Constr, converter)
 		if err != nil {
 			return nil, err
 		}
 
-		converted = &Case[NamedDeBruijn]{
-			Constr:   constr,
-			Branches: &branches,
-		}
-	default:
-		fmt.Printf("%#v", t)
-		panic("HOW THE FUCK")
-	}
-
-	return converted, nil
-}
-
-func (c *converter) nameToEval(term Term[Name]) (Term[Eval], error) {
-	var converted Term[Eval]
-
-	switch t := term.(type) {
-	case *Var[Name]:
-		index, err := c.getIndex(&t.Name)
-		if err != nil {
-			return nil, err
-		}
-
-		converted = &Var[Eval]{
-			Name: NamedDeBruijn{
-				Text:  t.Name.Text,
-				Index: index,
-			},
-		}
-	case *Delay[Name]:
-		inner, err := c.nameToEval(t.Term)
-		if err != nil {
-			return nil, err
-		}
-
-		converted = &Delay[Eval]{
-			Term: inner,
-		}
-	case *Lambda[Name]:
-		c.declareUnique(t.ParameterName.Unique)
-
-		index, err := c.getIndex(&t.ParameterName)
-		if err != nil {
-			return nil, err
-		}
-
-		c.startScope()
-
-		body, err := c.nameToEval(t.Body)
-		if err != nil {
-			return nil, err
-		}
-
-		c.endScope()
-
-		c.removeUnique(t.ParameterName.Unique)
-
-		converted = &Lambda[Eval]{
-			ParameterName: NamedDeBruijn{
-				Text:  t.ParameterName.Text,
-				Index: index,
-			},
-			Body: body,
-		}
-	case *Apply[Name]:
-
-		f, err := c.nameToEval(t.Function)
-		if err != nil {
-			return nil, err
-		}
-
-		arg, err := c.nameToEval(t.Argument)
-		if err != nil {
-			return nil, err
-		}
-
-		converted = &Apply[Eval]{
-			Function: f,
-			Argument: arg,
-		}
-	case *Constant:
-		converted = t
-	case *Force[Name]:
-		inner, err := c.nameToEval(t.Term)
-		if err != nil {
-			return nil, err
-		}
-
-		converted = &Force[Eval]{
-			Term: inner,
-		}
-
-	case *Error:
-		converted = t
-
-	case *Builtin:
-		converted = t
-
-	case *Constr[Name]:
-		var fields []Term[Eval]
-
-		for _, f := range *t.Fields {
-			item, err := c.nameToEval(f)
-			if err != nil {
-				return nil, err
-			}
-
-			fields = append(fields, item)
-		}
-
-		converted = &Constr[Eval]{
-			Tag:    t.Tag,
-			Fields: &fields,
-		}
-	case *Case[Name]:
-		var branches []Term[Eval]
-
-		for _, b := range *t.Branches {
-			item, err := c.nameToEval(b)
-			if err != nil {
-				return nil, err
-			}
-
-			branches = append(branches, item)
-
-		}
-
-		constr, err := c.nameToEval(t.Constr)
-		if err != nil {
-			return nil, err
-		}
-
-		converted = &Case[Eval]{
+		converted = &Case[T]{
 			Constr:   constr,
 			Branches: &branches,
 		}
