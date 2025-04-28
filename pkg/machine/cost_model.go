@@ -15,6 +15,7 @@ type MachineCosts struct {
 }
 
 func (mc MachineCosts) get(kind StepKind) ExBudget {
+
 	switch kind {
 	case ExConstant:
 		return mc.constant

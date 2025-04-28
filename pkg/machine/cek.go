@@ -2,6 +2,7 @@ package machine
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 )
@@ -42,8 +43,9 @@ func (m *Machine) Run(term syn.Term[syn.Eval]) (syn.Term[syn.Eval], error) {
 			state, err = m.returnCompute(v.Ctx, v.Value)
 		case Done:
 			return v.term, nil
+		default:
+			panic("THIS SHOULD NOT HAPPEN")
 		}
-
 		if err != nil {
 			return nil, err
 		}
@@ -58,7 +60,7 @@ func (m *Machine) compute(
 	var state MachineState
 
 	switch t := term.(type) {
-	case syn.Var[syn.Eval]:
+	case *syn.Var[syn.Eval]:
 		if err := m.stepAndMaybeSpend(ExVar); err != nil {
 			return nil, err
 		}
@@ -70,7 +72,7 @@ func (m *Machine) compute(
 		}
 
 		state = Return{Ctx: context, Value: *value}
-	case syn.Delay[syn.Eval]:
+	case *syn.Delay[syn.Eval]:
 		if err := m.stepAndMaybeSpend(ExDelay); err != nil {
 			return nil, err
 		}
@@ -81,7 +83,7 @@ func (m *Machine) compute(
 		}
 
 		state = Return{Ctx: context, Value: value}
-	case syn.Lambda[syn.Eval]:
+	case *syn.Lambda[syn.Eval]:
 		if err := m.stepAndMaybeSpend(ExLambda); err != nil {
 			return nil, err
 		}
@@ -93,7 +95,8 @@ func (m *Machine) compute(
 		}
 
 		state = Return{Ctx: context, Value: value}
-	case syn.Apply[syn.Eval]:
+	case *syn.Apply[syn.Eval]:
+
 		if err := m.stepAndMaybeSpend(ExApply); err != nil {
 			return nil, err
 		}
@@ -109,7 +112,7 @@ func (m *Machine) compute(
 			Env:  env,
 			Term: t.Function,
 		}
-	case syn.Constant:
+	case *syn.Constant:
 		if err := m.stepAndMaybeSpend(ExConstant); err != nil {
 			return nil, err
 		}
@@ -121,7 +124,7 @@ func (m *Machine) compute(
 			},
 		}
 
-	case syn.Force[syn.Eval]:
+	case *syn.Force[syn.Eval]:
 		if err := m.stepAndMaybeSpend(ExForce); err != nil {
 			return nil, err
 		}
@@ -136,10 +139,10 @@ func (m *Machine) compute(
 			Term: t.Term,
 		}
 
-	case syn.Error:
+	case *syn.Error:
 		return nil, errors.New("Eval Failure")
 
-	case syn.Builtin:
+	case *syn.Builtin:
 		if err := m.stepAndMaybeSpend(ExBuiltin); err != nil {
 			return nil, err
 		}
@@ -147,13 +150,12 @@ func (m *Machine) compute(
 		state = Return{
 			Ctx: context,
 			Value: Builtin{
-				Func: t.DefaultFunction,
-				Args: []Value{},
-				// placeholder
+				Func:   t.DefaultFunction,
+				Args:   []Value{},
 				Forces: 0,
 			},
 		}
-	case syn.Constr[syn.Eval]:
+	case *syn.Constr[syn.Eval]:
 		if err := m.stepAndMaybeSpend(ExConstr); err != nil {
 			return nil, err
 		}
@@ -187,7 +189,7 @@ func (m *Machine) compute(
 				Term: first_field,
 			}
 		}
-	case syn.Case[syn.Eval]:
+	case *syn.Case[syn.Eval]:
 		if err := m.stepAndMaybeSpend(ExCase); err != nil {
 			return nil, err
 		}
@@ -203,7 +205,11 @@ func (m *Machine) compute(
 			Env:  env,
 			Term: t.Constr,
 		}
+	default:
+		fmt.Printf("THING %v\n", state)
+		panic("WHAT HAPPENED HERE???")
 	}
+
 	return state, nil
 }
 
@@ -318,7 +324,7 @@ func (m *Machine) forceEvaluate(context MachineContext, value Value) (MachineSta
 
 			if b.IsReady() {
 				var err error
-				resolved, err = b.evalBuiltinApp()
+				resolved, err = m.evalBuiltinApp(b)
 				if err != nil {
 					return nil, err
 				}
@@ -344,7 +350,7 @@ func (m *Machine) applyEvaluate(context MachineContext, function Value, arg Valu
 
 	switch f := function.(type) {
 	case Lambda:
-		env := make(Env, len(f.Env)+1)
+		env := make(Env, len(f.Env))
 		copy(env, f.Env)
 
 		env = append(env, arg)
@@ -362,7 +368,8 @@ func (m *Machine) applyEvaluate(context MachineContext, function Value, arg Valu
 
 			if b.IsReady() {
 				var err error
-				resolved, err = b.evalBuiltinApp()
+
+				resolved, err = m.evalBuiltinApp(b)
 				if err != nil {
 					return nil, err
 				}
@@ -383,10 +390,6 @@ func (m *Machine) applyEvaluate(context MachineContext, function Value, arg Valu
 	return state, nil
 }
 
-func (b Builtin) evalBuiltinApp() (Value, error) {
-	panic("TODO")
-}
-
 func transferArgStack(fields []Value, ctx MachineContext) MachineContext {
 	c := ctx
 	for arg := len(fields) - 1; arg >= 0; arg-- {
@@ -399,7 +402,123 @@ func transferArgStack(fields []Value, ctx MachineContext) MachineContext {
 }
 
 func dischargeValue(value Value) syn.Term[syn.Eval] {
-	panic("TODO")
+	var dischargedTerm syn.Term[syn.Eval]
+
+	switch v := value.(type) {
+	case Constant:
+		dischargedTerm = syn.Constant{
+			Con: v.Constant,
+		}
+	case Builtin:
+		var forcedTerm syn.Term[syn.Eval]
+		forcedTerm = syn.Builtin{
+			DefaultFunction: v.Func,
+		}
+
+		for range int(v.Forces) {
+			forcedTerm = syn.Force[syn.Eval]{
+				Term: forcedTerm,
+			}
+		}
+
+		for _, arg := range v.Args {
+			forcedTerm = syn.Apply[syn.Eval]{
+				Function: forcedTerm,
+				Argument: dischargeValue(arg),
+			}
+		}
+
+		dischargedTerm = forcedTerm
+
+	case Delay:
+		dischargedTerm = syn.Delay[syn.Eval]{
+			Term: withEnv(0, v.Env, v.Body),
+		}
+
+	case Lambda:
+		dischargedTerm = syn.Lambda[syn.Eval]{
+			ParameterName: v.ParameterName,
+			Body:          withEnv(1, v.Env, v.Body),
+		}
+
+	case Constr:
+		fields := []syn.Term[syn.Eval]{}
+
+		for _, f := range v.Fields {
+			fields = append(fields, dischargeValue(f))
+		}
+
+		dischargedTerm = syn.Constr[syn.Eval]{
+			Tag:    v.Tag,
+			Fields: &fields,
+		}
+	}
+
+	return dischargedTerm
+}
+
+func withEnv(lamCnt uint, env Env, term syn.Term[syn.Eval]) syn.Term[syn.Eval] {
+	var dischargedTerm syn.Term[syn.Eval]
+
+	switch t := term.(type) {
+	case syn.Var[syn.Eval]:
+		if lamCnt >= uint(t.Name.LookupIndex()) {
+			dischargedTerm = t
+		} else if val, exists := env.lookup(uint(t.Name.LookupIndex()) - lamCnt); exists {
+			dischargedTerm = dischargeValue(*val)
+		} else {
+			dischargedTerm = t
+		}
+
+	case syn.Lambda[syn.Eval]:
+		dischargedTerm = syn.Lambda[syn.Eval]{
+			ParameterName: t.ParameterName,
+			Body:          withEnv(lamCnt+1, env, t.Body),
+		}
+
+	case syn.Apply[syn.Eval]:
+		dischargedTerm = syn.Apply[syn.Eval]{
+			Function: withEnv(lamCnt, env, t.Function),
+			Argument: withEnv(lamCnt, env, t.Argument),
+		}
+	case syn.Delay[syn.Eval]:
+		dischargedTerm = syn.Delay[syn.Eval]{
+			Term: withEnv(lamCnt, env, t.Term),
+		}
+
+	case syn.Force[syn.Eval]:
+		dischargedTerm = syn.Force[syn.Eval]{
+			Term: withEnv(lamCnt, env, t.Term),
+		}
+
+	case syn.Constr[syn.Eval]:
+		fields := []syn.Term[syn.Eval]{}
+
+		for _, f := range *t.Fields {
+			fields = append(fields, withEnv(lamCnt, env, f))
+		}
+
+		dischargedTerm = syn.Constr[syn.Eval]{
+			Tag:    t.Tag,
+			Fields: &fields,
+		}
+	case syn.Case[syn.Eval]:
+		branches := []syn.Term[syn.Eval]{}
+
+		for _, b := range *t.Branches {
+			branches = append(branches, withEnv(lamCnt, env, b))
+		}
+
+		dischargedTerm = syn.Case[syn.Eval]{
+			Constr:   withEnv(lamCnt, env, t.Constr),
+			Branches: &branches,
+		}
+	default:
+		dischargedTerm = t
+
+	}
+
+	return dischargedTerm
 }
 
 func (m *Machine) stepAndMaybeSpend(step StepKind) error {
@@ -416,7 +535,7 @@ func (m *Machine) stepAndMaybeSpend(step StepKind) error {
 }
 
 func (m *Machine) spendUnbudgetedSteps() error {
-	for i := range m.unbudgetedSteps {
+	for i := range len(m.unbudgetedSteps) - 1 {
 		unspent_step_budget :=
 			m.costs.machineCosts.get(StepKind(i))
 

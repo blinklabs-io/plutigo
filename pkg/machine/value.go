@@ -70,7 +70,7 @@ func (b Builtin) ConsumeForce() Builtin {
 }
 
 func (b Builtin) ApplyArg(arg Value) Builtin {
-	args := make([]Value, len(b.Args)+1)
+	args := make([]Value, len(b.Args))
 	copy(args, b.Args)
 
 	args = append(args, arg)

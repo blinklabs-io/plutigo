@@ -17,7 +17,7 @@ type Integer struct {
 
 func (Integer) isConstant() {}
 func (v Integer) String() string {
-	return "TODO"
+	return fmt.Sprintf("Integer: %v", v.Inner)
 }
 
 // (con bytestring #aaBB)
@@ -27,7 +27,7 @@ type ByteString struct {
 
 func (ByteString) isConstant() {}
 func (v ByteString) String() string {
-	return "TODO"
+	return fmt.Sprintf("ByteString: %v", v.Inner)
 }
 
 // (con string "hello world")
@@ -37,7 +37,7 @@ type String struct {
 
 func (String) isConstant() {}
 func (v String) String() string {
-	return "TODO"
+	return fmt.Sprintf("String: %v", v.Inner)
 }
 
 // (con unit ())
@@ -45,7 +45,7 @@ type Unit struct{}
 
 func (Unit) isConstant() {}
 func (v Unit) String() string {
-	return "TODO"
+	return fmt.Sprintf("Unit")
 }
 
 // (con bool True)
@@ -55,7 +55,7 @@ type Bool struct {
 
 func (Bool) isConstant() {}
 func (v Bool) String() string {
-	return "TODO"
+	return fmt.Sprintf("Bool: %v", v.Inner)
 }
 
 type ProtoList struct {
