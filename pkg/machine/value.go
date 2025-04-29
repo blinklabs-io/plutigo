@@ -92,7 +92,7 @@ func (b Builtin) IsArrow() bool {
 }
 
 type Constr struct {
-	Tag    uint64
+	Tag    uint
 	Fields []Value
 }
 

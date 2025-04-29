@@ -75,7 +75,7 @@ func (v Builtin) String() string {
 
 // (constr 0 (con integer 1) (con string "1234"))
 type Constr[T any] struct {
-	Tag    uint64
+	Tag    uint
 	Fields *[]Term[T]
 }
 

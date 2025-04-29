@@ -256,7 +256,7 @@ func (p *Parser) parseConstr() (Term[Name], error) {
 		return nil, fmt.Errorf("expected tag number, got %v at position %d", p.curToken.Type, p.curToken.Position)
 	}
 
-	n, err := strconv.ParseUint(p.curToken.Literal, 10, 64)
+	n, err := strconv.ParseUint(p.curToken.Literal, 10, 32)
 	if err != nil {
 		return nil, fmt.Errorf("invalid constr tag %s at position %d: %v", p.curToken.Literal, p.curToken.Position, err)
 	}
@@ -280,7 +280,7 @@ func (p *Parser) parseConstr() (Term[Name], error) {
 		return nil, err
 	}
 
-	return &Constr[Name]{Tag: tag, Fields: &fields}, nil
+	return &Constr[Name]{Tag: uint(tag), Fields: &fields}, nil
 }
 
 func (p *Parser) parseCase() (Term[Name], error) {
