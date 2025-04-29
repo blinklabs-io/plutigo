@@ -48,7 +48,21 @@ func (p *Program[Name]) NamedDeBruijn() (*Program[NamedDeBruijn], error) {
 }
 
 func (p *Program[Name]) DeBruijn() (*Program[DeBruijn], error) {
-	panic("hi")
+	var converter converter
+
+	t, err := nameToIndex(&converter, p.Term, func(s string, d DeBruijn) DeBruijn {
+		return DeBruijn(d)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	program := &Program[DeBruijn]{
+		Version: p.Version,
+		Term:    t,
+	}
+
+	return program, nil
 }
 
 type converter struct {

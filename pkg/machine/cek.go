@@ -415,7 +415,7 @@ func dischargeValue(value Value) syn.Term[syn.Eval] {
 			DefaultFunction: v.Func,
 		}
 
-		for range int(v.Forces) {
+		for i := uint(0); i < v.Forces; i++ {
 			forcedTerm = syn.Force[syn.Eval]{
 				Term: forcedTerm,
 			}
@@ -535,7 +535,7 @@ func (m *Machine) stepAndMaybeSpend(step StepKind) error {
 }
 
 func (m *Machine) spendUnbudgetedSteps() error {
-	for i := range len(m.unbudgetedSteps) - 1 {
+	for i := 0; i < len(m.unbudgetedSteps)-1; i++ {
 		unspent_step_budget :=
 			m.costs.machineCosts.get(StepKind(i))
 
