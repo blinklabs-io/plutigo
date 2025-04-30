@@ -12,6 +12,7 @@ type Binder interface {
 	BinderDecode(d any) (*Binder, error)
 	// TODO: maybe use String interface
 	TextName() string
+	fmt.Stringer
 }
 
 type Eval interface {
@@ -35,6 +36,10 @@ func (n Name) TextName() string {
 	return n.Text
 }
 
+func (n Name) String() string {
+	return fmt.Sprintf("Name: %s %v", n.Text, n.Unique)
+}
+
 type NamedDeBruijn struct {
 	Text  string
 	Index DeBruijn
@@ -49,7 +54,11 @@ func (n NamedDeBruijn) BinderDecode(d any) (*Binder, error) {
 }
 
 func (n NamedDeBruijn) TextName() string {
-	return n.Text
+	return fmt.Sprintf("%s_%d", n.Text, n.Index)
+}
+
+func (n NamedDeBruijn) String() string {
+	return fmt.Sprintf("NamedDeBruijn: %s %v", n.Text, n.Index)
 }
 
 func (n NamedDeBruijn) LookupIndex() uint64 {
