@@ -17,35 +17,19 @@ func main() {
 
 	filename := os.Args[1]
 
-	content, err := os.ReadFile(filename)
-	if err != nil {
-		fmt.Printf("Error reading file: %v\n", err)
-		os.Exit(1)
-	}
+	content, _ := os.ReadFile(filename)
 
 	input := string(content)
 
-	program, err := syn.Parse(input)
+	program, _ := syn.Parse(input)
 
-	if err != nil {
-		fmt.Printf("Error parsing file: %v\n", err)
-
-		os.Exit(1)
-	}
-
-	dProgram, err := program.ToEval()
-
-	if err != nil {
-		fmt.Printf("Error converting program: %v\n", err)
-
-		os.Exit(1)
-	}
+	dProgram, _ := syn.NameToNamedDeBruijn(program)
 
 	mach := machine.NewMachine(200)
 
-	term, err := mach.Run(dProgram.Term)
+	term, _ := machine.Run[syn.NamedDeBruijn](mach, dProgram.Term)
 
-	prettyTerm := syn.PrettyTerm[syn.Eval](term)
+	prettyTerm := syn.PrettyTerm[syn.NamedDeBruijn](term)
 
 	fmt.Println(prettyTerm)
 }

@@ -7,8 +7,9 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 )
 
-type Value interface {
+type Value[T syn.Eval] interface {
 	fmt.Stringer
+
 	isValue()
 }
 
@@ -22,60 +23,60 @@ func (c Constant) String() string {
 
 func (c Constant) isValue() {}
 
-type Delay struct {
-	Body syn.Term[syn.Eval]
-	Env  Env
+type Delay[T syn.Eval] struct {
+	Body syn.Term[T]
+	Env  Env[T]
 }
 
-func (d Delay) String() string {
+func (d Delay[T]) String() string {
 	return fmt.Sprintf("Delay[%T]", d.Body)
 }
 
-func (d Delay) isValue() {}
+func (d Delay[T]) isValue() {}
 
-type Lambda struct {
-	ParameterName syn.Eval
-	Body          syn.Term[syn.Eval]
-	Env           Env
+type Lambda[T syn.Eval] struct {
+	ParameterName T
+	Body          syn.Term[T]
+	Env           Env[T]
 }
 
-func (l Lambda) String() string {
+func (l Lambda[T]) String() string {
 	return fmt.Sprintf("Lambda[%v]", l.ParameterName)
 }
 
-func (l Lambda) isValue() {}
+func (l Lambda[T]) isValue() {}
 
-type Builtin struct {
+type Builtin[T syn.Eval] struct {
 	Func   builtin.DefaultFunction
 	Forces uint
-	Args   []Value
+	Args   []Value[T]
 }
 
-func (b Builtin) String() string {
+func (b Builtin[T]) String() string {
 	return fmt.Sprintf("Builtin[%d args, %d forces]", len(b.Args), b.Forces)
 }
 
-func (b Builtin) isValue() {}
+func (b Builtin[T]) isValue() {}
 
-func (b Builtin) NeedsForce() bool {
+func (b Builtin[T]) NeedsForce() bool {
 	return b.Func.ForceCount() > int(b.Forces)
 }
 
-func (b Builtin) ConsumeForce() Builtin {
-	return Builtin{
+func (b *Builtin[T]) ConsumeForce() Builtin[T] {
+	return Builtin[T]{
 		Func:   b.Func,
 		Forces: b.Forces + 1,
 		Args:   b.Args,
 	}
 }
 
-func (b Builtin) ApplyArg(arg Value) Builtin {
-	args := make([]Value, len(b.Args))
+func (b *Builtin[T]) ApplyArg(arg Value[T]) Builtin[T] {
+	args := make([]Value[T], len(b.Args))
 	copy(args, b.Args)
 
 	args = append(args, arg)
 
-	return Builtin{
+	return Builtin[T]{
 		Func:   b.Func,
 		Forces: b.Forces,
 		Args:   args,
@@ -83,21 +84,21 @@ func (b Builtin) ApplyArg(arg Value) Builtin {
 
 }
 
-func (b Builtin) IsReady() bool {
+func (b *Builtin[T]) IsReady() bool {
 	return b.Func.Arity() == len(b.Args) && b.Func.ForceCount() == int(b.Forces)
 }
 
-func (b Builtin) IsArrow() bool {
+func (b *Builtin[T]) IsArrow() bool {
 	return b.Func.Arity() > len(b.Args)
 }
 
-type Constr struct {
+type Constr[T syn.Eval] struct {
 	Tag    uint
-	Fields []Value
+	Fields []Value[T]
 }
 
-func (c Constr) String() string {
+func (c Constr[T]) String() string {
 	return fmt.Sprintf("Constr[tag=%d, fields=%d]", c.Tag, len(c.Fields))
 }
 
-func (c Constr) isValue() {}
+func (c Constr[T]) isValue() {}

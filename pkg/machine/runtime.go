@@ -8,18 +8,18 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 )
 
-func (m *Machine) evalBuiltinApp(b Builtin) (Value, error) {
+func evalBuiltinApp[T syn.Eval](m *Machine, b Builtin[T]) (Value[T], error) {
 	// Budgeting
-	var evalValue Value
+	var evalValue Value[T]
 
 	switch b.Func {
 	case builtin.AddInteger:
-		arg1, err := unwrapInteger(b.Args[0])
+		arg1, err := unwrapInteger[T](b.Args[0])
 		if err != nil {
 			return nil, err
 		}
 
-		arg2, err := unwrapInteger(b.Args[1])
+		arg2, err := unwrapInteger[T](b.Args[1])
 		if err != nil {
 			return nil, err
 		}
@@ -31,18 +31,18 @@ func (m *Machine) evalBuiltinApp(b Builtin) (Value, error) {
 		newInt.Add(arg1, arg2)
 
 		evalValue = Constant{
-			Constant: syn.Integer{
+			Constant: &syn.Integer{
 				Inner: &newInt,
 			},
 		}
 
 	case builtin.SubtractInteger:
-		arg1, err := unwrapInteger(b.Args[0])
+		arg1, err := unwrapInteger[T](b.Args[0])
 		if err != nil {
 			return nil, err
 		}
 
-		arg2, err := unwrapInteger(b.Args[1])
+		arg2, err := unwrapInteger[T](b.Args[1])
 		if err != nil {
 			return nil, err
 		}
@@ -54,7 +54,7 @@ func (m *Machine) evalBuiltinApp(b Builtin) (Value, error) {
 		newInt.Sub(arg1, arg2)
 
 		evalValue = Constant{
-			Constant: syn.Integer{
+			Constant: &syn.Integer{
 				Inner: &newInt,
 			},
 		}
@@ -64,7 +64,7 @@ func (m *Machine) evalBuiltinApp(b Builtin) (Value, error) {
 	return evalValue, nil
 }
 
-func unwrapInteger(value Value) (*big.Int, error) {
+func unwrapInteger[T syn.Eval](value Value[T]) (*big.Int, error) {
 
 	var i *big.Int
 

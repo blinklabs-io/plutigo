@@ -15,8 +15,8 @@ type Machine struct {
 	Logs            []string
 }
 
-func NewMachine(slippage uint32) Machine {
-	return Machine{
+func NewMachine(slippage uint32) *Machine {
+	return &Machine{
 		costs:    DefaultCostModel,
 		slippage: slippage,
 		exBudget: DefaultExBudget,
@@ -26,25 +26,27 @@ func NewMachine(slippage uint32) Machine {
 	}
 }
 
-func (m *Machine) Run(term syn.Term[syn.Eval]) (syn.Term[syn.Eval], error) {
+func Run[T syn.Eval](m *Machine, term syn.Term[T]) (syn.Term[T], error) {
 	startupBudget := m.costs.machineCosts.startup
 	if err := m.spendBudget(startupBudget); err != nil {
 		return nil, err
 	}
 
-	var state MachineState = Compute{Ctx: NoFrame{}, Env: Env([]Value{}), Term: term}
+	initialEnv := Env[T]([]Value[T]{})
+
+	var state MachineState[T] = Compute[T]{Ctx: NoFrame{}, Env: initialEnv, Term: term}
 	var err error
 
 	for {
 		switch v := state.(type) {
-		case Compute:
-			state, err = m.compute(v.Ctx, v.Env, v.Term)
-		case Return:
-			state, err = m.returnCompute(v.Ctx, v.Value)
-		case Done:
+		case Compute[T]:
+			state, err = compute(m, v.Ctx, v.Env, v.Term)
+		case Return[T]:
+			state, err = returnCompute[T](m, v.Ctx, v.Value)
+		case Done[T]:
 			return v.term, nil
 		default:
-			panic("THIS SHOULD NOT HAPPEN")
+			panic("unknown machine state")
 		}
 		if err != nil {
 			return nil, err
@@ -52,62 +54,62 @@ func (m *Machine) Run(term syn.Term[syn.Eval]) (syn.Term[syn.Eval], error) {
 	}
 }
 
-func (m *Machine) compute(
-	context MachineContext,
-	env Env,
-	term syn.Term[syn.Eval],
-) (MachineState, error) {
-	var state MachineState
+func compute[T syn.Eval](
+	m *Machine,
+	context MachineContext[T],
+	env Env[T],
+	term syn.Term[T],
+) (MachineState[T], error) {
+	var state MachineState[T]
 
 	switch t := term.(type) {
-	case *syn.Var[syn.Eval]:
+	case *syn.Var[T]:
 		if err := m.stepAndMaybeSpend(ExVar); err != nil {
 			return nil, err
 		}
 
-		value, exists := env.lookup(uint(t.Name.LookupIndex()))
+		value, exists := lookup(&env, uint(t.Name.LookupIndex()))
 
 		if !exists {
 			return nil, errors.New("open term evaluated")
 		}
 
-		state = Return{Ctx: context, Value: *value}
-	case *syn.Delay[syn.Eval]:
+		state = Return[T]{Ctx: context, Value: *value}
+	case *syn.Delay[T]:
 		if err := m.stepAndMaybeSpend(ExDelay); err != nil {
 			return nil, err
 		}
 
-		value := Delay{
+		value := Delay[T]{
 			Body: t.Term,
 			Env:  env,
 		}
 
-		state = Return{Ctx: context, Value: value}
-	case *syn.Lambda[syn.Eval]:
+		state = Return[T]{Ctx: context, Value: value}
+	case *syn.Lambda[T]:
 		if err := m.stepAndMaybeSpend(ExLambda); err != nil {
 			return nil, err
 		}
 
-		value := Lambda{
+		value := Lambda[T]{
 			ParameterName: t.ParameterName,
 			Body:          t.Body,
 			Env:           env,
 		}
 
-		state = Return{Ctx: context, Value: value}
-	case *syn.Apply[syn.Eval]:
-
+		state = Return[T]{Ctx: context, Value: value}
+	case *syn.Apply[T]:
 		if err := m.stepAndMaybeSpend(ExApply); err != nil {
 			return nil, err
 		}
 
-		frame := FrameAwaitFunTerm{
+		frame := FrameAwaitFunTerm[T]{
 			Env:  env,
 			Term: t.Argument,
 			Ctx:  context,
 		}
 
-		state = Compute{
+		state = Compute[T]{
 			Ctx:  frame,
 			Env:  env,
 			Term: t.Function,
@@ -117,28 +119,26 @@ func (m *Machine) compute(
 			return nil, err
 		}
 
-		state = Return{
+		state = Return[T]{
 			Ctx: context,
 			Value: Constant{
 				Constant: t.Con,
 			},
 		}
-
-	case *syn.Force[syn.Eval]:
+	case *syn.Force[T]:
 		if err := m.stepAndMaybeSpend(ExForce); err != nil {
 			return nil, err
 		}
 
-		frame := FrameForce{
+		frame := FrameForce[T]{
 			Ctx: context,
 		}
 
-		state = Compute{
+		state = Compute[T]{
 			Ctx:  frame,
 			Env:  env,
 			Term: t.Term,
 		}
-
 	case *syn.Error:
 		return nil, errors.New("Eval Failure")
 
@@ -147,15 +147,15 @@ func (m *Machine) compute(
 			return nil, err
 		}
 
-		state = Return{
+		state = Return[T]{
 			Ctx: context,
-			Value: Builtin{
+			Value: Builtin[T]{
 				Func:   t.DefaultFunction,
-				Args:   []Value{},
+				Args:   []Value[T]{},
 				Forces: 0,
 			},
 		}
-	case *syn.Constr[syn.Eval]:
+	case *syn.Constr[T]:
 		if err := m.stepAndMaybeSpend(ExConstr); err != nil {
 			return nil, err
 		}
@@ -163,11 +163,11 @@ func (m *Machine) compute(
 		fields := *t.Fields
 
 		if len(fields) == 0 {
-			state = Return{
+			state = Return[T]{
 				Ctx: context,
-				Value: Constr{
+				Value: Constr[T]{
 					Tag:    t.Tag,
-					Fields: []Value{},
+					Fields: []Value[T]{},
 				},
 			}
 		} else {
@@ -175,85 +175,84 @@ func (m *Machine) compute(
 
 			rest := fields[1:]
 
-			frame := FrameConstr{
+			frame := FrameConstr[T]{
 				Ctx:            context,
 				Tag:            t.Tag,
 				Fields:         rest,
-				ResolvedFields: []Value{},
+				ResolvedFields: []Value[T]{},
 				Env:            env,
 			}
 
-			state = Compute{
+			state = Compute[T]{
 				Ctx:  frame,
 				Env:  env,
 				Term: first_field,
 			}
 		}
-	case *syn.Case[syn.Eval]:
+	case *syn.Case[T]:
 		if err := m.stepAndMaybeSpend(ExCase); err != nil {
 			return nil, err
 		}
 
-		frame := FrameCases{
+		frame := FrameCases[T]{
 			Env:      env,
 			Ctx:      context,
 			Branches: *t.Branches,
 		}
 
-		state = Compute{
+		state = Compute[T]{
 			Ctx:  frame,
 			Env:  env,
 			Term: t.Constr,
 		}
 	default:
-		fmt.Printf("THING %v\n", state)
-		panic("WHAT HAPPENED HERE???")
+		panic(fmt.Sprintf("unknown term: %v", term))
 	}
 
 	return state, nil
 }
 
-func (m *Machine) returnCompute(context MachineContext, value Value) (MachineState, error) {
-	var state MachineState
+func returnCompute[T syn.Eval](m *Machine, context MachineContext[T], value Value[T]) (MachineState[T], error) {
+	var state MachineState[T]
 	var err error
 
 	switch c := context.(type) {
-	case FrameAwaitArg:
-		state, err = m.applyEvaluate(c.Ctx, c.Value, value)
+	case FrameAwaitArg[T]:
+		state, err = applyEvaluate[T](m, c.Ctx, c.Value, value)
 
 		if err != nil {
 			return nil, err
 		}
-	case FrameAwaitFunTerm:
-		state = Compute{
-			Ctx: FrameAwaitArg{
+	case FrameAwaitFunTerm[T]:
+		state = Compute[T]{
+			Ctx: FrameAwaitArg[T]{
 				Ctx:   c.Ctx,
 				Value: value,
 			},
 			Env:  c.Env,
 			Term: c.Term,
 		}
-	case FrameAwaitFunValue:
-		state, err = m.applyEvaluate(c.Ctx, value, c.Value)
+	case FrameAwaitFunValue[T]:
+		state, err = applyEvaluate[T](m, c.Ctx, value, c.Value)
 
 		if err != nil {
 			return nil, err
 		}
-	case FrameForce:
-		state, err = m.forceEvaluate(c.Ctx, value)
+	case FrameForce[T]:
+		state, err = forceEvaluate[T](m, c.Ctx, value)
 
 		if err != nil {
 			return nil, err
 		}
-	case FrameConstr:
+	case FrameConstr[T]:
 		resolvedFields := append(c.ResolvedFields, value)
 
 		fields := c.Fields
 
 		if len(fields) == 0 {
-			state = Return{
+			state = Return[T]{
 				Ctx: c.Ctx,
-				Value: Constr{
+				Value: Constr[T]{
 					Tag:    c.Tag,
 					Fields: resolvedFields,
 				},
@@ -262,7 +261,7 @@ func (m *Machine) returnCompute(context MachineContext, value Value) (MachineSta
 			first_field := fields[0]
 			rest := fields[1:]
 
-			frame := FrameConstr{
+			frame := FrameConstr[T]{
 				Ctx:            context,
 				Tag:            c.Tag,
 				Fields:         rest,
@@ -270,17 +269,17 @@ func (m *Machine) returnCompute(context MachineContext, value Value) (MachineSta
 				Env:            c.Env,
 			}
 
-			state = Compute{
+			state = Compute[T]{
 				Ctx:  frame,
 				Env:  c.Env,
 				Term: first_field,
 			}
 		}
-	case FrameCases:
+	case FrameCases[T]:
 		switch v := value.(type) {
-		case Constr:
+		case Constr[T]:
 			if indexExists(c.Branches, int(v.Tag)) {
-				state = Compute{
+				state = Compute[T]{
 					Ctx:  transferArgStack(v.Fields, c.Ctx),
 					Env:  c.Env,
 					Term: c.Branches[v.Tag],
@@ -298,33 +297,34 @@ func (m *Machine) returnCompute(context MachineContext, value Value) (MachineSta
 			}
 		}
 
-		state = Done{
-			term: dischargeValue(value),
+		state = Done[T]{
+			term: dischargeValue[T](value),
 		}
 	}
 	return state, nil
 }
 
-func (m *Machine) forceEvaluate(context MachineContext, value Value) (MachineState, error) {
-
-	var state MachineState
+func forceEvaluate[T syn.Eval](m *Machine, context MachineContext[T], value Value[T]) (MachineState[T], error) {
+	var state MachineState[T]
 
 	switch v := value.(type) {
-	case Delay:
-		state = Compute{
+	case Delay[T]:
+		state = Compute[T]{
 			Ctx:  context,
 			Env:  v.Env,
 			Term: v.Body,
 		}
-	case Builtin:
+	case Builtin[T]:
 		if v.NeedsForce() {
-			var resolved Value
+			var resolved Value[T]
 
 			b := v.ConsumeForce()
 
 			if b.IsReady() {
 				var err error
-				resolved, err = m.evalBuiltinApp(b)
+
+				resolved, err = evalBuiltinApp(m, b)
+
 				if err != nil {
 					return nil, err
 				}
@@ -332,7 +332,7 @@ func (m *Machine) forceEvaluate(context MachineContext, value Value) (MachineSta
 				resolved = b
 			}
 
-			state = Return{
+			state = Return[T]{
 				Ctx:   context,
 				Value: resolved,
 			}
@@ -342,34 +342,37 @@ func (m *Machine) forceEvaluate(context MachineContext, value Value) (MachineSta
 	default:
 		return nil, errors.New("NonPolymorphicInstantiation")
 	}
+
 	return state, nil
 }
 
-func (m *Machine) applyEvaluate(context MachineContext, function Value, arg Value) (MachineState, error) {
-	var state MachineState
+func applyEvaluate[T syn.Eval](m *Machine, context MachineContext[T], function Value[T], arg Value[T]) (MachineState[T], error) {
+	var state MachineState[T]
 
 	switch f := function.(type) {
-	case Lambda:
-		env := make(Env, len(f.Env))
+	case Lambda[T]:
+		env := make(Env[T], len(f.Env))
+
 		copy(env, f.Env)
 
 		env = append(env, arg)
 
-		state = Compute{
+		state = Compute[T]{
 			Ctx:  context,
 			Env:  env,
 			Term: f.Body,
 		}
-	case Builtin:
+	case Builtin[T]:
 		if !f.NeedsForce() && f.IsArrow() {
-			var resolved Value
+			var resolved Value[T]
 
 			b := f.ApplyArg(arg)
 
 			if b.IsReady() {
 				var err error
 
-				resolved, err = m.evalBuiltinApp(b)
+				resolved, err = evalBuiltinApp(m, b)
+
 				if err != nil {
 					return nil, err
 				}
@@ -377,7 +380,7 @@ func (m *Machine) applyEvaluate(context MachineContext, function Value, arg Valu
 				resolved = b
 			}
 
-			state = Return{
+			state = Return[T]{
 				Ctx:   context,
 				Value: resolved,
 			}
@@ -387,68 +390,71 @@ func (m *Machine) applyEvaluate(context MachineContext, function Value, arg Valu
 	default:
 		return nil, errors.New("NonFunctionalApplication")
 	}
+
 	return state, nil
 }
 
-func transferArgStack(fields []Value, ctx MachineContext) MachineContext {
+func transferArgStack[T syn.Eval](fields []Value[T], ctx MachineContext[T]) MachineContext[T] {
 	c := ctx
+
 	for arg := len(fields) - 1; arg >= 0; arg-- {
-		c = FrameAwaitFunValue{
+		c = FrameAwaitFunValue[T]{
 			Ctx:   c,
 			Value: fields[arg],
 		}
 	}
+
 	return c
 }
 
-func dischargeValue(value Value) syn.Term[syn.Eval] {
-	var dischargedTerm syn.Term[syn.Eval]
+func dischargeValue[T syn.Eval](value Value[T]) syn.Term[T] {
+	var dischargedTerm syn.Term[T]
 
 	switch v := value.(type) {
 	case Constant:
-		dischargedTerm = syn.Constant{
+		dischargedTerm = &syn.Constant{
 			Con: v.Constant,
 		}
-	case Builtin:
-		var forcedTerm syn.Term[syn.Eval]
-		forcedTerm = syn.Builtin{
+	case Builtin[T]:
+		var forcedTerm syn.Term[T]
+
+		forcedTerm = &syn.Builtin{
 			DefaultFunction: v.Func,
 		}
 
 		for i := uint(0); i < v.Forces; i++ {
-			forcedTerm = syn.Force[syn.Eval]{
+			forcedTerm = &syn.Force[T]{
 				Term: forcedTerm,
 			}
 		}
 
 		for _, arg := range v.Args {
-			forcedTerm = syn.Apply[syn.Eval]{
+			forcedTerm = &syn.Apply[T]{
 				Function: forcedTerm,
-				Argument: dischargeValue(arg),
+				Argument: dischargeValue[T](arg),
 			}
 		}
 
 		dischargedTerm = forcedTerm
-
-	case Delay:
-		dischargedTerm = syn.Delay[syn.Eval]{
+	case Delay[T]:
+		dischargedTerm = &syn.Delay[T]{
 			Term: withEnv(0, v.Env, v.Body),
 		}
 
-	case Lambda:
-		dischargedTerm = syn.Lambda[syn.Eval]{
+	case Lambda[T]:
+		dischargedTerm = &syn.Lambda[T]{
 			ParameterName: v.ParameterName,
 			Body:          withEnv(1, v.Env, v.Body),
 		}
 
-	case Constr:
-		fields := []syn.Term[syn.Eval]{}
+	case Constr[T]:
+		fields := []syn.Term[T]{}
 
 		for _, f := range v.Fields {
-			fields = append(fields, dischargeValue(f))
+			fields = append(fields, dischargeValue[T](f))
 		}
 
-		dischargedTerm = syn.Constr[syn.Eval]{
+		dischargedTerm = &syn.Constr[T]{
 			Tag:    v.Tag,
 			Fields: &fields,
 		}
@@ -457,65 +463,64 @@ func dischargeValue(value Value) syn.Term[syn.Eval] {
 	return dischargedTerm
 }
 
-func withEnv(lamCnt uint, env Env, term syn.Term[syn.Eval]) syn.Term[syn.Eval] {
-	var dischargedTerm syn.Term[syn.Eval]
+func withEnv[T syn.Eval](lamCnt uint, env Env[T], term syn.Term[T]) syn.Term[T] {
+	var dischargedTerm syn.Term[T]
 
 	switch t := term.(type) {
-	case syn.Var[syn.Eval]:
+	case syn.Var[T]:
 		if lamCnt >= uint(t.Name.LookupIndex()) {
 			dischargedTerm = t
-		} else if val, exists := env.lookup(uint(t.Name.LookupIndex()) - lamCnt); exists {
-			dischargedTerm = dischargeValue(*val)
+		} else if val, exists := lookup(&env, uint(t.Name.LookupIndex())-lamCnt); exists {
+			dischargedTerm = dischargeValue[T](*val)
 		} else {
 			dischargedTerm = t
 		}
 
-	case syn.Lambda[syn.Eval]:
-		dischargedTerm = syn.Lambda[syn.Eval]{
+	case syn.Lambda[T]:
+		dischargedTerm = &syn.Lambda[T]{
 			ParameterName: t.ParameterName,
 			Body:          withEnv(lamCnt+1, env, t.Body),
 		}
 
-	case syn.Apply[syn.Eval]:
-		dischargedTerm = syn.Apply[syn.Eval]{
+	case syn.Apply[T]:
+		dischargedTerm = &syn.Apply[T]{
 			Function: withEnv(lamCnt, env, t.Function),
 			Argument: withEnv(lamCnt, env, t.Argument),
 		}
-	case syn.Delay[syn.Eval]:
-		dischargedTerm = syn.Delay[syn.Eval]{
+	case syn.Delay[T]:
+		dischargedTerm = &syn.Delay[T]{
 			Term: withEnv(lamCnt, env, t.Term),
 		}
 
-	case syn.Force[syn.Eval]:
-		dischargedTerm = syn.Force[syn.Eval]{
+	case syn.Force[T]:
+		dischargedTerm = &syn.Force[T]{
 			Term: withEnv(lamCnt, env, t.Term),
 		}
 
-	case syn.Constr[syn.Eval]:
-		fields := []syn.Term[syn.Eval]{}
+	case syn.Constr[T]:
+		fields := []syn.Term[T]{}
 
 		for _, f := range *t.Fields {
 			fields = append(fields, withEnv(lamCnt, env, f))
 		}
 
-		dischargedTerm = syn.Constr[syn.Eval]{
+		dischargedTerm = &syn.Constr[T]{
 			Tag:    t.Tag,
 			Fields: &fields,
 		}
-	case syn.Case[syn.Eval]:
-		branches := []syn.Term[syn.Eval]{}
+	case syn.Case[T]:
+		branches := []syn.Term[T]{}
 
 		for _, b := range *t.Branches {
 			branches = append(branches, withEnv(lamCnt, env, b))
 		}
 
-		dischargedTerm = syn.Case[syn.Eval]{
+		dischargedTerm = &syn.Case[T]{
 			Constr:   withEnv(lamCnt, env, t.Constr),
 			Branches: &branches,
 		}
 	default:
 		dischargedTerm = t
-
 	}
 
 	return dischargedTerm

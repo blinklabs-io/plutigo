@@ -147,7 +147,7 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T]) {
 		pp.write(")")
 	case *Error:
 		pp.write("(error)")
-	case Constant:
+	case *Constant:
 		pp.printConstant(t)
 	default:
 		pp.write(fmt.Sprintf("unknown term: %v", t))
@@ -155,29 +155,29 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T]) {
 }
 
 // printConstant formats a Constant node
-func (pp *PrettyPrinter) printConstant(c Constant) {
+func (pp *PrettyPrinter) printConstant(c *Constant) {
 	pp.write("(con ")
 
 	switch con := c.Con.(type) {
-	case Integer:
+	case *Integer:
 		pp.write("integer ")
 
 		pp.write(con.Inner.String())
-	case ByteString:
+	case *ByteString:
 		pp.write("bytestring #")
 
 		for _, b := range con.Inner {
 			pp.builder.WriteString(fmt.Sprintf("%02x", b))
 		}
-	case String:
+	case *String:
 		pp.write("string \"")
 
 		pp.write(escapeString(con.Inner))
 
 		pp.write("\"")
-	case Unit:
+	case *Unit:
 		pp.write("unit ()")
-	case Bool:
+	case *Bool:
 		pp.write("bool ")
 
 		if con.Inner {

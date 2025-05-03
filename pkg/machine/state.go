@@ -2,33 +2,27 @@ package machine
 
 import "github.com/blinklabs-io/plutigo/pkg/syn"
 
-type MachineState interface {
-	isDone() bool
+type MachineState[T syn.Eval] interface {
+	isMachineState()
 }
 
-type Return struct {
-	Ctx   MachineContext
-	Value Value
+type Return[T syn.Eval] struct {
+	Ctx   MachineContext[T]
+	Value Value[T]
 }
 
-func (r Return) isDone() bool {
-	return false
+func (r Return[T]) isMachineState() {}
+
+type Compute[T syn.Eval] struct {
+	Ctx  MachineContext[T]
+	Env  Env[T]
+	Term syn.Term[T]
 }
 
-type Compute struct {
-	Ctx  MachineContext
-	Env  Env
-	Term syn.Term[syn.Eval]
+func (c Compute[T]) isMachineState() {}
+
+type Done[T syn.Eval] struct {
+	term syn.Term[T]
 }
 
-func (c Compute) isDone() bool {
-	return false
-}
-
-type Done struct {
-	term syn.Term[syn.Eval]
-}
-
-func (d Done) isDone() bool {
-	return true
-}
+func (d Done[T]) isMachineState() {}

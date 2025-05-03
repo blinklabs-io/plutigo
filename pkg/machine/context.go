@@ -6,80 +6,81 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 )
 
-type MachineContext interface {
+type MachineContext[T syn.Eval] interface {
 	fmt.Stringer
+
 	isMachineContext()
 }
 
-type FrameAwaitArg struct {
-	Value Value
-	Ctx   MachineContext
+type FrameAwaitArg[T syn.Eval] struct {
+	Value Value[T]
+	Ctx   MachineContext[T]
 }
 
-func (f FrameAwaitArg) String() string {
+func (f FrameAwaitArg[T]) String() string {
 	return fmt.Sprintf("FrameAwaitArg(value=%v, ctx=%v)", f.Value, f.Ctx)
 }
 
-func (f FrameAwaitArg) isMachineContext() {}
+func (f FrameAwaitArg[T]) isMachineContext() {}
 
-type FrameAwaitFunTerm struct {
-	Env  Env
-	Term syn.Term[syn.Eval]
-	Ctx  MachineContext
+type FrameAwaitFunTerm[T syn.Eval] struct {
+	Env  Env[T]
+	Term syn.Term[T]
+	Ctx  MachineContext[T]
 }
 
-func (f FrameAwaitFunTerm) String() string {
+func (f FrameAwaitFunTerm[T]) String() string {
 	return fmt.Sprintf("FrameAwaitFunTerm(env=%v, term=%v, ctx=%v)", f.Env, f.Term, f.Ctx)
 }
 
-func (f FrameAwaitFunTerm) isMachineContext() {}
+func (f FrameAwaitFunTerm[T]) isMachineContext() {}
 
-type FrameAwaitFunValue struct {
-	Value Value
-	Ctx   MachineContext
+type FrameAwaitFunValue[T syn.Eval] struct {
+	Value Value[T]
+	Ctx   MachineContext[T]
 }
 
-func (f FrameAwaitFunValue) String() string {
+func (f FrameAwaitFunValue[T]) String() string {
 	return fmt.Sprintf("FrameAwaitFunValue(value=%v, ctx=%v)", f.Value, f.Ctx)
 }
 
-func (f FrameAwaitFunValue) isMachineContext() {}
+func (f FrameAwaitFunValue[T]) isMachineContext() {}
 
-type FrameForce struct {
-	Ctx MachineContext
+type FrameForce[T syn.Eval] struct {
+	Ctx MachineContext[T]
 }
 
-func (f FrameForce) String() string {
+func (f FrameForce[T]) String() string {
 	return fmt.Sprintf("FrameForce(ctx=%v)", f.Ctx)
 }
 
-func (f FrameForce) isMachineContext() {}
+func (f FrameForce[T]) isMachineContext() {}
 
-type FrameConstr struct {
-	Env            Env
+type FrameConstr[T syn.Eval] struct {
+	Env            Env[T]
 	Tag            uint
-	Fields         []syn.Term[syn.Eval]
-	ResolvedFields []Value
-	Ctx            MachineContext
+	Fields         []syn.Term[T]
+	ResolvedFields []Value[T]
+	Ctx            MachineContext[T]
 }
 
-func (f FrameConstr) String() string {
+func (f FrameConstr[T]) String() string {
 	return fmt.Sprintf("FrameConstr(env=%v, tag=%v, fields=%v, resolvedFields=%v, ctx=%v)", f.Env, f.Tag, f.Fields, f.ResolvedFields, f.Ctx)
 }
 
-func (f FrameConstr) isMachineContext() {}
+func (f FrameConstr[T]) isMachineContext() {}
 
-type FrameCases struct {
-	Env      Env
-	Branches []syn.Term[syn.Eval]
-	Ctx      MachineContext
+type FrameCases[T syn.Eval] struct {
+	Env      Env[T]
+	Branches []syn.Term[T]
+	Ctx      MachineContext[T]
 }
 
-func (f FrameCases) String() string {
+func (f FrameCases[T]) String() string {
 	return fmt.Sprintf("FrameCases(env=%v, branches=%v, ctx=%v)", f.Env, f.Branches, f.Ctx)
 }
 
-func (f FrameCases) isMachineContext() {}
+func (f FrameCases[T]) isMachineContext() {}
 
 type NoFrame struct{}
 

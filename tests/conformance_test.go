@@ -224,12 +224,12 @@ func TestConformance(t *testing.T) {
 
 				mach := machine.NewMachine(200)
 
-				dProgram, err := program.NamedDeBruijn()
+				dProgram, err := syn.NameToNamedDeBruijn(program)
 				if err != nil {
 					t.Fatalf("Failed to convert program to DeBruijn: %v", err)
 				}
 
-				result, budget := mach.Run(dProgram.Term)
+				result, budget := machine.Run[syn.NamedDeBruijn](mach, dProgram.Term)
 
 				debugLog(2, "Evaluation result: %s", result)
 				debugLog(2, "Remaining budget: %s", budget)
@@ -239,7 +239,7 @@ func TestConformance(t *testing.T) {
 						debugLog(1, "Evaluation failure expected and encountered")
 						return
 					}
-					t.Fatalf("Evaluation failed: %v\nProgram: %s", errTerm, syn.PrettyTerm[syn.Binder](program.Term))
+					t.Fatalf("Evaluation failed: %v\nProgram: %s", errTerm, syn.PrettyTerm[syn.NamedDeBruijn](program.Term))
 				}
 
 				// Parse expected result
