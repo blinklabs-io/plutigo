@@ -26,10 +26,10 @@ func (p *Program[Name]) ToEval() (*Program[Eval], error) {
 	return program, nil
 }
 
-func (p *Program[Name]) NamedDeBruijn() (*Program[NamedDeBruijn], error) {
-	var converter converter
+func NameToNamedDeBruijn(p *Program[Name]) (*Program[NamedDeBruijn], error) {
+	converter := newConverter()
 
-	t, err := nameToIndex(&converter, p.Term, func(s string, d DeBruijn) NamedDeBruijn {
+	t, err := nameToIndex(converter, p.Term, func(s string, d DeBruijn) NamedDeBruijn {
 		return NamedDeBruijn{
 			Text:  s,
 			Index: d,
@@ -47,10 +47,10 @@ func (p *Program[Name]) NamedDeBruijn() (*Program[NamedDeBruijn], error) {
 	return program, nil
 }
 
-func (p *Program[Name]) DeBruijn() (*Program[DeBruijn], error) {
-	var converter converter
+func NameToDeBruijn(p *Program[Name]) (*Program[DeBruijn], error) {
+	converter := newConverter()
 
-	t, err := nameToIndex(&converter, p.Term, func(s string, d DeBruijn) DeBruijn {
+	t, err := nameToIndex(converter, p.Term, func(s string, d DeBruijn) DeBruijn {
 		return DeBruijn(d)
 	})
 	if err != nil {
@@ -69,6 +69,19 @@ type converter struct {
 	currentLevel  uint
 	currentUnique Unique
 	levels        []biMap
+}
+
+func newConverter() *converter {
+	return &converter{
+		currentLevel:  0,
+		currentUnique: 0,
+		levels: []biMap{
+			biMap{
+				left:  make(map[Unique]uint),
+				right: make(map[uint]Unique),
+			},
+		},
+	}
 }
 
 func nameToIndex[T any](c *converter, term Term[Name], converter func(string, DeBruijn) T) (Term[T], error) {

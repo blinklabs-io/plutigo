@@ -415,3 +415,135 @@ func (f DefaultFunction) Arity() int {
 		panic("WTF")
 	}
 }
+
+func (f DefaultFunction) String() string {
+	switch f {
+	// Integer functions
+	case AddInteger:
+		return "addInteger"
+	case SubtractInteger:
+		return "subtractInteger"
+	case MultiplyInteger:
+		return "multiplyInteger"
+	case DivideInteger:
+		return "divideInteger"
+	case QuotientInteger:
+		return "quotientInteger"
+	case RemainderInteger:
+		return "remainderInteger"
+	case ModInteger:
+		return "modInteger"
+	case EqualsInteger:
+		return "equalsInteger"
+	case LessThanInteger:
+		return "lessThanInteger"
+	case LessThanEqualsInteger:
+		return "lessThanEqualsInteger"
+	// ByteString functions
+	case AppendByteString:
+		return "appendByteString"
+	case ConsByteString:
+		return "consByteString"
+	case SliceByteString:
+		return "sliceByteString"
+	case LengthOfByteString:
+		return "lengthOfByteString"
+	case IndexByteString:
+		return "indexByteString"
+	case EqualsByteString:
+		return "equalsByteString"
+	case LessThanByteString:
+		return "lessThanByteString"
+	case LessThanEqualsByteString:
+		return "lessThanEqualsByteString"
+	// Cryptography and hash functions
+	case Sha2_256:
+		return "sha2256"
+	case Sha3_256:
+		return "sha3256"
+	case Blake2b_256:
+		return "blake2B256"
+	case VerifyEd25519Signature:
+		return "verifyEd25519Signature"
+	case VerifyEcdsaSecp256k1Signature:
+		return "verifyEcdsaSecp256K1Signature"
+	case VerifySchnorrSecp256k1Signature:
+		return "verifySchnorrSecp256K1Signature"
+	// String functions
+	case AppendString:
+		return "appendString"
+	case EqualsString:
+		return "equalsString"
+	case EncodeUtf8:
+		return "encodeUtf8"
+	case DecodeUtf8:
+		return "decodeUtf8"
+	// Bool function
+	case IfThenElse:
+		return "ifThenElse"
+	// Unit function
+	case ChooseUnit:
+		return "chooseUnit"
+	// Tracing function
+	case Trace:
+		return "trace"
+	// Pairs functions
+	case FstPair:
+		return "fstPair"
+	case SndPair:
+		return "sndPair"
+	// List functions
+	case ChooseList:
+		return "chooseList"
+	case MkCons:
+		return "mkCons"
+	case HeadList:
+		return "headList"
+	case TailList:
+		return "tailList"
+	case NullList:
+		return "nullList"
+	// Data functions
+	// It is convenient to have a "choosing" function for a data type that has more than two
+	// constructors to get pattern matching over it and we may end up having multiple such data
+	// types hence we include the name of the data type as a suffix.
+	case ChooseData:
+		return "chooseData"
+	case ConstrData:
+		return "constrData"
+	case MapData:
+		return "mapData"
+	case ListData:
+		return "listData"
+	case IData:
+		return "iData"
+	case BData:
+		return "bData"
+	case UnConstrData:
+		return "unConstrData"
+	case UnMapData:
+		return "unMapData"
+	case UnListData:
+		return "unListData"
+	case UnIData:
+		return "unIData"
+	case UnBData:
+		return "unBData"
+	case EqualsData:
+		return "equalsData"
+	case SerialiseData:
+		return "serialiseData"
+	// Misc constructors
+	// Constructors that we need for constructing e.g. Data. Polymorphic builtin
+	// constructors are often problematic (See note [Representable built-in
+	// functions over polymorphic built-in types])
+	case MkPairData:
+		return "mkPairData"
+	case MkNilData:
+		return "mkNilData"
+	case MkNilPairData:
+		return "mkNilPairData"
+	default:
+		panic("unknown builtin")
+	}
+}
