@@ -239,7 +239,7 @@ func TestConformance(t *testing.T) {
 						debugLog(1, "Evaluation failure expected and encountered")
 						return
 					}
-					t.Fatalf("Evaluation failed: %v\nProgram: %s", errTerm, program.Term.String())
+					t.Fatalf("Evaluation failed: %v\nProgram: %s", errTerm, syn.PrettyTerm[syn.Binder](program.Term))
 				}
 
 				// Parse expected result

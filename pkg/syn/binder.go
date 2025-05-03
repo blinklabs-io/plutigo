@@ -12,10 +12,12 @@ type Binder interface {
 	BinderDecode(d any) (*Binder, error)
 	// TODO: maybe use String interface
 	TextName() string
+
 	fmt.Stringer
 }
 
 type Eval interface {
+	Binder
 	LookupIndex() uint64
 }
 
