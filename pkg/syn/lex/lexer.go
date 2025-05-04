@@ -43,8 +43,37 @@ func (l *Lexer) peekChar() rune {
 }
 
 func (l *Lexer) skipWhitespace() {
-	for unicode.IsSpace(l.ch) {
-		l.readChar()
+	for {
+		// Skip standard whitespace
+		for unicode.IsSpace(l.ch) {
+			l.readChar()
+		}
+
+		// Check for comment start
+		if l.ch == '-' && l.peekChar() == '-' {
+			// Skip the '--'
+			l.readChar() // Consume first '-'
+			l.readChar() // Consume second '-'
+
+			// Skip until newline or EOF
+			for l.ch != '\n' && l.ch != 0 {
+				l.readChar()
+			}
+
+			// If we hit a newline, continue to check for more whitespace or comments
+			if l.ch == '\n' {
+				l.readChar()
+				continue
+			}
+
+			// If we hit EOF, break
+			if l.ch == 0 {
+				break
+			}
+		} else {
+			// No comment, exit loop
+			break
+		}
 	}
 }
 

@@ -2,7 +2,6 @@ package conformance
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -19,12 +18,6 @@ const (
 	debugEnabled = true
 	debugLevel   = 2 // 1=basic, 2=verbose, 3=trace
 )
-
-func debugLog(level int, format string, args ...interface{}) {
-	if debugEnabled && level <= debugLevel {
-		log.Printf("[DEBUG] "+format, args...)
-	}
-}
 
 // ==================== Test Cases ====================
 
@@ -151,7 +144,6 @@ func TestConformance(t *testing.T) {
 
 	testRoot := filepath.Join(filepath.Dir(filename), "conformance")
 	testRoot = filepath.Clean(testRoot)
-	debugLog(1, "Test root directory: %s", testRoot)
 
 	if _, err := os.Stat(testRoot); os.IsNotExist(err) {
 		t.Fatalf("Test directory not found: %s", testRoot)
@@ -160,7 +152,6 @@ func TestConformance(t *testing.T) {
 	categories := []string{"builtin", "example", "term"}
 	for _, category := range categories {
 		categoryDir := filepath.Join(testRoot, category)
-		debugLog(1, "Checking category: %s", categoryDir)
 
 		err := filepath.Walk(categoryDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -178,14 +169,12 @@ func TestConformance(t *testing.T) {
 			testName := strings.TrimSuffix(relPath, ".uplc")
 
 			t.Run(testName, func(t *testing.T) {
-				debugLog(1, "Running test: %s", testName)
 
 				// Read program file
 				programText, err := os.ReadFile(path)
 				if err != nil {
 					t.Fatalf("Failed to read program file: %v", err)
 				}
-				debugLog(2, "Program:\n%s", programText)
 
 				// Read expected file
 				expectedPath := path + ".expected"
@@ -193,7 +182,6 @@ func TestConformance(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to read expected file: %v", err)
 				}
-				debugLog(2, "Expected result:\n%s", expectedText)
 
 				// Handle budget file
 				budgetPath := path + ".budget.expected"
@@ -208,68 +196,70 @@ func TestConformance(t *testing.T) {
 				}
 
 				// Parse program
-				debugLog(1, "Parsing program...")
+
 				program, err := syn.Parse(string(programText))
 				if err != nil {
 					if string(expectedText) == "parse error" {
-						debugLog(1, "Parse error expected and encountered")
 						return
 					}
+
 					t.Fatalf("Parse failed: %v\nInput: %s", err, programText)
 				}
-				debugLog(2, "Parsed program: %#v", program)
 
-				// Evaluate program
-				debugLog(1, "Evaluating program...")
-
-				machine := cek.NewMachine[syn.NamedDeBruijn](200)
+				// Convert to NamedDeBruijn
 
 				dProgram, err := syn.NameToNamedDeBruijn(program)
 				if err != nil {
 					t.Fatalf("Failed to convert program to DeBruijn: %v", err)
 				}
 
-				result, budget := machine.Run(dProgram.Term)
+				// Evaluate program
 
-				debugLog(2, "Evaluation result: %s", result)
-				debugLog(2, "Remaining budget: %s", budget)
+				machine := cek.NewMachine[syn.NamedDeBruijn](200)
 
-				if errTerm, isErr := result.(syn.Error); isErr {
+				result, err := machine.Run(dProgram.Term)
+				if err != nil {
 					if string(expectedText) == "evaluation failure" {
-						debugLog(1, "Evaluation failure expected and encountered")
 						return
 					}
-					t.Fatalf("Evaluation failed: %v\nProgram: %s", errTerm, syn.PrettyTerm[syn.NamedDeBruijn](program.Term))
+
+					t.Fatalf("Failed to evaluate program: %v", err)
 				}
 
 				// Parse expected result
-				debugLog(1, "Parsing expected result...")
+
 				expected, err := syn.Parse(string(expectedText))
 				if err != nil {
 					t.Fatalf("Failed to parse expected result: %v\nExpected: %s", err, expectedText)
 				}
-				debugLog(2, "Parsed expected: %s", expected)
+
+				dExpected, err := syn.NameToNamedDeBruijn(expected)
+				if err != nil {
+					t.Fatalf("Failed to convert program to DeBruijn: %v", err)
+				}
 
 				// Compare results
-				debugLog(1, "Comparing results...")
-				if !alphaEquivalent(result, expected.Term) {
-					t.Errorf("Result mismatch\nGot:  %s\nWant: %s\nProgram: %s",
-						result, expected.Term, program.Term)
-				} else {
-					debugLog(1, "Results match")
+				prettyResult := syn.PrettyTerm[syn.NamedDeBruijn](result)
+				prettyExpected := syn.PrettyTerm[syn.NamedDeBruijn](dExpected.Term)
+
+				original := syn.Pretty[syn.Name](program)
+
+				if prettyResult != prettyExpected {
+					t.Errorf("Result mismatch\nGot:\n%s\nWant:\n%s\nProgram:\n%s",
+						prettyResult, prettyExpected, original)
 				}
 
 				// Compare budgets if budget file was found
 				if expectedBudget != "" {
-					actualBudget := budget.Error()
-					debugLog(2, "Comparing budgets - Expected: %s, Actual: %s", expectedBudget, actualBudget)
-					if actualBudget != expectedBudget {
-						t.Errorf("Budget mismatch\nGot:  %s\nWant: %s", actualBudget, expectedBudget)
-					} else {
-						debugLog(1, "Budgets match")
+					consumedBudget := cek.DefaultExBudget.Sub(&machine.ExBudget)
+					fmtBudget := fmt.Sprintf("({cpu: %d\n| mem: %d})", consumedBudget.Cpu, consumedBudget.Mem)
+
+					if fmtBudget != expectedBudget {
+						t.Errorf("Budget mismatch\nGot:\n%s\nWant:\n%s", fmtBudget, expectedBudget)
 					}
 				}
 			})
+
 			return nil
 		})
 

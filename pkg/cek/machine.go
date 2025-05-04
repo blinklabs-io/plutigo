@@ -8,18 +8,19 @@ import (
 )
 
 type Machine[T syn.Eval] struct {
-	costs           CostModel
-	slippage        uint32
-	exBudget        ExBudget
+	costs    CostModel
+	slippage uint32
+	ExBudget ExBudget
+	Logs     []string
+
 	unbudgetedSteps [10]uint32
-	Logs            []string
 }
 
 func NewMachine[T syn.Eval](slippage uint32) *Machine[T] {
 	return &Machine[T]{
 		costs:    DefaultCostModel,
 		slippage: slippage,
-		exBudget: DefaultExBudget,
+		ExBudget: DefaultExBudget,
 		Logs:     make([]string, 0),
 
 		unbudgetedSteps: [10]uint32{0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -143,7 +144,7 @@ func (m *Machine[T]) compute(
 			Term: t.Term,
 		}
 	case *syn.Error:
-		return nil, errors.New("Eval Failure")
+		return nil, errors.New("error explicitly called")
 
 	case *syn.Builtin:
 		if err := m.stepAndMaybeSpend(ExBuiltin); err != nil {
@@ -562,10 +563,10 @@ func (m *Machine[T]) spendUnbudgetedSteps() error {
 }
 
 func (m *Machine[T]) spendBudget(exBudget ExBudget) error {
-	m.exBudget.mem -= exBudget.mem
-	m.exBudget.cpu -= exBudget.cpu
+	m.ExBudget.Mem -= exBudget.Mem
+	m.ExBudget.Cpu -= exBudget.Cpu
 
-	if m.exBudget.mem < 0 || m.exBudget.cpu < 0 {
+	if m.ExBudget.Mem < 0 || m.ExBudget.Cpu < 0 {
 		return errors.New("out of budget")
 	}
 

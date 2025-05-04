@@ -1,16 +1,23 @@
 package cek
 
 type ExBudget struct {
-	mem int64
-	cpu int64
-}
-
-func (ex *ExBudget) occurrences(n uint32) {
-	ex.mem *= int64(n)
-	ex.cpu *= int64(n)
+	Mem int64
+	Cpu int64
 }
 
 var DefaultExBudget = ExBudget{
-	mem: 14000000,
-	cpu: 10000000000,
+	Mem: 14_000_000,
+	Cpu: 10_000_000_000,
+}
+
+func (ex *ExBudget) occurrences(n uint32) {
+	ex.Mem *= int64(n)
+	ex.Cpu *= int64(n)
+}
+
+func (ex *ExBudget) Sub(other *ExBudget) ExBudget {
+	return ExBudget{
+		Mem: ex.Mem - other.Mem,
+		Cpu: ex.Cpu - other.Cpu,
+	}
 }
