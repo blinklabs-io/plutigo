@@ -21,13 +21,28 @@ func main() {
 
 	input := string(content)
 
-	program, _ := syn.Parse(input)
+	program, err := syn.Parse(input)
+	if err != nil {
+		fmt.Printf("parse error: %v", err)
 
-	dProgram, _ := syn.NameToNamedDeBruijn(program)
+		os.Exit(1)
+	}
+
+	dProgram, err := syn.NameToNamedDeBruijn(program)
+	if err != nil {
+		fmt.Printf("conversion error: %v", err)
+
+		os.Exit(1)
+	}
 
 	machine := cek.NewMachine[syn.NamedDeBruijn](200)
 
-	term, _ := machine.Run(dProgram.Term)
+	term, err := machine.Run(dProgram.Term)
+	if err != nil {
+		fmt.Printf("eval error: %v", err)
+
+		os.Exit(1)
+	}
 
 	prettyTerm := syn.PrettyTerm[syn.NamedDeBruijn](term)
 
