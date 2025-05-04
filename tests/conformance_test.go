@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/blinklabs-io/plutigo/pkg/machine"
+	"github.com/blinklabs-io/plutigo/pkg/cek"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 )
 
@@ -222,14 +222,14 @@ func TestConformance(t *testing.T) {
 				// Evaluate program
 				debugLog(1, "Evaluating program...")
 
-				mach := machine.NewMachine(200)
+				machine := cek.NewMachine[syn.NamedDeBruijn](200)
 
 				dProgram, err := syn.NameToNamedDeBruijn(program)
 				if err != nil {
 					t.Fatalf("Failed to convert program to DeBruijn: %v", err)
 				}
 
-				result, budget := machine.Run[syn.NamedDeBruijn](mach, dProgram.Term)
+				result, budget := machine.Run(dProgram.Term)
 
 				debugLog(2, "Evaluation result: %s", result)
 				debugLog(2, "Remaining budget: %s", budget)

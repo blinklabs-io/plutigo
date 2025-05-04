@@ -1,4 +1,4 @@
-package machine
+package cek
 
 import (
 	"errors"
@@ -8,7 +8,7 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 )
 
-func evalBuiltinApp[T syn.Eval](m *Machine, b Builtin[T]) (Value[T], error) {
+func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 	// Budgeting
 	var evalValue Value[T]
 

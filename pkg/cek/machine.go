@@ -1,4 +1,4 @@
-package machine
+package cek
 
 import (
 	"errors"
@@ -7,7 +7,7 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 )
 
-type Machine struct {
+type Machine[T syn.Eval] struct {
 	costs           CostModel
 	slippage        uint32
 	exBudget        ExBudget
@@ -15,8 +15,8 @@ type Machine struct {
 	Logs            []string
 }
 
-func NewMachine(slippage uint32) *Machine {
-	return &Machine{
+func NewMachine[T syn.Eval](slippage uint32) *Machine[T] {
+	return &Machine[T]{
 		costs:    DefaultCostModel,
 		slippage: slippage,
 		exBudget: DefaultExBudget,
@@ -26,7 +26,7 @@ func NewMachine(slippage uint32) *Machine {
 	}
 }
 
-func Run[T syn.Eval](m *Machine, term syn.Term[T]) (syn.Term[T], error) {
+func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 	startupBudget := m.costs.machineCosts.startup
 	if err := m.spendBudget(startupBudget); err != nil {
 		return nil, err
@@ -34,15 +34,19 @@ func Run[T syn.Eval](m *Machine, term syn.Term[T]) (syn.Term[T], error) {
 
 	initialEnv := Env[T]([]Value[T]{})
 
-	var state MachineState[T] = Compute[T]{Ctx: NoFrame{}, Env: initialEnv, Term: term}
 	var err error
+	var state MachineState[T] = Compute[T]{
+		Ctx:  NoFrame{},
+		Env:  initialEnv,
+		Term: term,
+	}
 
 	for {
 		switch v := state.(type) {
 		case Compute[T]:
-			state, err = compute(m, v.Ctx, v.Env, v.Term)
+			state, err = m.compute(v.Ctx, v.Env, v.Term)
 		case Return[T]:
-			state, err = returnCompute[T](m, v.Ctx, v.Value)
+			state, err = m.returnCompute(v.Ctx, v.Value)
 		case Done[T]:
 			return v.term, nil
 		default:
@@ -54,8 +58,7 @@ func Run[T syn.Eval](m *Machine, term syn.Term[T]) (syn.Term[T], error) {
 	}
 }
 
-func compute[T syn.Eval](
-	m *Machine,
+func (m *Machine[T]) compute(
 	context MachineContext[T],
 	env Env[T],
 	term syn.Term[T],
@@ -68,7 +71,7 @@ func compute[T syn.Eval](
 			return nil, err
 		}
 
-		value, exists := lookup(&env, uint(t.Name.LookupIndex()))
+		value, exists := env.lookup(uint(t.Name.LookupIndex()))
 
 		if !exists {
 			return nil, errors.New("open term evaluated")
@@ -212,13 +215,13 @@ func compute[T syn.Eval](
 	return state, nil
 }
 
-func returnCompute[T syn.Eval](m *Machine, context MachineContext[T], value Value[T]) (MachineState[T], error) {
+func (m *Machine[T]) returnCompute(context MachineContext[T], value Value[T]) (MachineState[T], error) {
 	var state MachineState[T]
 	var err error
 
 	switch c := context.(type) {
 	case FrameAwaitArg[T]:
-		state, err = applyEvaluate[T](m, c.Ctx, c.Value, value)
+		state, err = m.applyEvaluate(c.Ctx, c.Value, value)
 
 		if err != nil {
 			return nil, err
@@ -233,13 +236,13 @@ func returnCompute[T syn.Eval](m *Machine, context MachineContext[T], value Valu
 			Term: c.Term,
 		}
 	case FrameAwaitFunValue[T]:
-		state, err = applyEvaluate[T](m, c.Ctx, value, c.Value)
+		state, err = m.applyEvaluate(c.Ctx, value, c.Value)
 
 		if err != nil {
 			return nil, err
 		}
 	case FrameForce[T]:
-		state, err = forceEvaluate[T](m, c.Ctx, value)
+		state, err = m.forceEvaluate(c.Ctx, value)
 
 		if err != nil {
 			return nil, err
@@ -304,7 +307,7 @@ func returnCompute[T syn.Eval](m *Machine, context MachineContext[T], value Valu
 	return state, nil
 }
 
-func forceEvaluate[T syn.Eval](m *Machine, context MachineContext[T], value Value[T]) (MachineState[T], error) {
+func (m *Machine[T]) forceEvaluate(context MachineContext[T], value Value[T]) (MachineState[T], error) {
 	var state MachineState[T]
 
 	switch v := value.(type) {
@@ -323,7 +326,7 @@ func forceEvaluate[T syn.Eval](m *Machine, context MachineContext[T], value Valu
 			if b.IsReady() {
 				var err error
 
-				resolved, err = evalBuiltinApp(m, b)
+				resolved, err = m.evalBuiltinApp(b)
 
 				if err != nil {
 					return nil, err
@@ -346,7 +349,7 @@ func forceEvaluate[T syn.Eval](m *Machine, context MachineContext[T], value Valu
 	return state, nil
 }
 
-func applyEvaluate[T syn.Eval](m *Machine, context MachineContext[T], function Value[T], arg Value[T]) (MachineState[T], error) {
+func (m *Machine[T]) applyEvaluate(context MachineContext[T], function Value[T], arg Value[T]) (MachineState[T], error) {
 	var state MachineState[T]
 
 	switch f := function.(type) {
@@ -371,7 +374,7 @@ func applyEvaluate[T syn.Eval](m *Machine, context MachineContext[T], function V
 			if b.IsReady() {
 				var err error
 
-				resolved, err = evalBuiltinApp(m, b)
+				resolved, err = m.evalBuiltinApp(b)
 
 				if err != nil {
 					return nil, err
@@ -470,7 +473,7 @@ func withEnv[T syn.Eval](lamCnt uint, env Env[T], term syn.Term[T]) syn.Term[T] 
 	case syn.Var[T]:
 		if lamCnt >= uint(t.Name.LookupIndex()) {
 			dischargedTerm = t
-		} else if val, exists := lookup(&env, uint(t.Name.LookupIndex())-lamCnt); exists {
+		} else if val, exists := env.lookup(uint(t.Name.LookupIndex()) - lamCnt); exists {
 			dischargedTerm = dischargeValue[T](*val)
 		} else {
 			dischargedTerm = t
@@ -526,7 +529,7 @@ func withEnv[T syn.Eval](lamCnt uint, env Env[T], term syn.Term[T]) syn.Term[T] 
 	return dischargedTerm
 }
 
-func (m *Machine) stepAndMaybeSpend(step StepKind) error {
+func (m *Machine[T]) stepAndMaybeSpend(step StepKind) error {
 	m.unbudgetedSteps[step] += 1
 	m.unbudgetedSteps[9] += 1
 
@@ -539,7 +542,7 @@ func (m *Machine) stepAndMaybeSpend(step StepKind) error {
 	return nil
 }
 
-func (m *Machine) spendUnbudgetedSteps() error {
+func (m *Machine[T]) spendUnbudgetedSteps() error {
 	for i := 0; i < len(m.unbudgetedSteps)-1; i++ {
 		unspent_step_budget :=
 			m.costs.machineCosts.get(StepKind(i))
@@ -558,7 +561,7 @@ func (m *Machine) spendUnbudgetedSteps() error {
 	return nil
 }
 
-func (m *Machine) spendBudget(exBudget ExBudget) error {
+func (m *Machine[T]) spendBudget(exBudget ExBudget) error {
 	m.exBudget.mem -= exBudget.mem
 	m.exBudget.cpu -= exBudget.cpu
 

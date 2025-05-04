@@ -1,4 +1,4 @@
-package machine
+package cek
 
 type ExBudget struct {
 	mem int64

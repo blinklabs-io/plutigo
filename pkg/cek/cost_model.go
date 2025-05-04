@@ -1,4 +1,4 @@
-package machine
+package cek
 
 type MachineCosts struct {
 	startup  ExBudget

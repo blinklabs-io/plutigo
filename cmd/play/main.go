@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/blinklabs-io/plutigo/pkg/machine"
+	"github.com/blinklabs-io/plutigo/pkg/cek"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 )
 
@@ -25,9 +25,9 @@ func main() {
 
 	dProgram, _ := syn.NameToNamedDeBruijn(program)
 
-	mach := machine.NewMachine(200)
+	machine := cek.NewMachine[syn.NamedDeBruijn](200)
 
-	term, _ := machine.Run[syn.NamedDeBruijn](mach, dProgram.Term)
+	term, _ := machine.Run(dProgram.Term)
 
 	prettyTerm := syn.PrettyTerm[syn.NamedDeBruijn](term)
 
