@@ -1,4 +1,4 @@
-package machine
+package cek
 
 func indexExists[T any](arr []T, index int) bool {
 	return index >= 0 && index < len(arr)

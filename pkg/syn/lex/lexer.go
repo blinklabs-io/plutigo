@@ -43,8 +43,37 @@ func (l *Lexer) peekChar() rune {
 }
 
 func (l *Lexer) skipWhitespace() {
-	for unicode.IsSpace(l.ch) {
-		l.readChar()
+	for {
+		// Skip standard whitespace
+		for unicode.IsSpace(l.ch) {
+			l.readChar()
+		}
+
+		// Check for comment start
+		if l.ch == '-' && l.peekChar() == '-' {
+			// Skip the '--'
+			l.readChar() // Consume first '-'
+			l.readChar() // Consume second '-'
+
+			// Skip until newline or EOF
+			for l.ch != '\n' && l.ch != 0 {
+				l.readChar()
+			}
+
+			// If we hit a newline, continue to check for more whitespace or comments
+			if l.ch == '\n' {
+				l.readChar()
+				continue
+			}
+
+			// If we hit EOF, break
+			if l.ch == 0 {
+				break
+			}
+		} else {
+			// No comment, exit loop
+			break
+		}
 	}
 }
 
@@ -92,7 +121,13 @@ func (l *Lexer) readByteString() (string, error) {
 		l.readChar()
 
 		if l.ch == 0 || unicode.IsSpace(l.ch) || l.ch == ')' || l.ch == ']' {
-			return l.input[start:l.pos], nil
+			literal := l.input[start:l.pos]
+
+			if len(literal)%2 != 0 {
+				return "", fmt.Errorf("bytestring #%s has odd length at position %d", literal, start-1)
+			}
+
+			return literal, nil
 		}
 
 		if !((l.ch >= '0' && l.ch <= '9') || (l.ch >= 'a' && l.ch <= 'f') || (l.ch >= 'A' && l.ch <= 'F')) {

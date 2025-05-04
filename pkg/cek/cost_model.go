@@ -1,4 +1,4 @@
-package machine
+package cek
 
 type MachineCosts struct {
 	startup  ExBudget
@@ -15,7 +15,6 @@ type MachineCosts struct {
 }
 
 func (mc MachineCosts) get(kind StepKind) ExBudget {
-
 	switch kind {
 	case ExConstant:
 		return mc.constant
@@ -41,43 +40,43 @@ func (mc MachineCosts) get(kind StepKind) ExBudget {
 }
 
 var DefaultMachineCosts = MachineCosts{
-	startup: ExBudget{mem: 100, cpu: 100},
+	startup: ExBudget{Mem: 100, Cpu: 100},
 	variable: ExBudget{
-		mem: 100,
-		cpu: 23000,
+		Mem: 100,
+		Cpu: 16000,
 	},
 	constant: ExBudget{
-		mem: 100,
-		cpu: 23000,
+		Mem: 100,
+		Cpu: 16000,
 	},
 	lambda: ExBudget{
-		mem: 100,
-		cpu: 23000,
+		Mem: 100,
+		Cpu: 16000,
 	},
 	delay: ExBudget{
-		mem: 100,
-		cpu: 23000,
+		Mem: 100,
+		Cpu: 16000,
 	},
 	force: ExBudget{
-		mem: 100,
-		cpu: 23000,
+		Mem: 100,
+		Cpu: 16000,
 	},
 	apply: ExBudget{
-		mem: 100,
-		cpu: 23000,
+		Mem: 100,
+		Cpu: 16000,
 	},
 	builtin: ExBudget{
-		mem: 100,
-		cpu: 23000,
+		Mem: 100,
+		Cpu: 16000,
 	},
 	// Placeholder values
 	constr: ExBudget{
-		mem: 30000000000,
-		cpu: 30000000000,
+		Mem: 100,
+		Cpu: 16000,
 	},
 	ccase: ExBudget{
-		mem: 30000000000,
-		cpu: 30000000000,
+		Mem: 100,
+		Cpu: 16000,
 	},
 }
 

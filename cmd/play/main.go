@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/blinklabs-io/plutigo/pkg/machine"
+	"github.com/blinklabs-io/plutigo/pkg/cek"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 )
 
@@ -21,13 +21,28 @@ func main() {
 
 	input := string(content)
 
-	program, _ := syn.Parse(input)
+	program, err := syn.Parse(input)
+	if err != nil {
+		fmt.Printf("parse error: %v", err)
 
-	dProgram, _ := syn.NameToNamedDeBruijn(program)
+		os.Exit(1)
+	}
 
-	mach := machine.NewMachine(200)
+	dProgram, err := syn.NameToNamedDeBruijn(program)
+	if err != nil {
+		fmt.Printf("conversion error: %v", err)
 
-	term, _ := machine.Run[syn.NamedDeBruijn](mach, dProgram.Term)
+		os.Exit(1)
+	}
+
+	machine := cek.NewMachine[syn.NamedDeBruijn](200)
+
+	term, err := machine.Run(dProgram.Term)
+	if err != nil {
+		fmt.Printf("eval error: %v", err)
+
+		os.Exit(1)
+	}
 
 	prettyTerm := syn.PrettyTerm[syn.NamedDeBruijn](term)
 
