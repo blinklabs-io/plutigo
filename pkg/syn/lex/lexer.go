@@ -121,7 +121,13 @@ func (l *Lexer) readByteString() (string, error) {
 		l.readChar()
 
 		if l.ch == 0 || unicode.IsSpace(l.ch) || l.ch == ')' || l.ch == ']' {
-			return l.input[start:l.pos], nil
+			literal := l.input[start:l.pos]
+
+			if len(literal)%2 != 0 {
+				return "", fmt.Errorf("bytestring #%s has odd length at position %d", literal, start-1)
+			}
+
+			return literal, nil
 		}
 
 		if !((l.ch >= '0' && l.ch <= '9') || (l.ch >= 'a' && l.ch <= 'f') || (l.ch >= 'A' && l.ch <= 'F')) {
