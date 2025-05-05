@@ -57,7 +57,7 @@ func (pp *PrettyPrinter) decreaseIndent() {
 
 // PrettyPrintTerm formats a Term[Name] to a string
 func prettyPrintTerm[T Binder](pp *PrettyPrinter, term Term[T]) string {
-	printTerm[T](pp, term)
+	printTerm[T](pp, term, true)
 
 	return pp.builder.String()
 }
@@ -74,15 +74,21 @@ func printProgram[T Binder](pp *PrettyPrinter, prog *Program[T]) {
 
 	pp.write(fmt.Sprintf("%d.%d.%d", prog.Version[0], prog.Version[1], prog.Version[2]))
 
-	pp.write(" ")
+	pp.write("\n")
 
-	printTerm[T](pp, prog.Term)
+	pp.increaseIndent()
+	pp.writeIndent()
+
+	printTerm[T](pp, prog.Term, false)
+
+	pp.decreaseIndent()
+	pp.write("\n")
 
 	pp.write(")")
 }
 
 // printTerm dispatches to the appropriate term printing method
-func printTerm[T Binder](pp *PrettyPrinter, term Term[T]) {
+func printTerm[T Binder](pp *PrettyPrinter, term Term[T], isTopLevel bool) {
 	switch t := term.(type) {
 	case *Var[T]:
 		pp.write(t.Name.TextName())
@@ -91,31 +97,62 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T]) {
 
 		pp.write(t.ParameterName.TextName())
 
-		pp.write(" ")
+		pp.write("\n")
+		pp.increaseIndent()
+		pp.writeIndent()
 
-		printTerm[T](pp, t.Body)
+		printTerm[T](pp, t.Body, false)
+
+		pp.decreaseIndent()
+		pp.write("\n")
+		pp.writeIndent()
 
 		pp.write(")")
 	case *Delay[T]:
-		pp.write("(delay ")
+		pp.write("(delay")
 
-		printTerm[T](pp, t.Term)
+		pp.write("\n")
+		pp.increaseIndent()
+		pp.writeIndent()
+
+		printTerm[T](pp, t.Term, false)
+
+		pp.decreaseIndent()
+		pp.write("\n")
+		pp.writeIndent()
 
 		pp.write(")")
-	case *Force[Name]:
-		pp.write("(force ")
+	case *Force[T]:
+		pp.write("(force")
 
-		printTerm[T](pp, t.Term)
+		pp.write("\n")
+		pp.increaseIndent()
+		pp.writeIndent()
+
+		printTerm[T](pp, t.Term, false)
+
+		pp.decreaseIndent()
+		pp.write("\n")
+		pp.writeIndent()
 
 		pp.write(")")
-	case *Apply[Name]:
+	case *Apply[T]:
 		pp.write("[")
 
-		printTerm[T](pp, t.Function)
+		pp.write("\n")
+		pp.increaseIndent()
+		pp.writeIndent()
 
-		pp.write(" ")
+		printTerm[T](pp, t.Function, false)
 
-		printTerm[T](pp, t.Argument)
+		pp.write("\n")
+		pp.writeIndent()
+
+		printTerm[T](pp, t.Argument, false)
+
+		pp.decreaseIndent()
+		pp.write("\n")
+		pp.writeIndent()
 
 		pp.write("]")
 	case *Builtin:
@@ -124,33 +161,60 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T]) {
 		pp.write(t.DefaultFunction.String()) // Assumes DefaultFunction has a String method
 
 		pp.write(")")
-	case *Constr[Name]:
+	case *Constr[T]:
 		pp.write(fmt.Sprintf("(constr %d", t.Tag))
 
-		for _, field := range *t.Fields {
-			pp.write(" ")
+		if len(t.Fields) > 0 {
+			pp.write("\n")
+			pp.increaseIndent()
 
-			printTerm[T](pp, field)
+			for _, field := range t.Fields {
+				pp.writeIndent()
+
+				printTerm[T](pp, field, false)
+
+				pp.write("\n")
+			}
+
+			pp.decreaseIndent()
+			pp.writeIndent()
 		}
 
+		pp.write("\n")
+		pp.writeIndent()
+
 		pp.write(")")
-	case *Case[Name]:
+	case *Case[T]:
 		pp.write("(case ")
 
-		printTerm[T](pp, t.Constr)
+		printTerm[T](pp, t.Constr, false)
 
-		for _, branch := range *t.Branches {
-			pp.write(" ")
+		if len(t.Branches) > 0 {
+			pp.write("\n")
+			pp.increaseIndent()
 
-			printTerm[T](pp, branch)
+			for _, branch := range t.Branches {
+				pp.writeIndent()
+
+				printTerm[T](pp, branch, false)
+
+				pp.write("\n")
+			}
+
+			pp.decreaseIndent()
+			pp.writeIndent()
 		}
+
+		pp.write("\n")
+		pp.writeIndent()
+
 		pp.write(")")
 	case *Error:
-		pp.write("(error)")
+		pp.write("(error )")
 	case *Constant:
 		pp.printConstant(t)
 	default:
-		pp.write(fmt.Sprintf("unknown term: %v", t))
+		panic(fmt.Sprintf("unknown term: %v", t))
 	}
 }
 
