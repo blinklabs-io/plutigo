@@ -272,7 +272,6 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 }
 
 func unwrapInteger[T syn.Eval](value Value[T]) (*big.Int, error) {
-
 	var i *big.Int
 
 	switch v := value.(type) {

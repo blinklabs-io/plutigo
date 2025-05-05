@@ -76,7 +76,7 @@ func newConverter() *converter {
 		currentLevel:  0,
 		currentUnique: 0,
 		levels: []biMap{
-			biMap{
+			{
 				left:  make(map[Unique]uint),
 				right: make(map[uint]Unique),
 			},
