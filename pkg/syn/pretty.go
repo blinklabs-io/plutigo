@@ -85,6 +85,8 @@ func printProgram[T Binder](pp *PrettyPrinter, prog *Program[T]) {
 	pp.write("\n")
 
 	pp.write(")")
+
+	pp.write("\n")
 }
 
 // printTerm dispatches to the appropriate term printing method
