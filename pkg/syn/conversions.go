@@ -5,27 +5,6 @@ import (
 	"fmt"
 )
 
-func (p *Program[Name]) ToEval() (*Program[Eval], error) {
-	var converter converter
-
-	t, err := nameToIndex(&converter, p.Term, func(s string, d DeBruijn) Eval {
-		return NamedDeBruijn{
-			Text:  s,
-			Index: d,
-		}
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	program := &Program[Eval]{
-		Version: p.Version,
-		Term:    t,
-	}
-
-	return program, nil
-}
-
 func NameToNamedDeBruijn(p *Program[Name]) (*Program[NamedDeBruijn], error) {
 	converter := newConverter()
 
