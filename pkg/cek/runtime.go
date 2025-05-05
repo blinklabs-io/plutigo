@@ -418,7 +418,17 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 	case builtin.ChooseUnit:
 		panic("implement ChooseUnit")
 	case builtin.Trace:
-		panic("implement Trace")
+		arg1, err := unwrapString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2 := b.Args[1]
+
+		// TODO: The budgeting
+		m.Logs = append(m.Logs, arg1)
+
+		evalValue = arg2
 	case builtin.FstPair:
 		panic("implement FstPair")
 	case builtin.SndPair:
@@ -503,6 +513,24 @@ func unwrapByteString[T syn.Eval](value Value[T]) ([]byte, error) {
 		}
 	default:
 		return nil, errors.New("Value not a Constant")
+	}
+
+	return i, nil
+}
+
+func unwrapString[T syn.Eval](value Value[T]) (string, error) {
+	var i string
+
+	switch v := value.(type) {
+	case Constant:
+		switch c := v.Constant.(type) {
+		case *syn.String:
+			i = c.Inner
+		default:
+			return "", errors.New("Value not a ByteString")
+		}
+	default:
+		return "", errors.New("Value not a Constant")
 	}
 
 	return i, nil

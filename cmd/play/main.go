@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/blinklabs-io/plutigo/pkg/cek"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
@@ -61,7 +62,14 @@ func main() {
 
 		prettyTerm := syn.PrettyTerm[syn.NamedDeBruijn](term)
 
-		fmt.Println(prettyTerm)
+		consumedBudget := cek.DefaultExBudget.Sub(&machine.ExBudget)
+
+		fmt.Printf("Term\n----\n%s\n\n", prettyTerm)
+		fmt.Printf("Budget\n------\nmem: %d\ncpu: %d\n\n", consumedBudget.Mem, consumedBudget.Cpu)
+
+		if len(machine.Logs) > 0 {
+			fmt.Printf("Logs\n----\n%s\n\n", strings.Join(machine.Logs, "\n"))
+		}
 	} else {
 		prettyProgram := syn.Pretty[syn.Name](program)
 
