@@ -36,11 +36,11 @@ func (b *termInterner) intern(currentTerm Term[Name]) {
 	case Case[Name]:
 		b.intern(term.Constr)
 
-		for _, branch := range *term.Branches {
+		for _, branch := range term.Branches {
 			b.intern(branch)
 		}
 	case Constr[Name]:
-		for _, branch := range *term.Fields {
+		for _, branch := range term.Fields {
 			b.intern(branch)
 		}
 	// Error, Constant, and Builtin have nothing further to intern.

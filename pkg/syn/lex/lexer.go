@@ -90,6 +90,10 @@ func (l *Lexer) readIdentifier() string {
 func (l *Lexer) readNumber() string {
 	start := l.pos
 
+	if l.ch == '-' {
+		l.readChar() // Consume the minus sign
+	}
+
 	for unicode.IsDigit(l.ch) {
 		l.readChar()
 	}
@@ -251,8 +255,18 @@ func (l *Lexer) NextToken() Token {
 			}
 
 			return tok
-		} else if unicode.IsDigit(l.ch) {
+		} else if l.ch == '-' || unicode.IsDigit(l.ch) {
 			literal := l.readNumber()
+
+			if len(literal) == 1 && literal == "-" {
+				tok.Type = TokenError
+
+				tok.Literal = fmt.Sprintf("invalid number: lone minus sign at position %d", l.pos)
+
+				l.readChar()
+
+				return tok
+			}
 
 			tok.Type = TokenNumber
 
@@ -260,7 +274,13 @@ func (l *Lexer) NextToken() Token {
 
 			n := new(big.Int)
 
-			n.SetString(literal, 10)
+			if _, ok := n.SetString(literal, 10); !ok {
+				tok.Type = TokenError
+
+				tok.Literal = fmt.Sprintf("invalid number %s at position %d", literal, l.pos)
+
+				return tok
+			}
 
 			tok.Value = n
 
