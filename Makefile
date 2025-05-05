@@ -1,5 +1,5 @@
 # Makefile for Go project
-.PHONY: test test-one fmt clean
+.PHONY: test test-one fmt clean play
 
 test: ## Run tests
 	@echo "Running tests..."
@@ -14,3 +14,9 @@ fmt: ## Format Go code
 
 clean: ## Remove test cache
 	@go clean -testcache
+
+play: ## Run the play command with arguments
+	@go run ./cmd/play/ cmd/play/sample.uplc
+
+play-fmt: ## Run the play command with arguments
+	@go run ./cmd/play/ -f cmd/play/sample.uplc
