@@ -164,7 +164,7 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 
-		fields := *t.Fields
+		fields := t.Fields
 
 		if len(fields) == 0 {
 			state = Return[T]{
@@ -201,7 +201,7 @@ func (m *Machine[T]) compute(
 		frame := FrameCases[T]{
 			Env:      env,
 			Ctx:      context,
-			Branches: *t.Branches,
+			Branches: t.Branches,
 		}
 
 		state = Compute[T]{
@@ -460,7 +460,7 @@ func dischargeValue[T syn.Eval](value Value[T]) syn.Term[T] {
 
 		dischargedTerm = &syn.Constr[T]{
 			Tag:    v.Tag,
-			Fields: &fields,
+			Fields: fields,
 		}
 	}
 
@@ -504,24 +504,24 @@ func withEnv[T syn.Eval](lamCnt uint, env Env[T], term syn.Term[T]) syn.Term[T] 
 	case syn.Constr[T]:
 		fields := []syn.Term[T]{}
 
-		for _, f := range *t.Fields {
+		for _, f := range t.Fields {
 			fields = append(fields, withEnv(lamCnt, env, f))
 		}
 
 		dischargedTerm = &syn.Constr[T]{
 			Tag:    t.Tag,
-			Fields: &fields,
+			Fields: fields,
 		}
 	case syn.Case[T]:
 		branches := []syn.Term[T]{}
 
-		for _, b := range *t.Branches {
+		for _, b := range t.Branches {
 			branches = append(branches, withEnv(lamCnt, env, b))
 		}
 
 		dischargedTerm = &syn.Case[T]{
 			Constr:   withEnv(lamCnt, env, t.Constr),
-			Branches: &branches,
+			Branches: branches,
 		}
 	default:
 		dischargedTerm = t

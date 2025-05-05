@@ -280,7 +280,7 @@ func (p *Parser) parseConstr() (Term[Name], error) {
 		return nil, err
 	}
 
-	return &Constr[Name]{Tag: uint(tag), Fields: &fields}, nil
+	return &Constr[Name]{Tag: uint(tag), Fields: fields}, nil
 }
 
 func (p *Parser) parseCase() (Term[Name], error) {
@@ -308,7 +308,7 @@ func (p *Parser) parseCase() (Term[Name], error) {
 		return nil, err
 	}
 
-	return &Case[Name]{Constr: constr, Branches: &branches}, nil
+	return &Case[Name]{Constr: constr, Branches: branches}, nil
 }
 
 func (p *Parser) parseConstant() (Term[Name], error) {

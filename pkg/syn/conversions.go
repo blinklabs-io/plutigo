@@ -162,7 +162,7 @@ func nameToIndex[T any](c *converter, term Term[Name], converter func(string, De
 	case *Constr[Name]:
 		var fields []Term[T]
 
-		for _, f := range *t.Fields {
+		for _, f := range t.Fields {
 			item, err := nameToIndex(c, f, converter)
 			if err != nil {
 				return nil, err
@@ -173,12 +173,12 @@ func nameToIndex[T any](c *converter, term Term[Name], converter func(string, De
 
 		converted = &Constr[T]{
 			Tag:    t.Tag,
-			Fields: &fields,
+			Fields: fields,
 		}
 	case *Case[Name]:
 		var branches []Term[T]
 
-		for _, b := range *t.Branches {
+		for _, b := range t.Branches {
 			item, err := nameToIndex(c, b, converter)
 			if err != nil {
 				return nil, err
@@ -195,7 +195,7 @@ func nameToIndex[T any](c *converter, term Term[Name], converter func(string, De
 
 		converted = &Case[T]{
 			Constr:   constr,
-			Branches: &branches,
+			Branches: branches,
 		}
 	default:
 		fmt.Printf("%#v", t)

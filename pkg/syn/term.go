@@ -55,7 +55,7 @@ func (Builtin) isTerm() {}
 // (constr 0 (con integer 1) (con string "1234"))
 type Constr[T any] struct {
 	Tag    uint
-	Fields *[]Term[T]
+	Fields []Term[T]
 }
 
 func (Constr[T]) isTerm() {}
@@ -63,7 +63,7 @@ func (Constr[T]) isTerm() {}
 // (case (constr 0) (constr 1 (con integer 1)))
 type Case[T any] struct {
 	Constr   Term[T]
-	Branches *[]Term[T]
+	Branches []Term[T]
 }
 
 func (Case[T]) isTerm() {}
