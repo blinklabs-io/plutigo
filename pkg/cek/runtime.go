@@ -1,6 +1,7 @@
 package cek
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math/big"
@@ -175,23 +176,209 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 		evalValue = Constant{
 			Constant: con,
 		}
-
 	case builtin.AppendByteString:
-		panic("implement AppendByteString")
+		arg1, err := unwrapByteString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapByteString[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: The budgeting
+
+		res := make([]byte, len(arg1)+len(arg2))
+
+		copy(res, arg1)
+		copy(res[len(arg1):], arg2)
+
+		evalValue = Constant{
+			Constant: &syn.ByteString{
+				Inner: res,
+			},
+		}
 	case builtin.ConsByteString:
 		panic("implement ConsByteString")
 	case builtin.SliceByteString:
-		panic("implement SliceByteString")
+		arg1, err := unwrapInteger[T](b.Args[0]) // skip
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapInteger[T](b.Args[1]) // take
+		if err != nil {
+			return nil, err
+		}
+
+		arg3, err := unwrapByteString[T](b.Args[2]) // byte string
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert skip and take to int
+		skip := 0
+		if arg1.Sign() > 0 {
+			if skip64, ok := arg1.Int64(), arg1.IsInt64(); ok {
+				skip = int(skip64)
+			} else {
+				skip = len(arg3) // Clamp to max if too large
+			}
+		}
+
+		take := 0
+		if arg2.Sign() > 0 {
+			if take64, ok := arg2.Int64(), arg2.IsInt64(); ok {
+				take = int(take64)
+			} else {
+				take = len(arg3) - skip // Take as much as possible
+			}
+		}
+
+		// Clamp end to len(arg3) to avoid out-of-bounds
+		end := skip + take
+
+		if end > len(arg3) {
+			end = len(arg3)
+		}
+
+		if skip > len(arg3) {
+			skip = len(arg3)
+			end = len(arg3)
+		}
+
+		// Slice
+		res := arg3[skip:end]
+
+		evalValue = Constant{
+			Constant: &syn.ByteString{
+				Inner: res,
+			},
+		}
 	case builtin.LengthOfByteString:
-		panic("implement LengthOfByteString")
+		arg1, err := unwrapByteString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: The budgeting
+
+		res := len(arg1)
+
+		evalValue = Constant{
+			Constant: &syn.Integer{
+				Inner: big.NewInt(int64(res)),
+			},
+		}
 	case builtin.IndexByteString:
-		panic("implement IndexByteString")
+		arg1, err := unwrapByteString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapInteger[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: The budgeting
+
+		index, ok := arg2.Int64(), arg2.IsInt64()
+		if !ok {
+			return nil, errors.New("byte string out of bounds")
+		}
+
+		// demorgan's law on: index >= 0 && int(index) < len(arg1)
+		if index < 0 || int(index) >= len(arg1) {
+			return nil, errors.New("byte string out of bounds")
+		}
+
+		res := int64(arg1[index])
+
+		evalValue = Constant{
+			Constant: &syn.Integer{
+				Inner: big.NewInt(res),
+			},
+		}
 	case builtin.EqualsByteString:
-		panic("implement EqualsByteString")
+		arg1, err := unwrapByteString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapByteString[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: The budgeting
+
+		res := bytes.Equal(arg1, arg2)
+
+		evalValue = Constant{
+			Constant: &syn.Bool{
+				Inner: res,
+			},
+		}
 	case builtin.LessThanByteString:
-		panic("implement LessThanByteString")
+		arg1, err := unwrapByteString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapByteString[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: The budgeting
+
+		res := bytes.Compare(arg1, arg2)
+
+		// assume false
+
+		con := &syn.Bool{
+			Inner: false,
+		}
+
+		// it's true
+		if res == -1 {
+			con.Inner = true
+		}
+
+		evalValue = Constant{
+			Constant: con,
+		}
 	case builtin.LessThanEqualsByteString:
-		panic("implement LessThanEqualsByteString")
+		arg1, err := unwrapByteString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapByteString[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: The budgeting
+
+		res := bytes.Compare(arg1, arg2)
+
+		// assume false
+
+		con := &syn.Bool{
+			Inner: false,
+		}
+
+		// it's true
+		if res == -1 || res == 0 {
+			con.Inner = true
+		}
+
+		evalValue = Constant{
+			Constant: con,
+		}
 	case builtin.Sha2_256:
 		panic("implement Sha2_256")
 	case builtin.Sha3_256:
@@ -213,7 +400,21 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 	case builtin.DecodeUtf8:
 		panic("implement DecodeUtf8")
 	case builtin.IfThenElse:
-		panic("implement IfThenElse")
+		arg1, err := unwrapBool[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2 := b.Args[1]
+		arg3 := b.Args[2]
+
+		// TODO: The budgeting
+
+		if arg1 {
+			evalValue = arg2
+		} else {
+			evalValue = arg3
+		}
 	case builtin.ChooseUnit:
 		panic("implement ChooseUnit")
 	case builtin.Trace:
@@ -284,6 +485,42 @@ func unwrapInteger[T syn.Eval](value Value[T]) (*big.Int, error) {
 		}
 	default:
 		return nil, errors.New("Value not a Constant")
+	}
+
+	return i, nil
+}
+
+func unwrapByteString[T syn.Eval](value Value[T]) ([]byte, error) {
+	var i []byte
+
+	switch v := value.(type) {
+	case Constant:
+		switch c := v.Constant.(type) {
+		case *syn.ByteString:
+			i = c.Inner
+		default:
+			return nil, errors.New("Value not a ByteString")
+		}
+	default:
+		return nil, errors.New("Value not a Constant")
+	}
+
+	return i, nil
+}
+
+func unwrapBool[T syn.Eval](value Value[T]) (bool, error) {
+	var i bool
+
+	switch v := value.(type) {
+	case Constant:
+		switch c := v.Constant.(type) {
+		case *syn.Bool:
+			i = c.Inner
+		default:
+			return false, errors.New("Value not a ByteString")
+		}
+	default:
+		return false, errors.New("Value not a Constant")
 	}
 
 	return i, nil
