@@ -19,7 +19,7 @@ func (Integer) isConstant() {}
 
 // (con bytestring #aaBB)
 type ByteString struct {
-	Inner []uint8
+	Inner []byte
 }
 
 func (ByteString) isConstant() {}
