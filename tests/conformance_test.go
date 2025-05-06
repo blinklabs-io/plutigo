@@ -13,12 +13,6 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 )
 
-// Debug configuration
-const (
-	debugEnabled = true
-	debugLevel   = 2 // 1=basic, 2=verbose, 3=trace
-)
-
 // ==================== Test Cases ====================
 
 func TestParse(t *testing.T) {
@@ -271,6 +265,7 @@ func TestConformance(t *testing.T) {
 
 // ==================== Test Helpers ====================
 
+//nolint:unused
 func alphaEquivalent(a syn.Term[syn.NamedDeBruijn], b syn.Term[syn.NamedDeBruijn]) bool {
 	switch aTerm := a.(type) {
 	case syn.Var[syn.NamedDeBruijn]:
