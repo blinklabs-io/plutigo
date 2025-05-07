@@ -380,11 +380,12 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 
 			var b bool
 
-			if p.curToken.Type == lex.TokenTrue {
+			switch p.curToken.Type {
+			case lex.TokenTrue:
 				b = true
-			} else if p.curToken.Type == lex.TokenFalse {
+			case lex.TokenFalse:
 				b = false
-			} else {
+			default:
 				return nil, fmt.Errorf("expected bool value, got %v at position %d", p.curToken.Type, p.curToken.Position)
 			}
 

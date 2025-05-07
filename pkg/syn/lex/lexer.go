@@ -194,7 +194,12 @@ func (l *Lexer) NextToken() Token {
 
 		for i := 0; i < len(literal); i += 2 {
 			var val uint8
-			fmt.Sscanf(literal[i:i+2], "%x", &val)
+			_, err = fmt.Sscanf(literal[i:i+2], "%x", &val)
+			if err != nil {
+				tok.Type = TokenError
+				tok.Literal = err.Error()
+				return tok
+			}
 			bytes[i/2] = val
 		}
 

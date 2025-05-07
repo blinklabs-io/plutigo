@@ -160,7 +160,7 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T], isTopLevel bool) {
 	case *Builtin:
 		pp.write("(builtin ")
 
-		pp.write(t.DefaultFunction.String()) // Assumes DefaultFunction has a String method
+		pp.write(t.String()) // Assumes DefaultFunction has a String method
 
 		pp.write(")")
 	case *Constr[T]:

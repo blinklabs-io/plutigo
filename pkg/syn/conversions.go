@@ -197,6 +197,7 @@ func (c *converter) getIndex(name *Name) (DeBruijn, error) {
 	return 0, errors.New("FreeUnique")
 }
 
+//nolint:unused
 // getUnique finds the Unique identifier for a given DeBruijn index
 func (c *converter) getUnique(index DeBruijn) (Unique, error) {
 	for i := len(c.levels) - 1; i >= 0; i-- {
@@ -227,6 +228,7 @@ func (c *converter) removeUnique(unique Unique) {
 	scope.remove(unique, c.currentLevel)
 }
 
+//nolint:unused
 // declareBinder declares a new binder in the current scope
 func (c *converter) declareBinder() {
 	scope := &c.levels[c.currentLevel]

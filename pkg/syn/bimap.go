@@ -20,6 +20,7 @@ func (b *biMap) getByUnique(unique Unique) (uint, bool) {
 	return level, ok
 }
 
+//nolint:unused
 func (b *biMap) getByLevel(level uint) (Unique, bool) {
 	unique, ok := b.right[level]
 	return unique, ok
