@@ -65,7 +65,7 @@ func main() {
 		consumedBudget := cek.DefaultExBudget.Sub(&machine.ExBudget)
 
 		fmt.Printf("Term\n----\n%s\n\n", prettyTerm)
-		fmt.Printf("Budget\n------\nmem: %d\ncpu: %d\n\n", consumedBudget.Mem, consumedBudget.Cpu)
+		fmt.Printf("Budget\n------\ncpu: %d\nmem: %d\n\n", consumedBudget.Cpu, consumedBudget.Mem)
 
 		if len(machine.Logs) > 0 {
 			fmt.Printf("Logs\n----\n%s\n\n", strings.Join(machine.Logs, "\n"))

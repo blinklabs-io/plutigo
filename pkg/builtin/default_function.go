@@ -98,9 +98,9 @@ var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
 	"lessThanByteString":       LessThanByteString,
 	"lessThanEqualsByteString": LessThanEqualsByteString,
 	// Cryptography and hash functions
-	"sha2256":                         Sha2_256,
-	"sha3256":                         Sha3_256,
-	"blake2B256":                      Blake2b_256,
+	"sha2_256":                        Sha2_256,
+	"sha3_256":                        Sha3_256,
+	"blake2b_256":                     Blake2b_256,
 	"verifyEd25519Signature":          VerifyEd25519Signature,
 	"verifyEcdsaSecp256K1Signature":   VerifyEcdsaSecp256k1Signature,
 	"verifySchnorrSecp256K1Signature": VerifySchnorrSecp256k1Signature,

@@ -1,11 +1,9 @@
 (program 1.0.0
   [
+    (builtin blake2b_256)
     [
-      (force
-        (builtin trace)
-      )
-      (con string "vm logging stuff bro")
+      (builtin encodeUtf8)
+      (con string "yo yo")
     ]
-    (con bytestring #aabbccbbaa)
   ]
 )
