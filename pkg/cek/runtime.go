@@ -2,12 +2,17 @@ package cek
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"crypto/sha3"
 	"errors"
 	"fmt"
 	"math/big"
+	"unicode/utf8"
 
 	"github.com/blinklabs-io/plutigo/pkg/builtin"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
+	"golang.org/x/crypto/blake2b"
 )
 
 func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
@@ -82,13 +87,115 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			},
 		}
 	case builtin.DivideInteger:
-		panic("implement DivideInteger")
+		arg1, err := unwrapInteger[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapInteger[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+		// Check for division by zero
+
+		if arg2.Sign() == 0 {
+			return nil, fmt.Errorf("division by zero")
+		}
+
+		// TODO: The budgeting
+
+		var newInt big.Int
+
+		newInt.Div(arg1, arg2) // Division (rounds toward zero)
+
+		evalValue = Constant{
+			Constant: &syn.Integer{
+				Inner: &newInt,
+			},
+		}
 	case builtin.QuotientInteger:
-		panic("implement QuotientInteger")
+		arg1, err := unwrapInteger[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapInteger[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		// Check for division by zero
+
+		if arg2.Sign() == 0 {
+			return nil, fmt.Errorf("division by zero")
+		}
+
+		// TODO: The budgeting
+
+		var newInt big.Int
+
+		newInt.Quo(arg1, arg2) // Floor division (rounds toward negative infinity)
+
+		evalValue = Constant{
+			Constant: &syn.Integer{
+				Inner: &newInt,
+			},
+		}
 	case builtin.RemainderInteger:
-		panic("implement RemainderInteger")
+		arg1, err := unwrapInteger[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapInteger[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		// Check for division by zero
+
+		if arg2.Sign() == 0 {
+			return nil, fmt.Errorf("division by zero")
+		}
+
+		// TODO: The budgeting
+
+		var newInt big.Int
+
+		newInt.Rem(arg1, arg2) // Remainder (consistent with Div, can be negative)
+
+		evalValue = Constant{
+			Constant: &syn.Integer{
+				Inner: &newInt,
+			},
+		}
 	case builtin.ModInteger:
-		panic("implement ModInteger")
+		arg1, err := unwrapInteger[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapInteger[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		// Check for division by zero
+		if arg2.Sign() == 0 {
+			return nil, fmt.Errorf("division by zero")
+		}
+
+		// TODO: The budgeting
+
+		var newInt big.Int
+
+		newInt.Mod(arg1, arg2) // Modulus (always non-negative)
+
+		evalValue = Constant{
+			Constant: &syn.Integer{
+				Inner: &newInt,
+			},
+		}
 	case builtin.EqualsInteger:
 		arg1, err := unwrapInteger[T](b.Args[0])
 		if err != nil {
@@ -380,25 +487,177 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			Constant: con,
 		}
 	case builtin.Sha2_256:
-		panic("implement Sha2_256")
+		arg1, err := unwrapByteString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: The budgeting
+
+		res := sha256.Sum256(arg1)
+
+		con := &syn.ByteString{
+			Inner: res[:],
+		}
+
+		evalValue = Constant{
+			Constant: con,
+		}
 	case builtin.Sha3_256:
-		panic("implement Sha3_256")
+		arg1, err := unwrapByteString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: The budgeting
+
+		res := sha3.Sum256(arg1)
+
+		con := &syn.ByteString{
+			Inner: res[:],
+		}
+
+		evalValue = Constant{
+			Constant: con,
+		}
 	case builtin.Blake2b_256:
-		panic("implement Blake2b_256")
+		arg1, err := unwrapByteString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: The budgeting
+
+		res := blake2b.Sum256(arg1)
+
+		con := &syn.ByteString{
+			Inner: res[:],
+		}
+
+		evalValue = Constant{
+			Constant: con,
+		}
 	case builtin.VerifyEd25519Signature:
-		panic("implement VerifyEd25519Signature")
+		publicKey, err := unwrapByteString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		message, err := unwrapByteString[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		signature, err := unwrapByteString[T](b.Args[2])
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: The budgeting
+
+		if len(publicKey) != ed25519.PublicKeySize { // 32 bytes
+			return nil, fmt.Errorf("invalid public key length: got %d, expected 32", len(publicKey))
+		}
+
+		if len(signature) != ed25519.SignatureSize { // 64 bytes
+			return nil, fmt.Errorf("invalid signature length: got %d, expected 64", len(signature))
+		}
+
+		res := ed25519.Verify(publicKey, message, signature)
+
+		con := &syn.Bool{
+			Inner: res,
+		}
+
+		evalValue = Constant{
+			Constant: con,
+		}
 	case builtin.VerifyEcdsaSecp256k1Signature:
 		panic("implement VerifyEcdsaSecp256k1Signature")
 	case builtin.VerifySchnorrSecp256k1Signature:
 		panic("implement VerifySchnorrSecp256k1Signature")
 	case builtin.AppendString:
-		panic("implement AppendString")
+		arg1, err := unwrapString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapString[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: The budgeting
+
+		res := arg1 + arg2
+
+		con := &syn.String{
+			Inner: res,
+		}
+
+		evalValue = Constant{
+			Constant: con,
+		}
 	case builtin.EqualsString:
-		panic("implement EqualsString")
+		arg1, err := unwrapString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapString[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: The budgeting
+
+		res := arg1 == arg2
+
+		con := &syn.Bool{
+			Inner: res,
+		}
+
+		evalValue = Constant{
+			Constant: con,
+		}
 	case builtin.EncodeUtf8:
-		panic("implement EncodeUtf8")
+		arg1, err := unwrapString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: The budgeting
+
+		res := []byte(arg1)
+
+		con := &syn.ByteString{
+			Inner: res,
+		}
+
+		evalValue = Constant{
+			Constant: con,
+		}
 	case builtin.DecodeUtf8:
-		panic("implement DecodeUtf8")
+		arg1, err := unwrapByteString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: The budgeting
+
+		if !utf8.Valid(arg1) {
+			return nil, errors.New("error decoding utf8 bytes")
+		}
+
+		res := string(arg1)
+
+		con := &syn.String{
+			Inner: res,
+		}
+
+		evalValue = Constant{
+			Constant: con,
+		}
 	case builtin.IfThenElse:
 		arg1, err := unwrapBool[T](b.Args[0])
 		if err != nil {
