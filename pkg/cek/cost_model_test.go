@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestBigIntExMem_0(t *testing.T) {
+func TestBigIntExMem0(t *testing.T) {
 	x := big.NewInt(0)
 
 	y := bigIntExMem(x)()
@@ -17,8 +17,8 @@ func TestBigIntExMem_0(t *testing.T) {
 	println(y)
 }
 
-func TestBigIntExMem_63(t *testing.T) {
-	x := big.NewInt(0)
+func TestBigIntExMemSmall(t *testing.T) {
+	x := big.NewInt(1600000000000)
 
 	y := bigIntExMem(x)()
 
@@ -29,32 +29,10 @@ func TestBigIntExMem_63(t *testing.T) {
 	println(y)
 }
 
-func TestBigIntExMem_64(t *testing.T) {
-	x := big.NewInt(0)
+func TestBigIntExMemBig(t *testing.T) {
+	x := big.NewInt(160000000000000)
 
-	y := bigIntExMem(x)()
-
-	if y != ExMem(1) {
-		t.Error("HOW???")
-	}
-
-	println(y)
-}
-
-func TestBigIntExMem_65(t *testing.T) {
-	x := big.NewInt(0)
-
-	y := bigIntExMem(x)()
-
-	if y != ExMem(1) {
-		t.Error("HOW???")
-	}
-
-	println(y)
-}
-
-func TestBigIntExMem_128(t *testing.T) {
-	x := big.NewInt(128)
+	x.Mul(x, big.NewInt(1000000))
 
 	y := bigIntExMem(x)()
 
@@ -65,36 +43,16 @@ func TestBigIntExMem_128(t *testing.T) {
 	println(y)
 }
 
-func TestBigIntExMem_1024(t *testing.T) {
-	x := big.NewInt(1024)
+func TestBigIntExMemHuge(t *testing.T) {
+	x := big.NewInt(1600000000000000000)
+
+	x.Mul(x, big.NewInt(1000000000000000000))
+
+	x.Mul(x, big.NewInt(1000))
 
 	y := bigIntExMem(x)()
 
-	if y != ExMem(5) {
-		t.Error("HOW???")
-	}
-
-	println(y)
-}
-
-func TestBigIntExMem_1025(t *testing.T) {
-	x := big.NewInt(1025)
-
-	y := bigIntExMem(x)()
-
-	if y != ExMem(5) {
-		t.Error("HOW???")
-	}
-
-	println(y)
-}
-
-func TestBigIntExMem_neg_1025(t *testing.T) {
-	x := big.NewInt(-1025)
-
-	y := bigIntExMem(x)()
-
-	if y != ExMem(5) {
+	if y != ExMem(3) {
 		t.Error("HOW???")
 	}
 

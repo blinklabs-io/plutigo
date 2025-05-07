@@ -2,7 +2,6 @@ package cek
 
 import (
 	"math/big"
-	"reflect"
 
 	"github.com/blinklabs-io/plutigo/pkg/builtin"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
@@ -126,16 +125,16 @@ func ValueExMem[T syn.Eval](v Value[T]) func() ExMem {
 func bigIntExMem(i *big.Int) func() ExMem {
 	return func() ExMem {
 		x := big.NewInt(0)
-		if reflect.DeepEqual(x, i) {
+		if x.Cmp(i) == 0 {
 			return ExMem(1)
 		} else {
 			x := big.NewInt(0)
 
 			x.Abs(i)
 
-			x.Div(x, big.NewInt(64))
+			logResult := x.BitLen() - 1
 
-			return ExMem(x.BitLen())
+			return ExMem(logResult/64 + 1)
 		}
 	}
 }
