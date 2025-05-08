@@ -409,7 +409,7 @@ type LinearInX struct {
 }
 
 func (l LinearInX) CostTwo(x, y ExMem) int {
-	return l.LinearCost.Cost(x)
+	return l.Cost(x)
 }
 
 // Y is not used so constant
@@ -425,7 +425,7 @@ type LinearInY struct {
 }
 
 func (l LinearInY) CostTwo(x, y ExMem) int {
-	return l.LinearCost.Cost(y)
+	return l.Cost(y)
 }
 
 // X is not used so constant
@@ -670,7 +670,7 @@ type ThreeLinearInX struct {
 }
 
 func (l ThreeLinearInX) CostThree(x, y, z ExMem) int {
-	return l.LinearCost.Cost(x)
+	return l.Cost(x)
 }
 
 // Y,Z are not used so constant
@@ -686,7 +686,7 @@ type ThreeLinearInY struct {
 }
 
 func (l ThreeLinearInY) CostThree(x, y, z ExMem) int {
-	return l.LinearCost.Cost(y)
+	return l.Cost(y)
 }
 
 // X,Z are not used so constant
@@ -702,7 +702,7 @@ type ThreeLinearInZ struct {
 }
 
 func (l ThreeLinearInZ) CostThree(x, y, z ExMem) int {
-	return l.LinearCost.Cost(z)
+	return l.Cost(z)
 }
 
 // X,Y are not used so constant

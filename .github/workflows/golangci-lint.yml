@@ -18,8 +18,8 @@ jobs:
     name: lint
     strategy:
       matrix:
-        go-version: [1.23.x]
-        platform: [ubuntu-latest, macos-latest]
+        go-version: [1.24.x]
+        platform: [ubuntu-latest]
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -27,10 +27,4 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.53.3 # current version at time of commit
-          # We disable the 'unused' linter check to avoid annoying linter warnings during initial development
-          args: --timeout=10m --disable unused
-          only-new-issues: true
-    
+        uses: golangci/golangci-lint-action@v8

@@ -26,7 +26,7 @@ func (m *Machine[T]) CostOne(b *builtin.DefaultFunction, x func() ExMem) {
 		cpu: cpu,
 	}
 
-	m.spendBudget(CostSingle(cf, x))
+	_ = m.spendBudget(CostSingle(cf, x))
 }
 
 func (m *Machine[T]) CostTwo(b *builtin.DefaultFunction, x, y func() ExMem) {
@@ -40,7 +40,7 @@ func (m *Machine[T]) CostTwo(b *builtin.DefaultFunction, x, y func() ExMem) {
 		cpu: cpu,
 	}
 
-	m.spendBudget(CostPair(cf, x, y))
+	_ = m.spendBudget(CostPair(cf, x, y))
 }
 
 func (m *Machine[T]) CostThree(b *builtin.DefaultFunction, x, y, z func() ExMem) {
@@ -54,7 +54,7 @@ func (m *Machine[T]) CostThree(b *builtin.DefaultFunction, x, y, z func() ExMem)
 		cpu: cpu,
 	}
 
-	m.spendBudget(CostTriple(cf, x, y, z))
+	_ = m.spendBudget(CostTriple(cf, x, y, z))
 }
 
 func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
