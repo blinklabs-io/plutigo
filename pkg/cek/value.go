@@ -9,7 +9,7 @@ import (
 
 type Value[T syn.Eval] interface {
 	fmt.Stringer
-
+	toExMem() ExMem
 	isValue()
 }
 
@@ -21,7 +21,14 @@ func (c Constant) String() string {
 	return fmt.Sprintf("%v", c.Constant)
 }
 
-func (c Constant) isValue() {}
+func (Constant) isValue() {}
+
+func (c Constant) toExMem() ExMem {
+	switch c.Constant.(type) {
+	default:
+		panic("Exhausted Constant Choices")
+	}
+}
 
 type Delay[T syn.Eval] struct {
 	Body syn.Term[T]
@@ -32,7 +39,11 @@ func (d Delay[T]) String() string {
 	return fmt.Sprintf("Delay[%T]", d.Body)
 }
 
-func (d Delay[T]) isValue() {}
+func (Delay[T]) isValue() {}
+
+func (Delay[T]) toExMem() ExMem {
+	return ExMem(1)
+}
 
 type Lambda[T syn.Eval] struct {
 	ParameterName T
@@ -46,6 +57,10 @@ func (l Lambda[T]) String() string {
 
 func (l Lambda[T]) isValue() {}
 
+func (Lambda[T]) toExMem() ExMem {
+	return ExMem(1)
+}
+
 type Builtin[T syn.Eval] struct {
 	Func   builtin.DefaultFunction
 	Forces uint
@@ -57,6 +72,10 @@ func (b Builtin[T]) String() string {
 }
 
 func (b Builtin[T]) isValue() {}
+
+func (b Builtin[T]) toExMem() ExMem {
+	return ExMem(1)
+}
 
 func (b Builtin[T]) NeedsForce() bool {
 	return b.Func.ForceCount() > int(b.Forces)
@@ -102,3 +121,7 @@ func (c Constr[T]) String() string {
 }
 
 func (c Constr[T]) isValue() {}
+
+func (c Constr[T]) toExMem() ExMem {
+	return ExMem(1)
+}

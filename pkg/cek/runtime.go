@@ -15,6 +15,48 @@ import (
 	"golang.org/x/crypto/blake2b"
 )
 
+func (m *Machine[T]) CostOne(b *builtin.DefaultFunction, x func() ExMem) {
+	model := m.costs.builtinCosts[*b]
+
+	mem, _ := model.mem.(OneArgument)
+	cpu, _ := model.cpu.(OneArgument)
+
+	cf := CostingFunc[OneArgument]{
+		mem: mem,
+		cpu: cpu,
+	}
+
+	_ = m.spendBudget(CostSingle(cf, x))
+}
+
+func (m *Machine[T]) CostTwo(b *builtin.DefaultFunction, x, y func() ExMem) {
+	model := m.costs.builtinCosts[*b]
+
+	mem, _ := model.mem.(TwoArgument)
+	cpu, _ := model.cpu.(TwoArgument)
+
+	cf := CostingFunc[TwoArgument]{
+		mem: mem,
+		cpu: cpu,
+	}
+
+	_ = m.spendBudget(CostPair(cf, x, y))
+}
+
+func (m *Machine[T]) CostThree(b *builtin.DefaultFunction, x, y, z func() ExMem) {
+	model := m.costs.builtinCosts[*b]
+
+	mem, _ := model.mem.(ThreeArgument)
+	cpu, _ := model.cpu.(ThreeArgument)
+
+	cf := CostingFunc[ThreeArgument]{
+		mem: mem,
+		cpu: cpu,
+	}
+
+	_ = m.spendBudget(CostTriple(cf, x, y, z))
+}
+
 func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 	// Budgeting
 	var evalValue Value[T]
@@ -31,7 +73,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
 
 		var newInt big.Int
 
@@ -53,7 +95,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
 
 		var newInt big.Int
 
@@ -75,7 +117,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
 
 		var newInt big.Int
 
@@ -102,7 +144,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, fmt.Errorf("division by zero")
 		}
 
-		// TODO: The budgeting
+		m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
 
 		var newInt big.Int
 
@@ -130,7 +172,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, fmt.Errorf("division by zero")
 		}
 
-		// TODO: The budgeting
+		m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
 
 		var newInt big.Int
 
@@ -158,7 +200,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, fmt.Errorf("division by zero")
 		}
 
-		// TODO: The budgeting
+		m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
 
 		var newInt big.Int
 
@@ -185,7 +227,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, fmt.Errorf("division by zero")
 		}
 
-		// TODO: The budgeting
+		m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
 
 		var newInt big.Int
 
@@ -207,7 +249,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
 
 		res := arg1.Cmp(arg2)
 
@@ -236,7 +278,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
 
 		res := arg1.Cmp(arg2)
 
@@ -265,7 +307,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
 
 		res := arg1.Cmp(arg2)
 
@@ -294,7 +336,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostTwo(&b.Func, byteArrayExMem(arg1), byteArrayExMem(arg2))
 
 		res := make([]byte, len(arg1)+len(arg2))
 
@@ -324,6 +366,8 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
+		m.CostThree(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2), byteArrayExMem(arg3))
+
 		// Convert skip and take to int
 		skip := 0
 		if arg1.Sign() > 0 {
@@ -344,11 +388,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 		}
 
 		// Clamp end to len(arg3) to avoid out-of-bounds
-		end := skip + take
-
-		if end > len(arg3) {
-			end = len(arg3)
-		}
+		end := min(skip+take, len(arg3))
 
 		if skip > len(arg3) {
 			skip = len(arg3)
@@ -369,7 +409,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostOne(&b.Func, byteArrayExMem(arg1))
 
 		res := len(arg1)
 
@@ -389,7 +429,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostTwo(&b.Func, byteArrayExMem(arg1), bigIntExMem(arg2))
 
 		index, ok := arg2.Int64(), arg2.IsInt64()
 		if !ok {
@@ -419,7 +459,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostTwo(&b.Func, byteArrayExMem(arg1), byteArrayExMem(arg2))
 
 		res := bytes.Equal(arg1, arg2)
 
@@ -439,7 +479,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostTwo(&b.Func, byteArrayExMem(arg1), byteArrayExMem(arg2))
 
 		res := bytes.Compare(arg1, arg2)
 
@@ -468,7 +508,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostTwo(&b.Func, byteArrayExMem(arg1), byteArrayExMem(arg2))
 
 		res := bytes.Compare(arg1, arg2)
 
@@ -492,7 +532,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostOne(&b.Func, byteArrayExMem(arg1))
 
 		res := sha256.Sum256(arg1)
 
@@ -509,7 +549,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostOne(&b.Func, byteArrayExMem(arg1))
 
 		res := sha3.Sum256(arg1)
 
@@ -526,7 +566,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostOne(&b.Func, byteArrayExMem(arg1))
 
 		res := blake2b.Sum256(arg1)
 
@@ -553,7 +593,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostThree(&b.Func, byteArrayExMem(publicKey), byteArrayExMem(message), byteArrayExMem(signature))
 
 		if len(publicKey) != ed25519.PublicKeySize { // 32 bytes
 			return nil, fmt.Errorf("invalid public key length: got %d, expected 32", len(publicKey))
@@ -667,7 +707,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 		arg2 := b.Args[1]
 		arg3 := b.Args[2]
 
-		// TODO: The budgeting
+		m.CostThree(&b.Func, boolExMem(arg1), ValueExMem[T](arg2), ValueExMem[T](arg3))
 
 		if arg1 {
 			evalValue = arg2

@@ -124,7 +124,8 @@ func (l *Lexer) readByteString() (string, error) {
 	for {
 		l.readChar()
 
-		if l.ch == 0 || unicode.IsSpace(l.ch) || l.ch == ')' || l.ch == ']' {
+		switch {
+		case l.ch == 0, unicode.IsSpace(l.ch), l.ch == ')', l.ch == ']':
 			literal := l.input[start:l.pos]
 
 			if len(literal)%2 != 0 {
@@ -132,9 +133,10 @@ func (l *Lexer) readByteString() (string, error) {
 			}
 
 			return literal, nil
-		}
-
-		if !((l.ch >= '0' && l.ch <= '9') || (l.ch >= 'a' && l.ch <= 'f') || (l.ch >= 'A' && l.ch <= 'F')) {
+		case (l.ch >= '0' && l.ch <= '9'), (l.ch >= 'a' && l.ch <= 'f'), (l.ch >= 'A' && l.ch <= 'F'):
+			// All good, continue
+			continue
+		default:
 			return "", fmt.Errorf("invalid bytestring character %c at position %d", l.ch, l.pos)
 		}
 	}
