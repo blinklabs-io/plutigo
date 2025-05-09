@@ -205,7 +205,7 @@ func listExMem(l []syn.IConstant) func() ExMem {
 		var accExMem ExMem
 
 		for _, item := range l {
-			accExMem += iconstantExMem(item)()
+			accExMem += iconstantExMem(item)() + 3
 		}
 
 		return ExMem(1 + accExMem)
