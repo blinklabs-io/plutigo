@@ -782,9 +782,9 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		branchOtherwise := b.Args[2]
 
-		m.CostThree(&b.Func, listExMem(l), valueExMem[T](branchEmpty), valueExMem[T](branchOtherwise))
+		m.CostThree(&b.Func, listExMem(l.List), valueExMem[T](branchEmpty), valueExMem[T](branchOtherwise))
 
-		if len(l) == 0 {
+		if len(l.List) == 0 {
 			evalValue = branchEmpty
 		} else {
 			evalValue = branchOtherwise
@@ -799,24 +799,70 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 		typ := arg1.Constant.Typ()
 
 		arg2, err := unwrapList[T](typ, b.Args[1])
+		if err != nil {
+			return nil, err
+		}
 
-		m.CostTwo(&b.Func, valueExMem[T](arg1), listExMem(arg2))
+		m.CostTwo(&b.Func, valueExMem[T](arg1), listExMem(arg2.List))
 
-		consList := append([]syn.IConstant{arg1.Constant}, arg2...)
+		consList := append([]syn.IConstant{arg1.Constant}, arg2.List...)
 
 		evalValue = Constant{
-			Constant: syn.ProtoList{
+			Constant: &syn.ProtoList{
 				LTyp: typ,
 				List: consList,
 			},
 		}
 
 	case builtin.HeadList:
-		panic("implement HeadList")
+		arg1, err := unwrapList[T](nil, b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		m.CostOne(&b.Func, listExMem(arg1.List))
+
+		if len(arg1.List) == 0 {
+			return nil, errors.New("headList on an empty list")
+		}
+
+		evalValue = Constant{
+			Constant: arg1.List[0],
+		}
+
 	case builtin.TailList:
-		panic("implement TailList")
+		arg1, err := unwrapList[T](nil, b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		m.CostOne(&b.Func, listExMem(arg1.List))
+
+		if len(arg1.List) == 0 {
+			return nil, errors.New("tailList on an empty list")
+		}
+
+		tailList := arg1.List[1:]
+
+		evalValue = Constant{
+			Constant: &syn.ProtoList{
+				LTyp: arg1.LTyp,
+				List: tailList,
+			},
+		}
 	case builtin.NullList:
-		panic("implement NullList")
+		arg1, err := unwrapList[T](nil, b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		m.CostOne(&b.Func, listExMem(arg1.List))
+
+		evalValue = Constant{
+			Constant: &syn.Bool{
+				Inner: len(arg1.List) == 0,
+			},
+		}
 	case builtin.ChooseData:
 		panic("implement ChooseData")
 	case builtin.ConstrData:
@@ -958,8 +1004,8 @@ func unwrapUnit[T syn.Eval](value Value[T]) error {
 
 }
 
-func unwrapList[T syn.Eval](typ syn.Typ, value Value[T]) ([]syn.IConstant, error) {
-	var i []syn.IConstant
+func unwrapList[T syn.Eval](typ syn.Typ, value Value[T]) (*syn.ProtoList, error) {
+	var i *syn.ProtoList
 
 	switch v := value.(type) {
 	case Constant:
@@ -968,7 +1014,7 @@ func unwrapList[T syn.Eval](typ syn.Typ, value Value[T]) ([]syn.IConstant, error
 			if typ != nil && !reflect.DeepEqual(typ, c.LTyp) {
 				return nil, errors.New(fmt.Sprintf("Value not a List of type %v", typ))
 			}
-			i = c.List
+			i = c
 		default:
 			return nil, errors.New("Value not a List")
 		}
