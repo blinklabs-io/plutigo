@@ -2,9 +2,20 @@ package cek
 
 import "github.com/blinklabs-io/plutigo/pkg/builtin"
 
-type BuiltinCosts map[builtin.DefaultFunction]CostingFunc[Arguments]
+type BuiltinCosts map[builtin.DefaultFunction]*CostingFunc[Arguments]
 
-var DefaultBuiltinCosts = BuiltinCosts{}
+var DefaultBuiltinCosts = BuiltinCosts{
+	builtin.AddInteger: &CostingFunc[TwoArgument]{
+		mem: &MaxSizeModel{MaxSize{
+			intercept: 1,
+			slope:     1,
+		}},
+		cpu: &MaxSizeModel{MaxSize{
+			intercept: 100788,
+			slope:     420,
+		}},
+	},
+}
 
 type CostingFunc[T Arguments] struct {
 	mem T

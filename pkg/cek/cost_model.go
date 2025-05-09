@@ -54,6 +54,7 @@ func iconstantExMem(c syn.IConstant) func() ExMem {
 func bigIntExMem(i *big.Int) func() ExMem {
 	return func() ExMem {
 		x := big.NewInt(0)
+
 		if x.Cmp(i) == 0 {
 			return ExMem(1)
 		} else {
