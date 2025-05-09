@@ -2,6 +2,7 @@ package syn
 
 import (
 	"fmt"
+	"math"
 	"math/big"
 	"strconv"
 
