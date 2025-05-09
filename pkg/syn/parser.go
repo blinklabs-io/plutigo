@@ -260,8 +260,11 @@ func (p *Parser) parseConstr() (Term[Name], error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid constr tag %s at position %d: %v", p.curToken.Literal, p.curToken.Position, err)
 	}
+	if n > math.MaxUint32 {
+		return nil, fmt.Errorf("constr tag %s exceeds maximum uint32 value at position %d", p.curToken.Literal, p.curToken.Position)
+	}
 
-	tag := n
+	tag := uint32(n)
 
 	p.nextToken()
 

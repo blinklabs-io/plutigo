@@ -282,6 +282,9 @@ func (m *Machine[T]) returnCompute(context MachineContext[T], value Value[T]) (M
 	case FrameCases[T]:
 		switch v := value.(type) {
 		case Constr[T]:
+			if v.Tag > uint32(math.MaxInt) {
+				return nil, errors.New("Tag value exceeds maximum int value")
+			}
 			if indexExists(c.Branches, int(v.Tag)) {
 				state = Compute[T]{
 					Ctx:  transferArgStack(v.Fields, c.Ctx),
