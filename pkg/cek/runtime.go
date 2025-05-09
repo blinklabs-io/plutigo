@@ -57,6 +57,20 @@ func (m *Machine[T]) CostThree(b *builtin.DefaultFunction, x, y, z func() ExMem)
 	_ = m.spendBudget(CostTriple(cf, x, y, z))
 }
 
+func (m *Machine[T]) Costsix(b *builtin.DefaultFunction, x, y, z, xx, yy, zz func() ExMem) {
+	model := m.costs.builtinCosts[*b]
+
+	mem, _ := model.mem.(SixArgument)
+	cpu, _ := model.cpu.(SixArgument)
+
+	cf := CostingFunc[SixArgument]{
+		mem: mem,
+		cpu: cpu,
+	}
+
+	_ = m.spendBudget(CostSextuple(cf, x, y, z, xx, yy, zz))
+}
+
 func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 	// Budgeting
 	var evalValue Value[T]
@@ -253,15 +267,8 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		res := arg1.Cmp(arg2)
 
-		// assume false
-
 		con := &syn.Bool{
-			Inner: false,
-		}
-
-		// it's true
-		if res == 0 {
-			con.Inner = true
+			Inner: res == 0,
 		}
 
 		evalValue = Constant{
@@ -282,15 +289,8 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		res := arg1.Cmp(arg2)
 
-		// assume false
-
 		con := &syn.Bool{
-			Inner: false,
-		}
-
-		// it's true
-		if res == -1 {
-			con.Inner = true
+			Inner: res == -1,
 		}
 
 		evalValue = Constant{
@@ -311,15 +311,8 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		res := arg1.Cmp(arg2)
 
-		// assume false
-
 		con := &syn.Bool{
-			Inner: false,
-		}
-
-		// it's true
-		if res == -1 || res == 0 {
-			con.Inner = true
+			Inner: res == -1 || res == 0,
 		}
 
 		evalValue = Constant{
@@ -349,7 +342,38 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			},
 		}
 	case builtin.ConsByteString:
-		panic("implement ConsByteString")
+
+		arg1, err := unwrapInteger[T](b.Args[0]) // skip
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapByteString[T](b.Args[1]) // byte string
+		if err != nil {
+			return nil, err
+		}
+
+		m.CostTwo(&b.Func, bigIntExMem(arg1), byteArrayExMem(arg2))
+
+		// TODO: handle PlutusSemantic Versioning
+
+		if !arg1.IsInt64() {
+			return nil, errors.New("int does not fit into a byte")
+		}
+
+		int_val := arg1.Int64()
+
+		if int_val < 0 || int_val > 255 {
+			return nil, errors.New("int does not fit into a byte")
+		}
+
+		res := append([]byte{byte(int_val)}, arg2...)
+
+		evalValue = Constant{
+			Constant: &syn.ByteString{
+				Inner: res,
+			},
+		}
 	case builtin.SliceByteString:
 		arg1, err := unwrapInteger[T](b.Args[0]) // skip
 		if err != nil {
@@ -483,15 +507,8 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		res := bytes.Compare(arg1, arg2)
 
-		// assume false
-
 		con := &syn.Bool{
-			Inner: false,
-		}
-
-		// it's true
-		if res == -1 {
-			con.Inner = true
+			Inner: res == -1,
 		}
 
 		evalValue = Constant{
@@ -512,15 +529,8 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		res := bytes.Compare(arg1, arg2)
 
-		// assume false
-
 		con := &syn.Bool{
-			Inner: false,
-		}
-
-		// it's true
-		if res == -1 || res == 0 {
-			con.Inner = true
+			Inner: res == -1 || res == 0,
 		}
 
 		evalValue = Constant{
@@ -627,7 +637,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostTwo(&b.Func, stringExMem(arg1), stringExMem(arg2))
 
 		res := arg1 + arg2
 
@@ -649,7 +659,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostTwo(&b.Func, stringExMem(arg1), stringExMem(arg2))
 
 		res := arg1 == arg2
 
@@ -666,7 +676,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostOne(&b.Func, stringExMem(arg1))
 
 		res := []byte(arg1)
 
@@ -683,7 +693,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// TODO: The budgeting
+		m.CostOne(&b.Func, byteArrayExMem(arg1))
 
 		if !utf8.Valid(arg1) {
 			return nil, errors.New("error decoding utf8 bytes")
@@ -707,7 +717,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 		arg2 := b.Args[1]
 		arg3 := b.Args[2]
 
-		m.CostThree(&b.Func, boolExMem(arg1), ValueExMem[T](arg2), ValueExMem[T](arg3))
+		m.CostThree(&b.Func, boolExMem(arg1), valueExMem[T](arg2), valueExMem[T](arg3))
 
 		if arg1 {
 			evalValue = arg2
@@ -715,7 +725,16 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			evalValue = arg3
 		}
 	case builtin.ChooseUnit:
-		panic("implement ChooseUnit")
+		if err := unwrapUnit[T](b.Args[0]); err != nil {
+			return nil, err
+		}
+
+		arg2 := b.Args[1]
+
+		m.CostTwo(&b.Func, unitExMem(), valueExMem[T](arg2))
+
+		evalValue = arg2
+
 	case builtin.Trace:
 		arg1, err := unwrapString[T](b.Args[0])
 		if err != nil {
@@ -724,14 +743,34 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		arg2 := b.Args[1]
 
-		// TODO: The budgeting
+		m.CostTwo(&b.Func, stringExMem(arg1), valueExMem[T](arg2))
+
 		m.Logs = append(m.Logs, arg1)
 
 		evalValue = arg2
 	case builtin.FstPair:
-		panic("implement FstPair")
+		fstPair, sndPair, err := unwrapPair[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		m.CostOne(&b.Func, pairExMem(fstPair, sndPair))
+
+		evalValue = Constant{
+			Constant: fstPair,
+		}
+
 	case builtin.SndPair:
-		panic("implement SndPair")
+		fstPair, sndPair, err := unwrapPair[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		m.CostOne(&b.Func, pairExMem(fstPair, sndPair))
+
+		evalValue = Constant{
+			Constant: sndPair,
+		}
 	case builtin.ChooseList:
 		panic("implement ChooseList")
 	case builtin.MkCons:
@@ -851,4 +890,40 @@ func unwrapBool[T syn.Eval](value Value[T]) (bool, error) {
 	}
 
 	return i, nil
+}
+
+func unwrapUnit[T syn.Eval](value Value[T]) error {
+
+	switch v := value.(type) {
+	case Constant:
+		switch v.Constant.(type) {
+		case *syn.Unit:
+			return nil
+		default:
+			return errors.New("Value not a Unit")
+		}
+	default:
+		return errors.New("Value not a Constant")
+	}
+
+}
+
+func unwrapPair[T syn.Eval](value Value[T]) (syn.IConstant, syn.IConstant, error) {
+	var i syn.IConstant
+	var j syn.IConstant
+
+	switch v := value.(type) {
+	case Constant:
+		switch c := v.Constant.(type) {
+		case *syn.ProtoPair:
+			i = c.First
+			j = c.Second
+		default:
+			return nil, nil, errors.New("Value not a ByteString")
+		}
+	default:
+		return nil, nil, errors.New("Value not a Constant")
+	}
+
+	return i, j, nil
 }

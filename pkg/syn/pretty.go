@@ -318,3 +318,8 @@ func (b Bool) String() string {
 
 	return "False"
 }
+
+// Bool implements String
+func (p ProtoPair) String() string {
+	return fmt.Sprintf("pair (%v, %v)", p.First.String(), p.Second.String())
+}

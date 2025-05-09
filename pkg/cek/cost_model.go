@@ -114,10 +114,33 @@ var DefaultCostModel = CostModel{
 
 type ExMem int
 
-func ValueExMem[T syn.Eval](v Value[T]) func() ExMem {
+func valueExMem[T syn.Eval](v Value[T]) func() ExMem {
 	return func() ExMem {
 		return v.toExMem()
 	}
+}
+
+func iconstantExMem(c syn.IConstant) func() ExMem {
+	var ex func() ExMem
+
+	switch x := c.(type) {
+	case syn.Integer:
+		ex = bigIntExMem(x.Inner)
+	case syn.ByteString:
+		ex = byteArrayExMem(x.Inner)
+	case syn.Bool:
+		ex = boolExMem(x.Inner)
+	case syn.String:
+		ex = stringExMem(x.Inner)
+	case syn.Unit:
+		ex = unitExMem()
+	case syn.ProtoPair:
+		ex = pairExMem(x.First, x.Second)
+	default:
+		panic("Oh no!")
+	}
+
+	return ex
 }
 
 // Return a function so we can have lazy
@@ -152,9 +175,32 @@ func byteArrayExMem(b []byte) func() ExMem {
 	}
 }
 
+// According to the Haskell code they are charging 8 bytes of value per byte contained in the string
+// So returning just the string length as ExMem matches the Haskell behavior
+func stringExMem(s string) func() ExMem {
+	return func() ExMem {
+		x := len(s)
+
+		return ExMem(x)
+
+	}
+}
+
 func boolExMem(bool) func() ExMem {
 	return func() ExMem {
 		return ExMem(1)
+	}
+}
+
+func unitExMem() func() ExMem {
+	return func() ExMem {
+		return ExMem(1)
+	}
+}
+
+func pairExMem(x syn.IConstant, y syn.IConstant) func() ExMem {
+	return func() ExMem {
+		return ExMem(1 + iconstantExMem(x)() + iconstantExMem(y)())
 	}
 }
 
