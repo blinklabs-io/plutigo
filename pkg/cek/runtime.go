@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"reflect"
 	"unicode/utf8"
 
 	"github.com/blinklabs-io/plutigo/pkg/builtin"
@@ -772,7 +773,23 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			Constant: sndPair,
 		}
 	case builtin.ChooseList:
-		panic("implement ChooseList")
+		l, err := unwrapList[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		branchEmpty := b.Args[1]
+
+		branchOtherwise := b.Args[2]
+
+		m.CostThree(&b.Func, listExMem(l), valueExMem[T](branchEmpty), valueExMem[T](branchOtherwise))
+
+		if len(l) == 0 {
+			evalValue = branchEmpty
+		} else {
+			evalValue = branchOtherwise
+		}
+
 	case builtin.MkCons:
 		panic("implement MkCons")
 	case builtin.HeadList:
@@ -908,6 +925,27 @@ func unwrapUnit[T syn.Eval](value Value[T]) error {
 
 }
 
+func unwrapList[T syn.Eval, L *syn.Typ](value Value[T]) ([]syn.IConstant, error) {
+	var i []syn.IConstant
+
+	switch v := value.(type) {
+	case Constant:
+		switch c := v.Constant.(type) {
+		case *syn.ProtoList:
+			if _, ok := c.Typ.(L); !ok {
+				return nil, errors.New(fmt.Sprintf("Value not a List of type %v", reflect.TypeFor[L]()))
+			}
+			i = c.List
+		default:
+			return nil, errors.New("Value not a List")
+		}
+	default:
+		return nil, errors.New("Value not a Constant")
+	}
+
+	return i, nil
+}
+
 func unwrapPair[T syn.Eval](value Value[T]) (syn.IConstant, syn.IConstant, error) {
 	var i syn.IConstant
 	var j syn.IConstant
@@ -919,7 +957,7 @@ func unwrapPair[T syn.Eval](value Value[T]) (syn.IConstant, syn.IConstant, error
 			i = c.First
 			j = c.Second
 		default:
-			return nil, nil, errors.New("Value not a ByteString")
+			return nil, nil, errors.New("Value not a Pair")
 		}
 	default:
 		return nil, nil, errors.New("Value not a Constant")

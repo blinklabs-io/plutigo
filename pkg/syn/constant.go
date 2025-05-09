@@ -44,14 +44,17 @@ type Bool struct {
 func (Bool) isConstant() {}
 
 type ProtoList struct {
+	Typ  Typ
 	List []IConstant
 }
 
 func (ProtoList) isConstant() {}
 
 type ProtoPair struct {
-	First  IConstant
-	Second IConstant
+	FstType Typ
+	SndType Typ
+	First   IConstant
+	Second  IConstant
 }
 
 func (ProtoPair) isConstant() {}

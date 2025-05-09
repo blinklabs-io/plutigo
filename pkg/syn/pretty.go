@@ -319,7 +319,12 @@ func (b Bool) String() string {
 	return "False"
 }
 
-// Bool implements String
+// Pair implements String
 func (p ProtoPair) String() string {
-	return fmt.Sprintf("pair (%v, %v)", p.First.String(), p.Second.String())
+	panic("TODO")
+}
+
+// List implements String
+func (p ProtoList) String() string {
+	panic("TODO")
 }

@@ -134,6 +134,8 @@ func iconstantExMem(c syn.IConstant) func() ExMem {
 		ex = stringExMem(x.Inner)
 	case syn.Unit:
 		ex = unitExMem()
+	case syn.ProtoList:
+		ex = listExMem(x.List)
 	case syn.ProtoPair:
 		ex = pairExMem(x.First, x.Second)
 	default:
@@ -195,6 +197,18 @@ func boolExMem(bool) func() ExMem {
 func unitExMem() func() ExMem {
 	return func() ExMem {
 		return ExMem(1)
+	}
+}
+
+func listExMem(l []syn.IConstant) func() ExMem {
+	return func() ExMem {
+		var accExMem ExMem
+
+		for _, item := range l {
+			accExMem += iconstantExMem(item)()
+		}
+
+		return ExMem(1 + accExMem)
 	}
 }
 
