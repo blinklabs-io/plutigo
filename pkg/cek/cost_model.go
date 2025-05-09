@@ -87,6 +87,8 @@ var DefaultMachineCosts = MachineCosts{
 	},
 }
 
+var DefaultBuiltinCosts = map[builtin.DefaultFunction]CostingFunc[Arguments]{}
+
 type StepKind uint8
 
 const (
@@ -108,8 +110,7 @@ type CostModel struct {
 
 var DefaultCostModel = CostModel{
 	machineCosts: DefaultMachineCosts,
-	// TODO: Make DefaultBuiltinCosts
-	builtinCosts: map[builtin.DefaultFunction]CostingFunc[Arguments]{},
+	builtinCosts: DefaultBuiltinCosts,
 }
 
 type ExMem int
