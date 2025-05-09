@@ -3,6 +3,7 @@ package cek
 import (
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 )
