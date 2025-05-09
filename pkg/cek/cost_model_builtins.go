@@ -15,6 +15,163 @@ var DefaultBuiltinCosts = BuiltinCosts{
 			slope:     420,
 		}},
 	},
+	builtin.SubtractInteger: &CostingFunc[Arguments]{
+		mem: &MaxSizeModel{MaxSize{
+			intercept: 1,
+			slope:     1,
+		}},
+		cpu: &MaxSizeModel{MaxSize{
+			intercept: 100788,
+			slope:     420,
+		}},
+	},
+	builtin.MultiplyInteger: &CostingFunc[Arguments]{
+		mem: &AddedSizesModel{AddedSizes{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &MultipliedSizesModel{MultipliedSizes{
+			intercept: 90434,
+			slope:     519,
+		}},
+	},
+	builtin.DivideInteger: &CostingFunc[Arguments]{
+		mem: &SubtractedSizesModel{SubtractedSizes{
+			intercept: 0,
+			slope:     1,
+			minimum:   1,
+		}},
+		cpu: &ConstAboveDiagonalIntoQuadraticXAndYModel{
+			constant: 85848,
+			TwoArgumentsQuadraticFunction: TwoArgumentsQuadraticFunction{
+				minimum: 85848,
+				coeff00: 123203,
+				coeff01: 7305,
+				coeff02: -900,
+				coeff10: 1716,
+				coeff11: 549,
+				coeff20: 57,
+			},
+		},
+	},
+	builtin.QuotientInteger: &CostingFunc[Arguments]{
+		mem: &SubtractedSizesModel{SubtractedSizes{
+			intercept: 0,
+			slope:     1,
+			minimum:   1,
+		}},
+		cpu: &ConstAboveDiagonalIntoQuadraticXAndYModel{
+			constant: 85848,
+			TwoArgumentsQuadraticFunction: TwoArgumentsQuadraticFunction{
+				minimum: 85848,
+				coeff00: 123203,
+				coeff01: 7305,
+				coeff02: -900,
+				coeff10: 1716,
+				coeff11: 549,
+				coeff20: 57,
+			},
+		},
+	},
+	builtin.RemainderInteger: &CostingFunc[Arguments]{
+		mem: &LinearInY{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &ConstAboveDiagonalIntoQuadraticXAndYModel{
+			constant: 85848,
+			TwoArgumentsQuadraticFunction: TwoArgumentsQuadraticFunction{
+				minimum: 85848,
+				coeff00: 123203,
+				coeff01: 7305,
+				coeff02: -900,
+				coeff10: 1716,
+				coeff11: 549,
+				coeff20: 57,
+			},
+		},
+	},
+	builtin.ModInteger: &CostingFunc[Arguments]{
+		mem: &LinearInY{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &ConstAboveDiagonalIntoQuadraticXAndYModel{
+			constant: 85848,
+			TwoArgumentsQuadraticFunction: TwoArgumentsQuadraticFunction{
+				minimum: 85848,
+				coeff00: 123203,
+				coeff01: 7305,
+				coeff02: -900,
+				coeff10: 1716,
+				coeff11: 549,
+				coeff20: 57,
+			},
+		},
+	},
+	builtin.EqualsInteger:         &CostingFunc[Arguments]{},
+	builtin.LessThanInteger:       &CostingFunc[Arguments]{},
+	builtin.LessThanEqualsInteger: &CostingFunc[Arguments]{},
+	// ByteString functions
+	builtin.AppendByteString:         &CostingFunc[Arguments]{},
+	builtin.ConsByteString:           &CostingFunc[Arguments]{},
+	builtin.SliceByteString:          &CostingFunc[Arguments]{},
+	builtin.LengthOfByteString:       &CostingFunc[Arguments]{},
+	builtin.IndexByteString:          &CostingFunc[Arguments]{},
+	builtin.EqualsByteString:         &CostingFunc[Arguments]{},
+	builtin.LessThanByteString:       &CostingFunc[Arguments]{},
+	builtin.LessThanEqualsByteString: &CostingFunc[Arguments]{},
+	// Cryptography and hash functions
+	builtin.Sha2_256:                        &CostingFunc[Arguments]{},
+	builtin.Sha3_256:                        &CostingFunc[Arguments]{},
+	builtin.Blake2b_256:                     &CostingFunc[Arguments]{},
+	builtin.VerifyEd25519Signature:          &CostingFunc[Arguments]{},
+	builtin.VerifyEcdsaSecp256k1Signature:   &CostingFunc[Arguments]{},
+	builtin.VerifySchnorrSecp256k1Signature: &CostingFunc[Arguments]{},
+	// String functions
+	builtin.AppendString: &CostingFunc[Arguments]{},
+	builtin.EqualsString: &CostingFunc[Arguments]{},
+	builtin.EncodeUtf8:   &CostingFunc[Arguments]{},
+	builtin.DecodeUtf8:   &CostingFunc[Arguments]{},
+	// Bool function
+	builtin.IfThenElse: &CostingFunc[Arguments]{},
+	// Unit function
+	builtin.ChooseUnit: &CostingFunc[Arguments]{},
+	// Tracing function
+	builtin.Trace: &CostingFunc[Arguments]{},
+	// Pairs functions
+	builtin.FstPair: &CostingFunc[Arguments]{},
+	builtin.SndPair: &CostingFunc[Arguments]{},
+	// List functions
+	builtin.ChooseList: &CostingFunc[Arguments]{},
+	builtin.MkCons:     &CostingFunc[Arguments]{},
+	builtin.HeadList:   &CostingFunc[Arguments]{},
+	builtin.TailList:   &CostingFunc[Arguments]{},
+	builtin.NullList:   &CostingFunc[Arguments]{},
+	// Data functions
+	// It is convenient to have a "choosing" function for a data type that has more than two
+	// constructors to get pattern matching over it and we may end up having multiple such data
+	// types hence we include the name of the data type as a suffix.
+	builtin.ChooseData:    &CostingFunc[Arguments]{},
+	builtin.ConstrData:    &CostingFunc[Arguments]{},
+	builtin.MapData:       &CostingFunc[Arguments]{},
+	builtin.ListData:      &CostingFunc[Arguments]{},
+	builtin.IData:         &CostingFunc[Arguments]{},
+	builtin.BData:         &CostingFunc[Arguments]{},
+	builtin.UnConstrData:  &CostingFunc[Arguments]{},
+	builtin.UnMapData:     &CostingFunc[Arguments]{},
+	builtin.UnListData:    &CostingFunc[Arguments]{},
+	builtin.UnIData:       &CostingFunc[Arguments]{},
+	builtin.UnBData:       &CostingFunc[Arguments]{},
+	builtin.EqualsData:    &CostingFunc[Arguments]{},
+	builtin.SerialiseData: &CostingFunc[Arguments]{},
+	// Misc constructors
+	// Constructors that we need for constructing e.g. Data. Polymorphic builtin
+	// constructors are often problematic (See note [Representable built-in
+	// functions over polymorphic built-in types])
+	builtin.MkPairData:    &CostingFunc[Arguments]{},
+	builtin.MkNilData:     &CostingFunc[Arguments]{},
+	builtin.MkNilPairData: &CostingFunc[Arguments]{},
 }
 
 type CostingFunc[T Arguments] struct {
