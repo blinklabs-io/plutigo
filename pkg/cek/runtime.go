@@ -773,7 +773,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			Constant: sndPair,
 		}
 	case builtin.ChooseList:
-		l, err := unwrapList[T](b.Args[0])
+		l, err := unwrapList[T](nil, b.Args[0])
 		if err != nil {
 			return nil, err
 		}
@@ -791,7 +791,24 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 		}
 
 	case builtin.MkCons:
-		panic("implement MkCons")
+		arg1, err := unwrapConstant[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		typ := arg1.Constant.Typ()
+
+		arg2, err := unwrapList[T](typ, b.Args[1])
+
+		consList := append([]syn.IConstant{arg1.Constant}, arg2...)
+
+		evalValue = Constant{
+			Constant: syn.ProtoList{
+				LTyp: typ,
+				List: consList,
+			},
+		}
+
 	case builtin.HeadList:
 		panic("implement HeadList")
 	case builtin.TailList:
@@ -835,6 +852,20 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 	}
 
 	return evalValue, nil
+}
+
+func unwrapConstant[T syn.Eval](value Value[T]) (*Constant, error) {
+	var i *Constant
+
+	switch v := value.(type) {
+	case Constant:
+		i = &v
+
+	default:
+		return nil, errors.New("Value not a Constant")
+	}
+
+	return i, nil
 }
 
 func unwrapInteger[T syn.Eval](value Value[T]) (*big.Int, error) {
@@ -925,15 +956,15 @@ func unwrapUnit[T syn.Eval](value Value[T]) error {
 
 }
 
-func unwrapList[T syn.Eval, L *syn.Typ](value Value[T]) ([]syn.IConstant, error) {
+func unwrapList[T syn.Eval](typ syn.Typ, value Value[T]) ([]syn.IConstant, error) {
 	var i []syn.IConstant
 
 	switch v := value.(type) {
 	case Constant:
 		switch c := v.Constant.(type) {
 		case *syn.ProtoList:
-			if _, ok := c.Typ.(L); !ok {
-				return nil, errors.New(fmt.Sprintf("Value not a List of type %v", reflect.TypeFor[L]()))
+			if typ != nil && !reflect.DeepEqual(typ, c.LTyp) {
+				return nil, errors.New(fmt.Sprintf("Value not a List of type %v", typ))
 			}
 			i = c.List
 		default:
