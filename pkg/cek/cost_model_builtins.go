@@ -5,7 +5,7 @@ import "github.com/blinklabs-io/plutigo/pkg/builtin"
 type BuiltinCosts map[builtin.DefaultFunction]*CostingFunc[Arguments]
 
 var DefaultBuiltinCosts = BuiltinCosts{
-	builtin.AddInteger: &CostingFunc[TwoArgument]{
+	builtin.AddInteger: &CostingFunc[Arguments]{
 		mem: &MaxSizeModel{MaxSize{
 			intercept: 1,
 			slope:     1,
