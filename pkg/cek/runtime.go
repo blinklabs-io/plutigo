@@ -735,7 +735,6 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 		m.CostTwo(&b.Func, unitExMem(), valueExMem[T](arg2))
 
 		evalValue = arg2
-
 	case builtin.Trace:
 		arg1, err := unwrapString[T](b.Args[0])
 		if err != nil {
@@ -760,7 +759,6 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 		evalValue = Constant{
 			Constant: fstPair,
 		}
-
 	case builtin.SndPair:
 		fstPair, sndPair, err := unwrapPair[T](b.Args[0])
 		if err != nil {
@@ -789,7 +787,6 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 		} else {
 			evalValue = branchOtherwise
 		}
-
 	case builtin.MkCons:
 		arg1, err := unwrapConstant[T](b.Args[0])
 		if err != nil {
@@ -813,7 +810,6 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 				List: consList,
 			},
 		}
-
 	case builtin.HeadList:
 		arg1, err := unwrapList[T](nil, b.Args[0])
 		if err != nil {
@@ -829,7 +825,6 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 		evalValue = Constant{
 			Constant: arg1.List[0],
 		}
-
 	case builtin.TailList:
 		arg1, err := unwrapList[T](nil, b.Args[0])
 		if err != nil {
@@ -961,7 +956,7 @@ func unwrapString[T syn.Eval](value Value[T]) (string, error) {
 		case *syn.String:
 			i = c.Inner
 		default:
-			return "", errors.New("Value not a ByteString")
+			return "", errors.New("Value not a String")
 		}
 	default:
 		return "", errors.New("Value not a Constant")
@@ -979,7 +974,7 @@ func unwrapBool[T syn.Eval](value Value[T]) (bool, error) {
 		case *syn.Bool:
 			i = c.Inner
 		default:
-			return false, errors.New("Value not a ByteString")
+			return false, errors.New("Value not a Bool")
 		}
 	default:
 		return false, errors.New("Value not a Constant")
@@ -989,7 +984,6 @@ func unwrapBool[T syn.Eval](value Value[T]) (bool, error) {
 }
 
 func unwrapUnit[T syn.Eval](value Value[T]) error {
-
 	switch v := value.(type) {
 	case Constant:
 		switch v.Constant.(type) {
@@ -1001,7 +995,6 @@ func unwrapUnit[T syn.Eval](value Value[T]) error {
 	default:
 		return errors.New("Value not a Constant")
 	}
-
 }
 
 func unwrapList[T syn.Eval](typ syn.Typ, value Value[T]) (*syn.ProtoList, error) {
@@ -1012,7 +1005,7 @@ func unwrapList[T syn.Eval](typ syn.Typ, value Value[T]) (*syn.ProtoList, error)
 		switch c := v.Constant.(type) {
 		case *syn.ProtoList:
 			if typ != nil && !reflect.DeepEqual(typ, c.LTyp) {
-				return nil, errors.New(fmt.Sprintf("Value not a List of type %v", typ))
+				return nil, fmt.Errorf("Value not a List of type %v", typ)
 			}
 			i = c
 		default:
