@@ -800,6 +800,8 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		arg2, err := unwrapList[T](typ, b.Args[1])
 
+		m.CostTwo(&b.Func, valueExMem[T](arg1), listExMem(arg2))
+
 		consList := append([]syn.IConstant{arg1.Constant}, arg2...)
 
 		evalValue = Constant{
