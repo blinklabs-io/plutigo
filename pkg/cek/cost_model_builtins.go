@@ -61,8 +61,8 @@ var DefaultBuiltinCosts = BuiltinCosts{
 			minimum:   1,
 		}},
 		cpu: &ConstAboveDiagonalIntoQuadraticXAndYModel{
-			constant: 85848,
-			TwoArgumentsQuadraticFunction: TwoArgumentsQuadraticFunction{
+			85848,
+			TwoArgumentsQuadraticFunction{
 				minimum: 85848,
 				coeff00: 123203,
 				coeff01: 7305,
@@ -109,15 +109,66 @@ var DefaultBuiltinCosts = BuiltinCosts{
 			},
 		},
 	},
-	builtin.EqualsInteger:         &CostingFunc[Arguments]{},
-	builtin.LessThanInteger:       &CostingFunc[Arguments]{},
-	builtin.LessThanEqualsInteger: &CostingFunc[Arguments]{},
+	builtin.EqualsInteger: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &MinSizeModel{MinSize{
+			intercept: 51775,
+			slope:     558,
+		}},
+	},
+	builtin.LessThanInteger: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &MinSizeModel{MinSize{
+			intercept: 44749,
+			slope:     541,
+		}},
+	},
+	builtin.LessThanEqualsInteger: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &MinSizeModel{MinSize{
+			intercept: 43285,
+			slope:     552,
+		}},
+	},
 	// ByteString functions
-	builtin.AppendByteString:         &CostingFunc[Arguments]{},
-	builtin.ConsByteString:           &CostingFunc[Arguments]{},
-	builtin.SliceByteString:          &CostingFunc[Arguments]{},
-	builtin.LengthOfByteString:       &CostingFunc[Arguments]{},
-	builtin.IndexByteString:          &CostingFunc[Arguments]{},
+	builtin.AppendByteString: &CostingFunc[Arguments]{
+		mem: &AddedSizesModel{AddedSizes{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &AddedSizesModel{AddedSizes{
+			intercept: 1000,
+			slope:     173,
+		}},
+	},
+	builtin.ConsByteString: &CostingFunc[Arguments]{
+		mem: &AddedSizesModel{AddedSizes{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &LinearInY{LinearCost{
+			intercept: 72010,
+			slope:     178,
+		}},
+	},
+	builtin.SliceByteString: &CostingFunc[Arguments]{
+		mem: &ThreeLinearInZ{LinearCost{
+			intercept: 4,
+			slope:     0,
+		}},
+		cpu: &ThreeLinearInZ{LinearCost{
+			intercept: 20467,
+			slope:     1,
+		}},
+	},
+	builtin.LengthOfByteString: &CostingFunc[Arguments]{
+		mem: &ConstantCost{10},
+		cpu: &ConstantCost{22100},
+	},
+	builtin.IndexByteString: &CostingFunc[Arguments]{
+		mem: &ConstantCost{4},
+		cpu: &ConstantCost{13169},
+	},
 	builtin.EqualsByteString:         &CostingFunc[Arguments]{},
 	builtin.LessThanByteString:       &CostingFunc[Arguments]{},
 	builtin.LessThanEqualsByteString: &CostingFunc[Arguments]{},
