@@ -1,19 +1,25 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 	"os"
-	"strings"
 
 	"github.com/blinklabs-io/plutigo/pkg/cek"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 )
 
+type Output struct {
+	Result string   `json:"result"`
+	Cpu    int64    `json:"cpu"`
+	Mem    int64    `json:"mem"`
+	Logs   []string `json:"logs"`
+}
+
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Error: Please provide a file name as argument")
-
-		os.Exit(1)
+		log.Fatal("Error: Please provide a file name as argument")
 	}
 
 	var filename string
@@ -29,47 +35,44 @@ func main() {
 
 	content, err := os.ReadFile(filename)
 	if err != nil {
-		fmt.Printf("loading file error: %v\n\n", err)
-
-		os.Exit(1)
+		log.Fatalf("loading file error: %v\n\n", err)
 	}
 
 	input := string(content)
 
 	program, err := syn.Parse(input)
 	if err != nil {
-		fmt.Printf("parse error: %v\n\n", err)
-
-		os.Exit(1)
+		log.Fatalf("parse error: %v\n\n", err)
 	}
 
 	if !format {
 		dProgram, err := syn.NameToNamedDeBruijn(program)
 		if err != nil {
-			fmt.Printf("conversion error: %v\n\n", err)
-
-			os.Exit(1)
+			log.Fatalf("conversion error: %v\n\n", err)
 		}
 
 		machine := cek.NewMachine[syn.NamedDeBruijn](200)
 
 		term, err := machine.Run(dProgram.Term)
 		if err != nil {
-			fmt.Printf("eval error: %v\n\n", err)
-
-			os.Exit(1)
+			log.Fatalf("eval error: %v\n\n", err)
 		}
 
 		prettyTerm := syn.PrettyTerm[syn.NamedDeBruijn](term)
 
 		consumedBudget := cek.DefaultExBudget.Sub(&machine.ExBudget)
 
-		fmt.Printf("Term\n----\n%s\n\n", prettyTerm)
-		fmt.Printf("Budget\n------\ncpu: %d\nmem: %d\n\n", consumedBudget.Cpu, consumedBudget.Mem)
-
-		if len(machine.Logs) > 0 {
-			fmt.Printf("Logs\n----\n%s\n\n", strings.Join(machine.Logs, "\n"))
+		output, err := json.MarshalIndent(Output{
+			Result: prettyTerm,
+			Cpu:    consumedBudget.Cpu,
+			Mem:    consumedBudget.Mem,
+			Logs:   machine.Logs,
+		}, "", "  ")
+		if err != nil {
+			log.Fatalf("Error marshaling JSON: %v", err)
 		}
+
+		fmt.Println(string(output))
 	} else {
 		prettyProgram := syn.Pretty[syn.Name](program)
 

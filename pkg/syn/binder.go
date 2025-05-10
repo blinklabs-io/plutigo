@@ -6,11 +6,12 @@ import (
 )
 
 type Binder interface {
-	// TODO: e should be a encoder
-	BinderEncode(e any) error
-	// TODO: d should be a decoder
-	BinderDecode(d any) (*Binder, error)
-	// TODO: maybe use String interface
+	VarEncode(e *encoder) error
+	ParameterEncode(e *encoder) error
+
+	VarDecode(d *decoder) (*Binder, error)
+	ParameterDecode(d *decoder) (*Binder, error)
+
 	TextName() string
 
 	fmt.Stringer
@@ -26,11 +27,19 @@ type Name struct {
 	Unique Unique
 }
 
-func (n Name) BinderEncode(e any) error {
+func (n Name) VarEncode(e *encoder) error {
 	return nil
 }
 
-func (n Name) BinderDecode(d any) (*Binder, error) {
+func (n Name) VarDecode(d *decoder) (*Binder, error) {
+	return nil, errors.New("fill in this method")
+}
+
+func (n Name) ParameterEncode(e *encoder) error {
+	return nil
+}
+
+func (n Name) ParameterDecode(d *decoder) (*Binder, error) {
 	return nil, errors.New("fill in this method")
 }
 
@@ -47,11 +56,19 @@ type NamedDeBruijn struct {
 	Index DeBruijn
 }
 
-func (n NamedDeBruijn) BinderEncode(e any) error {
+func (n NamedDeBruijn) VarEncode(e *encoder) error {
 	return nil
 }
 
-func (n NamedDeBruijn) BinderDecode(d any) (*Binder, error) {
+func (n NamedDeBruijn) VarDecode(d *decoder) (*Binder, error) {
+	return nil, errors.New("fill in this method")
+}
+
+func (n NamedDeBruijn) ParameterEncode(e *encoder) error {
+	return nil
+}
+
+func (n NamedDeBruijn) ParameterDecode(d *decoder) (*Binder, error) {
 	return nil, errors.New("fill in this method")
 }
 
@@ -71,11 +88,19 @@ type Unique uint64
 
 type DeBruijn uint64
 
-func (n DeBruijn) BinderEncode(e any) error {
+func (n DeBruijn) VarEncode(e *encoder) error {
 	return nil
 }
 
-func (n DeBruijn) BinderDecode(d any) (*Binder, error) {
+func (n DeBruijn) VarDecode(d *decoder) (*Binder, error) {
+	return nil, errors.New("fill in this method")
+}
+
+func (n DeBruijn) ParameterEncode(e *encoder) error {
+	return nil
+}
+
+func (n DeBruijn) ParameterDecode(d *decoder) (*Binder, error) {
 	return nil, errors.New("fill in this method")
 }
 

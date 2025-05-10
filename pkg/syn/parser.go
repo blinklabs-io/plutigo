@@ -256,7 +256,7 @@ func (p *Parser) parseConstr() (Term[Name], error) {
 		return nil, fmt.Errorf("expected tag number, got %v at position %d", p.curToken.Type, p.curToken.Position)
 	}
 
-	n, err := strconv.ParseUint(p.curToken.Literal, 10, 32)
+	n, err := strconv.Atoi(p.curToken.Literal)
 	if err != nil {
 		return nil, fmt.Errorf("invalid constr tag %s at position %d: %v", p.curToken.Literal, p.curToken.Position, err)
 	}

@@ -318,3 +318,13 @@ func (b Bool) String() string {
 
 	return "False"
 }
+
+// Pair implements String
+func (p ProtoPair) String() string {
+	panic("TODO")
+}
+
+// List implements String
+func (p ProtoList) String() string {
+	panic("TODO")
+}

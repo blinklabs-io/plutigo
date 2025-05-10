@@ -3,6 +3,7 @@ package cek
 import (
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 )
@@ -282,6 +283,9 @@ func (m *Machine[T]) returnCompute(context MachineContext[T], value Value[T]) (M
 	case FrameCases[T]:
 		switch v := value.(type) {
 		case Constr[T]:
+			if v.Tag > math.MaxInt {
+				return nil, errors.New("MaxIntExceeded")
+			}
 			if indexExists(c.Branches, int(v.Tag)) {
 				state = Compute[T]{
 					Ctx:  transferArgStack(v.Fields, c.Ctx),

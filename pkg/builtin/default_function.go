@@ -458,11 +458,11 @@ func (f DefaultFunction) String() string {
 		return "lessThanEqualsByteString"
 	// Cryptography and hash functions
 	case Sha2_256:
-		return "sha2256"
+		return "sha2_256"
 	case Sha3_256:
-		return "sha3256"
+		return "sha3_256"
 	case Blake2b_256:
-		return "blake2B256"
+		return "blake2b_256"
 	case VerifyEd25519Signature:
 		return "verifyEd25519Signature"
 	case VerifyEcdsaSecp256k1Signature:
