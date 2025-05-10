@@ -19,9 +19,7 @@ type Output struct {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Error: Please provide a file name as argument")
-
-		os.Exit(1)
+		log.Fatal("Error: Please provide a file name as argument")
 	}
 
 	var filename string
@@ -37,18 +35,14 @@ func main() {
 
 	content, err := os.ReadFile(filename)
 	if err != nil {
-		fmt.Printf("loading file error: %v\n\n", err)
-
-		os.Exit(1)
+		log.Fatalf("loading file error: %v\n\n", err)
 	}
 
 	input := string(content)
 
 	program, err := syn.Parse(input)
 	if err != nil {
-		fmt.Printf("parse error: %v\n\n", err)
-
-		os.Exit(1)
+		log.Fatalf("parse error: %v\n\n", err)
 	}
 
 	if !format {
