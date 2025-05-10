@@ -26,21 +26,30 @@ func Encode[T Binder](program *Program[T]) ([]byte, error) {
 func EncodeTerm[T Binder](e *encoder, term Term[T]) error {
 	switch t := term.(type) {
 	case *Var[T]:
-		e.encodeTermTag(0)
+		termError := e.encodeTermTag(0)
+		if termError != nil {
+			return termError
+		}
 
 		err := t.Name.VarEncode(e)
 		if err != nil {
 			return err
 		}
 	case *Delay[T]:
-		e.encodeTermTag(1)
+		termError := e.encodeTermTag(1)
+		if termError != nil {
+			return termError
+		}
 
 		err := EncodeTerm[T](e, t.Term)
 		if err != nil {
 			return err
 		}
 	case *Lambda[T]:
-		e.encodeTermTag(2)
+		termError := e.encodeTermTag(2)
+		if termError != nil {
+			return termError
+		}
 
 		err := t.ParameterName.ParameterEncode(e)
 		if err != nil {
@@ -53,7 +62,10 @@ func EncodeTerm[T Binder](e *encoder, term Term[T]) error {
 		}
 
 	case *Apply[T]:
-		e.encodeTermTag(3)
+		termError := e.encodeTermTag(3)
+		if termError != nil {
+			return termError
+		}
 
 		err := EncodeTerm[T](e, t.Function)
 		if err != nil {
@@ -65,29 +77,49 @@ func EncodeTerm[T Binder](e *encoder, term Term[T]) error {
 			return error
 		}
 	case *Constant:
-		e.encodeTermTag(4)
+		termError := e.encodeTermTag(4)
+		if termError != nil {
+			return termError
+		}
 		panic("TODO")
 	case *Force[T]:
-		e.encodeTermTag(5)
+		termError := e.encodeTermTag(5)
+		if termError != nil {
+			return termError
+		}
 
 		err := EncodeTerm[T](e, t.Term)
 		if err != nil {
 			return err
 		}
 	case *Error:
-		e.encodeTermTag(6)
+		termError := e.encodeTermTag(6)
+		if termError != nil {
+			return termError
+		}
 	case *Builtin:
-		e.encodeTermTag(7)
+		termError := e.encodeTermTag(7)
+		if termError != nil {
+			return termError
+		}
 		panic("TODO")
 	case *Constr[T]:
-		e.encodeTermTag(8).word(t.Tag)
+		termError := e.encodeTermTag(8)
+		if termError != nil {
+			return termError
+		}
+
+		e.word(t.Tag)
 
 		err := EncodeList(e, t.Fields, EncodeTerm[T])
 		if err != nil {
 			return err
 		}
 	case *Case[T]:
-		e.encodeTermTag(9)
+		termError := e.encodeTermTag(9)
+		if termError != nil {
+			return termError
+		}
 
 		err := EncodeTerm[T](e, t.Constr)
 		if err != nil {
@@ -130,23 +162,25 @@ func newEncoder() *encoder {
 	}
 }
 
-func (e *encoder) encodeTermTag(tag byte) *encoder {
-	encoder, err := e.safeEncodeBits(TERMTAGWIDTH, tag)
-	// In practice this is unreachable
+func (e *encoder) encodeTermTag(tag byte) error {
+	err := e.safeEncodeBits(TERMTAGWIDTH, tag)
+
 	if err != nil {
-		panic(err)
+		return err
 	}
 
-	return encoder
+	return nil
 
 }
 
-func (e *encoder) safeEncodeBits(numBits int64, val byte) (*encoder, error) {
+func (e *encoder) safeEncodeBits(numBits int64, val byte) error {
 	if 2**&numBits <= int64(val) {
-		return nil, errors.New(fmt.Sprintf("Overflow detected, cannot fit %i in %i bits.", val, numBits))
+		return errors.New(fmt.Sprintf("Overflow detected, cannot fit %d in %d bits.", val, numBits))
 	}
 
-	return e.bits(numBits, val), nil
+	e.bits(numBits, val)
+
+	return nil
 }
 
 // Encode a unsigned integer of any size.
@@ -188,17 +222,13 @@ func (e *encoder) bits(numBits int64, val byte) *encoder {
 	} else if numBits == 1 && val == 1 {
 		e.one()
 	} else if numBits == 2 && val == 0 {
-		e.zero()
-		e.zero()
+		e.zero().zero()
 	} else if numBits == 2 && val == 1 {
-		e.zero()
-		e.one()
+		e.zero().one()
 	} else if numBits == 2 && val == 2 {
-		e.one()
-		e.zero()
+		e.one().zero()
 	} else if numBits == 2 && val == 3 {
-		e.one()
-		e.one()
+		e.one().one()
 	} else {
 		e.usedBits += numBits
 		unusedBits := 8 - e.usedBits
@@ -235,17 +265,19 @@ func (e *encoder) filler() *encoder {
 
 // Write a 0 bit into the current byte.
 // Write out to buffer if last used bit in the current byte.
-func (e *encoder) zero() {
+func (e *encoder) zero() *encoder {
 	if e.usedBits == 7 {
 		e.nextWord()
 	} else {
 		e.usedBits += 1
 	}
+
+	return e
 }
 
 // Write a 1 bit into the current byte.
 // Write out to buffer if last used bit in the current byte.
-func (e *encoder) one() {
+func (e *encoder) one() *encoder {
 	if e.usedBits == 7 {
 		e.currentByte |= 1
 		e.nextWord()
@@ -253,14 +285,18 @@ func (e *encoder) one() {
 		e.currentByte |= 128 >> e.usedBits
 		e.usedBits += 1
 	}
+
+	return e
 }
 
 // Write the current byte out to the buffer and begin next byte to write
 // out. Add current byte to the buffer and set current byte and used
 // bits to 0.
-func (e *encoder) nextWord() {
+func (e *encoder) nextWord() *encoder {
 	e.buffer = append(e.buffer, e.currentByte)
 
 	e.currentByte = 0
 	e.usedBits = 0
+
+	return e
 }

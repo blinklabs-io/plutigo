@@ -1,11 +1,113 @@
 package syn
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
+
+const DECODETERMTAG = 4
 
 func Decode[T Binder](bytes []byte) (*Program[T], error) {
-	d := newDecoder()
+	d := newDecoder(bytes)
 
-	return nil, nil
+	major, merr := d.word()
+	if merr != nil {
+		return nil, merr
+	}
+
+	minor, err := d.word()
+	if err != nil {
+		return nil, err
+	}
+
+	patch, perr := d.word()
+	if perr != nil {
+		return nil, perr
+	}
+
+	terms, terr := DecodeTerm[T](d)
+	if terr != nil {
+		return nil, terr
+	}
+
+	program := &Program[T]{
+		Version: [3]uint32{uint32(major), uint32(minor), uint32(patch)},
+		Term:    *terms,
+	}
+
+	return program, nil
+}
+
+func DecodeTerm[T Binder](d *decoder) (*Term[T], error) {
+	tag, e := d.decodeTermTag()
+	if e != nil {
+		return nil, e
+	}
+
+	var term Term[T]
+
+	switch tag {
+	case 0:
+		// TODO BinderVarDecode
+		term = Var[T]{}
+	case 1:
+		t, err := DecodeTerm[T](d)
+		if err != nil {
+			return nil, err
+		}
+
+		term = Delay[T]{
+			Term: *t,
+		}
+	case 2:
+		// TODO BinderParameterDecode
+		t, err := DecodeTerm[T](d)
+		if err != nil {
+			return nil, err
+		}
+
+		term = Lambda[T]{
+			Body: *t,
+		}
+	case 3:
+		function, err := DecodeTerm[T](d)
+		if err != nil {
+			return nil, err
+		}
+
+		argument, aerr := DecodeTerm[T](d)
+		if aerr != nil {
+			return nil, aerr
+		}
+
+		term = Apply[T]{
+			Function: *function,
+			Argument: *argument,
+		}
+	case 4:
+		panic("TODO")
+	case 5:
+		t, err := DecodeTerm[T](d)
+		if err != nil {
+			return nil, err
+		}
+
+		term = Force[T]{
+			Term: *t,
+		}
+	case 6:
+		term = Error{}
+	case 7:
+		panic("TODO")
+	case 8:
+		panic("TODO")
+	case 9:
+		panic("TODO")
+	default:
+		return nil, errors.New(fmt.Sprintf("Invalid term tag: %d", tag))
+	}
+
+	return &term, nil
 }
 
 type decoder struct {
@@ -14,8 +116,16 @@ type decoder struct {
 	pos      int
 }
 
-func newDecoder() *decoder {
-	return &decoder{}
+func newDecoder(bytes []byte) *decoder {
+	return &decoder{
+		buffer:   bytes,
+		usedBits: 0,
+		pos:      0,
+	}
+}
+
+func (d *decoder) decodeTermTag() (byte, error) {
+	return d.bits8(DECODETERMTAG)
 }
 
 // / Decode a word of any size.
@@ -56,27 +166,49 @@ func (d *decoder) word() (uint, error) {
 // / significant bits in the next byte in the buffer. Otherwise we decode
 // / the unused bits from the current byte. Returns the decoded value up
 // / to a byte in size.
-func (d *decoder) bits8(numBits uint8) (uint8, error) {
+func (d *decoder) bits8(numBits byte) (byte, error) {
 	if numBits > 8 {
 		return 0, errors.New("IncorrectNumBits")
 	}
 
-	// self.ensure_bits(num_bits)?;
+	err := d.ensureBits(uint(numBits))
+	if err != nil {
+		return 0, err
+	}
 
-	// let unused_bits = 8 - self.used_bits as usize;
-	// let leading_zeroes = 8 - num_bits;
-	// let r = (self.buffer[self.pos] << self.used_bits as usize) >> leading_zeroes;
+	unusedBits := 8 - d.usedBits
 
-	// let x = if num_bits > unused_bits {
-	//     r | (self.buffer[self.pos + 1] >> (unused_bits + leading_zeroes))
-	// } else {
-	//     r
-	// };
+	leadingZeros := 8 - numBits
 
-	// self.drop_bits(num_bits);
+	r := (d.buffer[d.pos] << byte(d.usedBits)) >> leadingZeros
 
-	// Ok(x)
-	//
-	panic("TODO")
+	var x byte
 
+	if numBits > byte(unusedBits) {
+		x = r | (d.buffer[d.pos+1] >> (byte(unusedBits) + leadingZeros))
+	} else {
+		x = r
+	}
+
+	d.dropBits(uint(numBits))
+
+	return x, nil
+
+}
+
+func (d *decoder) dropBits(numBits uint) {
+	allUsedBits := numBits + uint(d.usedBits)
+	d.usedBits = int64(allUsedBits) % 8
+	d.pos += int(allUsedBits) / 8
+}
+
+// / Ensures the buffer has the required bits passed in by required_bits.
+// / Throws a NotEnoughBits error if there are less bits remaining in the
+// / buffer than required_bits.
+func (d *decoder) ensureBits(requiredBits uint) error {
+	if int(requiredBits) > (len(d.buffer)-d.pos)*8-int(d.usedBits) {
+		return errors.New(fmt.Sprintf("NotEnoughBits(%d)", requiredBits))
+	} else {
+		return nil
+	}
 }
