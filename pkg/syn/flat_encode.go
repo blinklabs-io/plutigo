@@ -1,5 +1,12 @@
 package syn
 
+import (
+	"errors"
+	"fmt"
+)
+
+const TERMTAGWIDTH = 4
+
 func Encode[T Binder](program *Program[T]) ([]byte, error) {
 	e := newEncoder()
 
@@ -17,6 +24,95 @@ func Encode[T Binder](program *Program[T]) ([]byte, error) {
 }
 
 func EncodeTerm[T Binder](e *encoder, term Term[T]) error {
+	switch t := term.(type) {
+	case *Var[T]:
+		e.encodeTermTag(0)
+
+		err := t.Name.VarEncode(e)
+		if err != nil {
+			return err
+		}
+	case *Delay[T]:
+		e.encodeTermTag(1)
+
+		err := EncodeTerm[T](e, t.Term)
+		if err != nil {
+			return err
+		}
+	case *Lambda[T]:
+		e.encodeTermTag(2)
+
+		err := t.ParameterName.ParameterEncode(e)
+		if err != nil {
+			return err
+		}
+
+		error := EncodeTerm[T](e, t.Body)
+		if error != nil {
+			return error
+		}
+
+	case *Apply[T]:
+		e.encodeTermTag(3)
+
+		err := EncodeTerm[T](e, t.Function)
+		if err != nil {
+			return err
+		}
+
+		error := EncodeTerm[T](e, t.Argument)
+		if error != nil {
+			return error
+		}
+	case *Constant:
+		e.encodeTermTag(4)
+		panic("TODO")
+	case *Force[T]:
+		e.encodeTermTag(5)
+
+		err := EncodeTerm[T](e, t.Term)
+		if err != nil {
+			return err
+		}
+	case *Error:
+		e.encodeTermTag(6)
+	case *Builtin:
+		e.encodeTermTag(7)
+		panic("TODO")
+	case *Constr[T]:
+		e.encodeTermTag(8).word(t.Tag)
+
+		err := EncodeList(e, t.Fields, EncodeTerm[T])
+		if err != nil {
+			return err
+		}
+	case *Case[T]:
+		e.encodeTermTag(9)
+
+		err := EncodeTerm[T](e, t.Constr)
+		if err != nil {
+			return err
+		}
+
+		error := EncodeList(e, t.Branches, EncodeTerm[T])
+		if error != nil {
+			return error
+		}
+	}
+
+	return nil
+}
+
+func EncodeList[T any](e *encoder, items []T, itemEncoder func(*encoder, T) error) error {
+	for _, item := range items {
+		e.one()
+		err := itemEncoder(e, item)
+		if err != nil {
+			return err
+		}
+	}
+
+	e.zero()
 	return nil
 }
 
@@ -32,6 +128,25 @@ func newEncoder() *encoder {
 		usedBits:    0,
 		currentByte: 0,
 	}
+}
+
+func (e *encoder) encodeTermTag(tag byte) *encoder {
+	encoder, err := e.safeEncodeBits(TERMTAGWIDTH, tag)
+	// In practice this is unreachable
+	if err != nil {
+		panic(err)
+	}
+
+	return encoder
+
+}
+
+func (e *encoder) safeEncodeBits(numBits int64, val byte) (*encoder, error) {
+	if 2**&numBits <= int64(val) {
+		return nil, errors.New(fmt.Sprintf("Overflow detected, cannot fit %i in %i bits.", val, numBits))
+	}
+
+	return e.bits(numBits, val), nil
 }
 
 // Encode a unsigned integer of any size.
