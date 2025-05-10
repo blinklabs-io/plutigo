@@ -169,60 +169,233 @@ var DefaultBuiltinCosts = BuiltinCosts{
 		mem: &ConstantCost{4},
 		cpu: &ConstantCost{13169},
 	},
-	builtin.EqualsByteString:         &CostingFunc[Arguments]{},
-	builtin.LessThanByteString:       &CostingFunc[Arguments]{},
-	builtin.LessThanEqualsByteString: &CostingFunc[Arguments]{},
+	builtin.EqualsByteString: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &LinearOnDiagonalModel{ConstantOrLinear{
+			constant:  24548,
+			intercept: 29498,
+			slope:     38,
+		}},
+	},
+	builtin.LessThanByteString: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &MinSizeModel{MinSize{
+			intercept: 28999,
+			slope:     74,
+		}},
+	},
+	builtin.LessThanEqualsByteString: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &MinSizeModel{MinSize{
+			intercept: 28999,
+			slope:     74,
+		}},
+	},
 	// Cryptography and hash functions
-	builtin.Sha2_256:                        &CostingFunc[Arguments]{},
-	builtin.Sha3_256:                        &CostingFunc[Arguments]{},
-	builtin.Blake2b_256:                     &CostingFunc[Arguments]{},
-	builtin.VerifyEd25519Signature:          &CostingFunc[Arguments]{},
-	builtin.VerifyEcdsaSecp256k1Signature:   &CostingFunc[Arguments]{},
-	builtin.VerifySchnorrSecp256k1Signature: &CostingFunc[Arguments]{},
+	builtin.Sha2_256: &CostingFunc[Arguments]{
+		mem: &ConstantCost{4},
+		cpu: &LinearCost{
+			intercept: 270652,
+			slope:     22588,
+		},
+	},
+	builtin.Sha3_256: &CostingFunc[Arguments]{
+		mem: &ConstantCost{4},
+		cpu: &LinearCost{
+			intercept: 1457325,
+			slope:     64566,
+		},
+	},
+	builtin.Blake2b_256: &CostingFunc[Arguments]{
+		mem: &ConstantCost{4},
+		cpu: &LinearCost{
+			intercept: 201305,
+			slope:     8356,
+		},
+	},
+	builtin.VerifyEd25519Signature: &CostingFunc[Arguments]{
+		mem: &ConstantCost{10},
+		cpu: &ThreeLinearInY{LinearCost{
+			intercept: 53384111,
+			slope:     14333,
+		}},
+	},
+	builtin.VerifyEcdsaSecp256k1Signature: &CostingFunc[Arguments]{
+		mem: &ConstantCost{10},
+		cpu: &ConstantCost{43053543},
+	},
+	builtin.VerifySchnorrSecp256k1Signature: &CostingFunc[Arguments]{
+		mem: &ConstantCost{10},
+		cpu: &ThreeLinearInY{LinearCost{
+			intercept: 43574283,
+			slope:     26308,
+		}},
+	},
 	// String functions
-	builtin.AppendString: &CostingFunc[Arguments]{},
-	builtin.EqualsString: &CostingFunc[Arguments]{},
-	builtin.EncodeUtf8:   &CostingFunc[Arguments]{},
-	builtin.DecodeUtf8:   &CostingFunc[Arguments]{},
+	builtin.AppendString: &CostingFunc[Arguments]{
+		mem: &AddedSizesModel{AddedSizes{
+			intercept: 4,
+			slope:     1,
+		}},
+		cpu: &AddedSizesModel{AddedSizes{
+			intercept: 1000,
+			slope:     59957,
+		}},
+	},
+	builtin.EqualsString: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &LinearOnDiagonalModel{ConstantOrLinear{
+			constant:  39184,
+			intercept: 1000,
+			slope:     60594,
+		}},
+	},
+	builtin.EncodeUtf8: &CostingFunc[Arguments]{
+		mem: &LinearCost{
+			intercept: 4,
+			slope:     2,
+		},
+		cpu: &LinearCost{
+			intercept: 1000,
+			slope:     42921,
+		},
+	},
+	builtin.DecodeUtf8: &CostingFunc[Arguments]{
+		mem: &LinearCost{
+			intercept: 4,
+			slope:     2,
+		},
+		cpu: &LinearCost{
+			intercept: 91189,
+			slope:     769,
+		},
+	},
 	// Bool function
-	builtin.IfThenElse: &CostingFunc[Arguments]{},
+	builtin.IfThenElse: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &ConstantCost{76049},
+	},
 	// Unit function
-	builtin.ChooseUnit: &CostingFunc[Arguments]{},
+	builtin.ChooseUnit: &CostingFunc[Arguments]{
+		mem: &ConstantCost{4},
+		cpu: &ConstantCost{61462},
+	},
 	// Tracing function
-	builtin.Trace: &CostingFunc[Arguments]{},
+	builtin.Trace: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{59498},
+	},
 	// Pairs functions
-	builtin.FstPair: &CostingFunc[Arguments]{},
-	builtin.SndPair: &CostingFunc[Arguments]{},
+	builtin.FstPair: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{141895},
+	},
+	builtin.SndPair: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{141992},
+	},
 	// List functions
-	builtin.ChooseList: &CostingFunc[Arguments]{},
-	builtin.MkCons:     &CostingFunc[Arguments]{},
-	builtin.HeadList:   &CostingFunc[Arguments]{},
-	builtin.TailList:   &CostingFunc[Arguments]{},
-	builtin.NullList:   &CostingFunc[Arguments]{},
+	builtin.ChooseList: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{132994},
+	},
+	builtin.MkCons: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{72362},
+	},
+	builtin.HeadList: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{83150},
+	},
+	builtin.TailList: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{81663},
+	},
+	builtin.NullList: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{74433},
+	},
 	// Data functions
 	// It is convenient to have a "choosing" function for a data type that has more than two
 	// constructors to get pattern matching over it and we may end up having multiple such data
 	// types hence we include the name of the data type as a suffix.
-	builtin.ChooseData:    &CostingFunc[Arguments]{},
-	builtin.ConstrData:    &CostingFunc[Arguments]{},
-	builtin.MapData:       &CostingFunc[Arguments]{},
-	builtin.ListData:      &CostingFunc[Arguments]{},
-	builtin.IData:         &CostingFunc[Arguments]{},
-	builtin.BData:         &CostingFunc[Arguments]{},
-	builtin.UnConstrData:  &CostingFunc[Arguments]{},
-	builtin.UnMapData:     &CostingFunc[Arguments]{},
-	builtin.UnListData:    &CostingFunc[Arguments]{},
-	builtin.UnIData:       &CostingFunc[Arguments]{},
-	builtin.UnBData:       &CostingFunc[Arguments]{},
-	builtin.EqualsData:    &CostingFunc[Arguments]{},
-	builtin.SerialiseData: &CostingFunc[Arguments]{},
+	builtin.ChooseData: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{94375},
+	},
+	builtin.ConstrData: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{22151},
+	},
+	builtin.MapData: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{68246},
+	},
+	builtin.ListData: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{33852},
+	},
+	builtin.IData: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{15299},
+	},
+	builtin.BData: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{11183},
+	},
+	builtin.UnConstrData: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{24588},
+	},
+	builtin.UnMapData: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{24623},
+	},
+	builtin.UnListData: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{25933},
+	},
+	builtin.UnIData: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{20744},
+	},
+	builtin.UnBData: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{20142},
+	},
+	builtin.EqualsData: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &MinSizeModel{MinSize{
+			intercept: 898148,
+			slope:     27279,
+		}},
+	},
+	builtin.SerialiseData: &CostingFunc[Arguments]{
+		mem: &LinearCost{
+			intercept: 0,
+			slope:     2,
+		},
+		cpu: &LinearCost{
+			intercept: 955506,
+			slope:     213312,
+		},
+	},
 	// Misc constructors
 	// Constructors that we need for constructing e.g. Data. Polymorphic builtin
 	// constructors are often problematic (See note [Representable built-in
 	// functions over polymorphic built-in types])
-	builtin.MkPairData:    &CostingFunc[Arguments]{},
-	builtin.MkNilData:     &CostingFunc[Arguments]{},
-	builtin.MkNilPairData: &CostingFunc[Arguments]{},
+	builtin.MkPairData: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{11546},
+	},
+	builtin.MkNilData: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{7243},
+	},
+	builtin.MkNilPairData: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{7391},
+	},
 }
 
 type CostingFunc[T Arguments] struct {

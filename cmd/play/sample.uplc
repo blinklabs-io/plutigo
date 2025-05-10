@@ -1,7 +1,9 @@
 (program 1.0.0
   [
-    (builtin addInteger)
-    (con integer 1)
-    (con integer 1)
+    (builtin blake2b_256)
+    [
+      (builtin encodeUtf8)
+      (con string "yo yo")
+    ]
   ]
 )
