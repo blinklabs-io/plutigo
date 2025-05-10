@@ -7,7 +7,17 @@ func Encode[T Binder](program *Program[T]) ([]byte, error) {
 		word(uint(program.Version[1])).
 		word(uint(program.Version[2]))
 
-	return nil, nil
+	if err := EncodeTerm[T](e, program.Term); err != nil {
+		return nil, err
+	}
+
+	e.filler()
+
+	return e.buffer, nil
+}
+
+func EncodeTerm[T Binder](e *encoder, term Term[T]) error {
+	return nil
 }
 
 type encoder struct {
