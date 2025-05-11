@@ -104,7 +104,7 @@ func DecodeTerm[T Binder](d *decoder) (*Term[T], error) {
 	case 9:
 		panic("TODO")
 	default:
-		return nil, errors.New(fmt.Sprintf("Invalid term tag: %d", tag))
+		return nil, fmt.Errorf("Invalid term tag: %d", tag)
 	}
 
 	return &term, nil
@@ -207,7 +207,7 @@ func (d *decoder) dropBits(numBits uint) {
 // / buffer than required_bits.
 func (d *decoder) ensureBits(requiredBits uint) error {
 	if int(requiredBits) > (len(d.buffer)-d.pos)*8-int(d.usedBits) {
-		return errors.New(fmt.Sprintf("NotEnoughBits(%d)", requiredBits))
+		return fmt.Errorf("NotEnoughBits(%d)", requiredBits)
 	} else {
 		return nil
 	}

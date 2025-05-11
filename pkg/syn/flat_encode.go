@@ -1,7 +1,6 @@
 package syn
 
 import (
-	"errors"
 	"fmt"
 )
 
@@ -175,7 +174,7 @@ func (e *encoder) encodeTermTag(tag byte) error {
 
 func (e *encoder) safeEncodeBits(numBits int64, val byte) error {
 	if 2**&numBits <= int64(val) {
-		return errors.New(fmt.Sprintf("Overflow detected, cannot fit %d in %d bits.", val, numBits))
+		return fmt.Errorf("Overflow detected, cannot fit %d in %d bits.", val, numBits)
 	}
 
 	e.bits(numBits, val)
