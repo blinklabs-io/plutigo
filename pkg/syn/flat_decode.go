@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"unicode/utf8"
-)
 
-const DECODETERMTAG = 4
+	"github.com/blinklabs-io/plutigo/pkg/builtin"
+)
 
 func Decode[T Binder](bytes []byte) (*Program[T], error) {
 	d := newDecoder(bytes)
@@ -46,7 +46,7 @@ func Decode[T Binder](bytes []byte) (*Program[T], error) {
 }
 
 func DecodeTerm[T Binder](d *decoder) (Term[T], error) {
-	tag, e := d.decodeTermTag()
+	tag, e := d.bits8(TermTagWidth)
 	if e != nil {
 		return nil, e
 	}
@@ -54,7 +54,7 @@ func DecodeTerm[T Binder](d *decoder) (Term[T], error) {
 	var term Term[T]
 
 	switch tag {
-	case 0:
+	case VarTag:
 		var name T
 
 		binder, err := name.VarDecode(d) // Call on zero-value t
@@ -68,7 +68,7 @@ func DecodeTerm[T Binder](d *decoder) (Term[T], error) {
 		}
 
 		term = &Var[T]{Name: name}
-	case 1:
+	case DelayTag:
 		t, err := DecodeTerm[T](d)
 		if err != nil {
 			return nil, err
@@ -77,7 +77,7 @@ func DecodeTerm[T Binder](d *decoder) (Term[T], error) {
 		term = &Delay[T]{
 			Term: t,
 		}
-	case 2:
+	case LambdaTag:
 		var name T
 		binder, err := name.ParameterDecode(d) // Call on zero-value t
 		if err != nil {
@@ -98,7 +98,7 @@ func DecodeTerm[T Binder](d *decoder) (Term[T], error) {
 			ParameterName: name,
 			Body:          t,
 		}
-	case 3:
+	case ApplyTag:
 		function, err := DecodeTerm[T](d)
 		if err != nil {
 			return nil, err
@@ -113,9 +113,9 @@ func DecodeTerm[T Binder](d *decoder) (Term[T], error) {
 			Function: function,
 			Argument: argument,
 		}
-	case 4:
-		panic("TODO")
-	case 5:
+	case ConstantTag:
+		panic("decode constant")
+	case ForceTag:
 		t, err := DecodeTerm[T](d)
 		if err != nil {
 			return nil, err
@@ -124,14 +124,24 @@ func DecodeTerm[T Binder](d *decoder) (Term[T], error) {
 		term = &Force[T]{
 			Term: t,
 		}
-	case 6:
+	case ErrorTag:
 		term = &Error{}
-	case 7:
-		panic("TODO")
-	case 8:
-		panic("TODO")
-	case 9:
-		panic("TODO")
+	case BuiltinTag:
+		builtinTag, err := d.bits8(BuiltinTagWidth)
+		if err != nil {
+			return nil, err
+		}
+
+		fn, err := builtin.FromByte(builtinTag)
+		if err != nil {
+			return nil, err
+		}
+
+		term = &Builtin{fn}
+	case ConstrTag:
+		panic("decode constr")
+	case CaseTag:
+		panic("decode case")
 	default:
 		return nil, fmt.Errorf("Invalid term tag: %d", tag)
 	}
@@ -151,10 +161,6 @@ func newDecoder(bytes []byte) *decoder {
 		usedBits: 0,
 		pos:      0,
 	}
-}
-
-func (d *decoder) decodeTermTag() (byte, error) {
-	return d.bits8(DECODETERMTAG)
 }
 
 // Decodes a filler of max one byte size.

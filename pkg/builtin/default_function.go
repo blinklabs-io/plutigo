@@ -1,5 +1,7 @@
 package builtin
 
+import "fmt"
+
 type DefaultFunction uint8
 
 const (
@@ -546,4 +548,20 @@ func (f DefaultFunction) String() string {
 	default:
 		panic("unknown builtin")
 	}
+}
+
+// Smallest DefaultFunction
+const MinDefaultFunction byte = 0
+
+// Smallest DefaultFunction
+const MaxDefaultFunction byte = 74
+
+func FromByte(tag byte) (DefaultFunction, error) {
+	// only need to check if greater than because
+	// the lowest possible value for byte is zero anyways
+	if tag > MaxDefaultFunction {
+		return 0, fmt.Errorf("DefaultFunctionNotFound(%d)", tag)
+	}
+
+	return DefaultFunction(tag), nil
 }

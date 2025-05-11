@@ -1,5 +1,5 @@
 # Makefile for Go project
-.PHONY: test test-one fmt clean play play-fmt
+.PHONY: test test-one fmt clean play play-fmt play-flat
 
 test: ## Run tests
 	@echo "Running tests..."
