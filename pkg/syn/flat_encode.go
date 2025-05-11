@@ -3,9 +3,8 @@ package syn
 import (
 	"errors"
 	"fmt"
+	"math/big"
 )
-
-const TERMTAGWIDTH = 4
 
 func Encode[T Binder](program *Program[T]) ([]byte, error) {
 	e := newEncoder()
@@ -138,6 +137,7 @@ func EncodeTerm[T Binder](e *encoder, term Term[T]) error {
 func EncodeList[T any](e *encoder, items []T, itemEncoder func(*encoder, T) error) error {
 	for _, item := range items {
 		e.one()
+
 		err := itemEncoder(e, item)
 		if err != nil {
 			return err
@@ -145,6 +145,7 @@ func EncodeList[T any](e *encoder, items []T, itemEncoder func(*encoder, T) erro
 	}
 
 	e.zero()
+
 	return nil
 }
 
@@ -163,8 +164,7 @@ func newEncoder() *encoder {
 }
 
 func (e *encoder) encodeTermTag(tag byte) error {
-	err := e.safeEncodeBits(TERMTAGWIDTH, tag)
-
+	err := e.safeEncodeBits(TermTagWidth, tag)
 	if err != nil {
 		return err
 	}
@@ -173,8 +173,8 @@ func (e *encoder) encodeTermTag(tag byte) error {
 
 }
 
-func (e *encoder) safeEncodeBits(numBits int64, val byte) error {
-	if 2**&numBits <= int64(val) {
+func (e *encoder) safeEncodeBits(numBits byte, val byte) error {
+	if 2<<numBits <= val {
 		return fmt.Errorf("Overflow detected, cannot fit %d in %d bits.", val, numBits)
 	}
 
@@ -216,7 +216,7 @@ func (e *encoder) word(c uint) *encoder {
 // number of bits to use is greater than unused bits. Expects that
 // number of bits to use is greater than or equal to required bits by the
 // value. The param num_bits is i64 to match unused_bits type.
-func (e *encoder) bits(numBits int64, val byte) *encoder {
+func (e *encoder) bits(numBits byte, val byte) *encoder {
 	if numBits == 1 && val == 0 {
 		e.zero()
 	} else if numBits == 1 && val == 1 {
@@ -230,7 +230,7 @@ func (e *encoder) bits(numBits int64, val byte) *encoder {
 	} else if numBits == 2 && val == 3 {
 		e.one().one()
 	} else {
-		e.usedBits += numBits
+		e.usedBits += int64(numBits)
 		unusedBits := 8 - e.usedBits
 		if unusedBits == 0 {
 			e.currentByte |= val
@@ -357,4 +357,47 @@ func (e *encoder) writeBlk(arr []byte) {
 	}
 
 	e.buffer = append(e.buffer, 0)
+}
+
+// integer encodes an arbitrarily sized signed integer to the buffer.
+// It is byte-alignment agnostic. First applies zigzag encoding to convert
+// the signed integer to unsigned, then encodes it as a bigWord.
+func (e *encoder) integer(i *big.Int) *encoder {
+	e.bigWord(zigzag(i))
+
+	return e
+}
+
+// bigWord encodes an unsigned integer to the buffer.
+// It is byte-alignment agnostic. Encodes 7-bit chunks, setting the MSB to 1
+// if more chunks follow, or 0 if it’s the last chunk.
+func (e *encoder) bigWord(c *big.Int) *encoder {
+	d := new(big.Int).Set(c)
+
+	for {
+		// temp = d % 128
+		temp := new(big.Int)
+		temp.Mod(d, big.NewInt(128))
+
+		// Convert to uint8
+		w := uint8(temp.Int64())
+
+		// d >>= 7
+		d.Rsh(d, 7)
+
+		// If d != 0, set MSB (w |= 128)
+		if d.Sign() != 0 {
+			w |= 128
+		}
+
+		// Write 8 bits
+		e.bits(8, w)
+
+		// Stop if d == 0
+		if d.Sign() == 0 {
+			break
+		}
+	}
+
+	return e
 }

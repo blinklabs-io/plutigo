@@ -3,6 +3,7 @@ package syn
 import (
 	"errors"
 	"fmt"
+	"math/big"
 	"unicode/utf8"
 
 	"github.com/blinklabs-io/plutigo/pkg/builtin"
@@ -185,7 +186,12 @@ func DecodeConstant(d *decoder) (IConstant, error) {
 	switch {
 	// Integer
 	case len(tags) == 1 && tags[0] == IntegerTag:
-		panic("unimplemented: INTEGER")
+		i, err := d.integer()
+		if err != nil {
+			return nil, err
+		}
+
+		constant = &Integer{i}
 
 	// ByteString
 	case len(tags) == 1 && tags[0] == ByteStringTag:
@@ -407,7 +413,6 @@ func (d *decoder) bits8(numBits byte) (byte, error) {
 	d.dropBits(uint(numBits))
 
 	return x, nil
-
 }
 
 func (d *decoder) dropBits(numBits uint) {
@@ -502,6 +507,52 @@ func (d *decoder) byteArray() ([]byte, error) {
 	}
 
 	return result, nil
+}
+
+// integer decodes a variable-length signed integer from the buffer.
+// It is byte-alignment agnostic. Reads 8 bits at a time, using the 7 least
+// significant bits for the unsigned integer, continuing if the MSB is 1,
+// stopping if 0, then applies zigzag decoding to get the signed integer.
+func (d *decoder) integer() (*big.Int, error) {
+	word, err := d.bigWord()
+	if err != nil {
+		return nil, err
+	}
+
+	return unzigzag(word), nil
+}
+
+// bigWord decodes a variable-length unsigned integer from the buffer.
+// It is byte-alignment agnostic. Reads 8 bits at a time, using the 7 least
+// significant bits for the integer, continuing if the MSB is 1, stopping if 0.
+func (d *decoder) bigWord() (*big.Int, error) {
+	finalWord := new(big.Int)
+	shift := uint(0)
+
+	for {
+		word8, err := d.bits8(8)
+		if err != nil {
+			return nil, err
+		}
+		// Get 7 least significant bits: word8 & 0x7F
+		word7 := word8 & 0x7F
+
+		// Shift and OR into finalWord
+		part := new(big.Int).SetInt64(int64(word7))
+		shiftedPart := new(big.Int).Lsh(part, shift)
+		finalWord.Or(finalWord, shiftedPart)
+
+		// Increment shift by 7
+		shift += 7
+
+		// Check MSB: word8 & 0x80
+		leadingBit := word8 & 0x80
+		if leadingBit == 0 {
+			break
+		}
+	}
+
+	return finalWord, nil
 }
 
 // Increment used bits by 1.
