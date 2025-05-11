@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/blinklabs-io/plutigo/pkg/cek"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
@@ -38,22 +39,30 @@ func main() {
 		log.Fatalf("loading file error: %v\n\n", err)
 	}
 
-	input := string(content)
-
-	program, err := syn.Parse(input)
-	if err != nil {
-		log.Fatalf("parse error: %v\n\n", err)
-	}
-
 	if !format {
-		dProgram, err := syn.NameToNamedDeBruijn(program)
-		if err != nil {
-			log.Fatalf("conversion error: %v\n\n", err)
+		var program *syn.Program[syn.DeBruijn]
+		if filepath.Ext(filename) == ".flat" {
+			program, err = syn.Decode[syn.DeBruijn](content)
+			if err != nil {
+				log.Fatalf("decode error: %v\n\n", err)
+			}
+		} else {
+			input := string(content)
+
+			pprogram, err := syn.Parse(input)
+			if err != nil {
+				log.Fatalf("parse error: %v\n\n", err)
+			}
+
+			program, err = syn.NameToDeBruijn(pprogram)
+			if err != nil {
+				log.Fatalf("conversion error: %v\n\n", err)
+			}
 		}
 
-		machine := cek.NewMachine[syn.NamedDeBruijn](200)
+		machine := cek.NewMachine[syn.DeBruijn](200)
 
-		term, err := machine.Run(dProgram.Term)
+		term, err := machine.Run(program.Term)
 		if err != nil {
 			log.Fatalf("eval error: %v\n\n", err)
 		}
@@ -74,6 +83,13 @@ func main() {
 
 		fmt.Println(string(output))
 	} else {
+		input := string(content)
+
+		program, err := syn.Parse(input)
+		if err != nil {
+			log.Fatalf("parse error: %v\n\n", err)
+		}
+
 		prettyProgram := syn.Pretty[syn.Name](program)
 
 		_ = os.WriteFile(filename, []byte(prettyProgram), 0644)

@@ -108,6 +108,10 @@ func (n DeBruijn) TextName() string {
 	return fmt.Sprintf("i_%d", n)
 }
 
+func (n DeBruijn) String() string {
+	return fmt.Sprintf("DeBruijn: %v", n)
+}
+
 func (n DeBruijn) LookupIndex() uint64 {
 	return uint64(n)
 }

@@ -15,8 +15,11 @@ fmt: ## Format Go code
 clean: ## Remove test cache
 	@go clean -testcache
 
-play: ## Run the play command with arguments
+play: ## Run some uplc sample code
 	@go run ./cmd/play/ cmd/play/sample.uplc
 
-play-fmt: ## Run the play command with arguments
+play-flat: ## Run some uplc from flat
+	@go run ./cmd/play/ cmd/play/auction_1-1.flat
+
+play-fmt: ## Format the uplc sample code
 	@go run ./cmd/play/ -f cmd/play/sample.uplc
