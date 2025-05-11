@@ -3,6 +3,7 @@ package syn
 import (
 	"errors"
 	"fmt"
+	"unicode/utf8"
 )
 
 const DECODETERMTAG = 4
@@ -30,9 +31,15 @@ func Decode[T Binder](bytes []byte) (*Program[T], error) {
 		return nil, err
 	}
 
+	version := [3]uint32{uint32(major), uint32(minor), uint32(patch)}
+
 	program := &Program[T]{
-		Version: [3]uint32{uint32(major), uint32(minor), uint32(patch)},
+		Version: version,
 		Term:    terms,
+	}
+
+	if err := d.filler(); err != nil {
+		return nil, err
 	}
 
 	return program, nil
@@ -150,6 +157,53 @@ func (d *decoder) decodeTermTag() (byte, error) {
 	return d.bits8(DECODETERMTAG)
 }
 
+// Decodes a filler of max one byte size.
+// Decodes bits until we hit a bit that is 1.
+// Expects that the 1 is at the end of the current byte in the buffer.
+func (d *decoder) filler() error {
+	for {
+		ok, err := d.zero()
+		if err != nil {
+			return err
+		}
+
+		if !ok {
+			break
+		}
+	}
+
+	return nil
+}
+
+// Decode the next bit in the buffer.
+// If the bit was 0 then return true.
+// Otherwise return false.
+// Throws EndOfBuffer error if used at the end of the array.
+func (d *decoder) zero() (bool, error) {
+	currentBit, err := d.bit()
+	if err != nil {
+		return false, err
+	}
+
+	return !currentBit, nil
+}
+
+// Decode the next bit in the buffer.
+// If the bit was 1 then return true.
+// Otherwise return false.
+// Throws EndOfBuffer error if used at the end of the array.
+func (d *decoder) bit() (bool, error) {
+	if d.pos >= len(d.buffer) {
+		return false, errors.New("end of buffer")
+	}
+
+	b := d.buffer[d.pos]&(128>>d.usedBits) > 0
+
+	d.incrementBufferByBit()
+
+	return b, nil
+}
+
 // Decode a word of any size.
 // This is byte alignment agnostic.
 // First we decode the next 8 bits of the buffer.
@@ -165,7 +219,6 @@ func (d *decoder) word() (uint, error) {
 
 	for {
 		word8, err := d.bits8(8)
-
 		if err != nil {
 			return 0, err
 		}
@@ -239,6 +292,104 @@ func (d *decoder) dropBits(numBits uint) {
 func (d *decoder) ensureBits(requiredBits uint) error {
 	if int(requiredBits) > (len(d.buffer)-d.pos)*8-int(d.usedBits) {
 		return fmt.Errorf("NotEnoughBits(%d)", requiredBits)
+	} else {
+		return nil
+	}
+}
+
+// Decode a string.
+// Convert to byte array and then use byte array decoding.
+// Decodes a filler to byte align the buffer,
+// then decodes the next byte to get the array length up to a max of 255.
+// We decode bytes equal to the array length to form the byte array.
+// If the following byte for array length is not 0 we decode it and repeat
+// above to continue decoding the byte array. We stop once we hit a
+// byte array length of 0. If array length is 0 for first byte array
+// length the we return a empty array.
+func (d *decoder) utf8() (string, error) {
+	b, err := d.bytes()
+	if err != nil {
+		return "", err
+	}
+
+	if !utf8.Valid(b) {
+		return "", fmt.Errorf("bytes are not valid utf8 %v", b)
+	}
+
+	return string(b), nil
+}
+
+// Decode a byte array.
+// Decodes a filler to byte align the buffer,
+// then decodes the next byte to get the array length up to a max of 255.
+// We decode bytes equal to the array length to form the byte array.
+// If the following byte for array length is not 0 we decode it and repeat
+// above to continue decoding the byte array. We stop once we hit a
+// byte array length of 0. If array length is 0 for first byte array
+// length the we return a empty array.
+func (d *decoder) bytes() ([]byte, error) {
+	if err := d.filler(); err != nil {
+		return nil, err
+	}
+
+	return d.byteArray()
+}
+
+// Decode a byte array.
+// Throws a BufferNotByteAligned error if the buffer is not byte aligned
+// Decodes the next byte to get the array length up to a max of 255.
+// We decode bytes equal to the array length to form the byte array.
+// If the following byte for array length is not 0 we decode it and repeat
+// above to continue decoding the byte array. We stop once we hit a
+// byte array length of 0. If array length is 0 for first byte array
+// length the we return a empty array.
+func (d *decoder) byteArray() ([]byte, error) {
+	if d.usedBits != 0 {
+		return nil, errors.New("buffer not byte aligned")
+	}
+
+	if err := d.ensureBytes(1); err != nil {
+		return nil, err
+	}
+
+	result := make([]byte, 0)
+	blkLen := int(d.buffer[d.pos])
+	d.pos++
+
+	for blkLen != 0 {
+		if err := d.ensureBytes(blkLen + 1); err != nil {
+			return nil, err
+		}
+
+		decodedArray := d.buffer[d.pos : d.pos+blkLen]
+		result = append(result, decodedArray...)
+
+		d.pos += blkLen
+		blkLen = int(d.buffer[d.pos])
+		d.pos++
+	}
+
+	return result, nil
+}
+
+// Increment used bits by 1.
+// If all 8 bits are used then increment buffer position by 1.
+func (d *decoder) incrementBufferByBit() {
+	if d.usedBits == 7 {
+		d.pos += 1
+
+		d.usedBits = 0
+	} else {
+		d.usedBits += 1
+	}
+}
+
+// Ensures the buffer has the required bytes passed in by required_bytes.
+// Throws a NotEnoughBytes error if there are less bytes remaining in the
+// buffer than required_bytes.
+func (d *decoder) ensureBytes(requiredBytes int) error {
+	if requiredBytes > len(d.buffer)-d.pos {
+		return fmt.Errorf("NotEnoughBytes(%d)", requiredBytes)
 	} else {
 		return nil
 	}

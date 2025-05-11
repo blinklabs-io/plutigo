@@ -1,6 +1,7 @@
 package syn
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -298,4 +299,62 @@ func (e *encoder) nextWord() *encoder {
 	e.usedBits = 0
 
 	return e
+}
+
+// Encode a string.
+// Convert to byte array and then use byte array encoding.
+// Uses filler to byte align the buffer, then writes byte array length up
+// to 255. Following that it writes the next 255 bytes from the array.
+// After reaching the end of the buffer we write a 0 byte. Only write 0
+// byte if the byte array is empty.
+func (e *encoder) utf8(s string) error {
+	return e.bytes([]byte(s))
+}
+
+// Encode a byte array.
+// Uses filler to byte align the buffer, then writes byte array length up
+// to 255. Following that it writes the next 255 bytes from the array.
+// We repeat writing length up to 255 and the next 255 bytes until we reach
+// the end of the byte array. After reaching the end of the byte array
+// we write a 0 byte. Only write 0 byte if the byte array is empty.
+func (e *encoder) bytes(x []byte) error {
+	// use filler to write current buffer so bits used gets reset
+	return e.filler().byteArray(x)
+}
+
+// Encode a byte array in a byte aligned buffer. Throws exception if any
+// bits for the current byte were used. Writes byte array length up to
+// 255 Following that it writes the next 255 bytes from the array.
+// We repeat writing length up to 255 and the next 255 bytes until we reach
+// the end of the byte array. After reaching the end of the buffer we
+// write a 0 byte. Only write 0 if the byte array is empty.
+func (e *encoder) byteArray(arr []byte) error {
+	if e.usedBits != 0 {
+		return errors.New("BufferNotByteAligned")
+	}
+
+	e.writeBlk(arr)
+
+	return nil
+}
+
+// Writes byte array length up to 255
+// Following that it writes the next 255 bytes from the array.
+// After reaching the end of the buffer we write a 0 byte. Only write 0 if
+// the byte array is empty. This is byte alignment agnostic.
+func (e *encoder) writeBlk(arr []byte) {
+	for len(arr) > 0 {
+		chunkLen := len(arr)
+
+		if chunkLen > 255 {
+			chunkLen = 255
+		}
+
+		e.buffer = append(e.buffer, byte(chunkLen))
+		e.buffer = append(e.buffer, arr[:chunkLen]...)
+
+		arr = arr[chunkLen:]
+	}
+
+	e.buffer = append(e.buffer, 0)
 }
