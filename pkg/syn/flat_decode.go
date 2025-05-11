@@ -114,7 +114,12 @@ func DecodeTerm[T Binder](d *decoder) (Term[T], error) {
 			Argument: argument,
 		}
 	case ConstantTag:
-		panic("decode constant")
+		constant, err := DecodeConstant(d)
+		if err != nil {
+			return nil, err
+		}
+
+		term = &Constant{constant}
 	case ForceTag:
 		t, err := DecodeTerm[T](d)
 		if err != nil {
@@ -167,6 +172,79 @@ func DecodeTerm[T Binder](d *decoder) (Term[T], error) {
 	}
 
 	return term, nil
+}
+
+func DecodeConstant(d *decoder) (IConstant, error) {
+	tags, err := decodeConstantTags(d)
+	if err != nil {
+		return nil, err
+	}
+
+	var constant IConstant
+
+	switch {
+	// Integer
+	case len(tags) == 1 && tags[0] == IntegerTag:
+		panic("unimplemented: INTEGER")
+
+	// ByteString
+	case len(tags) == 1 && tags[0] == ByteStringTag:
+		b, err := d.bytes()
+		if err != nil {
+			return nil, err
+		}
+
+		constant = &ByteString{b}
+
+	// String
+	case len(tags) == 1 && tags[0] == StringTag:
+		s, err := d.utf8()
+		if err != nil {
+			return nil, err
+		}
+
+		constant = &String{s}
+
+	// Unit
+	case len(tags) == 1 && tags[0] == UnitTag:
+		constant = &Unit{}
+
+	// Bool
+	case len(tags) == 1 && tags[0] == BoolTag:
+		v, err := d.bit()
+		if err != nil {
+			return nil, err
+		}
+
+		constant = &Bool{v}
+
+	// ProtoList
+	case len(tags) >= 2 && tags[0] == ProtoListOneTag && tags[1] == ProtoListTwoTag:
+		// Handle PROTO_LIST_ONE, PROTO_LIST_TWO, rest...
+		panic("unimplemented: PROTO_LIST")
+
+	// ProtoPair
+	case len(tags) >= 3 && tags[0] == ProtoPairOneTag && tags[1] == ProtoPairTwoTag && tags[2] == ProtoPairThreeTag:
+		// Handle PROTO_PAIR_ONE, PROTO_PAIR_TWO, PROTO_PAIR_THREE, rest...
+		panic("unimplemented: PROTO_PAIR")
+
+	// Data
+	case len(tags) == 1 && tags[0] == DataTag:
+		panic("unimplemented: DATA")
+
+	default:
+		return nil, errors.New("unknown constant constructor")
+	}
+
+	return constant, nil
+}
+
+func decodeConstantTags(d *decoder) ([]byte, error) {
+	return DecodeList(d, decodeConstantTag)
+}
+
+func decodeConstantTag(d *decoder) (byte, error) {
+	return d.bits8(ConstTagWidth)
 }
 
 type decoder struct {
