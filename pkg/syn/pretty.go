@@ -328,3 +328,8 @@ func (p ProtoPair) String() string {
 func (p ProtoList) String() string {
 	panic("TODO")
 }
+
+// List implements String
+func (p Data) String() string {
+	return "some data bro"
+}

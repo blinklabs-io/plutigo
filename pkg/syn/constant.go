@@ -3,6 +3,8 @@ package syn
 import (
 	"fmt"
 	"math/big"
+
+	"github.com/blinklabs-io/plutigo/pkg/data"
 )
 
 type IConstant interface {
@@ -86,4 +88,14 @@ func (ProtoPair) isConstant() {}
 
 func (pp ProtoPair) Typ() Typ {
 	return &TPair{First: pp.FstType, Second: pp.SndType}
+}
+
+type Data struct {
+	Inner data.PlutusData
+}
+
+func (Data) isConstant() {}
+
+func (Data) Typ() Typ {
+	return &TData{}
 }

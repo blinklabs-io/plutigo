@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/blinklabs-io/plutigo/pkg/builtin"
+	"github.com/blinklabs-io/plutigo/pkg/data"
 )
 
 func Decode[T Binder](bytes []byte) (*Program[T], error) {
@@ -236,7 +237,19 @@ func DecodeConstant(d *decoder) (IConstant, error) {
 
 	// Data
 	case len(tags) == 1 && tags[0] == DataTag:
-		panic("unimplemented: DATA")
+		cborBytes, err := d.bytes()
+		if err != nil {
+			return nil, err
+		}
+
+		pd, err := data.Decode(cborBytes)
+		if err != nil {
+			return nil, err
+		}
+
+		constant = &Data{pd}
+
+		fmt.Println(constant)
 
 	default:
 		return nil, errors.New("unknown constant constructor")
