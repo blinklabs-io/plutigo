@@ -249,8 +249,6 @@ func DecodeConstant(d *decoder) (IConstant, error) {
 
 		constant = &Data{pd}
 
-		fmt.Println(constant)
-
 	default:
 		return nil, errors.New("unknown constant constructor")
 	}
