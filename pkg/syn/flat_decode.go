@@ -170,7 +170,7 @@ func DecodeTerm[T Binder](d *decoder) (Term[T], error) {
 
 		term = &Case[T]{constr, branches}
 	default:
-		return nil, fmt.Errorf("Invalid term tag: %d", tag)
+		return nil, fmt.Errorf("invalid term tag: %d", tag)
 	}
 
 	return term, nil

@@ -175,7 +175,7 @@ func (e *encoder) encodeTermTag(tag byte) error {
 
 func (e *encoder) safeEncodeBits(numBits byte, val byte) error {
 	if 2<<numBits <= val {
-		return fmt.Errorf("Overflow detected, cannot fit %d in %d bits.", val, numBits)
+		return fmt.Errorf("overflow detected, cannot fit %d in %d bits", val, numBits)
 	}
 
 	e.bits(numBits, val)
