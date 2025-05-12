@@ -96,7 +96,7 @@ func DecodeTerm[T Binder](d *decoder) (Term[T], error) {
 			return nil, err
 		}
 
-		term = Lambda[T]{
+		term = &Lambda[T]{
 			ParameterName: name,
 			Body:          t,
 		}
@@ -264,6 +264,34 @@ func decodeConstantTag(d *decoder) (byte, error) {
 	return d.bits8(ConstTagWidth)
 }
 
+// Decode a list of items with a decoder function.
+// This is byte alignment agnostic.
+// Decode a bit from the buffer.
+// If 0 then stop.
+// Otherwise we decode an item in the list with the decoder function passed
+// in. Then decode the next bit in the buffer and repeat above.
+// Returns a list of items decoded with the decoder function.
+func DecodeList[T any](d *decoder, decoderFunc func(*decoder) (T, error)) ([]T, error) {
+	result := make([]T, 0)
+
+	for {
+		bit, err := d.bit()
+		if err != nil {
+			return nil, err
+		}
+		if !bit {
+			break
+		}
+		item, err := decoderFunc(d)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+
+	return result, nil
+}
+
 type decoder struct {
 	buffer   []byte
 	usedBits int64
@@ -358,34 +386,6 @@ func (d *decoder) word() (uint, error) {
 	}
 
 	return finalWord, nil
-}
-
-// Decode a list of items with a decoder function.
-// This is byte alignment agnostic.
-// Decode a bit from the buffer.
-// If 0 then stop.
-// Otherwise we decode an item in the list with the decoder function passed
-// in. Then decode the next bit in the buffer and repeat above.
-// Returns a list of items decoded with the decoder function.
-func DecodeList[T any](d *decoder, decoderFunc func(*decoder) (T, error)) ([]T, error) {
-	result := make([]T, 0)
-
-	for {
-		bit, err := d.bit()
-		if err != nil {
-			return nil, err
-		}
-		if !bit {
-			break
-		}
-		item, err := decoderFunc(d)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, item)
-	}
-
-	return result, nil
 }
 
 // Decode up to 8 bits.

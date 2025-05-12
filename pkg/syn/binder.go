@@ -163,7 +163,7 @@ func (n DeBruijn) TextName() string {
 }
 
 func (n DeBruijn) String() string {
-	return fmt.Sprintf("DeBruijn: %v", n)
+	return fmt.Sprintf("DeBruijn: %d", n)
 }
 
 func (n DeBruijn) LookupIndex() uint64 {
