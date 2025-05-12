@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"reflect"
 
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 )
@@ -211,6 +212,7 @@ func (m *Machine[T]) compute(
 			Term: t.Constr,
 		}
 	default:
+		fmt.Println(reflect.TypeOf(term))
 		panic(fmt.Sprintf("unknown term: %v", term))
 	}
 
@@ -308,6 +310,8 @@ func (m *Machine[T]) returnCompute(context MachineContext[T], value Value[T]) (M
 		state = Done[T]{
 			term: dischargeValue[T](value),
 		}
+	default:
+		panic(fmt.Sprintf("unknown context %v", context))
 	}
 	return state, nil
 }

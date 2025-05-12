@@ -67,7 +67,7 @@ func main() {
 			log.Fatalf("eval error: %v\n\n", err)
 		}
 
-		prettyTerm := syn.PrettyTerm[syn.NamedDeBruijn](term)
+		prettyTerm := syn.PrettyTerm[syn.DeBruijn](term)
 
 		consumedBudget := cek.DefaultExBudget.Sub(&machine.ExBudget)
 

@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/blinklabs-io/plutigo/pkg/builtin"
+	"github.com/blinklabs-io/plutigo/pkg/data"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 	"golang.org/x/crypto/blake2b"
 )
@@ -987,15 +988,138 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 	case builtin.BData:
 		panic("implement BData")
 	case builtin.UnConstrData:
-		panic("implement UnConstrData")
+		arg1, err := unwrapData[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, dataExMem(arg1))
+		if err != nil {
+			return nil, err
+		}
+
+		var pair *syn.ProtoPair
+		switch constr := arg1.(type) {
+		case *data.Constr:
+			var fields []syn.IConstant
+
+			for _, field := range constr.Fields {
+				con := &syn.Data{
+					Inner: field,
+				}
+
+				fields = append(fields, con)
+			}
+
+			pair = &syn.ProtoPair{
+				FstType: syn.TInteger{},
+				SndType: syn.TList{
+					Typ: syn.TData{},
+				},
+				First: &syn.Integer{
+					Inner: big.NewInt(int64(constr.Tag)),
+				},
+				Second: &syn.ProtoList{
+					LTyp: syn.TData{},
+					List: fields,
+				},
+			}
+		default:
+			return nil, errors.New("data is not a constr")
+		}
+
+		evalValue = Constant{
+			Constant: pair,
+		}
 	case builtin.UnMapData:
 		panic("implement UnMapData")
 	case builtin.UnListData:
-		panic("implement UnListData")
+		arg1, err := unwrapData[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, dataExMem(arg1))
+		if err != nil {
+			return nil, err
+		}
+
+		var list *syn.ProtoList
+		switch l := arg1.(type) {
+		case *data.List:
+			var items []syn.IConstant
+
+			for _, item := range l.Items {
+				dataList := &syn.Data{
+					Inner: item,
+				}
+
+				items = append(items, dataList)
+			}
+
+			list = &syn.ProtoList{
+				LTyp: syn.TData{},
+				List: items,
+			}
+		default:
+			return nil, errors.New("data is not a list")
+		}
+
+		evalValue = Constant{
+			Constant: list,
+		}
 	case builtin.UnIData:
-		panic("implement UnIData")
+		arg1, err := unwrapData[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, dataExMem(arg1))
+		if err != nil {
+			return nil, err
+		}
+
+		var integer syn.IConstant
+
+		switch b := arg1.(type) {
+		case *data.Integer:
+			integer = &syn.Integer{
+				Inner: b.Inner,
+			}
+
+		default:
+			return nil, errors.New("data is not a integer")
+		}
+
+		evalValue = Constant{
+			Constant: integer,
+		}
 	case builtin.UnBData:
-		panic("implement UnBData")
+		arg1, err := unwrapData[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, dataExMem(arg1))
+		if err != nil {
+			return nil, err
+		}
+
+		var bytes syn.IConstant
+
+		switch b := arg1.(type) {
+		case *data.ByteString:
+			bytes = &syn.ByteString{
+				Inner: b.Inner,
+			}
+
+		default:
+			return nil, errors.New("data is not a bytearray")
+		}
+
+		evalValue = Constant{
+			Constant: bytes,
+		}
 	case builtin.EqualsData:
 		panic("implement EqualsData")
 	case builtin.SerialiseData:
@@ -1152,4 +1276,22 @@ func unwrapPair[T syn.Eval](value Value[T]) (syn.IConstant, syn.IConstant, error
 	}
 
 	return i, j, nil
+}
+
+func unwrapData[T syn.Eval](value Value[T]) (data.PlutusData, error) {
+	var i data.PlutusData
+
+	switch v := value.(type) {
+	case Constant:
+		switch c := v.Constant.(type) {
+		case *syn.Data:
+			i = c.Inner
+		default:
+			return nil, errors.New("Value not a Data")
+		}
+	default:
+		return nil, errors.New("Value not a Constant")
+	}
+
+	return i, nil
 }

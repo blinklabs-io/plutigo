@@ -2,6 +2,7 @@ package syn
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 )
 
@@ -216,6 +217,7 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T], isTopLevel bool) {
 	case *Constant:
 		pp.printConstant(t)
 	default:
+		fmt.Println(reflect.TypeOf(t))
 		panic(fmt.Sprintf("unknown term: %v", t))
 	}
 }
