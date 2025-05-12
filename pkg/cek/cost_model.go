@@ -130,10 +130,7 @@ func dataExMem(x data.PlutusData) func() ExMem {
 			x,
 		}
 
-		for {
-			if len(costStack) == 0 {
-				break
-			}
+		for len(costStack) != 0 {
 
 			d := costStack[0]
 			costStack = costStack[1:]
@@ -141,13 +138,9 @@ func dataExMem(x data.PlutusData) func() ExMem {
 			acc += 4
 			switch dat := d.(type) {
 			case data.Constr:
-				for _, field := range dat.Fields {
-					costStack = append(costStack, field)
-				}
+				costStack = append(costStack, dat.Fields...)
 			case data.List:
-				for _, item := range dat.Items {
-					costStack = append(costStack, item)
-				}
+				costStack = append(costStack, dat.Items...)
 			case data.Map:
 				for _, pair := range dat.Pairs {
 					costStack = append(costStack, pair[0])
