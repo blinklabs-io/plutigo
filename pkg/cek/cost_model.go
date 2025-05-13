@@ -183,7 +183,7 @@ func equalsDataExMem(x data.PlutusData, y data.PlutusData) (func() ExMem, func()
 		y,
 	}
 
-	for xLen, yLen := true, true; !((xLen || xAcc > yAcc) && (yLen || yAcc > xAcc)); xLen,
+	for xLen, yLen := true, true; (xLen || xAcc > yAcc) && (yLen || yAcc > xAcc); xLen,
 		yLen = len(costStackX) != 0, len(costStackY) != 0 {
 
 		if xLen {
