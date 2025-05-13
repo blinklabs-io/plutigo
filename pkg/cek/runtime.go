@@ -81,7 +81,7 @@ func (m *Machine[T]) Costsix(b *builtin.DefaultFunction, x, y, z, xx, yy, zz fun
 	return err
 }
 
-func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
+func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 	// Budgeting
 	var evalValue Value[T]
 
@@ -106,7 +106,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		newInt.Add(arg1, arg2)
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: &syn.Integer{
 				Inner: &newInt,
 			},
@@ -131,7 +131,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		newInt.Sub(arg1, arg2)
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: &syn.Integer{
 				Inner: &newInt,
 			},
@@ -156,7 +156,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		newInt.Mul(arg1, arg2)
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: &syn.Integer{
 				Inner: &newInt,
 			},
@@ -186,7 +186,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		newInt.Div(arg1, arg2) // Division (rounds toward zero)
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: &syn.Integer{
 				Inner: &newInt,
 			},
@@ -217,7 +217,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		newInt.Quo(arg1, arg2) // Floor division (rounds toward negative infinity)
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: &syn.Integer{
 				Inner: &newInt,
 			},
@@ -248,7 +248,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		newInt.Rem(arg1, arg2) // Remainder (consistent with Div, can be negative)
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: &syn.Integer{
 				Inner: &newInt,
 			},
@@ -278,7 +278,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		newInt.Mod(arg1, arg2) // Modulus (always non-negative)
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: &syn.Integer{
 				Inner: &newInt,
 			},
@@ -305,7 +305,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			Inner: res == 0,
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: con,
 		}
 	case builtin.LessThanInteger:
@@ -330,7 +330,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			Inner: res == -1,
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: con,
 		}
 	case builtin.LessThanEqualsInteger:
@@ -355,7 +355,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			Inner: res == -1 || res == 0,
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: con,
 		}
 	case builtin.AppendByteString:
@@ -379,7 +379,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 		copy(res, arg1)
 		copy(res[len(arg1):], arg2)
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: &syn.ByteString{
 				Inner: res,
 			},
@@ -415,7 +415,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		res := append([]byte{byte(int_val)}, arg2...)
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: &syn.ByteString{
 				Inner: res,
 			},
@@ -471,7 +471,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 		// Slice
 		res := arg3[skip:end]
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: &syn.ByteString{
 				Inner: res,
 			},
@@ -489,7 +489,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		res := len(arg1)
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: &syn.Integer{
 				Inner: big.NewInt(int64(res)),
 			},
@@ -522,7 +522,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		res := int64(arg1[index])
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: &syn.Integer{
 				Inner: big.NewInt(res),
 			},
@@ -545,7 +545,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		res := bytes.Equal(arg1, arg2)
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: &syn.Bool{
 				Inner: res,
 			},
@@ -572,7 +572,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			Inner: res == -1,
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: con,
 		}
 	case builtin.LessThanEqualsByteString:
@@ -597,7 +597,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			Inner: res == -1 || res == 0,
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: con,
 		}
 	case builtin.Sha2_256:
@@ -617,7 +617,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			Inner: res[:],
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: con,
 		}
 	case builtin.Sha3_256:
@@ -637,7 +637,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			Inner: res[:],
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: con,
 		}
 	case builtin.Blake2b_256:
@@ -657,7 +657,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			Inner: res[:],
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: con,
 		}
 	case builtin.VerifyEd25519Signature:
@@ -695,7 +695,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			Inner: res,
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: con,
 		}
 	case builtin.VerifyEcdsaSecp256k1Signature:
@@ -724,7 +724,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			Inner: res,
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: con,
 		}
 	case builtin.EqualsString:
@@ -749,7 +749,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			Inner: res,
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: con,
 		}
 	case builtin.EncodeUtf8:
@@ -769,7 +769,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			Inner: res,
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: con,
 		}
 	case builtin.DecodeUtf8:
@@ -793,7 +793,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			Inner: res,
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: con,
 		}
 	case builtin.IfThenElse:
@@ -855,7 +855,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: fstPair,
 		}
 	case builtin.SndPair:
@@ -869,7 +869,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: sndPair,
 		}
 	case builtin.ChooseList:
@@ -912,7 +912,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		consList := append([]syn.IConstant{arg1.Constant}, arg2.List...)
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: &syn.ProtoList{
 				LTyp: typ,
 				List: consList,
@@ -933,7 +933,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, errors.New("headList on an empty list")
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: arg1.List[0],
 		}
 	case builtin.TailList:
@@ -953,7 +953,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 
 		tailList := arg1.List[1:]
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: &syn.ProtoList{
 				LTyp: arg1.LTyp,
 				List: tailList,
@@ -970,7 +970,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: &syn.Bool{
 				Inner: len(arg1.List) == 0,
 			},
@@ -1028,7 +1028,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, errors.New("data is not a constr")
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: pair,
 		}
 	case builtin.UnMapData:
@@ -1065,7 +1065,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, errors.New("data is not a list")
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: list,
 		}
 	case builtin.UnIData:
@@ -1091,7 +1091,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, errors.New("data is not a integer")
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: integer,
 		}
 	case builtin.UnBData:
@@ -1117,7 +1117,7 @@ func (m *Machine[T]) evalBuiltinApp(b Builtin[T]) (Value[T], error) {
 			return nil, errors.New("data is not a bytearray")
 		}
 
-		evalValue = Constant{
+		evalValue = &Constant{
 			Constant: bytes,
 		}
 	case builtin.EqualsData:
@@ -1141,8 +1141,8 @@ func unwrapConstant[T syn.Eval](value Value[T]) (*Constant, error) {
 	var i *Constant
 
 	switch v := value.(type) {
-	case Constant:
-		i = &v
+	case *Constant:
+		i = v
 
 	default:
 		return nil, errors.New("Value not a Constant")
@@ -1155,7 +1155,7 @@ func unwrapInteger[T syn.Eval](value Value[T]) (*big.Int, error) {
 	var i *big.Int
 
 	switch v := value.(type) {
-	case Constant:
+	case *Constant:
 		switch c := v.Constant.(type) {
 		case *syn.Integer:
 			i = c.Inner
@@ -1173,7 +1173,7 @@ func unwrapByteString[T syn.Eval](value Value[T]) ([]byte, error) {
 	var i []byte
 
 	switch v := value.(type) {
-	case Constant:
+	case *Constant:
 		switch c := v.Constant.(type) {
 		case *syn.ByteString:
 			i = c.Inner
@@ -1191,7 +1191,7 @@ func unwrapString[T syn.Eval](value Value[T]) (string, error) {
 	var i string
 
 	switch v := value.(type) {
-	case Constant:
+	case *Constant:
 		switch c := v.Constant.(type) {
 		case *syn.String:
 			i = c.Inner
@@ -1209,7 +1209,7 @@ func unwrapBool[T syn.Eval](value Value[T]) (bool, error) {
 	var i bool
 
 	switch v := value.(type) {
-	case Constant:
+	case *Constant:
 		switch c := v.Constant.(type) {
 		case *syn.Bool:
 			i = c.Inner
@@ -1225,7 +1225,7 @@ func unwrapBool[T syn.Eval](value Value[T]) (bool, error) {
 
 func unwrapUnit[T syn.Eval](value Value[T]) error {
 	switch v := value.(type) {
-	case Constant:
+	case *Constant:
 		switch v.Constant.(type) {
 		case *syn.Unit:
 			return nil
@@ -1241,7 +1241,7 @@ func unwrapList[T syn.Eval](typ syn.Typ, value Value[T]) (*syn.ProtoList, error)
 	var i *syn.ProtoList
 
 	switch v := value.(type) {
-	case Constant:
+	case *Constant:
 		switch c := v.Constant.(type) {
 		case *syn.ProtoList:
 			if typ != nil && !reflect.DeepEqual(typ, c.LTyp) {
@@ -1263,7 +1263,7 @@ func unwrapPair[T syn.Eval](value Value[T]) (syn.IConstant, syn.IConstant, error
 	var j syn.IConstant
 
 	switch v := value.(type) {
-	case Constant:
+	case *Constant:
 		switch c := v.Constant.(type) {
 		case *syn.ProtoPair:
 			i = c.First
@@ -1282,7 +1282,7 @@ func unwrapData[T syn.Eval](value Value[T]) (data.PlutusData, error) {
 	var i data.PlutusData
 
 	switch v := value.(type) {
-	case Constant:
+	case *Constant:
 		switch c := v.Constant.(type) {
 		case *syn.Data:
 			i = c.Inner

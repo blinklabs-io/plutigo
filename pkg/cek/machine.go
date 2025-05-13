@@ -80,13 +80,13 @@ func (m *Machine[T]) compute(
 			return nil, errors.New("open term evaluated")
 		}
 
-		state = Return[T]{Ctx: context, Value: *value}
+		state = Return[T]{Ctx: context, Value: value}
 	case *syn.Delay[T]:
 		if err := m.stepAndMaybeSpend(ExDelay); err != nil {
 			return nil, err
 		}
 
-		value := Delay[T]{
+		value := &Delay[T]{
 			Body: t.Term,
 			Env:  env,
 		}
@@ -97,7 +97,7 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 
-		value := Lambda[T]{
+		value := &Lambda[T]{
 			ParameterName: t.ParameterName,
 			Body:          t.Body,
 			Env:           env,
@@ -127,7 +127,7 @@ func (m *Machine[T]) compute(
 
 		state = Return[T]{
 			Ctx: context,
-			Value: Constant{
+			Value: &Constant{
 				Constant: t.Con,
 			},
 		}
@@ -155,7 +155,7 @@ func (m *Machine[T]) compute(
 
 		state = Return[T]{
 			Ctx: context,
-			Value: Builtin[T]{
+			Value: &Builtin[T]{
 				Func:   t.DefaultFunction,
 				Args:   []Value[T]{},
 				Forces: 0,
@@ -171,7 +171,7 @@ func (m *Machine[T]) compute(
 		if len(fields) == 0 {
 			state = Return[T]{
 				Ctx: context,
-				Value: Constr[T]{
+				Value: &Constr[T]{
 					Tag:    t.Tag,
 					Fields: []Value[T]{},
 				},
@@ -212,7 +212,6 @@ func (m *Machine[T]) compute(
 			Term: t.Constr,
 		}
 	default:
-		fmt.Println(reflect.TypeOf(term))
 		panic(fmt.Sprintf("unknown term: %v", term))
 	}
 
@@ -284,7 +283,7 @@ func (m *Machine[T]) returnCompute(context MachineContext[T], value Value[T]) (M
 		}
 	case FrameCases[T]:
 		switch v := value.(type) {
-		case Constr[T]:
+		case *Constr[T]:
 			if v.Tag > math.MaxInt {
 				return nil, errors.New("MaxIntExceeded")
 			}
@@ -320,13 +319,13 @@ func (m *Machine[T]) forceEvaluate(context MachineContext[T], value Value[T]) (M
 	var state MachineState[T]
 
 	switch v := value.(type) {
-	case Delay[T]:
+	case *Delay[T]:
 		state = Compute[T]{
 			Ctx:  context,
 			Env:  v.Env,
 			Term: v.Body,
 		}
-	case Builtin[T]:
+	case *Builtin[T]:
 		if v.NeedsForce() {
 			var resolved Value[T]
 
@@ -352,6 +351,7 @@ func (m *Machine[T]) forceEvaluate(context MachineContext[T], value Value[T]) (M
 			return nil, errors.New("BuiltinTermArgumentExpected")
 		}
 	default:
+		fmt.Println(reflect.TypeOf(v))
 		return nil, errors.New("NonPolymorphicInstantiation")
 	}
 
@@ -362,7 +362,7 @@ func (m *Machine[T]) applyEvaluate(context MachineContext[T], function Value[T],
 	var state MachineState[T]
 
 	switch f := function.(type) {
-	case Lambda[T]:
+	case *Lambda[T]:
 		env := make(Env[T], len(f.Env))
 
 		copy(env, f.Env)
@@ -374,7 +374,7 @@ func (m *Machine[T]) applyEvaluate(context MachineContext[T], function Value[T],
 			Env:  env,
 			Term: f.Body,
 		}
-	case Builtin[T]:
+	case *Builtin[T]:
 		if !f.NeedsForce() && f.IsArrow() {
 			var resolved Value[T]
 
@@ -423,11 +423,11 @@ func dischargeValue[T syn.Eval](value Value[T]) syn.Term[T] {
 	var dischargedTerm syn.Term[T]
 
 	switch v := value.(type) {
-	case Constant:
+	case *Constant:
 		dischargedTerm = &syn.Constant{
 			Con: v.Constant,
 		}
-	case Builtin[T]:
+	case *Builtin[T]:
 		var forcedTerm syn.Term[T]
 
 		forcedTerm = &syn.Builtin{
@@ -448,18 +448,18 @@ func dischargeValue[T syn.Eval](value Value[T]) syn.Term[T] {
 		}
 
 		dischargedTerm = forcedTerm
-	case Delay[T]:
+	case *Delay[T]:
 		dischargedTerm = &syn.Delay[T]{
 			Term: withEnv(0, v.Env, v.Body),
 		}
 
-	case Lambda[T]:
+	case *Lambda[T]:
 		dischargedTerm = &syn.Lambda[T]{
 			ParameterName: v.ParameterName,
 			Body:          withEnv(1, v.Env, v.Body),
 		}
 
-	case Constr[T]:
+	case *Constr[T]:
 		fields := []syn.Term[T]{}
 
 		for _, f := range v.Fields {
@@ -483,7 +483,7 @@ func withEnv[T syn.Eval](lamCnt uint, env Env[T], term syn.Term[T]) syn.Term[T] 
 		if lamCnt >= uint(t.Name.LookupIndex()) {
 			dischargedTerm = t
 		} else if val, exists := env.lookup(uint(t.Name.LookupIndex()) - lamCnt); exists {
-			dischargedTerm = dischargeValue[T](*val)
+			dischargedTerm = dischargeValue[T](val)
 		} else {
 			dischargedTerm = t
 		}
