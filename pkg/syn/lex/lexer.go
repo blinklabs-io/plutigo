@@ -3,7 +3,6 @@ package lex
 import (
 	"fmt"
 	"math/big"
-	"strings"
 	"unicode"
 )
 
@@ -87,18 +86,22 @@ func (l *Lexer) readIdentifier() string {
 	return l.input[start:l.pos]
 }
 
-func (l *Lexer) readNumber() string {
+func (l *Lexer) readNumber() (string, error) {
 	start := l.pos
 
-	if l.ch == '-' {
+	if l.ch == '-' || l.ch == '+' {
 		l.readChar() // Consume the minus sign
+	}
+
+	if !unicode.IsDigit(l.ch) {
+		return "", fmt.Errorf("expected digit after sign at position %d", l.pos)
 	}
 
 	for unicode.IsDigit(l.ch) {
 		l.readChar()
 	}
 
-	return l.input[start:l.pos]
+	return l.input[start:l.pos], nil
 }
 
 func (l *Lexer) readString() (string, error) {
@@ -125,7 +128,7 @@ func (l *Lexer) readByteString() (string, error) {
 		l.readChar()
 
 		switch {
-		case l.ch == 0, unicode.IsSpace(l.ch), l.ch == ')', l.ch == ']':
+		case l.ch == 0, unicode.IsSpace(l.ch), l.ch == ')', l.ch == ']', l.ch == ',':
 			literal := l.input[start:l.pos]
 
 			if len(literal)%2 != 0 {
@@ -149,11 +152,22 @@ func (l *Lexer) NextToken() Token {
 
 	switch l.ch {
 	case '(':
-		tok.Type = TokenLParen
+		if l.peekChar() == ')' {
+			// Handle () as TokenUnit
+			tok.Type = TokenUnit
 
-		tok.Literal = string(l.ch)
+			tok.Literal = "()"
 
-		l.readChar()
+			l.readChar() // Consume (
+
+			l.readChar() // Consume )
+		} else {
+			tok.Type = TokenLParen
+
+			tok.Literal = string(l.ch)
+
+			l.readChar()
+		}
 	case ')':
 		tok.Type = TokenRParen
 
@@ -174,6 +188,12 @@ func (l *Lexer) NextToken() Token {
 		l.readChar()
 	case '.':
 		tok.Type = TokenDot
+
+		tok.Literal = string(l.ch)
+
+		l.readChar()
+	case ',':
+		tok.Type = TokenComma
 
 		tok.Literal = string(l.ch)
 
@@ -232,7 +252,7 @@ func (l *Lexer) NextToken() Token {
 
 			tok.Literal = literal
 
-			switch strings.ToLower(literal) {
+			switch literal {
 			case "lam":
 				tok.Type = TokenLam
 			case "delay":
@@ -241,8 +261,6 @@ func (l *Lexer) NextToken() Token {
 				tok.Type = TokenForce
 			case "builtin":
 				tok.Type = TokenBuiltin
-			case "constr":
-				tok.Type = TokenConstr
 			case "case":
 				tok.Type = TokenCase
 			case "con":
@@ -251,27 +269,38 @@ func (l *Lexer) NextToken() Token {
 				tok.Type = TokenErrorTerm
 			case "program":
 				tok.Type = TokenProgram
-			case "true":
+			case "True":
 				tok.Type = TokenTrue
 				tok.Value = true
-			case "false":
+			case "False":
 				tok.Type = TokenFalse
 				tok.Value = false
+			case "pair":
+				tok.Type = TokenPair
+			case "I":
+				tok.Type = TokenI
+			case "B":
+				tok.Type = TokenB
+			case "list":
+				tok.Type = TokenList
+			case "List":
+				tok.Type = TokenPlutusList
+			case "Map":
+				tok.Type = TokenMap
+			case "constr":
+				tok.Type = TokenConstr
+			case "Constr":
+				tok.Type = TokenPlutusConstr
 			default:
 				tok.Type = TokenIdentifier
 			}
 
 			return tok
-		} else if l.ch == '-' || unicode.IsDigit(l.ch) {
-			literal := l.readNumber()
-
-			if len(literal) == 1 && literal == "-" {
+		} else if unicode.IsDigit(l.ch) || l.ch == '-' || l.ch == '+' {
+			literal, err := l.readNumber()
+			if err != nil {
 				tok.Type = TokenError
-
-				tok.Literal = fmt.Sprintf("invalid number: lone minus sign at position %d", l.pos)
-
-				l.readChar()
-
+				tok.Literal = err.Error()
 				return tok
 			}
 
