@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"reflect"
 
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 )
@@ -351,7 +350,6 @@ func (m *Machine[T]) forceEvaluate(context MachineContext[T], value Value[T]) (M
 			return nil, errors.New("BuiltinTermArgumentExpected")
 		}
 	default:
-		fmt.Println(reflect.TypeOf(v))
 		return nil, errors.New("NonPolymorphicInstantiation")
 	}
 
