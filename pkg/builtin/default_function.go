@@ -1,5 +1,7 @@
 package builtin
 
+import "fmt"
+
 type DefaultFunction uint8
 
 const (
@@ -458,11 +460,11 @@ func (f DefaultFunction) String() string {
 		return "lessThanEqualsByteString"
 	// Cryptography and hash functions
 	case Sha2_256:
-		return "sha2256"
+		return "sha2_256"
 	case Sha3_256:
-		return "sha3256"
+		return "sha3_256"
 	case Blake2b_256:
-		return "blake2B256"
+		return "blake2b_256"
 	case VerifyEd25519Signature:
 		return "verifyEd25519Signature"
 	case VerifyEcdsaSecp256k1Signature:
@@ -546,4 +548,20 @@ func (f DefaultFunction) String() string {
 	default:
 		panic("unknown builtin")
 	}
+}
+
+// Smallest DefaultFunction
+const MinDefaultFunction byte = 0
+
+// Smallest DefaultFunction
+const MaxDefaultFunction byte = 74
+
+func FromByte(tag byte) (DefaultFunction, error) {
+	// only need to check if greater than because
+	// the lowest possible value for byte is zero anyways
+	if tag > MaxDefaultFunction {
+		return 0, fmt.Errorf("DefaultFunctionNotFound(%d)", tag)
+	}
+
+	return DefaultFunction(tag), nil
 }

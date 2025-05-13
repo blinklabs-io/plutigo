@@ -81,21 +81,21 @@ func (b Builtin[T]) NeedsForce() bool {
 	return b.Func.ForceCount() > int(b.Forces)
 }
 
-func (b *Builtin[T]) ConsumeForce() Builtin[T] {
-	return Builtin[T]{
+func (b *Builtin[T]) ConsumeForce() *Builtin[T] {
+	return &Builtin[T]{
 		Func:   b.Func,
 		Forces: b.Forces + 1,
 		Args:   b.Args,
 	}
 }
 
-func (b *Builtin[T]) ApplyArg(arg Value[T]) Builtin[T] {
+func (b *Builtin[T]) ApplyArg(arg Value[T]) *Builtin[T] {
 	args := make([]Value[T], len(b.Args))
 	copy(args, b.Args)
 
 	args = append(args, arg)
 
-	return Builtin[T]{
+	return &Builtin[T]{
 		Func:   b.Func,
 		Forces: b.Forces,
 		Args:   args,

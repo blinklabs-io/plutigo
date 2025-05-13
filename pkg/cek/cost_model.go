@@ -3,121 +3,56 @@ package cek
 import (
 	"math/big"
 
-	"github.com/blinklabs-io/plutigo/pkg/builtin"
+	"github.com/blinklabs-io/plutigo/pkg/data"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
-)
-
-type MachineCosts struct {
-	startup  ExBudget
-	variable ExBudget
-	constant ExBudget
-	lambda   ExBudget
-	delay    ExBudget
-	force    ExBudget
-	apply    ExBudget
-	constr   ExBudget
-	ccase    ExBudget
-	/// Just the cost of evaluating a Builtin node not the builtin itself.
-	builtin ExBudget
-}
-
-func (mc MachineCosts) get(kind StepKind) ExBudget {
-	switch kind {
-	case ExConstant:
-		return mc.constant
-	case ExVar:
-		return mc.variable
-	case ExLambda:
-		return mc.lambda
-	case ExDelay:
-		return mc.delay
-	case ExForce:
-		return mc.force
-	case ExApply:
-		return mc.apply
-	case ExBuiltin:
-		return mc.builtin
-	case ExConstr:
-		return mc.constr
-	case ExCase:
-		return mc.ccase
-	default:
-		panic("invalid step kind")
-	}
-}
-
-var DefaultMachineCosts = MachineCosts{
-	startup: ExBudget{Mem: 100, Cpu: 100},
-	variable: ExBudget{
-		Mem: 100,
-		Cpu: 16000,
-	},
-	constant: ExBudget{
-		Mem: 100,
-		Cpu: 16000,
-	},
-	lambda: ExBudget{
-		Mem: 100,
-		Cpu: 16000,
-	},
-	delay: ExBudget{
-		Mem: 100,
-		Cpu: 16000,
-	},
-	force: ExBudget{
-		Mem: 100,
-		Cpu: 16000,
-	},
-	apply: ExBudget{
-		Mem: 100,
-		Cpu: 16000,
-	},
-	builtin: ExBudget{
-		Mem: 100,
-		Cpu: 16000,
-	},
-	// Placeholder values
-	constr: ExBudget{
-		Mem: 100,
-		Cpu: 16000,
-	},
-	ccase: ExBudget{
-		Mem: 100,
-		Cpu: 16000,
-	},
-}
-
-type StepKind uint8
-
-const (
-	ExConstant StepKind = iota
-	ExVar
-	ExLambda
-	ExApply
-	ExDelay
-	ExForce
-	ExBuiltin
-	ExConstr
-	ExCase
 )
 
 type CostModel struct {
 	machineCosts MachineCosts
-	builtinCosts map[builtin.DefaultFunction]CostingFunc[Arguments]
+	builtinCosts BuiltinCosts
 }
 
 var DefaultCostModel = CostModel{
 	machineCosts: DefaultMachineCosts,
-	// TODO: Make DefaultBuiltinCosts
-	builtinCosts: map[builtin.DefaultFunction]CostingFunc[Arguments]{},
+	builtinCosts: DefaultBuiltinCosts,
 }
+
+const PAIR_COST = 1
+const CONS_COST = 3
+const NIL_COST = 1
+const DATA_COST = 4
 
 type ExMem int
 
-func ValueExMem[T syn.Eval](v Value[T]) func() ExMem {
+func valueExMem[T syn.Eval](v Value[T]) func() ExMem {
 	return func() ExMem {
 		return v.toExMem()
 	}
+}
+
+func iconstantExMem(c syn.IConstant) func() ExMem {
+	var ex func() ExMem
+
+	switch x := c.(type) {
+	case syn.Integer:
+		ex = bigIntExMem(x.Inner)
+	case syn.ByteString:
+		ex = byteArrayExMem(x.Inner)
+	case syn.Bool:
+		ex = boolExMem(x.Inner)
+	case syn.String:
+		ex = stringExMem(x.Inner)
+	case syn.Unit:
+		ex = unitExMem()
+	case syn.ProtoList:
+		ex = listExMem(x.List)
+	case syn.ProtoPair:
+		ex = pairExMem(x.First, x.Second)
+	default:
+		panic("Oh no!")
+	}
+
+	return ex
 }
 
 // Return a function so we can have lazy
@@ -125,6 +60,7 @@ func ValueExMem[T syn.Eval](v Value[T]) func() ExMem {
 func bigIntExMem(i *big.Int) func() ExMem {
 	return func() ExMem {
 		x := big.NewInt(0)
+
 		if x.Cmp(i) == 0 {
 			return ExMem(1)
 		} else {
@@ -152,647 +88,165 @@ func byteArrayExMem(b []byte) func() ExMem {
 	}
 }
 
+// According to the Haskell code they are charging 8 bytes of value per byte contained in the string
+// So returning just the string length as ExMem matches the Haskell behavior
+func stringExMem(s string) func() ExMem {
+	return func() ExMem {
+		x := len(s)
+
+		return ExMem(x)
+	}
+}
+
 func boolExMem(bool) func() ExMem {
 	return func() ExMem {
 		return ExMem(1)
 	}
 }
 
-type CostingFunc[T Arguments] struct {
-	mem T
-	cpu T
+func unitExMem() func() ExMem {
+	return func() ExMem {
+		return ExMem(1)
+	}
 }
 
-func CostSingle[T OneArgument](cf CostingFunc[T], x func() ExMem) ExBudget {
-	memConstants := cf.mem.HasConstants()
+func listExMem(l []syn.IConstant) func() ExMem {
+	return func() ExMem {
+		var accExMem ExMem
 
-	cpuConstants := cf.cpu.HasConstants()
-
-	var usedBudget ExBudget
-
-	if memConstants[0] && cpuConstants[0] {
-		usedBudget = ExBudget{
-			Mem: int64(cf.mem.Cost(ExMem(0))),
-			Cpu: int64(cf.cpu.Cost(ExMem(0))),
+		for _, item := range l {
+			accExMem += iconstantExMem(item)() + CONS_COST
 		}
-	} else {
-		i := x()
-		usedBudget = ExBudget{
-			Mem: int64(cf.mem.Cost(i)),
-			Cpu: int64(cf.cpu.Cost(i)),
+
+		return ExMem(NIL_COST + accExMem)
+	}
+}
+
+func pairExMem(x syn.IConstant, y syn.IConstant) func() ExMem {
+	return func() ExMem {
+		return ExMem(PAIR_COST + iconstantExMem(x)() + iconstantExMem(y)())
+	}
+}
+
+func dataExMem(x data.PlutusData) func() ExMem {
+	return func() ExMem {
+		var acc ExMem
+		costStack := []data.PlutusData{
+			x,
 		}
-	}
 
-	return usedBudget
-}
+		for len(costStack) != 0 {
 
-// Function to cost TwoArguments similar to CostSingle for OneArgument
-func CostPair[T TwoArgument](cf CostingFunc[T], x, y func() ExMem) ExBudget {
-	memConstants := cf.mem.HasConstants()
-	cpuConstants := cf.cpu.HasConstants()
+			d := costStack[0]
+			costStack = costStack[1:]
+			// Cost 4 per item switch
+			acc += DATA_COST
+			switch dat := d.(type) {
+			case data.Constr:
+				costStack = append(costStack, dat.Fields...)
+			case data.List:
+				costStack = append(costStack, dat.Items...)
+			case data.Map:
+				for _, pair := range dat.Pairs {
+					costStack = append(costStack, pair[0])
+					costStack = append(costStack, pair[1])
+				}
+			case data.Integer:
+				acc += bigIntExMem(dat.Inner)()
+			case data.ByteString:
+				acc += byteArrayExMem(dat.Inner)()
+			default:
+				panic("Unreachable")
+			}
+		}
 
-	var xMem ExMem
-	var yMem ExMem
-
-	if memConstants[0] && cpuConstants[0] {
-		xMem = ExMem(0)
-	} else {
-		xMem = x()
-	}
-
-	if memConstants[1] && cpuConstants[1] {
-		yMem = ExMem(1)
-	} else {
-		yMem = y()
-	}
-
-	return ExBudget{
-		Mem: int64(cf.mem.CostTwo(xMem, yMem)),
-		Cpu: int64(cf.cpu.CostTwo(xMem, yMem)),
-	}
-}
-
-// Function to cost ThreeArguments
-func CostTriple[T ThreeArgument](cf CostingFunc[T], x, y, z func() ExMem) ExBudget {
-	memConstants := cf.mem.HasConstants()
-	cpuConstants := cf.cpu.HasConstants()
-
-	var xMem, yMem, zMem ExMem
-
-	if memConstants[0] && cpuConstants[0] {
-		xMem = ExMem(0)
-	} else {
-		xMem = x()
-	}
-
-	if memConstants[1] && cpuConstants[1] {
-		yMem = ExMem(0)
-	} else {
-		yMem = y()
-	}
-
-	if memConstants[2] && cpuConstants[2] {
-		zMem = ExMem(0)
-	} else {
-		zMem = z()
-	}
-
-	return ExBudget{
-		Mem: int64(cf.mem.CostThree(xMem, yMem, zMem)),
-		Cpu: int64(cf.cpu.CostThree(xMem, yMem, zMem)),
+		return acc
 	}
 }
 
-// Function to cost SixArguments
-func CostSextuple[T SixArgument](cf CostingFunc[T], a, b, c, d, e, f func() ExMem) ExBudget {
-	memConstants := cf.mem.HasConstants()
-	cpuConstants := cf.cpu.HasConstants()
+// Equals Data is an exceptional case where the cost for the full traversal
+// of 2 plutus data objects may far exceed what ends up being costed by the builtin cpu wise (Uses Min Size)
+// this is possible via having one super large object equals data with a tiny object
+// like script context vs a Data of bytearray of 0 bytes. In this case the cpu ExBudget would far underestimate
+// the cost for calculating the ExMem for the entire script context thus causing a lot of free work to be done
+// by the node
+func equalsDataExMem(x data.PlutusData, y data.PlutusData) (func() ExMem, func() ExMem) {
 
-	var aMem, bMem, cMem, dMem, eMem, fMem ExMem
-
-	// Check each argument individually
-	if memConstants[0] && cpuConstants[0] {
-		aMem = ExMem(0)
-	} else {
-		aMem = a()
+	var xAcc ExMem
+	var yAcc ExMem
+	var minAcc ExMem
+	costStackX := []data.PlutusData{
+		x,
 	}
 
-	if memConstants[1] && cpuConstants[1] {
-		bMem = ExMem(0)
-	} else {
-		bMem = b()
+	costStackY := []data.PlutusData{
+		y,
 	}
 
-	if memConstants[2] && cpuConstants[2] {
-		cMem = ExMem(0)
-	} else {
-		cMem = c()
+	for {
+		if !((len(costStackX) != 0 || xAcc > yAcc) && (len(costStackY) != 0 || yAcc > xAcc)) {
+			break
+		}
+
+		if len(costStackX) != 0 {
+			// Cost 4 per item switch
+			xAcc += DATA_COST
+			switch dat := x.(type) {
+			case data.Constr:
+				for _, field := range dat.Fields {
+					costStackX = append(costStackX, field)
+				}
+			case data.List:
+				for _, item := range dat.Items {
+					costStackX = append(costStackX, item)
+				}
+			case data.Map:
+				for _, pair := range dat.Pairs {
+					costStackX = append(costStackX, pair[0])
+					costStackX = append(costStackX, pair[1])
+				}
+			case data.Integer:
+				xAcc += bigIntExMem(dat.Inner)()
+			case data.ByteString:
+				xAcc += byteArrayExMem(dat.Inner)()
+			default:
+				panic("Unreachable")
+			}
+		}
+
+		if len(costStackY) != 0 {
+			// Cost 4 per item switch
+			yAcc += DATA_COST
+			switch dat := x.(type) {
+			case data.Constr:
+				for _, field := range dat.Fields {
+					costStackY = append(costStackY, field)
+				}
+			case data.List:
+				for _, item := range dat.Items {
+					costStackY = append(costStackY, item)
+				}
+			case data.Map:
+				for _, pair := range dat.Pairs {
+					costStackY = append(costStackY, pair[0])
+					costStackY = append(costStackY, pair[1])
+				}
+			case data.Integer:
+				yAcc += bigIntExMem(dat.Inner)()
+			case data.ByteString:
+				yAcc += byteArrayExMem(dat.Inner)()
+			default:
+				panic("Unreachable")
+			}
+		}
+
 	}
 
-	if memConstants[3] && cpuConstants[3] {
-		dMem = ExMem(0)
-	} else {
-		dMem = d()
+	minAcc = min(xAcc, yAcc)
+
+	final_func := func() ExMem {
+		return minAcc
 	}
 
-	if memConstants[4] && cpuConstants[4] {
-		eMem = ExMem(0)
-	} else {
-		eMem = e()
-	}
-
-	if memConstants[5] && cpuConstants[5] {
-		fMem = ExMem(0)
-	} else {
-		fMem = f()
-	}
-
-	return ExBudget{
-		Mem: int64(cf.mem.CostSix(aMem, bMem, cMem, dMem, eMem, fMem)),
-		Cpu: int64(cf.cpu.CostSix(aMem, bMem, cMem, dMem, eMem, fMem)),
-	}
-}
-
-type Arguments interface {
-	isArguments()
-	HasConstants() []bool
-}
-
-type OneArgument interface {
-	Cost(x ExMem) int
-	Arguments
-}
-
-type ConstantCost struct {
-	c int
-}
-
-func (ConstantCost) isArguments() {}
-
-func (ConstantCost) HasConstants() []bool {
-	return []bool{true, true, true, true, true, true}
-}
-
-func (c ConstantCost) Cost(x ExMem) int {
-	return c.c
-}
-
-type LinearCost struct {
-	slope     int
-	intercept int
-}
-
-func (LinearCost) isArguments() {}
-
-func (LinearCost) HasConstants() []bool {
-	return []bool{false}
-}
-
-func (l LinearCost) Cost(x ExMem) int {
-	return l.slope*int(x) + l.intercept
-}
-
-// TwoArgument interface for costing functions with two arguments
-type TwoArgument interface {
-	CostTwo(x, y ExMem) int
-	Arguments
-}
-
-type TwoVariableLinearSize struct {
-	intercept int
-	slope1    int
-	slope2    int
-}
-
-type AddedSizes struct {
-	intercept int
-	slope     int
-}
-
-type SubtractedSizes struct {
-	intercept int
-	slope     int
-	minimum   int
-}
-
-type MultipliedSizes struct {
-	intercept int
-	slope     int
-}
-
-type MinSize struct {
-	intercept int
-	slope     int
-}
-
-type MaxSize struct {
-	intercept int
-	slope     int
-}
-
-type ConstantOrLinear struct {
-	constant  int
-	intercept int
-	slope     int
-}
-
-type ConstantOrTwoArguments struct {
-	constant int
-	model    TwoArgument
-}
-
-type QuadraticFunction struct {
-	coeff0 int
-	coeff1 int
-	coeff2 int
-}
-
-type TwoArgumentsQuadraticFunction struct {
-	minimum int
-	coeff00 int
-	coeff10 int
-	coeff01 int
-	coeff20 int
-	coeff11 int
-	coeff02 int
-}
-
-// Implementations for TwoArguments variants
-// Using existing ConstantCost for two arguments
-func (c ConstantCost) CostTwo(x, y ExMem) int {
-	return c.c
-}
-
-// LinearInX costs based only on the first argument
-type LinearInX struct {
-	LinearCost
-}
-
-func (l LinearInX) CostTwo(x, y ExMem) int {
-	return l.Cost(x)
-}
-
-// Y is not used so constant
-func (LinearInX) HasConstants() []bool {
-	return []bool{false, true}
-}
-
-func (LinearInX) isArguments() {}
-
-// LinearInY costs based only on the second argument
-type LinearInY struct {
-	LinearCost
-}
-
-func (l LinearInY) CostTwo(x, y ExMem) int {
-	return l.Cost(y)
-}
-
-// X is not used so constant
-func (LinearInY) HasConstants() []bool {
-	return []bool{true, false}
-}
-
-func (LinearInY) isArguments() {}
-
-// LinearInXAndY costs based on both arguments with different slopes
-type LinearInXAndY struct {
-	TwoVariableLinearSize
-}
-
-func (l LinearInXAndY) CostTwo(x, y ExMem) int {
-	return l.slope1*int(x) + l.slope2*int(y) + l.intercept
-}
-
-func (LinearInXAndY) HasConstants() []bool {
-	return []bool{false, false}
-}
-
-func (LinearInXAndY) isArguments() {}
-
-// AddedSizesModel costs based on the sum of arguments
-type AddedSizesModel struct {
-	AddedSizes
-}
-
-func (a AddedSizesModel) CostTwo(x, y ExMem) int {
-	return a.slope*(int(x)+int(y)) + a.intercept
-}
-
-func (AddedSizesModel) HasConstants() []bool {
-	return []bool{false, false}
-}
-
-func (AddedSizesModel) isArguments() {}
-
-// SubtractedSizesModel costs based on the difference of arguments
-type SubtractedSizesModel struct {
-	SubtractedSizes
-}
-
-func (s SubtractedSizesModel) CostTwo(x, y ExMem) int {
-	diff := max(int(x)-int(y), s.minimum)
-	return s.slope*diff + s.intercept
-}
-
-func (SubtractedSizesModel) HasConstants() []bool {
-	return []bool{false, false}
-}
-
-func (SubtractedSizesModel) isArguments() {}
-
-// MultipliedSizesModel costs based on the product of arguments
-type MultipliedSizesModel struct {
-	MultipliedSizes
-}
-
-func (m MultipliedSizesModel) CostTwo(x, y ExMem) int {
-	return m.slope*(int(x)*int(y)) + m.intercept
-}
-
-func (MultipliedSizesModel) HasConstants() []bool {
-	return []bool{false, false}
-}
-
-func (MultipliedSizesModel) isArguments() {}
-
-// MinSizeModel costs based on the minimum of arguments
-type MinSizeModel struct {
-	MinSize
-}
-
-func (m MinSizeModel) CostTwo(x, y ExMem) int {
-	min := int(x)
-	if int(y) < min {
-		min = int(y)
-	}
-	return m.slope*min + m.intercept
-}
-
-func (MinSizeModel) HasConstants() []bool {
-	return []bool{false, false}
-}
-
-func (MinSizeModel) isArguments() {}
-
-// MaxSizeModel costs based on the maximum of arguments
-type MaxSizeModel struct {
-	MaxSize
-}
-
-func (m MaxSizeModel) CostTwo(x, y ExMem) int {
-	max := int(x)
-	if int(y) > max {
-		max = int(y)
-	}
-	return m.slope*max + m.intercept
-}
-
-func (MaxSizeModel) HasConstants() []bool {
-	return []bool{false, false}
-}
-
-func (MaxSizeModel) isArguments() {}
-
-// LinearOnDiagonalModel costs linearly when arguments are equal, constant otherwise
-type LinearOnDiagonalModel struct {
-	ConstantOrLinear
-}
-
-func (l LinearOnDiagonalModel) CostTwo(x, y ExMem) int {
-	if int(x) == int(y) {
-		return l.slope*int(x) + l.intercept
-	}
-	return l.constant
-}
-
-func (LinearOnDiagonalModel) HasConstants() []bool {
-	return []bool{false, false}
-}
-
-func (LinearOnDiagonalModel) isArguments() {}
-
-// ConstAboveDiagonalModel costs constant when x < y, uses another model otherwise
-type ConstAboveDiagonalModel struct {
-	ConstantOrTwoArguments
-}
-
-func (c ConstAboveDiagonalModel) CostTwo(x, y ExMem) int {
-	if int(x) < int(y) {
-		return c.constant
-	}
-	return c.model.CostTwo(x, y)
-}
-
-func (ConstAboveDiagonalModel) HasConstants() []bool {
-	return []bool{false, false}
-}
-
-func (ConstAboveDiagonalModel) isArguments() {}
-
-// ConstBelowDiagonalModel costs constant when x > y, uses another model otherwise
-type ConstBelowDiagonalModel struct {
-	ConstantOrTwoArguments
-}
-
-func (c ConstBelowDiagonalModel) CostTwo(x, y ExMem) int {
-	if int(x) > int(y) {
-		return c.constant
-	}
-	return c.model.CostTwo(x, y)
-}
-
-func (ConstBelowDiagonalModel) HasConstants() []bool {
-	return []bool{false, false}
-}
-
-func (ConstBelowDiagonalModel) isArguments() {}
-
-// QuadraticInYModel costs based on a quadratic function of y
-type QuadraticInYModel struct {
-	QuadraticFunction
-}
-
-func (q QuadraticInYModel) CostTwo(x, y ExMem) int {
-	yVal := int(y)
-	return q.coeff0 + (q.coeff1 * yVal) + (q.coeff2 * yVal * yVal)
-}
-
-// X is not used so constant
-func (QuadraticInYModel) HasConstants() []bool {
-	return []bool{true, false}
-}
-
-func (QuadraticInYModel) isArguments() {}
-
-// ConstAboveDiagonalIntoQuadraticXAndYModel costs constant when x < y, uses a quadratic function otherwise
-type ConstAboveDiagonalIntoQuadraticXAndYModel struct {
-	constant int
-	TwoArgumentsQuadraticFunction
-}
-
-func (c ConstAboveDiagonalIntoQuadraticXAndYModel) CostTwo(x, y ExMem) int {
-	if int(x) < int(y) {
-		return c.constant
-	}
-
-	xVal, yVal := int(x), int(y)
-	result := c.coeff00 +
-		c.coeff10*xVal +
-		c.coeff01*yVal +
-		c.coeff20*xVal*xVal +
-		c.coeff11*xVal*yVal +
-		c.coeff02*yVal*yVal
-
-	if result < c.minimum {
-		return c.minimum
-	}
-	return result
-}
-
-func (ConstAboveDiagonalIntoQuadraticXAndYModel) HasConstants() []bool {
-	return []bool{false, false}
-}
-
-func (ConstAboveDiagonalIntoQuadraticXAndYModel) isArguments() {}
-
-// ThreeArgument interface for costing functions with three arguments
-type ThreeArgument interface {
-	CostThree(x, y, z ExMem) int
-	Arguments
-}
-
-// Implementations for ThreeArguments variants
-
-// Using existing ConstantCost for three arguments
-func (c ConstantCost) CostThree(x, y, z ExMem) int {
-	return c.c
-}
-
-// ThreeAddedSizesModel costs based on the sum of three arguments
-type ThreeAddedSizesModel struct {
-	AddedSizes
-}
-
-func (a ThreeAddedSizesModel) CostThree(x, y, z ExMem) int {
-	return a.slope*(int(x)+int(y)+int(z)) + a.intercept
-}
-
-func (ThreeAddedSizesModel) HasConstants() []bool {
-	return []bool{false, false, false}
-}
-
-func (ThreeAddedSizesModel) isArguments() {}
-
-// LinearInX costs based only on the first argument
-type ThreeLinearInX struct {
-	LinearCost
-}
-
-func (l ThreeLinearInX) CostThree(x, y, z ExMem) int {
-	return l.Cost(x)
-}
-
-// Y,Z are not used so constant
-func (ThreeLinearInX) HasConstants() []bool {
-	return []bool{false, true, true}
-}
-
-func (ThreeLinearInX) isArguments() {}
-
-// LinearInY costs based only on the second argument
-type ThreeLinearInY struct {
-	LinearCost
-}
-
-func (l ThreeLinearInY) CostThree(x, y, z ExMem) int {
-	return l.Cost(y)
-}
-
-// X,Z are not used so constant
-func (ThreeLinearInY) HasConstants() []bool {
-	return []bool{true, false, true}
-}
-
-func (ThreeLinearInY) isArguments() {}
-
-// LinearInZ costs based only on the third argument
-type ThreeLinearInZ struct {
-	LinearCost
-}
-
-func (l ThreeLinearInZ) CostThree(x, y, z ExMem) int {
-	return l.Cost(z)
-}
-
-// X,Y are not used so constant
-func (ThreeLinearInZ) HasConstants() []bool {
-	return []bool{true, true, false}
-}
-
-func (ThreeLinearInZ) isArguments() {}
-
-// QuadraticInZ costs based on a quadratic function of the third argument
-type ThreeQuadraticInZ struct {
-	QuadraticFunction
-}
-
-// X,Y are not used so constant
-func (q ThreeQuadraticInZ) CostThree(x, y, z ExMem) int {
-	zVal := int(z)
-	return q.coeff0 + (q.coeff1 * zVal) + (q.coeff2 * zVal * zVal)
-}
-
-func (ThreeQuadraticInZ) HasConstants() []bool {
-	return []bool{true, true, false}
-}
-
-func (ThreeQuadraticInZ) isArguments() {}
-
-// LiteralInYorLinearInZ costs y if y != 0, otherwise linear in z
-type ThreeLiteralInYorLinearInZ struct {
-	LinearCost
-}
-
-func (l ThreeLiteralInYorLinearInZ) CostThree(x, y, z ExMem) int {
-	if int(y) == 0 {
-		return l.slope*int(z) + l.intercept
-	}
-	return int(y)
-}
-
-// X is not used so constant
-func (ThreeLiteralInYorLinearInZ) HasConstants() []bool {
-	return []bool{true, false, false}
-}
-
-func (ThreeLiteralInYorLinearInZ) isArguments() {}
-
-// LinearInMaxYZ costs based on the maximum of y and z
-type ThreeLinearInMaxYZ struct {
-	LinearCost
-}
-
-func (l ThreeLinearInMaxYZ) CostThree(x, y, z ExMem) int {
-	max := int(y)
-	if int(z) > max {
-		max = int(z)
-	}
-	return l.slope*max + l.intercept
-}
-
-// X is not used so constant
-func (ThreeLinearInMaxYZ) HasConstants() []bool {
-	return []bool{true, false, false}
-}
-
-func (ThreeLinearInMaxYZ) isArguments() {}
-
-// LinearInYandZ costs based on both y and z arguments
-type ThreeLinearInYandZ struct {
-	TwoVariableLinearSize
-}
-
-func (l ThreeLinearInYandZ) CostThree(x, y, z ExMem) int {
-	return l.slope1*int(y) + l.slope2*int(z) + l.intercept
-}
-
-// X is not used so constant
-func (ThreeLinearInYandZ) HasConstants() []bool {
-	return []bool{true, false, false}
-}
-
-func (ThreeLinearInYandZ) isArguments() {}
-
-// SixArgument interface for costing functions with six arguments
-type SixArgument interface {
-	CostSix(a, b, c, d, e, f ExMem) int
-	Arguments
-}
-
-// Implementations for SixArguments variants
-
-// Using existing ConstantCost for six arguments
-func (c ConstantCost) CostSix(a, b, c2, d, e, f ExMem) int {
-	return c.c
+	return final_func, final_func
 }

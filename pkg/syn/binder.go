@@ -1,16 +1,16 @@
 package syn
 
 import (
-	"errors"
 	"fmt"
 )
 
 type Binder interface {
-	// TODO: e should be a encoder
-	BinderEncode(e any) error
-	// TODO: d should be a decoder
-	BinderDecode(d any) (*Binder, error)
-	// TODO: maybe use String interface
+	VarEncode(e *encoder) error
+	VarDecode(d *decoder) (Binder, error)
+
+	ParameterEncode(e *encoder) error
+	ParameterDecode(d *decoder) (Binder, error)
+
 	TextName() string
 
 	fmt.Stringer
@@ -18,7 +18,7 @@ type Binder interface {
 
 type Eval interface {
 	Binder
-	LookupIndex() uint64
+	LookupIndex() int
 }
 
 type Name struct {
@@ -26,12 +26,42 @@ type Name struct {
 	Unique Unique
 }
 
-func (n Name) BinderEncode(e any) error {
+func (n Name) VarEncode(e *encoder) error {
+	err := e.utf8(n.Text)
+	if err != nil {
+		return err
+	}
+
+	e.word(uint(n.Unique))
+
 	return nil
 }
 
-func (n Name) BinderDecode(d any) (*Binder, error) {
-	return nil, errors.New("fill in this method")
+func (n Name) VarDecode(d *decoder) (Binder, error) {
+	text, err := d.utf8()
+	if err != nil {
+		return nil, err
+	}
+
+	i, err := d.word()
+	if err != nil {
+		return nil, err
+	}
+
+	name := Name{
+		Text:   text,
+		Unique: Unique(i),
+	}
+
+	return name, nil
+}
+
+func (n Name) ParameterEncode(e *encoder) error {
+	return n.VarEncode(e)
+}
+
+func (n Name) ParameterDecode(d *decoder) (Binder, error) {
+	return n.VarDecode(d)
 }
 
 func (n Name) TextName() string {
@@ -47,12 +77,42 @@ type NamedDeBruijn struct {
 	Index DeBruijn
 }
 
-func (n NamedDeBruijn) BinderEncode(e any) error {
+func (n NamedDeBruijn) VarEncode(e *encoder) error {
+	err := e.utf8(n.Text)
+	if err != nil {
+		return err
+	}
+
+	e.word(uint(n.Index))
+
 	return nil
 }
 
-func (n NamedDeBruijn) BinderDecode(d any) (*Binder, error) {
-	return nil, errors.New("fill in this method")
+func (n NamedDeBruijn) VarDecode(d *decoder) (Binder, error) {
+	text, err := d.utf8()
+	if err != nil {
+		return nil, err
+	}
+
+	i, err := d.word()
+	if err != nil {
+		return nil, err
+	}
+
+	nd := NamedDeBruijn{
+		Text:  text,
+		Index: DeBruijn(i),
+	}
+
+	return nd, nil
+}
+
+func (n NamedDeBruijn) ParameterEncode(e *encoder) error {
+	return n.VarEncode(e)
+}
+
+func (n NamedDeBruijn) ParameterDecode(d *decoder) (Binder, error) {
+	return n.VarDecode(d)
 }
 
 func (n NamedDeBruijn) TextName() string {
@@ -63,26 +123,49 @@ func (n NamedDeBruijn) String() string {
 	return fmt.Sprintf("NamedDeBruijn: %s %v", n.Text, n.Index)
 }
 
-func (n NamedDeBruijn) LookupIndex() uint64 {
-	return uint64(n.Index)
+func (n NamedDeBruijn) LookupIndex() int {
+	return int(n.Index)
 }
 
 type Unique uint64
 
-type DeBruijn uint64
+// An index into the Machine's environment
+// which powers var lookups
+type DeBruijn int
 
-func (n DeBruijn) BinderEncode(e any) error {
+func (n DeBruijn) VarEncode(e *encoder) error {
+	e.word(uint(n))
+
 	return nil
 }
 
-func (n DeBruijn) BinderDecode(d any) (*Binder, error) {
-	return nil, errors.New("fill in this method")
+func (n DeBruijn) VarDecode(d *decoder) (Binder, error) {
+	i, err := d.word()
+	if err != nil {
+		return nil, err
+	}
+
+	return DeBruijn(i), nil
+}
+
+func (n DeBruijn) ParameterEncode(e *encoder) error {
+	// this is correct, in DeBruijn we never encode the param
+	return nil
+}
+
+func (n DeBruijn) ParameterDecode(d *decoder) (Binder, error) {
+	// it's actually always zero, trust, see above
+	return DeBruijn(0), nil
 }
 
 func (n DeBruijn) TextName() string {
 	return fmt.Sprintf("i_%d", n)
 }
 
-func (n DeBruijn) LookupIndex() uint64 {
-	return uint64(n)
+func (n DeBruijn) String() string {
+	return fmt.Sprintf("DeBruijn: %d", n)
+}
+
+func (n DeBruijn) LookupIndex() int {
+	return int(n)
 }
