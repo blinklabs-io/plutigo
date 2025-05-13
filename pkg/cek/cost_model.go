@@ -17,6 +17,11 @@ var DefaultCostModel = CostModel{
 	builtinCosts: DefaultBuiltinCosts,
 }
 
+const PAIR_COST = 1
+const CONS_COST = 3
+const NIL_COST = 1
+const DATA_COST = 4
+
 type ExMem int
 
 func valueExMem[T syn.Eval](v Value[T]) func() ExMem {
@@ -110,16 +115,16 @@ func listExMem(l []syn.IConstant) func() ExMem {
 		var accExMem ExMem
 
 		for _, item := range l {
-			accExMem += iconstantExMem(item)() + 3
+			accExMem += iconstantExMem(item)() + CONS_COST
 		}
 
-		return ExMem(1 + accExMem)
+		return ExMem(NIL_COST + accExMem)
 	}
 }
 
 func pairExMem(x syn.IConstant, y syn.IConstant) func() ExMem {
 	return func() ExMem {
-		return ExMem(1 + iconstantExMem(x)() + iconstantExMem(y)())
+		return ExMem(PAIR_COST + iconstantExMem(x)() + iconstantExMem(y)())
 	}
 }
 
@@ -135,7 +140,7 @@ func dataExMem(x data.PlutusData) func() ExMem {
 			d := costStack[0]
 			costStack = costStack[1:]
 			// Cost 4 per item switch
-			acc += 4
+			acc += DATA_COST
 			switch dat := d.(type) {
 			case data.Constr:
 				costStack = append(costStack, dat.Fields...)
@@ -157,4 +162,91 @@ func dataExMem(x data.PlutusData) func() ExMem {
 
 		return acc
 	}
+}
+
+// Equals Data is an exceptional case where the cost for the full traversal
+// of 2 plutus data objects may far exceed what ends up being costed by the builtin cpu wise (Uses Min Size)
+// this is possible via having one super large object equals data with a tiny object
+// like script context vs a Data of bytearray of 0 bytes. In this case the cpu ExBudget would far underestimate
+// the cost for calculating the ExMem for the entire script context thus causing a lot of free work to be done
+// by the node
+func equalsDataExMem(x data.PlutusData, y data.PlutusData) (func() ExMem, func() ExMem) {
+
+	var xAcc ExMem
+	var yAcc ExMem
+	var minAcc ExMem
+	costStackX := []data.PlutusData{
+		x,
+	}
+
+	costStackY := []data.PlutusData{
+		y,
+	}
+
+	for {
+		if !((len(costStackX) != 0 || xAcc > yAcc) && (len(costStackY) != 0 || yAcc > xAcc)) {
+			break
+		}
+
+		if len(costStackX) != 0 {
+			// Cost 4 per item switch
+			xAcc += DATA_COST
+			switch dat := x.(type) {
+			case data.Constr:
+				for _, field := range dat.Fields {
+					costStackX = append(costStackX, field)
+				}
+			case data.List:
+				for _, item := range dat.Items {
+					costStackX = append(costStackX, item)
+				}
+			case data.Map:
+				for _, pair := range dat.Pairs {
+					costStackX = append(costStackX, pair[0])
+					costStackX = append(costStackX, pair[1])
+				}
+			case data.Integer:
+				xAcc += bigIntExMem(dat.Inner)()
+			case data.ByteString:
+				xAcc += byteArrayExMem(dat.Inner)()
+			default:
+				panic("Unreachable")
+			}
+		}
+
+		if len(costStackY) != 0 {
+			// Cost 4 per item switch
+			yAcc += DATA_COST
+			switch dat := x.(type) {
+			case data.Constr:
+				for _, field := range dat.Fields {
+					costStackY = append(costStackY, field)
+				}
+			case data.List:
+				for _, item := range dat.Items {
+					costStackY = append(costStackY, item)
+				}
+			case data.Map:
+				for _, pair := range dat.Pairs {
+					costStackY = append(costStackY, pair[0])
+					costStackY = append(costStackY, pair[1])
+				}
+			case data.Integer:
+				yAcc += bigIntExMem(dat.Inner)()
+			case data.ByteString:
+				yAcc += byteArrayExMem(dat.Inner)()
+			default:
+				panic("Unreachable")
+			}
+		}
+
+	}
+
+	minAcc = min(xAcc, yAcc)
+
+	final_func := func() ExMem {
+		return minAcc
+	}
+
+	return final_func, final_func
 }

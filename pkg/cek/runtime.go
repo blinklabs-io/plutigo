@@ -1121,7 +1121,29 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			Constant: bytes,
 		}
 	case builtin.EqualsData:
-		panic("implement EqualsData")
+		arg1, err := unwrapData[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapData[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		costX, costY := equalsDataExMem(arg1, arg2)
+		err = m.CostTwo(&b.Func, costX, costY)
+		if err != nil {
+			return nil, err
+		}
+
+		result := &syn.Bool{
+			Inner: reflect.DeepEqual(arg1, arg2),
+		}
+
+		evalValue = Constant{
+			Constant: result,
+		}
 	case builtin.SerialiseData:
 		panic("implement SerialiseData")
 	case builtin.MkPairData:
