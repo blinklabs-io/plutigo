@@ -24,10 +24,7 @@ func (c Constant) String() string {
 func (Constant) isValue() {}
 
 func (c Constant) toExMem() ExMem {
-	switch c.Constant.(type) {
-	default:
-		panic("Exhausted Constant Choices")
-	}
+	return iconstantExMem(c.Constant)()
 }
 
 type Delay[T syn.Eval] struct {

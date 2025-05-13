@@ -31,28 +31,30 @@ func valueExMem[T syn.Eval](v Value[T]) func() ExMem {
 }
 
 func iconstantExMem(c syn.IConstant) func() ExMem {
-	var ex func() ExMem
+	return func() ExMem {
+		var ex func() ExMem
 
-	switch x := c.(type) {
-	case syn.Integer:
-		ex = bigIntExMem(x.Inner)
-	case syn.ByteString:
-		ex = byteArrayExMem(x.Inner)
-	case syn.Bool:
-		ex = boolExMem(x.Inner)
-	case syn.String:
-		ex = stringExMem(x.Inner)
-	case syn.Unit:
-		ex = unitExMem()
-	case syn.ProtoList:
-		ex = listExMem(x.List)
-	case syn.ProtoPair:
-		ex = pairExMem(x.First, x.Second)
-	default:
-		panic("Oh no!")
+		switch x := c.(type) {
+		case syn.Integer:
+			ex = bigIntExMem(x.Inner)
+		case syn.ByteString:
+			ex = byteArrayExMem(x.Inner)
+		case syn.Bool:
+			ex = boolExMem(x.Inner)
+		case syn.String:
+			ex = stringExMem(x.Inner)
+		case syn.Unit:
+			ex = unitExMem()
+		case syn.ProtoList:
+			ex = listExMem(x.List)
+		case syn.ProtoPair:
+			ex = pairExMem(x.First, x.Second)
+		default:
+			panic("Oh no!")
+		}
+
+		return ex()
 	}
-
-	return ex
 }
 
 // Return a function so we can have lazy
