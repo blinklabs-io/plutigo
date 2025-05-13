@@ -74,7 +74,7 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 
-		value, exists := env.lookup(uint(t.Name.LookupIndex()))
+		value, exists := env.lookup(t.Name.LookupIndex())
 
 		if !exists {
 			return nil, errors.New("open term evaluated")
@@ -475,14 +475,14 @@ func dischargeValue[T syn.Eval](value Value[T]) syn.Term[T] {
 	return dischargedTerm
 }
 
-func withEnv[T syn.Eval](lamCnt uint, env Env[T], term syn.Term[T]) syn.Term[T] {
+func withEnv[T syn.Eval](lamCnt int, env Env[T], term syn.Term[T]) syn.Term[T] {
 	var dischargedTerm syn.Term[T]
 
 	switch t := term.(type) {
 	case *syn.Var[T]:
-		if lamCnt >= uint(t.Name.LookupIndex()) {
+		if lamCnt >= t.Name.LookupIndex() {
 			dischargedTerm = t
-		} else if val, exists := env.lookup(uint(t.Name.LookupIndex()) - lamCnt); exists {
+		} else if val, exists := env.lookup(t.Name.LookupIndex() - lamCnt); exists {
 			dischargedTerm = dischargeValue[T](val)
 		} else {
 			dischargedTerm = t

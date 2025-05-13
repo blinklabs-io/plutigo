@@ -18,7 +18,7 @@ type Binder interface {
 
 type Eval interface {
 	Binder
-	LookupIndex() uint64
+	LookupIndex() int
 }
 
 type Name struct {
@@ -123,15 +123,15 @@ func (n NamedDeBruijn) String() string {
 	return fmt.Sprintf("NamedDeBruijn: %s %v", n.Text, n.Index)
 }
 
-func (n NamedDeBruijn) LookupIndex() uint64 {
-	return uint64(n.Index)
+func (n NamedDeBruijn) LookupIndex() int {
+	return int(n.Index)
 }
 
 type Unique uint64
 
 // An index into the Machine's environment
 // which powers var lookups
-type DeBruijn uint64
+type DeBruijn int
 
 func (n DeBruijn) VarEncode(e *encoder) error {
 	e.word(uint(n))
@@ -166,6 +166,6 @@ func (n DeBruijn) String() string {
 	return fmt.Sprintf("DeBruijn: %d", n)
 }
 
-func (n DeBruijn) LookupIndex() uint64 {
-	return uint64(n)
+func (n DeBruijn) LookupIndex() int {
+	return int(n)
 }
