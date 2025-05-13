@@ -13,8 +13,6 @@ func TestBigIntExMem0(t *testing.T) {
 	if y != ExMem(1) {
 		t.Error("HOW???")
 	}
-
-	println(y)
 }
 
 func TestBigIntExMemSmall(t *testing.T) {
@@ -25,8 +23,6 @@ func TestBigIntExMemSmall(t *testing.T) {
 	if y != ExMem(1) {
 		t.Error("HOW???")
 	}
-
-	println(y)
 }
 
 func TestBigIntExMemBig(t *testing.T) {
@@ -39,8 +35,6 @@ func TestBigIntExMemBig(t *testing.T) {
 	if y != ExMem(2) {
 		t.Error("HOW???")
 	}
-
-	println(y)
 }
 
 func TestBigIntExMemHuge(t *testing.T) {
@@ -55,6 +49,4 @@ func TestBigIntExMemHuge(t *testing.T) {
 	if y != ExMem(3) {
 		t.Error("HOW???")
 	}
-
-	println(y)
 }
