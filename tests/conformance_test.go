@@ -204,6 +204,10 @@ func TestConformance(t *testing.T) {
 
 				dProgram, err := syn.NameToNamedDeBruijn(program)
 				if err != nil {
+					if string(expectedText) == "evaluation failure" {
+						return
+					}
+
 					t.Fatalf("Failed to convert program to DeBruijn: %v", err)
 				}
 
