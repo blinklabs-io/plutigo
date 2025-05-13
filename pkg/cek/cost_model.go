@@ -136,7 +136,6 @@ func dataExMem(x data.PlutusData) func() ExMem {
 		}
 
 		for len(costStack) != 0 {
-
 			d := costStack[0]
 			costStack = costStack[1:]
 			// Cost 4 per item switch
@@ -148,8 +147,7 @@ func dataExMem(x data.PlutusData) func() ExMem {
 				costStack = append(costStack, dat.Items...)
 			case data.Map:
 				for _, pair := range dat.Pairs {
-					costStack = append(costStack, pair[0])
-					costStack = append(costStack, pair[1])
+					costStack = append(costStack, pair[0], pair[1])
 				}
 			case data.Integer:
 				acc += bigIntExMem(dat.Inner)()
@@ -183,27 +181,22 @@ func equalsDataExMem(x data.PlutusData, y data.PlutusData) (func() ExMem, func()
 		y,
 	}
 
-	for {
-		if !((len(costStackX) != 0 || xAcc > yAcc) && (len(costStackY) != 0 || yAcc > xAcc)) {
-			break
-		}
+	for xLen, yLen := true, true; !((xLen || xAcc > yAcc) && (yLen || yAcc > xAcc)); xLen,
+		yLen = len(costStackX) != 0, len(costStackY) != 0 {
 
-		if len(costStackX) != 0 {
+		if xLen {
 			// Cost 4 per item switch
 			xAcc += DATA_COST
-			switch dat := x.(type) {
+			d := costStackX[0]
+			costStackX = costStackX[1:]
+			switch dat := d.(type) {
 			case data.Constr:
-				for _, field := range dat.Fields {
-					costStackX = append(costStackX, field)
-				}
+				costStackX = append(costStackX, dat.Fields...)
 			case data.List:
-				for _, item := range dat.Items {
-					costStackX = append(costStackX, item)
-				}
+				costStackX = append(costStackX, dat.Items...)
 			case data.Map:
 				for _, pair := range dat.Pairs {
-					costStackX = append(costStackX, pair[0])
-					costStackX = append(costStackX, pair[1])
+					costStackX = append(costStackX, pair[0], pair[1])
 				}
 			case data.Integer:
 				xAcc += bigIntExMem(dat.Inner)()
@@ -214,22 +207,19 @@ func equalsDataExMem(x data.PlutusData, y data.PlutusData) (func() ExMem, func()
 			}
 		}
 
-		if len(costStackY) != 0 {
+		if yLen {
 			// Cost 4 per item switch
 			yAcc += DATA_COST
-			switch dat := x.(type) {
+			d := costStackY[0]
+			costStackY = costStackY[1:]
+			switch dat := d.(type) {
 			case data.Constr:
-				for _, field := range dat.Fields {
-					costStackY = append(costStackY, field)
-				}
+				costStackY = append(costStackY, dat.Fields...)
 			case data.List:
-				for _, item := range dat.Items {
-					costStackY = append(costStackY, item)
-				}
+				costStackY = append(costStackY, dat.Items...)
 			case data.Map:
 				for _, pair := range dat.Pairs {
-					costStackY = append(costStackY, pair[0])
-					costStackY = append(costStackY, pair[1])
+					costStackY = append(costStackY, pair[0], pair[1])
 				}
 			case data.Integer:
 				yAcc += bigIntExMem(dat.Inner)()
@@ -239,7 +229,6 @@ func equalsDataExMem(x data.PlutusData, y data.PlutusData) (func() ExMem, func()
 				panic("Unreachable")
 			}
 		}
-
 	}
 
 	minAcc = min(xAcc, yAcc)
