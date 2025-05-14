@@ -453,7 +453,10 @@ func CostPair[T TwoArgument](cf CostingFunc[T], x, y func() ExMem) ExBudget {
 }
 
 // Function to cost ThreeArguments
-func CostTriple[T ThreeArgument](cf CostingFunc[T], x, y, z func() ExMem) ExBudget {
+func CostTriple[T ThreeArgument](
+	cf CostingFunc[T],
+	x, y, z func() ExMem,
+) ExBudget {
 	memConstants := cf.mem.HasConstants()
 	cpuConstants := cf.cpu.HasConstants()
 
@@ -484,7 +487,10 @@ func CostTriple[T ThreeArgument](cf CostingFunc[T], x, y, z func() ExMem) ExBudg
 }
 
 // Function to cost SixArguments
-func CostSextuple[T SixArgument](cf CostingFunc[T], a, b, c, d, e, f func() ExMem) ExBudget {
+func CostSextuple[T SixArgument](
+	cf CostingFunc[T],
+	a, b, c, d, e, f func() ExMem,
+) ExBudget {
 	memConstants := cf.mem.HasConstants()
 	cpuConstants := cf.cpu.HasConstants()
 

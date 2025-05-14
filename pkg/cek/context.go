@@ -30,7 +30,12 @@ type FrameAwaitFunTerm[T syn.Eval] struct {
 }
 
 func (f FrameAwaitFunTerm[T]) String() string {
-	return fmt.Sprintf("FrameAwaitFunTerm(env=%v, term=%v, ctx=%v)", f.Env, f.Term, f.Ctx)
+	return fmt.Sprintf(
+		"FrameAwaitFunTerm(env=%v, term=%v, ctx=%v)",
+		f.Env,
+		f.Term,
+		f.Ctx,
+	)
 }
 
 func (f FrameAwaitFunTerm[T]) isMachineContext() {}
@@ -65,7 +70,14 @@ type FrameConstr[T syn.Eval] struct {
 }
 
 func (f FrameConstr[T]) String() string {
-	return fmt.Sprintf("FrameConstr(env=%v, tag=%v, fields=%v, resolvedFields=%v, ctx=%v)", f.Env, f.Tag, f.Fields, f.ResolvedFields, f.Ctx)
+	return fmt.Sprintf(
+		"FrameConstr(env=%v, tag=%v, fields=%v, resolvedFields=%v, ctx=%v)",
+		f.Env,
+		f.Tag,
+		f.Fields,
+		f.ResolvedFields,
+		f.Ctx,
+	)
 }
 
 func (f FrameConstr[T]) isMachineContext() {}
@@ -77,7 +89,12 @@ type FrameCases[T syn.Eval] struct {
 }
 
 func (f FrameCases[T]) String() string {
-	return fmt.Sprintf("FrameCases(env=%v, branches=%v, ctx=%v)", f.Env, f.Branches, f.Ctx)
+	return fmt.Sprintf(
+		"FrameCases(env=%v, branches=%v, ctx=%v)",
+		f.Env,
+		f.Branches,
+		f.Ctx,
+	)
 }
 
 func (f FrameCases[T]) isMachineContext() {}

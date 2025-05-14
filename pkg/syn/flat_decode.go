@@ -66,7 +66,11 @@ func DecodeTerm[T Binder](d *decoder) (Term[T], error) {
 
 		name, ok := binder.(T) // Assign returned Binder to t
 		if !ok {
-			return nil, fmt.Errorf("VarDecode returned wrong type: got %T, want %T", binder, name)
+			return nil, fmt.Errorf(
+				"VarDecode returned wrong type: got %T, want %T",
+				binder,
+				name,
+			)
 		}
 
 		term = &Var[T]{Name: name}
@@ -88,7 +92,11 @@ func DecodeTerm[T Binder](d *decoder) (Term[T], error) {
 
 		name, ok := binder.(T) // Assign returned Binder to t
 		if !ok {
-			return nil, fmt.Errorf("ParameterDecode returned wrong type: got %T, want %T", binder, name)
+			return nil, fmt.Errorf(
+				"ParameterDecode returned wrong type: got %T, want %T",
+				binder,
+				name,
+			)
 		}
 
 		t, err := DecodeTerm[T](d)
@@ -271,7 +279,10 @@ func decodeConstantTag(d *decoder) (byte, error) {
 // Otherwise we decode an item in the list with the decoder function passed
 // in. Then decode the next bit in the buffer and repeat above.
 // Returns a list of items decoded with the decoder function.
-func DecodeList[T any](d *decoder, decoderFunc func(*decoder) (T, error)) ([]T, error) {
+func DecodeList[T any](
+	d *decoder,
+	decoderFunc func(*decoder) (T, error),
+) ([]T, error) {
 	result := make([]T, 0)
 
 	for {

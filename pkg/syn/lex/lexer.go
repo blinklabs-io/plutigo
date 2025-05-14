@@ -128,19 +128,33 @@ func (l *Lexer) readByteString() (string, error) {
 		l.readChar()
 
 		switch {
-		case l.ch == 0, unicode.IsSpace(l.ch), l.ch == ')', l.ch == ']', l.ch == ',':
+		case l.ch == 0,
+			unicode.IsSpace(l.ch),
+			l.ch == ')',
+			l.ch == ']',
+			l.ch == ',':
 			literal := l.input[start:l.pos]
 
 			if len(literal)%2 != 0 {
-				return "", fmt.Errorf("bytestring #%s has odd length at position %d", literal, start-1)
+				return "", fmt.Errorf(
+					"bytestring #%s has odd length at position %d",
+					literal,
+					start-1,
+				)
 			}
 
 			return literal, nil
-		case (l.ch >= '0' && l.ch <= '9'), (l.ch >= 'a' && l.ch <= 'f'), (l.ch >= 'A' && l.ch <= 'F'):
+		case (l.ch >= '0' && l.ch <= '9'),
+			(l.ch >= 'a' && l.ch <= 'f'),
+			(l.ch >= 'A' && l.ch <= 'F'):
 			// All good, continue
 			continue
 		default:
-			return "", fmt.Errorf("invalid bytestring character %c at position %d", l.ch, l.pos)
+			return "", fmt.Errorf(
+				"invalid bytestring character %c at position %d",
+				l.ch,
+				l.pos,
+			)
 		}
 	}
 }

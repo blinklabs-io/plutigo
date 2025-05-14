@@ -87,7 +87,10 @@ func TestParseTerm(t *testing.T) {
 				syn.NewApply(
 					syn.NewApply(syn.AddInteger(), syn.NewSimpleInteger(1)),
 					syn.NewApply(
-						syn.NewApply(syn.SubtractInteger(), syn.NewSimpleInteger(2)),
+						syn.NewApply(
+							syn.SubtractInteger(),
+							syn.NewSimpleInteger(2),
+						),
 						syn.NewSimpleInteger(1),
 					),
 				),
@@ -147,119 +150,152 @@ func TestConformance(t *testing.T) {
 	for _, category := range categories {
 		categoryDir := filepath.Join(testRoot, category)
 
-		err := filepath.Walk(categoryDir, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return fmt.Errorf("error accessing path %q: %w", path, err)
-			}
-
-			if info.IsDir() || !strings.HasSuffix(path, ".uplc") {
-				return nil
-			}
-
-			relPath, err := filepath.Rel(testRoot, path)
-			if err != nil {
-				return fmt.Errorf("could not get relative path: %w", err)
-			}
-			testName := strings.TrimSuffix(relPath, ".uplc")
-
-			t.Run(testName, func(t *testing.T) {
-
-				// Read program file
-				programText, err := os.ReadFile(path)
+		err := filepath.Walk(
+			categoryDir,
+			func(path string, info os.FileInfo, err error) error {
 				if err != nil {
-					t.Fatalf("Failed to read program file: %v", err)
+					return fmt.Errorf("error accessing path %q: %w", path, err)
 				}
 
-				// Read expected file
-				expectedPath := path + ".expected"
-				expectedText, err := os.ReadFile(expectedPath)
-				if err != nil {
-					t.Fatalf("Failed to read expected file: %v", err)
+				if info.IsDir() || !strings.HasSuffix(path, ".uplc") {
+					return nil
 				}
 
-				// Handle budget file
-				budgetPath := path + ".budget.expected"
-				var expectedBudget string
-				if _, err := os.Stat(budgetPath); err == nil {
-					budgetText, err := os.ReadFile(budgetPath)
+				relPath, err := filepath.Rel(testRoot, path)
+				if err != nil {
+					return fmt.Errorf("could not get relative path: %w", err)
+				}
+				testName := strings.TrimSuffix(relPath, ".uplc")
+
+				t.Run(testName, func(t *testing.T) {
+
+					// Read program file
+					programText, err := os.ReadFile(path)
 					if err != nil {
-						t.Logf("Failed to read budget file: %v", err)
-					} else {
-						expectedBudget = strings.TrimSpace(string(budgetText))
-					}
-				}
-
-				// Parse program
-
-				program, err := syn.Parse(string(programText))
-				if err != nil {
-					if string(expectedText) == "parse error" {
-						return
+						t.Fatalf("Failed to read program file: %v", err)
 					}
 
-					t.Fatalf("Parse failed: %v\nInput: %s", err, programText)
-				}
-
-				// Convert to NamedDeBruijn
-
-				dProgram, err := syn.NameToNamedDeBruijn(program)
-				if err != nil {
-					if string(expectedText) == "evaluation failure" {
-						return
+					// Read expected file
+					expectedPath := path + ".expected"
+					expectedText, err := os.ReadFile(expectedPath)
+					if err != nil {
+						t.Fatalf("Failed to read expected file: %v", err)
 					}
 
-					t.Fatalf("Failed to convert program to DeBruijn: %v", err)
-				}
-
-				// Evaluate program
-
-				machine := cek.NewMachine[syn.NamedDeBruijn](200)
-
-				result, err := machine.Run(dProgram.Term)
-				if err != nil {
-					if string(expectedText) == "evaluation failure" {
-						return
+					// Handle budget file
+					budgetPath := path + ".budget.expected"
+					var expectedBudget string
+					if _, err := os.Stat(budgetPath); err == nil {
+						budgetText, err := os.ReadFile(budgetPath)
+						if err != nil {
+							t.Logf("Failed to read budget file: %v", err)
+						} else {
+							expectedBudget = strings.TrimSpace(string(budgetText))
+						}
 					}
 
-					t.Fatalf("Failed to evaluate program: %v", err)
-				}
+					// Parse program
 
-				// Parse expected result
+					program, err := syn.Parse(string(programText))
+					if err != nil {
+						if string(expectedText) == "parse error" {
+							return
+						}
 
-				expected, err := syn.Parse(string(expectedText))
-				if err != nil {
-					t.Fatalf("Failed to parse expected result: %v\nExpected: %s", err, expectedText)
-				}
-
-				dExpected, err := syn.NameToNamedDeBruijn(expected)
-				if err != nil {
-					t.Fatalf("Failed to convert program to DeBruijn: %v", err)
-				}
-
-				// Compare results
-				prettyResult := syn.PrettyTerm[syn.NamedDeBruijn](result)
-				prettyExpected := syn.PrettyTerm[syn.NamedDeBruijn](dExpected.Term)
-
-				original := syn.Pretty[syn.Name](program)
-
-				if prettyResult != prettyExpected {
-					t.Errorf("Result mismatch\nGot:\n%s\nWant:\n%s\nProgram:\n%s",
-						prettyResult, prettyExpected, original)
-				}
-
-				// Compare budgets if budget file was found
-				if expectedBudget != "" {
-					consumedBudget := cek.DefaultExBudget.Sub(&machine.ExBudget)
-					fmtBudget := fmt.Sprintf("({cpu: %d\n| mem: %d})", consumedBudget.Cpu, consumedBudget.Mem)
-
-					if fmtBudget != expectedBudget {
-						t.Errorf("Budget mismatch\nGot:\n%s\nWant:\n%s", fmtBudget, expectedBudget)
+						t.Fatalf(
+							"Parse failed: %v\nInput: %s",
+							err,
+							programText,
+						)
 					}
-				}
-			})
 
-			return nil
-		})
+					// Convert to NamedDeBruijn
+
+					dProgram, err := syn.NameToNamedDeBruijn(program)
+					if err != nil {
+						if string(expectedText) == "evaluation failure" {
+							return
+						}
+
+						t.Fatalf(
+							"Failed to convert program to DeBruijn: %v",
+							err,
+						)
+					}
+
+					// Evaluate program
+
+					machine := cek.NewMachine[syn.NamedDeBruijn](200)
+
+					result, err := machine.Run(dProgram.Term)
+					if err != nil {
+						if string(expectedText) == "evaluation failure" {
+							return
+						}
+
+						t.Fatalf("Failed to evaluate program: %v", err)
+					}
+
+					// Parse expected result
+
+					expected, err := syn.Parse(string(expectedText))
+					if err != nil {
+						t.Fatalf(
+							"Failed to parse expected result: %v\nExpected: %s",
+							err,
+							expectedText,
+						)
+					}
+
+					dExpected, err := syn.NameToNamedDeBruijn(expected)
+					if err != nil {
+						t.Fatalf(
+							"Failed to convert program to DeBruijn: %v",
+							err,
+						)
+					}
+
+					// Compare results
+					prettyResult := syn.PrettyTerm[syn.NamedDeBruijn](result)
+					prettyExpected := syn.PrettyTerm[syn.NamedDeBruijn](
+						dExpected.Term,
+					)
+
+					original := syn.Pretty[syn.Name](program)
+
+					if prettyResult != prettyExpected {
+						t.Errorf(
+							"Result mismatch\nGot:\n%s\nWant:\n%s\nProgram:\n%s",
+							prettyResult,
+							prettyExpected,
+							original,
+						)
+					}
+
+					// Compare budgets if budget file was found
+					if expectedBudget != "" {
+						consumedBudget := cek.DefaultExBudget.Sub(
+							&machine.ExBudget,
+						)
+						fmtBudget := fmt.Sprintf(
+							"({cpu: %d\n| mem: %d})",
+							consumedBudget.Cpu,
+							consumedBudget.Mem,
+						)
+
+						if fmtBudget != expectedBudget {
+							t.Errorf(
+								"Budget mismatch\nGot:\n%s\nWant:\n%s",
+								fmtBudget,
+								expectedBudget,
+							)
+						}
+					}
+				})
+
+				return nil
+			},
+		)
 
 		if err != nil {
 			t.Errorf("Error walking %s directory: %v", category, err)

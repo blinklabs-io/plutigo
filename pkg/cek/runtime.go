@@ -33,7 +33,10 @@ func (m *Machine[T]) CostOne(b *builtin.DefaultFunction, x func() ExMem) error {
 	return err
 }
 
-func (m *Machine[T]) CostTwo(b *builtin.DefaultFunction, x, y func() ExMem) error {
+func (m *Machine[T]) CostTwo(
+	b *builtin.DefaultFunction,
+	x, y func() ExMem,
+) error {
 	model := m.costs.builtinCosts[*b]
 
 	mem, _ := model.mem.(TwoArgument)
@@ -49,7 +52,10 @@ func (m *Machine[T]) CostTwo(b *builtin.DefaultFunction, x, y func() ExMem) erro
 	return err
 }
 
-func (m *Machine[T]) CostThree(b *builtin.DefaultFunction, x, y, z func() ExMem) error {
+func (m *Machine[T]) CostThree(
+	b *builtin.DefaultFunction,
+	x, y, z func() ExMem,
+) error {
 	model := m.costs.builtinCosts[*b]
 
 	mem, _ := model.mem.(ThreeArgument)
@@ -65,7 +71,10 @@ func (m *Machine[T]) CostThree(b *builtin.DefaultFunction, x, y, z func() ExMem)
 	return err
 }
 
-func (m *Machine[T]) Costsix(b *builtin.DefaultFunction, x, y, z, xx, yy, zz func() ExMem) error {
+func (m *Machine[T]) Costsix(
+	b *builtin.DefaultFunction,
+	x, y, z, xx, yy, zz func() ExMem,
+) error {
 	model := m.costs.builtinCosts[*b]
 
 	mem, _ := model.mem.(SixArgument)
@@ -215,7 +224,10 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 
 		var newInt big.Int
 
-		newInt.Quo(arg1, arg2) // Floor division (rounds toward negative infinity)
+		newInt.Quo(
+			arg1,
+			arg2,
+		) // Floor division (rounds toward negative infinity)
 
 		evalValue = &Constant{
 			Constant: &syn.Integer{
@@ -246,7 +258,10 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 
 		var newInt big.Int
 
-		newInt.Rem(arg1, arg2) // Remainder (consistent with Div, can be negative)
+		newInt.Rem(
+			arg1,
+			arg2,
+		) // Remainder (consistent with Div, can be negative)
 
 		evalValue = &Constant{
 			Constant: &syn.Integer{
@@ -436,7 +451,12 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		err = m.CostThree(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2), byteArrayExMem(arg3))
+		err = m.CostThree(
+			&b.Func,
+			bigIntExMem(arg1),
+			bigIntExMem(arg2),
+			byteArrayExMem(arg3),
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -676,17 +696,28 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		err = m.CostThree(&b.Func, byteArrayExMem(publicKey), byteArrayExMem(message), byteArrayExMem(signature))
+		err = m.CostThree(
+			&b.Func,
+			byteArrayExMem(publicKey),
+			byteArrayExMem(message),
+			byteArrayExMem(signature),
+		)
 		if err != nil {
 			return nil, err
 		}
 
 		if len(publicKey) != ed25519.PublicKeySize { // 32 bytes
-			return nil, fmt.Errorf("invalid public key length: got %d, expected 32", len(publicKey))
+			return nil, fmt.Errorf(
+				"invalid public key length: got %d, expected 32",
+				len(publicKey),
+			)
 		}
 
 		if len(signature) != ed25519.SignatureSize { // 64 bytes
-			return nil, fmt.Errorf("invalid signature length: got %d, expected 64", len(signature))
+			return nil, fmt.Errorf(
+				"invalid signature length: got %d, expected 64",
+				len(signature),
+			)
 		}
 
 		res := ed25519.Verify(publicKey, message, signature)
@@ -805,7 +836,12 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 		arg2 := b.Args[1]
 		arg3 := b.Args[2]
 
-		err = m.CostThree(&b.Func, boolExMem(arg1), valueExMem[T](arg2), valueExMem[T](arg3))
+		err = m.CostThree(
+			&b.Func,
+			boolExMem(arg1),
+			valueExMem[T](arg2),
+			valueExMem[T](arg3),
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -882,7 +918,12 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 
 		branchOtherwise := b.Args[2]
 
-		err = m.CostThree(&b.Func, listExMem(l.List), valueExMem[T](branchEmpty), valueExMem[T](branchOtherwise))
+		err = m.CostThree(
+			&b.Func,
+			listExMem(l.List),
+			valueExMem[T](branchEmpty),
+			valueExMem[T](branchOtherwise),
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -1283,7 +1324,10 @@ func unwrapUnit[T syn.Eval](value Value[T]) error {
 	}
 }
 
-func unwrapList[T syn.Eval](typ syn.Typ, value Value[T]) (*syn.ProtoList, error) {
+func unwrapList[T syn.Eval](
+	typ syn.Typ,
+	value Value[T],
+) (*syn.ProtoList, error) {
 	var i *syn.ProtoList
 
 	switch v := value.(type) {
@@ -1304,7 +1348,9 @@ func unwrapList[T syn.Eval](typ syn.Typ, value Value[T]) (*syn.ProtoList, error)
 	return i, nil
 }
 
-func unwrapPair[T syn.Eval](value Value[T]) (syn.IConstant, syn.IConstant, error) {
+func unwrapPair[T syn.Eval](
+	value Value[T],
+) (syn.IConstant, syn.IConstant, error) {
 	var i syn.IConstant
 	var j syn.IConstant
 
