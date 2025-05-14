@@ -134,7 +134,11 @@ func EncodeTerm[T Binder](e *encoder, term Term[T]) error {
 	return nil
 }
 
-func EncodeList[T any](e *encoder, items []T, itemEncoder func(*encoder, T) error) error {
+func EncodeList[T any](
+	e *encoder,
+	items []T,
+	itemEncoder func(*encoder, T) error,
+) error {
 	for _, item := range items {
 		e.one()
 
@@ -175,7 +179,11 @@ func (e *encoder) encodeTermTag(tag byte) error {
 
 func (e *encoder) safeEncodeBits(numBits byte, val byte) error {
 	if 2<<numBits <= val {
-		return fmt.Errorf("overflow detected, cannot fit %d in %d bits", val, numBits)
+		return fmt.Errorf(
+			"overflow detected, cannot fit %d in %d bits",
+			val,
+			numBits,
+		)
 	}
 
 	e.bits(numBits, val)

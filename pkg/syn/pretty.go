@@ -75,7 +75,14 @@ func prettyPrintProgram[T Binder](pp *PrettyPrinter, prog *Program[T]) string {
 func printProgram[T Binder](pp *PrettyPrinter, prog *Program[T]) {
 	pp.write("(program ")
 
-	pp.write(fmt.Sprintf("%d.%d.%d", prog.Version[0], prog.Version[1], prog.Version[2]))
+	pp.write(
+		fmt.Sprintf(
+			"%d.%d.%d",
+			prog.Version[0],
+			prog.Version[1],
+			prog.Version[2],
+		),
+	)
 
 	pp.write("\n")
 

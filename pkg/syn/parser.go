@@ -40,7 +40,12 @@ func (p *Parser) nextToken() {
 
 func (p *Parser) expect(typ lex.TokenType) error {
 	if p.curToken.Type != typ {
-		return fmt.Errorf("expected %v, got %v at position %d", typ, p.curToken.Type, p.curToken.Position)
+		return fmt.Errorf(
+			"expected %v, got %v at position %d",
+			typ,
+			p.curToken.Type,
+			p.curToken.Position,
+		)
 	}
 
 	p.nextToken()
@@ -81,13 +86,22 @@ func (p *Parser) ParseProgram() (*Program[Name], error) {
 
 	for i := 0; i < 3; i++ {
 		if p.curToken.Type != lex.TokenNumber {
-			return nil, fmt.Errorf("expected version number, got %v at position %d", p.curToken.Type, p.curToken.Position)
+			return nil, fmt.Errorf(
+				"expected version number, got %v at position %d",
+				p.curToken.Type,
+				p.curToken.Position,
+			)
 		}
 
 		n, err := strconv.ParseUint(p.curToken.Literal, 10, 32)
 
 		if err != nil {
-			return nil, fmt.Errorf("invalid version number %s at position %d: %v", p.curToken.Literal, p.curToken.Position, err)
+			return nil, fmt.Errorf(
+				"invalid version number %s at position %d: %v",
+				p.curToken.Literal,
+				p.curToken.Position,
+				err,
+			)
 		}
 
 		version[i] = uint32(n)
@@ -112,7 +126,11 @@ func (p *Parser) ParseProgram() (*Program[Name], error) {
 	}
 
 	if p.curToken.Type != lex.TokenEOF {
-		return nil, fmt.Errorf("unexpected token %v after program at position %d", p.curToken.Type, p.curToken.Position)
+		return nil, fmt.Errorf(
+			"unexpected token %v after program at position %d",
+			p.curToken.Type,
+			p.curToken.Position,
+		)
 	}
 
 	return &Program[Name]{Version: version, Term: term}, nil
@@ -152,12 +170,20 @@ func (p *Parser) ParseTerm() (Term[Name], error) {
 
 			return &Error{}, nil
 		default:
-			return nil, fmt.Errorf("unexpected token %v in term at position %d", p.curToken.Type, p.curToken.Position)
+			return nil, fmt.Errorf(
+				"unexpected token %v in term at position %d",
+				p.curToken.Type,
+				p.curToken.Position,
+			)
 		}
 	case lex.TokenLBracket:
 		return p.parseApply()
 	default:
-		return nil, fmt.Errorf("unexpected token %v in term at position %d", p.curToken.Type, p.curToken.Position)
+		return nil, fmt.Errorf(
+			"unexpected token %v in term at position %d",
+			p.curToken.Type,
+			p.curToken.Position,
+		)
 	}
 }
 
@@ -167,7 +193,11 @@ func (p *Parser) parseLambda() (Term[Name], error) {
 	}
 
 	if p.curToken.Type != lex.TokenIdentifier {
-		return nil, fmt.Errorf("expected identifier, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		return nil, fmt.Errorf(
+			"expected identifier, got %v at position %d",
+			p.curToken.Type,
+			p.curToken.Position,
+		)
 	}
 
 	name := p.internName(p.curToken.Literal)
@@ -229,7 +259,11 @@ func (p *Parser) parseBuiltin() (Term[Name], error) {
 	}
 
 	if p.curToken.Type != lex.TokenIdentifier {
-		return nil, fmt.Errorf("expected builtin name, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		return nil, fmt.Errorf(
+			"expected builtin name, got %v at position %d",
+			p.curToken.Type,
+			p.curToken.Position,
+		)
 	}
 
 	name := p.curToken.Literal
@@ -237,7 +271,11 @@ func (p *Parser) parseBuiltin() (Term[Name], error) {
 	fn, ok := builtin.Builtins[name]
 
 	if !ok {
-		return nil, fmt.Errorf("unknown builtin function %s at position %d", name, p.curToken.Position)
+		return nil, fmt.Errorf(
+			"unknown builtin function %s at position %d",
+			name,
+			p.curToken.Position,
+		)
 	}
 
 	p.nextToken()
@@ -255,12 +293,21 @@ func (p *Parser) parseConstr() (Term[Name], error) {
 	}
 
 	if p.curToken.Type != lex.TokenNumber {
-		return nil, fmt.Errorf("expected tag number, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		return nil, fmt.Errorf(
+			"expected tag number, got %v at position %d",
+			p.curToken.Type,
+			p.curToken.Position,
+		)
 	}
 
 	n, err := strconv.Atoi(p.curToken.Literal)
 	if err != nil {
-		return nil, fmt.Errorf("invalid constr tag %s at position %d: %v", p.curToken.Literal, p.curToken.Position, err)
+		return nil, fmt.Errorf(
+			"invalid constr tag %s at position %d: %v",
+			p.curToken.Literal,
+			p.curToken.Position,
+			err,
+		)
 	}
 
 	tag := n
@@ -647,12 +694,20 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 		p.nextToken()
 
 		if p.curToken.Type != lex.TokenNumber {
-			return nil, fmt.Errorf("expected integer value for I, got %v at position %d", p.curToken.Type, p.curToken.Position)
+			return nil, fmt.Errorf(
+				"expected integer value for I, got %v at position %d",
+				p.curToken.Type,
+				p.curToken.Position,
+			)
 		}
 
 		n, ok := p.curToken.Value.(*big.Int)
 		if !ok {
-			return nil, fmt.Errorf("invalid integer value %s at position %d", p.curToken.Literal, p.curToken.Position)
+			return nil, fmt.Errorf(
+				"invalid integer value %s at position %d",
+				p.curToken.Literal,
+				p.curToken.Position,
+			)
 		}
 
 		p.nextToken()
@@ -662,12 +717,20 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 		p.nextToken()
 
 		if p.curToken.Type != lex.TokenByteString {
-			return nil, fmt.Errorf("expected bytestring value for B, got %v at position %d", p.curToken.Type, p.curToken.Position)
+			return nil, fmt.Errorf(
+				"expected bytestring value for B, got %v at position %d",
+				p.curToken.Type,
+				p.curToken.Position,
+			)
 		}
 
 		b, ok := p.curToken.Value.([]byte)
 		if !ok {
-			return nil, fmt.Errorf("invalid bytestring value %s at position %d", p.curToken.Literal, p.curToken.Position)
+			return nil, fmt.Errorf(
+				"invalid bytestring value %s at position %d",
+				p.curToken.Literal,
+				p.curToken.Position,
+			)
 		}
 
 		p.nextToken()
@@ -753,12 +816,21 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 		p.nextToken()
 
 		if p.curToken.Type != lex.TokenNumber {
-			return nil, fmt.Errorf("expected tag number for Constr, got %v at position %d", p.curToken.Type, p.curToken.Position)
+			return nil, fmt.Errorf(
+				"expected tag number for Constr, got %v at position %d",
+				p.curToken.Type,
+				p.curToken.Position,
+			)
 		}
 
 		n, err := strconv.Atoi(p.curToken.Literal)
 		if err != nil {
-			return nil, fmt.Errorf("invalid constr tag %s at position %d: %v", p.curToken.Literal, p.curToken.Position, err)
+			return nil, fmt.Errorf(
+				"invalid constr tag %s at position %d: %v",
+				p.curToken.Literal,
+				p.curToken.Position,
+				err,
+			)
 		}
 
 		tag := uint(n)
@@ -792,15 +864,24 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 
 		return data.NewConstr(tag, fields), nil
 	default:
-		return nil, fmt.Errorf("expected PlutusData constructor (I, B, List, Map, Constr), got %v at position %d", p.curToken.Type, p.curToken.Position)
+		return nil, fmt.Errorf(
+			"expected PlutusData constructor (I, B, List, Map, Constr), got %v at position %d",
+			p.curToken.Type,
+			p.curToken.Position,
+		)
 	}
 }
 
 func (p *Parser) parseTypeSpec() (Typ, error) {
 	// Check for invalid bare list or pair
 	if p.curToken.Type == lex.TokenList || p.curToken.Type == lex.TokenPair {
-		return nil, fmt.Errorf("expected left parenthesis for %d type, got %v (literal: %s) at position %d",
-			p.curToken.Type, p.curToken.Type, p.curToken.Literal, p.curToken.Position)
+		return nil, fmt.Errorf(
+			"expected left parenthesis for %d type, got %v (literal: %s) at position %d",
+			p.curToken.Type,
+			p.curToken.Type,
+			p.curToken.Literal,
+			p.curToken.Position,
+		)
 	}
 
 	// Handle parenthesized type specs (e.g., (list data), (pair integer bool))
@@ -814,7 +895,12 @@ func (p *Parser) parseTypeSpec() (Typ, error) {
 		}
 
 		if p.curToken.Type != lex.TokenRParen {
-			return nil, fmt.Errorf("expected right parenthesis after type spec, got %v (literal: %s) at position %d", p.curToken.Type, p.curToken.Literal, p.curToken.Position)
+			return nil, fmt.Errorf(
+				"expected right parenthesis after type spec, got %v (literal: %s) at position %d",
+				p.curToken.Type,
+				p.curToken.Literal,
+				p.curToken.Position,
+			)
 		}
 
 		p.nextToken()
@@ -847,7 +933,11 @@ func (p *Parser) parseInnerTypeSpec() (Typ, error) {
 		case "data":
 			return &TData{}, nil
 		default:
-			return nil, fmt.Errorf("unknown type %s at position %d", typName, p.curToken.Position)
+			return nil, fmt.Errorf(
+				"unknown type %s at position %d",
+				typName,
+				p.curToken.Position,
+			)
 		}
 	case lex.TokenList:
 		p.nextToken()
@@ -875,7 +965,12 @@ func (p *Parser) parseInnerTypeSpec() (Typ, error) {
 
 		return &TPair{First: firstType, Second: secondType}, nil
 	default:
-		return nil, fmt.Errorf("expected type identifier, list, or pair, got %v (literal: %s) at position %d", p.curToken.Type, p.curToken.Literal, p.curToken.Position)
+		return nil, fmt.Errorf(
+			"expected type identifier, list, or pair, got %v (literal: %s) at position %d",
+			p.curToken.Type,
+			p.curToken.Literal,
+			p.curToken.Position,
+		)
 	}
 }
 
@@ -895,7 +990,11 @@ func (p *Parser) parseApply() (Term[Name], error) {
 	}
 
 	if len(terms) < 2 {
-		return nil, fmt.Errorf("application requires at least two terms, got %d at position %d", len(terms), p.curToken.Position)
+		return nil, fmt.Errorf(
+			"application requires at least two terms, got %d at position %d",
+			len(terms),
+			p.curToken.Position,
+		)
 	}
 
 	if err := p.expect(lex.TokenRBracket); err != nil {

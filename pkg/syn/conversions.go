@@ -8,12 +8,16 @@ import (
 func NameToNamedDeBruijn(p *Program[Name]) (*Program[NamedDeBruijn], error) {
 	converter := newConverter()
 
-	t, err := nameToIndex(converter, p.Term, func(s string, d DeBruijn) NamedDeBruijn {
-		return NamedDeBruijn{
-			Text:  s,
-			Index: d,
-		}
-	})
+	t, err := nameToIndex(
+		converter,
+		p.Term,
+		func(s string, d DeBruijn) NamedDeBruijn {
+			return NamedDeBruijn{
+				Text:  s,
+				Index: d,
+			}
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -29,9 +33,13 @@ func NameToNamedDeBruijn(p *Program[Name]) (*Program[NamedDeBruijn], error) {
 func NameToDeBruijn(p *Program[Name]) (*Program[DeBruijn], error) {
 	converter := newConverter()
 
-	t, err := nameToIndex(converter, p.Term, func(s string, d DeBruijn) DeBruijn {
-		return DeBruijn(d)
-	})
+	t, err := nameToIndex(
+		converter,
+		p.Term,
+		func(s string, d DeBruijn) DeBruijn {
+			return DeBruijn(d)
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +71,11 @@ func newConverter() *converter {
 	}
 }
 
-func nameToIndex[T any](c *converter, term Term[Name], converter func(string, DeBruijn) T) (Term[T], error) {
+func nameToIndex[T any](
+	c *converter,
+	term Term[Name],
+	converter func(string, DeBruijn) T,
+) (Term[T], error) {
 	var converted Term[T]
 
 	switch t := term.(type) {
@@ -197,8 +209,9 @@ func (c *converter) getIndex(name *Name) (DeBruijn, error) {
 	return 0, errors.New("FreeUnique")
 }
 
-//nolint:unused
 // getUnique finds the Unique identifier for a given DeBruijn index
+//
+//nolint:unused
 func (c *converter) getUnique(index DeBruijn) (Unique, error) {
 	for i := len(c.levels) - 1; i >= 0; i-- {
 		indexVal := uint(index)
@@ -228,8 +241,9 @@ func (c *converter) removeUnique(unique Unique) {
 	scope.remove(unique, c.currentLevel)
 }
 
-//nolint:unused
 // declareBinder declares a new binder in the current scope
+//
+//nolint:unused
 func (c *converter) declareBinder() {
 	scope := &c.levels[c.currentLevel]
 	scope.insert(c.currentUnique, c.currentLevel)

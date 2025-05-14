@@ -170,7 +170,10 @@ func dataExMem(x data.PlutusData) func() ExMem {
 // like script context vs a Data of bytearray of 0 bytes. In this case the cpu ExBudget would far underestimate
 // the cost for calculating the ExMem for the entire script context thus causing a lot of free work to be done
 // by the node
-func equalsDataExMem(x data.PlutusData, y data.PlutusData) (func() ExMem, func() ExMem) {
+func equalsDataExMem(
+	x data.PlutusData,
+	y data.PlutusData,
+) (func() ExMem, func() ExMem) {
 
 	var xAcc ExMem
 	var yAcc ExMem

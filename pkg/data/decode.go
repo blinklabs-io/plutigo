@@ -114,7 +114,11 @@ func decodeRaw(v interface{}) (PlutusData, error) {
 func decodeConstr(tag uint64, content interface{}) (PlutusData, error) {
 	arr, ok := content.([]interface{})
 	if !ok {
-		return nil, fmt.Errorf("expected array for Constr tag %d, got %T", tag, content)
+		return nil, fmt.Errorf(
+			"expected array for Constr tag %d, got %T",
+			tag,
+			content,
+		)
 	}
 
 	fields := make([]PlutusData, len(arr))
@@ -122,7 +126,11 @@ func decodeConstr(tag uint64, content interface{}) (PlutusData, error) {
 	for i, item := range arr {
 		pd, err := decodeRaw(item)
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode Constr field %d: %w", i, err)
+			return nil, fmt.Errorf(
+				"failed to decode Constr field %d: %w",
+				i,
+				err,
+			)
 		}
 
 		fields[i] = pd

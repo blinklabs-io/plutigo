@@ -217,7 +217,10 @@ func (m *Machine[T]) compute(
 	return state, nil
 }
 
-func (m *Machine[T]) returnCompute(context MachineContext[T], value Value[T]) (MachineState[T], error) {
+func (m *Machine[T]) returnCompute(
+	context MachineContext[T],
+	value Value[T],
+) (MachineState[T], error) {
 	var state MachineState[T]
 	var err error
 
@@ -314,7 +317,10 @@ func (m *Machine[T]) returnCompute(context MachineContext[T], value Value[T]) (M
 	return state, nil
 }
 
-func (m *Machine[T]) forceEvaluate(context MachineContext[T], value Value[T]) (MachineState[T], error) {
+func (m *Machine[T]) forceEvaluate(
+	context MachineContext[T],
+	value Value[T],
+) (MachineState[T], error) {
 	var state MachineState[T]
 
 	switch v := value.(type) {
@@ -356,7 +362,11 @@ func (m *Machine[T]) forceEvaluate(context MachineContext[T], value Value[T]) (M
 	return state, nil
 }
 
-func (m *Machine[T]) applyEvaluate(context MachineContext[T], function Value[T], arg Value[T]) (MachineState[T], error) {
+func (m *Machine[T]) applyEvaluate(
+	context MachineContext[T],
+	function Value[T],
+	arg Value[T],
+) (MachineState[T], error) {
 	var state MachineState[T]
 
 	switch f := function.(type) {
@@ -404,7 +414,10 @@ func (m *Machine[T]) applyEvaluate(context MachineContext[T], function Value[T],
 	return state, nil
 }
 
-func transferArgStack[T syn.Eval](fields []Value[T], ctx MachineContext[T]) MachineContext[T] {
+func transferArgStack[T syn.Eval](
+	fields []Value[T],
+	ctx MachineContext[T],
+) MachineContext[T] {
 	c := ctx
 
 	for arg := len(fields) - 1; arg >= 0; arg-- {
