@@ -799,7 +799,7 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 func (p *Parser) parseTypeSpec() (Typ, error) {
 	// Check for invalid bare list or pair
 	if p.curToken.Type == lex.TokenList || p.curToken.Type == lex.TokenPair {
-		return nil, fmt.Errorf("expected left parenthesis for %s type, got %v (literal: %s) at position %d",
+		return nil, fmt.Errorf("expected left parenthesis for %d type, got %v (literal: %s) at position %d",
 			p.curToken.Type, p.curToken.Type, p.curToken.Literal, p.curToken.Position)
 	}
 
