@@ -5,7 +5,7 @@ test: ## Run tests
 	@echo "Running tests..."
 	@go test -v ./...
 
-test-one: ## Run specific tests (usage: make test-one TEST=TestName)
+test-match: ## Run specific tests (usage: make test-one TEST=TestName)
 	@echo "Running test: $(TEST)..."
 	@go test -run $(TEST) -v ./...
 

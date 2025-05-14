@@ -984,9 +984,33 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 	case builtin.ListData:
 		panic("implement ListData")
 	case builtin.IData:
-		panic("implement IData")
+		arg1, err := unwrapInteger[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, bigIntExMem(arg1))
+		if err != nil {
+			return nil, err
+		}
+
+		evalValue = &Constant{&syn.Data{
+			Inner: &data.Integer{Inner: arg1},
+		}}
 	case builtin.BData:
-		panic("implement BData")
+		arg1, err := unwrapByteString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, byteArrayExMem(arg1))
+		if err != nil {
+			return nil, err
+		}
+
+		evalValue = &Constant{&syn.Data{
+			Inner: &data.ByteString{Inner: arg1},
+		}}
 	case builtin.UnConstrData:
 		arg1, err := unwrapData[T](b.Args[0])
 		if err != nil {

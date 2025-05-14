@@ -1,15 +1,14 @@
 package syn
 
 import (
-	"fmt"
 	"math/big"
 
 	"github.com/blinklabs-io/plutigo/pkg/data"
 )
 
 type IConstant interface {
-	fmt.Stringer
 	isConstant()
+
 	Typ() Typ
 }
 

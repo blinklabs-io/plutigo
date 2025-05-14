@@ -3,9 +3,11 @@ package syn
 import (
 	"fmt"
 	"math/big"
+	"reflect"
 	"strconv"
 
 	"github.com/blinklabs-io/plutigo/pkg/builtin"
+	"github.com/blinklabs-io/plutigo/pkg/data"
 	"github.com/blinklabs-io/plutigo/pkg/syn/lex"
 )
 
@@ -316,112 +318,574 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 		return nil, err
 	}
 
-	switch p.curToken.Type {
-	case lex.TokenIdentifier:
-		switch p.curToken.Literal {
-		case "integer":
-			p.nextToken()
+	typeSpec, err := p.parseTypeSpec()
+	if err != nil {
+		return nil, err
+	}
 
-			if p.curToken.Type != lex.TokenNumber {
-				return nil, fmt.Errorf("expected integer value, got %v at position %d", p.curToken.Type, p.curToken.Position)
-			}
-
-			n, ok := p.curToken.Value.(*big.Int)
-			if !ok {
-				return nil, fmt.Errorf("invalid integer value %s at position %d", p.curToken.Literal, p.curToken.Position)
-			}
-
-			p.nextToken()
-
-			if err := p.expect(lex.TokenRParen); err != nil {
-				return nil, err
-			}
-
-			return &Constant{Con: &Integer{Inner: n}}, nil
-		case "bytestring":
-			p.nextToken()
-
-			if p.curToken.Type != lex.TokenByteString {
-				return nil, fmt.Errorf("expected bytestring value, got %v at position %d", p.curToken.Type, p.curToken.Position)
-			}
-
-			b, ok := p.curToken.Value.([]byte)
-			if !ok {
-				return nil, fmt.Errorf("invalid bytestring value %s at position %d", p.curToken.Literal, p.curToken.Position)
-			}
-
-			p.nextToken()
-
-			if err := p.expect(lex.TokenRParen); err != nil {
-				return nil, err
-			}
-			return &Constant{Con: &ByteString{Inner: b}}, nil
-		case "string":
-			p.nextToken()
-
-			if p.curToken.Type != lex.TokenString {
-				return nil, fmt.Errorf("expected string value, got %v at position %d", p.curToken.Type, p.curToken.Position)
-			}
-
-			s, ok := p.curToken.Value.(string)
-			if !ok {
-				return nil, fmt.Errorf("invalid string value %s at position %d", p.curToken.Literal, p.curToken.Position)
-			}
-
-			p.nextToken()
-
-			if err := p.expect(lex.TokenRParen); err != nil {
-				return nil, err
-			}
-
-			return &Constant{Con: &String{Inner: s}}, nil
-		case "bool":
-			p.nextToken()
-
-			var b bool
-
-			switch p.curToken.Type {
-			case lex.TokenTrue:
-				b = true
-			case lex.TokenFalse:
-				b = false
-			default:
-				return nil, fmt.Errorf("expected bool value, got %v at position %d", p.curToken.Type, p.curToken.Position)
-			}
-
-			p.nextToken()
-
-			if err := p.expect(lex.TokenRParen); err != nil {
-				return nil, err
-			}
-
-			return &Constant{Con: &Bool{Inner: b}}, nil
-		case "unit":
-			p.nextToken()
-
-			if p.curToken.Type != lex.TokenUnit {
-				return nil, fmt.Errorf("expected unit value, got %v at position %d", p.curToken.Type, p.curToken.Position)
-			}
-
-			p.nextToken()
-
-			if err := p.expect(lex.TokenRParen); err != nil {
-				return nil, err
-			}
-
-			return &Constant{Con: &Unit{}}, nil
-		default:
-			return nil, fmt.Errorf("unknown constant type %s at position %d", p.curToken.Literal, p.curToken.Position)
+	switch ts := typeSpec.(type) {
+	case *TInteger:
+		if p.curToken.Type != lex.TokenNumber {
+			return nil, fmt.Errorf("expected integer value, got %v at position %d", p.curToken.Type, p.curToken.Position)
 		}
+
+		n, ok := p.curToken.Value.(*big.Int)
+		if !ok {
+			return nil, fmt.Errorf("invalid integer value %s at position %d", p.curToken.Literal, p.curToken.Position)
+		}
+
+		p.nextToken()
+
+		if err := p.expect(lex.TokenRParen); err != nil {
+			return nil, err
+		}
+
+		return &Constant{Con: &Integer{Inner: n}}, nil
+	case *TByteString:
+		if p.curToken.Type != lex.TokenByteString {
+			return nil, fmt.Errorf("expected bytestring value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		}
+
+		b, ok := p.curToken.Value.([]byte)
+		if !ok {
+			return nil, fmt.Errorf("invalid bytestring value %s at position %d", p.curToken.Literal, p.curToken.Position)
+		}
+
+		p.nextToken()
+
+		if err := p.expect(lex.TokenRParen); err != nil {
+			return nil, err
+		}
+
+		return &Constant{Con: &ByteString{Inner: b}}, nil
+	case *TString:
+		if p.curToken.Type != lex.TokenString {
+			return nil, fmt.Errorf("expected string value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		}
+
+		s, ok := p.curToken.Value.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid string value %s at position %d", p.curToken.Literal, p.curToken.Position)
+		}
+
+		p.nextToken()
+
+		if err := p.expect(lex.TokenRParen); err != nil {
+			return nil, err
+		}
+
+		return &Constant{Con: &String{Inner: s}}, nil
+	case *TBool:
+		var b bool
+
+		switch p.curToken.Type {
+		case lex.TokenTrue:
+			b = true
+		case lex.TokenFalse:
+			b = false
+		default:
+			return nil, fmt.Errorf("expected bool value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		}
+
+		p.nextToken()
+
+		if err := p.expect(lex.TokenRParen); err != nil {
+			return nil, err
+		}
+
+		return &Constant{Con: &Bool{Inner: b}}, nil
+	case *TUnit:
+		if p.curToken.Type != lex.TokenUnit {
+			return nil, fmt.Errorf("expected unit value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		}
+
+		p.nextToken()
+
+		if err := p.expect(lex.TokenRParen); err != nil {
+			return nil, err
+		}
+
+		return &Constant{Con: &Unit{}}, nil
+	case *TData:
+		if err := p.expect(lex.TokenLParen); err != nil {
+			return nil, err
+		}
+
+		dataVal, err := p.parsePlutusData()
+		if err != nil {
+			return nil, err
+		}
+
+		if err := p.expect(lex.TokenRParen); err != nil {
+			return nil, err
+		}
+
+		if err := p.expect(lex.TokenRParen); err != nil {
+			return nil, err
+		}
+
+		return &Constant{Con: &Data{Inner: dataVal}}, nil
+	case *TList:
+		if err := p.expect(lex.TokenLBracket); err != nil {
+			return nil, err
+		}
+
+		var items []IConstant
+
+		for p.curToken.Type != lex.TokenRBracket {
+			item, err := p.parseConstantValue(ts.Typ)
+			if err != nil {
+				return nil, err
+			}
+
+			if reflect.TypeOf(item.Typ()) != reflect.TypeOf(ts.Typ) {
+				return nil, fmt.Errorf("list element of type %T does not match expected type %T at position %d", item.Typ(), ts.Typ, p.curToken.Position)
+			}
+
+			items = append(items, item)
+
+			if p.curToken.Type != lex.TokenRBracket {
+				if err := p.expect(lex.TokenComma); err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		if err := p.expect(lex.TokenRBracket); err != nil {
+			return nil, err
+		}
+
+		if err := p.expect(lex.TokenRParen); err != nil {
+			return nil, err
+		}
+
+		return &Constant{Con: &ProtoList{LTyp: ts.Typ, List: items}}, nil
+	case *TPair:
+		if err := p.expect(lex.TokenLParen); err != nil {
+			return nil, err
+		}
+
+		first, err := p.parseConstantValue(ts.First)
+		if err != nil {
+			return nil, err
+		}
+
+		if reflect.TypeOf(first.Typ()) != reflect.TypeOf(ts.First) {
+			return nil, fmt.Errorf("pair first element of type %T does not match expected type %T at position %d", first.Typ(), ts.First, p.curToken.Position)
+		}
+
+		if err := p.expect(lex.TokenComma); err != nil {
+			return nil, err
+		}
+
+		second, err := p.parseConstantValue(ts.Second)
+		if err != nil {
+			return nil, err
+		}
+
+		if reflect.TypeOf(second.Typ()) != reflect.TypeOf(ts.Second) {
+			return nil, fmt.Errorf("pair second element of type %T does not match expected type %T at position %d", second.Typ(), ts.Second, p.curToken.Position)
+		}
+
+		if err := p.expect(lex.TokenRParen); err != nil {
+			return nil, err
+		}
+
+		if err := p.expect(lex.TokenRParen); err != nil {
+			return nil, err
+		}
+
+		return &Constant{Con: &ProtoPair{FstType: ts.First, SndType: ts.Second, First: first, Second: second}}, nil
 	default:
-		return nil, fmt.Errorf("expected constant type, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		return nil, fmt.Errorf("unexpected type spec %v at position %d", typeSpec, p.curToken.Position)
 	}
 }
+
+func (p *Parser) parseConstantValue(typ Typ) (IConstant, error) {
+	switch t := typ.(type) {
+	case *TInteger:
+		if p.curToken.Type != lex.TokenNumber {
+			return nil, fmt.Errorf("expected integer value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		}
+
+		n, ok := p.curToken.Value.(*big.Int)
+		if !ok {
+			return nil, fmt.Errorf("invalid integer value %s at position %d", p.curToken.Literal, p.curToken.Position)
+		}
+
+		p.nextToken()
+
+		return &Integer{Inner: n}, nil
+	case *TByteString:
+		if p.curToken.Type != lex.TokenByteString {
+			return nil, fmt.Errorf("expected bytestring value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		}
+
+		b, ok := p.curToken.Value.([]byte)
+		if !ok {
+			return nil, fmt.Errorf("invalid bytestring value %s at position %d", p.curToken.Literal, p.curToken.Position)
+		}
+
+		p.nextToken()
+
+		return &ByteString{Inner: b}, nil
+	case *TString:
+		if p.curToken.Type != lex.TokenString {
+			return nil, fmt.Errorf("expected string value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		}
+
+		s, ok := p.curToken.Value.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid string value %s at position %d", p.curToken.Literal, p.curToken.Position)
+		}
+
+		p.nextToken()
+
+		return &String{Inner: s}, nil
+	case *TBool:
+		var b bool
+
+		switch p.curToken.Type {
+		case lex.TokenTrue:
+			b = true
+		case lex.TokenFalse:
+			b = false
+		default:
+			return nil, fmt.Errorf("expected bool value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		}
+
+		p.nextToken()
+
+		return &Bool{Inner: b}, nil
+	case *TUnit:
+		if p.curToken.Type != lex.TokenUnit {
+			return nil, fmt.Errorf("expected unit value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		}
+
+		p.nextToken()
+
+		return &Unit{}, nil
+	case *TData:
+		dataVal, err := p.parsePlutusData()
+		if err != nil {
+			return nil, err
+		}
+
+		return &Data{Inner: dataVal}, nil
+	case *TList:
+		if err := p.expect(lex.TokenLBracket); err != nil {
+			return nil, err
+		}
+
+		var items []IConstant
+
+		for p.curToken.Type != lex.TokenRBracket {
+			item, err := p.parseConstantValue(t.Typ)
+
+			if err != nil {
+				return nil, err
+			}
+
+			if reflect.TypeOf(item.Typ()) != reflect.TypeOf(t.Typ) {
+				return nil, fmt.Errorf("list element of type %T does not match expected type %T at position %d", item.Typ(), t.Typ, p.curToken.Position)
+			}
+
+			items = append(items, item)
+
+			if p.curToken.Type != lex.TokenRBracket {
+				if err := p.expect(lex.TokenComma); err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		if err := p.expect(lex.TokenRBracket); err != nil {
+			return nil, err
+		}
+
+		return &ProtoList{LTyp: t.Typ, List: items}, nil
+	case *TPair:
+		if err := p.expect(lex.TokenLParen); err != nil {
+			return nil, err
+		}
+
+		first, err := p.parseConstantValue(t.First)
+		if err != nil {
+			return nil, err
+		}
+
+		if reflect.TypeOf(first.Typ()) != reflect.TypeOf(t.First) {
+			return nil, fmt.Errorf("pair first element of type %T does not match expected type %T at position %d", first.Typ(), t.First, p.curToken.Position)
+		}
+
+		if err := p.expect(lex.TokenComma); err != nil {
+			return nil, err
+		}
+
+		second, err := p.parseConstantValue(t.Second)
+		if err != nil {
+			return nil, err
+		}
+
+		if reflect.TypeOf(second.Typ()) != reflect.TypeOf(t.Second) {
+			return nil, fmt.Errorf("pair second element of type %T does not match expected type %T at position %d", second.Typ(), t.Second, p.curToken.Position)
+		}
+
+		if err := p.expect(lex.TokenRParen); err != nil {
+			return nil, err
+		}
+
+		return &ProtoPair{FstType: t.First, SndType: t.Second, First: first, Second: second}, nil
+	default:
+		return nil, fmt.Errorf("unexpected type %v at position %d", typ, p.curToken.Position)
+	}
+}
+
+func (p *Parser) parsePlutusData() (data.PlutusData, error) {
+	switch p.curToken.Type {
+	case lex.TokenI:
+		p.nextToken()
+
+		if p.curToken.Type != lex.TokenNumber {
+			return nil, fmt.Errorf("expected integer value for I, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		}
+
+		n, ok := p.curToken.Value.(*big.Int)
+		if !ok {
+			return nil, fmt.Errorf("invalid integer value %s at position %d", p.curToken.Literal, p.curToken.Position)
+		}
+
+		p.nextToken()
+
+		return data.NewInteger(n), nil
+	case lex.TokenB:
+		p.nextToken()
+
+		if p.curToken.Type != lex.TokenByteString {
+			return nil, fmt.Errorf("expected bytestring value for B, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		}
+
+		b, ok := p.curToken.Value.([]byte)
+		if !ok {
+			return nil, fmt.Errorf("invalid bytestring value %s at position %d", p.curToken.Literal, p.curToken.Position)
+		}
+
+		p.nextToken()
+
+		return data.NewByteString(b), nil
+	case lex.TokenPlutusList:
+		p.nextToken()
+
+		if err := p.expect(lex.TokenLBracket); err != nil {
+			return nil, err
+		}
+
+		var items []data.PlutusData
+
+		for p.curToken.Type != lex.TokenRBracket {
+			item, err := p.parsePlutusData()
+
+			if err != nil {
+				return nil, err
+			}
+
+			items = append(items, item)
+
+			if p.curToken.Type != lex.TokenRBracket {
+				if err := p.expect(lex.TokenComma); err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		if err := p.expect(lex.TokenRBracket); err != nil {
+			return nil, err
+		}
+
+		return data.NewList(items), nil
+	case lex.TokenMap:
+		p.nextToken()
+
+		if err := p.expect(lex.TokenLBracket); err != nil {
+			return nil, err
+		}
+
+		var pairs [][2]data.PlutusData
+
+		for p.curToken.Type != lex.TokenRBracket {
+			if err := p.expect(lex.TokenLParen); err != nil {
+				return nil, err
+			}
+
+			key, err := p.parsePlutusData()
+			if err != nil {
+				return nil, err
+			}
+
+			if err := p.expect(lex.TokenComma); err != nil {
+				return nil, err
+			}
+
+			value, err := p.parsePlutusData()
+			if err != nil {
+				return nil, err
+			}
+
+			if err := p.expect(lex.TokenRParen); err != nil {
+				return nil, err
+			}
+
+			pairs = append(pairs, [2]data.PlutusData{key, value})
+
+			if p.curToken.Type != lex.TokenRBracket {
+				if err := p.expect(lex.TokenComma); err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		if err := p.expect(lex.TokenRBracket); err != nil {
+			return nil, err
+		}
+
+		return data.NewMap(pairs), nil
+	case lex.TokenPlutusConstr:
+		p.nextToken()
+
+		if p.curToken.Type != lex.TokenNumber {
+			return nil, fmt.Errorf("expected tag number for Constr, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		}
+
+		n, err := strconv.Atoi(p.curToken.Literal)
+		if err != nil {
+			return nil, fmt.Errorf("invalid constr tag %s at position %d: %v", p.curToken.Literal, p.curToken.Position, err)
+		}
+
+		tag := uint(n)
+
+		p.nextToken()
+
+		if err := p.expect(lex.TokenLBracket); err != nil {
+			return nil, err
+		}
+
+		var fields []data.PlutusData
+
+		for p.curToken.Type != lex.TokenRBracket {
+			field, err := p.parsePlutusData()
+			if err != nil {
+				return nil, err
+			}
+
+			fields = append(fields, field)
+
+			if p.curToken.Type != lex.TokenRBracket {
+				if err := p.expect(lex.TokenComma); err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		if err := p.expect(lex.TokenRBracket); err != nil {
+			return nil, err
+		}
+
+		return data.NewConstr(tag, fields), nil
+	default:
+		return nil, fmt.Errorf("expected PlutusData constructor (I, B, List, Map, Constr), got %v at position %d", p.curToken.Type, p.curToken.Position)
+	}
+}
+
+func (p *Parser) parseTypeSpec() (Typ, error) {
+	// Check for invalid bare list or pair
+	if p.curToken.Type == lex.TokenList || p.curToken.Type == lex.TokenPair {
+		return nil, fmt.Errorf("expected left parenthesis for %d type, got %v (literal: %s) at position %d",
+			p.curToken.Type, p.curToken.Type, p.curToken.Literal, p.curToken.Position)
+	}
+
+	// Handle parenthesized type specs (e.g., (list data), (pair integer bool))
+	if p.curToken.Type == lex.TokenLParen {
+		p.nextToken()
+
+		typ, err := p.parseInnerTypeSpec()
+
+		if err != nil {
+			return nil, err
+		}
+
+		if p.curToken.Type != lex.TokenRParen {
+			return nil, fmt.Errorf("expected right parenthesis after type spec, got %v (literal: %s) at position %d", p.curToken.Type, p.curToken.Literal, p.curToken.Position)
+		}
+
+		p.nextToken()
+
+		return typ, nil
+	}
+
+	// Handle simple types (e.g., integer, data)
+	return p.parseInnerTypeSpec()
+}
+
+func (p *Parser) parseInnerTypeSpec() (Typ, error) {
+	switch p.curToken.Type {
+	case lex.TokenIdentifier:
+		typName := p.curToken.Literal
+
+		p.nextToken()
+
+		switch typName {
+		case "integer":
+			return &TInteger{}, nil
+		case "bytestring":
+			return &TByteString{}, nil
+		case "string":
+			return &TString{}, nil
+		case "unit":
+			return &TUnit{}, nil
+		case "bool":
+			return &TBool{}, nil
+		case "data":
+			return &TData{}, nil
+		default:
+			return nil, fmt.Errorf("unknown type %s at position %d", typName, p.curToken.Position)
+		}
+	case lex.TokenList:
+		p.nextToken()
+
+		// Parse element type, which may be parenthesized (e.g., (list data)) or simple (e.g., data)
+		elemType, err := p.parseTypeSpec()
+		if err != nil {
+			return nil, err
+		}
+
+		return &TList{Typ: elemType}, nil
+	case lex.TokenPair:
+		p.nextToken()
+
+		// Parse two types, each may be parenthesized or simple
+		firstType, err := p.parseTypeSpec()
+		if err != nil {
+			return nil, err
+		}
+
+		secondType, err := p.parseTypeSpec()
+		if err != nil {
+			return nil, err
+		}
+
+		return &TPair{First: firstType, Second: secondType}, nil
+	default:
+		return nil, fmt.Errorf("expected type identifier, list, or pair, got %v (literal: %s) at position %d", p.curToken.Type, p.curToken.Literal, p.curToken.Position)
+	}
+}
+
 func (p *Parser) parseApply() (Term[Name], error) {
 	if err := p.expect(lex.TokenLBracket); err != nil {
 		return nil, err
 	}
+
 	var terms []Term[Name]
+
 	for p.curToken.Type != lex.TokenRBracket {
 		term, err := p.ParseTerm()
 		if err != nil {
@@ -429,16 +893,21 @@ func (p *Parser) parseApply() (Term[Name], error) {
 		}
 		terms = append(terms, term)
 	}
+
 	if len(terms) < 2 {
 		return nil, fmt.Errorf("application requires at least two terms, got %d at position %d", len(terms), p.curToken.Position)
 	}
+
 	if err := p.expect(lex.TokenRBracket); err != nil {
 		return nil, err
 	}
+
 	// Build left-nested Apply structure
 	result := terms[0]
+
 	for i := 1; i < len(terms); i++ {
 		result = &Apply[Name]{Function: result, Argument: terms[i]}
 	}
+
 	return result, nil
 }

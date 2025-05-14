@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/blinklabs-io/plutigo/pkg/data"
 )
 
 // Pretty Print a Program
@@ -253,11 +255,150 @@ func (pp *PrettyPrinter) printConstant(c *Constant) {
 		} else {
 			pp.write("False")
 		}
+	case *ProtoList:
+		pp.write("(list ")
+		pp.printType(con.LTyp)
+		pp.write(") ")
+		if len(con.List) == 0 {
+			pp.write("[]")
+		} else {
+			pp.write("[\n")
+			pp.increaseIndent()
+			for i, item := range con.List {
+				pp.writeIndent()
+				pp.printConstant(&Constant{Con: item})
+				if i < len(con.List)-1 {
+					pp.write(",")
+				}
+				pp.write("\n")
+			}
+			pp.decreaseIndent()
+			pp.writeIndent()
+			pp.write("]")
+		}
+	case *ProtoPair:
+		pp.write("(pair ")
+		pp.printType(con.FstType)
+		pp.write(" ")
+		pp.printType(con.SndType)
+		pp.write(") (")
+		pp.printConstant(&Constant{Con: con.First})
+		pp.write(", ")
+		pp.printConstant(&Constant{Con: con.Second})
+		pp.write(")")
+	case *Data:
+		pp.write("data ")
+		pp.printPlutusData(con.Inner)
 	default:
 		pp.write(fmt.Sprintf("unknown constant: %v", c))
 	}
 
 	pp.write(")")
+}
+
+// printType formats a Typ interface
+func (pp *PrettyPrinter) printType(typ Typ) {
+	switch t := typ.(type) {
+	case *TInteger:
+		pp.write("integer")
+	case *TByteString:
+		pp.write("bytestring")
+	case *TString:
+		pp.write("string")
+	case *TUnit:
+		pp.write("unit")
+	case *TBool:
+		pp.write("bool")
+	case *TData:
+		pp.write("data")
+	case *TList:
+		pp.write("(list ")
+		pp.printType(t.Typ)
+		pp.write(")")
+	case *TPair:
+		pp.write("(pair ")
+		pp.printType(t.First)
+		pp.write(" ")
+		pp.printType(t.Second)
+		pp.write(")")
+	default:
+		pp.write(fmt.Sprintf("unknown type: %v", typ))
+	}
+}
+
+// printPlutusData formats a PlutusData node
+func (pp *PrettyPrinter) printPlutusData(pd data.PlutusData) {
+	switch d := pd.(type) {
+	case *data.Integer:
+		pp.write("I ")
+		pp.write(d.Inner.String())
+	case *data.ByteString:
+		pp.write("B #")
+		for _, b := range d.Inner {
+			pp.builder.WriteString(fmt.Sprintf("%02x", b))
+		}
+	case *data.List:
+		if len(d.Items) == 0 {
+			pp.write("List []")
+		} else {
+			pp.write("List [\n")
+			pp.increaseIndent()
+			for i, item := range d.Items {
+				pp.writeIndent()
+				pp.printPlutusData(item)
+				if i < len(d.Items)-1 {
+					pp.write(",")
+				}
+				pp.write("\n")
+			}
+			pp.decreaseIndent()
+			pp.writeIndent()
+			pp.write("]")
+		}
+	case *data.Map:
+		if len(d.Pairs) == 0 {
+			pp.write("Map []")
+		} else {
+			pp.write("Map [\n")
+			pp.increaseIndent()
+			for i, pair := range d.Pairs {
+				pp.writeIndent()
+				pp.write("(")
+				pp.printPlutusData(pair[0])
+				pp.write(", ")
+				pp.printPlutusData(pair[1])
+				pp.write(")")
+				if i < len(d.Pairs)-1 {
+					pp.write(",")
+				}
+				pp.write("\n")
+			}
+			pp.decreaseIndent()
+			pp.writeIndent()
+			pp.write("]")
+		}
+	case *data.Constr:
+		pp.write(fmt.Sprintf("Constr %d ", d.Tag))
+		if len(d.Fields) == 0 {
+			pp.write("[]")
+		} else {
+			pp.write("[\n")
+			pp.increaseIndent()
+			for i, field := range d.Fields {
+				pp.writeIndent()
+				pp.printPlutusData(field)
+				if i < len(d.Fields)-1 {
+					pp.write(",")
+				}
+				pp.write("\n")
+			}
+			pp.decreaseIndent()
+			pp.writeIndent()
+			pp.write("]")
+		}
+	default:
+		pp.write(fmt.Sprintf("unknown PlutusData: %v", pd))
+	}
 }
 
 // escapeString escapes special characters in a string for printing
@@ -280,58 +421,4 @@ func escapeString(s string) string {
 	}
 
 	return builder.String()
-}
-
-// Updated AST types with String methods and modified fields
-
-// Integer implements String
-func (i Integer) String() string {
-	return i.Inner.String()
-}
-
-// ByteString implements String
-func (b ByteString) String() string {
-	pp := NewPrettyPrinter(2)
-
-	pp.write("#")
-
-	for _, byteVal := range b.Inner {
-		pp.builder.WriteString(fmt.Sprintf("%02x", byteVal))
-	}
-
-	return pp.builder.String()
-}
-
-// String implements String
-func (s String) String() string {
-	return fmt.Sprintf("\"%s\"", escapeString(s.Inner))
-}
-
-// Unit implements String
-func (u Unit) String() string {
-	return "()"
-}
-
-// Bool implements String
-func (b Bool) String() string {
-	if b.Inner {
-		return "True"
-	}
-
-	return "False"
-}
-
-// Pair implements String
-func (p ProtoPair) String() string {
-	panic("TODO")
-}
-
-// List implements String
-func (p ProtoList) String() string {
-	panic("TODO")
-}
-
-// List implements String
-func (p Data) String() string {
-	return "some data bro"
 }
