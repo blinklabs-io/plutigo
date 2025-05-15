@@ -12,7 +12,7 @@ import (
 // It returns an error if the input is invalid or not a valid PlutusData encoding.
 func Decode(b []byte) (PlutusData, error) {
 	var raw cbor.RawMessage = b
-	var v interface{}
+	var v any
 
 	if err := cbor.Unmarshal(raw, &v); err != nil {
 		return nil, fmt.Errorf("failed to decode CBOR: %w", err)
@@ -22,7 +22,7 @@ func Decode(b []byte) (PlutusData, error) {
 }
 
 // decodeRaw converts a raw CBOR-decoded value into PlutusData.
-func decodeRaw(v interface{}) (PlutusData, error) {
+func decodeRaw(v any) (PlutusData, error) {
 	switch x := v.(type) {
 	case cbor.Tag:
 		// Handle tagged data (Constr, Bignum).
@@ -65,7 +65,7 @@ func decodeRaw(v interface{}) (PlutusData, error) {
 			return nil, fmt.Errorf("unknown CBOR tag for PlutusData: %d", x.Number)
 		}
 	// Handle List (untagged array).
-	case []interface{}:
+	case []any:
 		items := make([]PlutusData, len(x))
 
 		for i, item := range x {
@@ -79,7 +79,7 @@ func decodeRaw(v interface{}) (PlutusData, error) {
 		return NewList(items), nil
 
 	// Handle Map.
-	case map[interface{}]interface{}:
+	case map[any]any:
 		pairs := make([][2]PlutusData, 0, len(x))
 
 		for k, v := range x {
@@ -112,8 +112,8 @@ func decodeRaw(v interface{}) (PlutusData, error) {
 }
 
 // decodeConstr decodes a Constr from a CBOR tag content (expected to be an array).
-func decodeConstr(tag uint64, content interface{}) (PlutusData, error) {
-	arr, ok := content.([]interface{})
+func decodeConstr(tag uint64, content any) (PlutusData, error) {
+	arr, ok := content.([]any)
 	if !ok {
 		return nil, fmt.Errorf(
 			"expected array for Constr tag %d, got %T",
@@ -141,7 +141,7 @@ func decodeConstr(tag uint64, content interface{}) (PlutusData, error) {
 }
 
 // decodeBignum decodes a big integer from CBOR tag content (expected to be bytes).
-func decodeBignum(content interface{}, negative bool) (PlutusData, error) {
+func decodeBignum(content any, negative bool) (PlutusData, error) {
 	bytes, ok := content.([]byte)
 	if !ok {
 		return nil, fmt.Errorf("expected bytes for Bignum, got %T", content)

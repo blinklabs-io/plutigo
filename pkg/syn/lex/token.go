@@ -40,5 +40,5 @@ type Token struct {
 	Type     TokenType
 	Literal  string
 	Position int
-	Value    interface{} // For numbers (*big.Int), strings (string), bytestrings ([]byte)
+	Value    any // For numbers (*big.Int), strings (string), bytestrings ([]byte)
 }
