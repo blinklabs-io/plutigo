@@ -17,11 +17,13 @@ func (b *biMap) remove(unique Unique, level uint) {
 
 func (b *biMap) getByUnique(unique Unique) (uint, bool) {
 	level, ok := b.left[unique]
+
 	return level, ok
 }
 
 //nolint:unused
 func (b *biMap) getByLevel(level uint) (Unique, bool) {
 	unique, ok := b.right[level]
+
 	return unique, ok
 }

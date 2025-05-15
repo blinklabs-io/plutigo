@@ -174,7 +174,6 @@ func (e *encoder) encodeTermTag(tag byte) error {
 	}
 
 	return nil
-
 }
 
 func (e *encoder) safeEncodeBits(numBits byte, val byte) error {

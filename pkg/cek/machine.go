@@ -314,6 +314,7 @@ func (m *Machine[T]) returnCompute(
 	default:
 		panic(fmt.Sprintf("unknown context %v", context))
 	}
+
 	return state, nil
 }
 
@@ -445,7 +446,7 @@ func dischargeValue[T syn.Eval](value Value[T]) syn.Term[T] {
 			DefaultFunction: v.Func,
 		}
 
-		for i := uint(0); i < v.Forces; i++ {
+		for range uint(v.Forces) {
 			forcedTerm = &syn.Force[T]{
 				Term: forcedTerm,
 			}
@@ -563,7 +564,7 @@ func (m *Machine[T]) stepAndMaybeSpend(step StepKind) error {
 }
 
 func (m *Machine[T]) spendUnbudgetedSteps() error {
-	for i := 0; i < len(m.unbudgetedSteps)-1; i++ {
+	for i := range len(m.unbudgetedSteps) - 1 {
 		unspent_step_budget :=
 			m.costs.machineCosts.get(StepKind(i))
 

@@ -183,7 +183,7 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 		// Check for division by zero
 
 		if arg2.Sign() == 0 {
-			return nil, fmt.Errorf("division by zero")
+			return nil, errors.New("division by zero")
 		}
 
 		err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
@@ -214,7 +214,7 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 		// Check for division by zero
 
 		if arg2.Sign() == 0 {
-			return nil, fmt.Errorf("division by zero")
+			return nil, errors.New("division by zero")
 		}
 
 		err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
@@ -248,7 +248,7 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 		// Check for division by zero
 
 		if arg2.Sign() == 0 {
-			return nil, fmt.Errorf("division by zero")
+			return nil, errors.New("division by zero")
 		}
 
 		err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
@@ -281,7 +281,7 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 
 		// Check for division by zero
 		if arg2.Sign() == 0 {
-			return nil, fmt.Errorf("division by zero")
+			return nil, errors.New("division by zero")
 		}
 
 		err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))

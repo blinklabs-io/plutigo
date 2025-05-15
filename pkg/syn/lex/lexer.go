@@ -62,6 +62,7 @@ func (l *Lexer) skipWhitespace() {
 			// If we hit a newline, continue to check for more whitespace or comments
 			if l.ch == '\n' {
 				l.readChar()
+
 				continue
 			}
 
@@ -116,6 +117,7 @@ func (l *Lexer) readString() (string, error) {
 
 		if l.ch == '"' {
 			l.readChar() // Consume closing quote
+
 			return l.input[start : l.pos-1], nil
 		}
 	}
@@ -218,6 +220,7 @@ func (l *Lexer) NextToken() Token {
 		if err != nil {
 			tok.Type = TokenError
 			tok.Literal = err.Error()
+
 			return tok
 		}
 
@@ -234,6 +237,7 @@ func (l *Lexer) NextToken() Token {
 			if err != nil {
 				tok.Type = TokenError
 				tok.Literal = err.Error()
+
 				return tok
 			}
 			bytes[i/2] = val
@@ -315,6 +319,7 @@ func (l *Lexer) NextToken() Token {
 			if err != nil {
 				tok.Type = TokenError
 				tok.Literal = err.Error()
+
 				return tok
 			}
 

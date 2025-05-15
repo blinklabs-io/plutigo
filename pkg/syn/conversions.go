@@ -176,7 +176,6 @@ func nameToIndex[T any](
 			}
 
 			branches = append(branches, item)
-
 		}
 
 		constr, err := nameToIndex(c, t.Constr, converter)
@@ -202,6 +201,7 @@ func (c *converter) getIndex(name *Name) (DeBruijn, error) {
 		scope := &c.levels[i]
 		if foundLevel, ok := scope.getByUnique(name.Unique); ok {
 			index := c.currentLevel - foundLevel
+
 			return DeBruijn(index), nil
 		}
 	}

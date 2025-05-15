@@ -84,7 +84,7 @@ func (p *Parser) ParseProgram() (*Program[Name], error) {
 
 	var version [3]uint32
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if p.curToken.Type != lex.TokenNumber {
 			return nil, fmt.Errorf(
 				"expected version number, got %v at position %d",
@@ -97,7 +97,7 @@ func (p *Parser) ParseProgram() (*Program[Name], error) {
 
 		if err != nil {
 			return nil, fmt.Errorf(
-				"invalid version number %s at position %d: %v",
+				"invalid version number %s at position %d: %w",
 				p.curToken.Literal,
 				p.curToken.Position,
 				err,
@@ -303,7 +303,7 @@ func (p *Parser) parseConstr() (Term[Name], error) {
 	n, err := strconv.Atoi(p.curToken.Literal)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"invalid constr tag %s at position %d: %v",
+			"invalid constr tag %s at position %d: %w",
 			p.curToken.Literal,
 			p.curToken.Position,
 			err,
@@ -826,7 +826,7 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 		n, err := strconv.Atoi(p.curToken.Literal)
 		if err != nil {
 			return nil, fmt.Errorf(
-				"invalid constr tag %s at position %d: %v",
+				"invalid constr tag %s at position %d: %w",
 				p.curToken.Literal,
 				p.curToken.Position,
 				err,

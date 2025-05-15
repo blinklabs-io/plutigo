@@ -97,7 +97,6 @@ func (b *Builtin[T]) ApplyArg(arg Value[T]) *Builtin[T] {
 		Forces: b.Forces,
 		Args:   args,
 	}
-
 }
 
 func (b *Builtin[T]) IsReady() bool {

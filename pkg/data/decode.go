@@ -1,6 +1,7 @@
 package data
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -58,7 +59,7 @@ func decodeRaw(v interface{}) (PlutusData, error) {
 			return decodeBignum(x.Content, true)
 
 		case 102:
-			return nil, fmt.Errorf("tagged data (tag 102) not implemented")
+			return nil, errors.New("tagged data (tag 102) not implemented")
 
 		default:
 			return nil, fmt.Errorf("unknown CBOR tag for PlutusData: %d", x.Number)

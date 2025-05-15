@@ -718,6 +718,7 @@ type SubtractedSizesModel struct {
 
 func (s SubtractedSizesModel) CostTwo(x, y ExMem) int {
 	diff := max(int(x)-int(y), s.minimum)
+
 	return s.slope*diff + s.intercept
 }
 
@@ -752,6 +753,7 @@ func (m MinSizeModel) CostTwo(x, y ExMem) int {
 	if int(y) < min {
 		min = int(y)
 	}
+
 	return m.slope*min + m.intercept
 }
 
@@ -771,6 +773,7 @@ func (m MaxSizeModel) CostTwo(x, y ExMem) int {
 	if int(y) > max {
 		max = int(y)
 	}
+
 	return m.slope*max + m.intercept
 }
 
@@ -789,6 +792,7 @@ func (l LinearOnDiagonalModel) CostTwo(x, y ExMem) int {
 	if int(x) == int(y) {
 		return l.slope*int(x) + l.intercept
 	}
+
 	return l.constant
 }
 
@@ -807,6 +811,7 @@ func (c ConstAboveDiagonalModel) CostTwo(x, y ExMem) int {
 	if int(x) < int(y) {
 		return c.constant
 	}
+
 	return c.model.CostTwo(x, y)
 }
 
@@ -825,6 +830,7 @@ func (c ConstBelowDiagonalModel) CostTwo(x, y ExMem) int {
 	if int(x) > int(y) {
 		return c.constant
 	}
+
 	return c.model.CostTwo(x, y)
 }
 
@@ -841,6 +847,7 @@ type QuadraticInYModel struct {
 
 func (q QuadraticInYModel) CostTwo(x, y ExMem) int {
 	yVal := int(y)
+
 	return q.coeff0 + (q.coeff1 * yVal) + (q.coeff2 * yVal * yVal)
 }
 
@@ -873,6 +880,7 @@ func (c ConstAboveDiagonalIntoQuadraticXAndYModel) CostTwo(x, y ExMem) int {
 	if result < c.minimum {
 		return c.minimum
 	}
+
 	return result
 }
 
@@ -966,6 +974,7 @@ type ThreeQuadraticInZ struct {
 // X,Y are not used so constant
 func (q ThreeQuadraticInZ) CostThree(x, y, z ExMem) int {
 	zVal := int(z)
+
 	return q.coeff0 + (q.coeff1 * zVal) + (q.coeff2 * zVal * zVal)
 }
 
@@ -984,6 +993,7 @@ func (l ThreeLiteralInYorLinearInZ) CostThree(x, y, z ExMem) int {
 	if int(y) == 0 {
 		return l.slope*int(z) + l.intercept
 	}
+
 	return int(y)
 }
 
@@ -1004,6 +1014,7 @@ func (l ThreeLinearInMaxYZ) CostThree(x, y, z ExMem) int {
 	if int(z) > max {
 		max = int(z)
 	}
+
 	return l.slope*max + l.intercept
 }
 

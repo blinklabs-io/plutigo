@@ -34,7 +34,6 @@ func TestParse(t *testing.T) {
 			t.Errorf("got %+v, want %+v", program, want)
 		}
 	})
-
 }
 
 func TestParseTerm(t *testing.T) {
@@ -168,7 +167,6 @@ func TestConformance(t *testing.T) {
 				testName := strings.TrimSuffix(relPath, ".uplc")
 
 				t.Run(testName, func(t *testing.T) {
-
 					// Read program file
 					programText, err := os.ReadFile(path)
 					if err != nil {
