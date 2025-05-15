@@ -314,6 +314,7 @@ func (m *Machine[T]) returnCompute(
 	default:
 		panic(fmt.Sprintf("unknown context %v", context))
 	}
+
 	return state, nil
 }
 

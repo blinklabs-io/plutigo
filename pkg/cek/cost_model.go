@@ -85,6 +85,7 @@ func byteArrayExMem(b []byte) func() ExMem {
 			return ExMem(1)
 		} else {
 			i := ((length - 1) / 8) + 1
+
 			return ExMem(i)
 		}
 	}

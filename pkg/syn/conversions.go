@@ -202,6 +202,7 @@ func (c *converter) getIndex(name *Name) (DeBruijn, error) {
 		scope := &c.levels[i]
 		if foundLevel, ok := scope.getByUnique(name.Unique); ok {
 			index := c.currentLevel - foundLevel
+
 			return DeBruijn(index), nil
 		}
 	}
