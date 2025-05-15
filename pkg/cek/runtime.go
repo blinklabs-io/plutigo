@@ -1384,7 +1384,10 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		m.CostTwo(&b.Func, dataExMem(arg1), dataExMem(arg2))
+		err = m.CostTwo(&b.Func, dataExMem(arg1), dataExMem(arg2))
+		if err != nil {
+			return nil, err
+		}
 
 		pair := syn.ProtoPair{
 			FstType: syn.TData{},
@@ -1407,7 +1410,10 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		m.CostOne(&b.Func, unitExMem())
+		err = m.CostOne(&b.Func, unitExMem())
+		if err != nil {
+			return nil, err
+		}
 
 		l := syn.ProtoList{
 			LTyp: syn.TData{},
@@ -1423,7 +1429,10 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		m.CostOne(&b.Func, unitExMem())
+		err = m.CostOne(&b.Func, unitExMem())
+		if err != nil {
+			return nil, err
+		}
 
 		l := syn.ProtoList{
 			LTyp: syn.TPair{
