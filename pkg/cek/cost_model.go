@@ -175,7 +175,6 @@ func equalsDataExMem(
 	x data.PlutusData,
 	y data.PlutusData,
 ) (func() ExMem, func() ExMem) {
-
 	var xAcc ExMem
 	var yAcc ExMem
 	var minAcc ExMem
@@ -189,7 +188,6 @@ func equalsDataExMem(
 
 	for xLen, yLen := true, true; (xLen || xAcc > yAcc) && (yLen || yAcc > xAcc); xLen,
 		yLen = len(costStackX) != 0, len(costStackY) != 0 {
-
 		if xLen {
 			// Cost 4 per item switch
 			xAcc += DATA_COST

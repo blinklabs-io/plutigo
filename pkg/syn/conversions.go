@@ -176,7 +176,6 @@ func nameToIndex[T any](
 			}
 
 			branches = append(branches, item)
-
 		}
 
 		constr, err := nameToIndex(c, t.Constr, converter)
