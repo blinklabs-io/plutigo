@@ -20,8 +20,8 @@ import (
 func (m *Machine[T]) CostOne(b *builtin.DefaultFunction, x func() ExMem) error {
 	model := m.costs.builtinCosts[*b]
 
-	mem, _ := model.mem.(OneArgument)
-	cpu, _ := model.cpu.(OneArgument)
+	mem := model.mem.(OneArgument)
+	cpu := model.cpu.(OneArgument)
 
 	cf := CostingFunc[OneArgument]{
 		mem: mem,
@@ -39,8 +39,8 @@ func (m *Machine[T]) CostTwo(
 ) error {
 	model := m.costs.builtinCosts[*b]
 
-	mem, _ := model.mem.(TwoArgument)
-	cpu, _ := model.cpu.(TwoArgument)
+	mem := model.mem.(TwoArgument)
+	cpu := model.cpu.(TwoArgument)
 
 	cf := CostingFunc[TwoArgument]{
 		mem: mem,
@@ -58,8 +58,8 @@ func (m *Machine[T]) CostThree(
 ) error {
 	model := m.costs.builtinCosts[*b]
 
-	mem, _ := model.mem.(ThreeArgument)
-	cpu, _ := model.cpu.(ThreeArgument)
+	mem := model.mem.(ThreeArgument)
+	cpu := model.cpu.(ThreeArgument)
 
 	cf := CostingFunc[ThreeArgument]{
 		mem: mem,
@@ -71,14 +71,14 @@ func (m *Machine[T]) CostThree(
 	return err
 }
 
-func (m *Machine[T]) Costsix(
+func (m *Machine[T]) CostSix(
 	b *builtin.DefaultFunction,
 	x, y, z, xx, yy, zz func() ExMem,
 ) error {
 	model := m.costs.builtinCosts[*b]
 
-	mem, _ := model.mem.(SixArgument)
-	cpu, _ := model.cpu.(SixArgument)
+	mem := model.mem.(SixArgument)
+	cpu := model.cpu.(SixArgument)
 
 	cf := CostingFunc[SixArgument]{
 		mem: mem,
@@ -1017,13 +1017,132 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			},
 		}
 	case builtin.ChooseData:
-		panic("implement ChooseData")
+		arg1, err := unwrapData[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		constrBranch := b.Args[1]
+		mapBranch := b.Args[2]
+		listBranch := b.Args[3]
+		integerBranch := b.Args[4]
+		bytesBranch := b.Args[5]
+
+		err = m.CostSix(&b.Func,
+			dataExMem(arg1),
+			valueExMem[T](constrBranch),
+			valueExMem[T](mapBranch),
+			valueExMem[T](listBranch),
+			valueExMem[T](integerBranch),
+			valueExMem[T](bytesBranch),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		switch arg1.(type) {
+		case *data.Constr:
+			evalValue = constrBranch
+		case *data.Map:
+			evalValue = mapBranch
+		case *data.List:
+			evalValue = listBranch
+		case *data.Integer:
+			evalValue = integerBranch
+		case *data.ByteString:
+			evalValue = bytesBranch
+		default:
+			panic("unreachable")
+		}
 	case builtin.ConstrData:
-		panic("implement ConstrData")
+		arg1, err := unwrapInteger[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapList[T](syn.TData{}, b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostTwo(&b.Func, bigIntExMem(arg1), listExMem(arg2.List))
+		if err != nil {
+			return nil, err
+		}
+
+		var dataList []data.PlutusData
+
+		for _, item := range arg2.List {
+			itemData := item.(syn.Data)
+			dataList = append(dataList, itemData.Inner)
+		}
+
+		evalValue = Constant{
+			Constant: &syn.Data{
+				Inner: &data.Constr{
+					Tag:    uint(arg1.Int64()),
+					Fields: dataList,
+				},
+			},
+		}
 	case builtin.MapData:
-		panic("implement MapData")
+
+		pairType := syn.TPair{
+			First:  syn.TData{},
+			Second: syn.TData{},
+		}
+		arg1, err := unwrapList[T](pairType, b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, listExMem(arg1.List))
+		if err != nil {
+			return nil, err
+		}
+
+		var dataList [][2]data.PlutusData
+
+		for _, item := range arg1.List {
+			pair := item.(syn.ProtoPair)
+			fst := pair.First.(syn.Data)
+			snd := pair.Second.(syn.Data)
+
+			dataList = append(dataList, [2]data.PlutusData{fst.Inner, snd.Inner})
+		}
+
+		evalValue = Constant{
+			Constant: &syn.Data{
+				Inner: &data.Map{
+					Pairs: dataList,
+				},
+			},
+		}
 	case builtin.ListData:
-		panic("implement ListData")
+		arg1, err := unwrapList[T](syn.TData{}, b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, listExMem(arg1.List))
+		if err != nil {
+			return nil, err
+		}
+
+		var dataList []data.PlutusData
+
+		for _, item := range arg1.List {
+			itemData := item.(syn.Data)
+			dataList = append(dataList, itemData.Inner)
+		}
+
+		evalValue = Constant{
+			Constant: &syn.Data{
+				Inner: &data.List{
+					Items: dataList,
+				},
+			},
+		}
 	case builtin.IData:
 		arg1, err := unwrapInteger[T](b.Args[0])
 		if err != nil {
@@ -1097,7 +1216,50 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			Constant: pair,
 		}
 	case builtin.UnMapData:
-		panic("implement UnMapData")
+		arg1, err := unwrapData[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, dataExMem(arg1))
+		if err != nil {
+			return nil, err
+		}
+
+		var dataMap *syn.ProtoList
+		switch l := arg1.(type) {
+		case *data.Map:
+			var items []syn.IConstant
+
+			for _, item := range l.Pairs {
+				pair := &syn.ProtoPair{
+					FstType: syn.TData{},
+					SndType: syn.TData{},
+					First: syn.Data{
+						Inner: item[0],
+					},
+					Second: syn.Data{
+						Inner: item[1],
+					},
+				}
+
+				items = append(items, pair)
+			}
+
+			dataMap = &syn.ProtoList{
+				LTyp: syn.TPair{
+					First:  syn.TData{},
+					Second: syn.TData{},
+				},
+				List: items,
+			}
+		default:
+			return nil, errors.New("data is not a map")
+		}
+
+		evalValue = &Constant{
+			Constant: dataMap,
+		}
 	case builtin.UnListData:
 		arg1, err := unwrapData[T](b.Args[0])
 		if err != nil {
@@ -1212,11 +1374,77 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 	case builtin.SerialiseData:
 		panic("implement SerialiseData")
 	case builtin.MkPairData:
-		panic("implement MkPairData")
+		arg1, err := unwrapData[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapData[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostTwo(&b.Func, dataExMem(arg1), dataExMem(arg2))
+		if err != nil {
+			return nil, err
+		}
+
+		pair := syn.ProtoPair{
+			FstType: syn.TData{},
+			SndType: syn.TData{},
+			First: &syn.Data{
+				Inner: arg1,
+			},
+			Second: &syn.Data{
+				Inner: arg2,
+			},
+		}
+
+		evalValue = Constant{
+			Constant: &pair,
+		}
+
 	case builtin.MkNilData:
-		panic("implement MkNilData")
+		err := unwrapUnit[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, unitExMem())
+		if err != nil {
+			return nil, err
+		}
+
+		l := syn.ProtoList{
+			LTyp: syn.TData{},
+			List: []syn.IConstant{},
+		}
+
+		evalValue = Constant{
+			Constant: &l,
+		}
 	case builtin.MkNilPairData:
-		panic("implement MkNilPairData")
+		err := unwrapUnit[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, unitExMem())
+		if err != nil {
+			return nil, err
+		}
+
+		l := syn.ProtoList{
+			LTyp: syn.TPair{
+				First:  syn.TData{},
+				Second: syn.TData{},
+			},
+			List: []syn.IConstant{},
+		}
+
+		evalValue = Constant{
+			Constant: &l,
+		}
 	default:
 		panic(fmt.Sprintf("unknown builtin: %v", b.Func))
 	}
