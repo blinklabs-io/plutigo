@@ -84,7 +84,7 @@ func (p *Parser) ParseProgram() (*Program[Name], error) {
 
 	var version [3]uint32
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if p.curToken.Type != lex.TokenNumber {
 			return nil, fmt.Errorf(
 				"expected version number, got %v at position %d",
