@@ -351,11 +351,7 @@ func (e *encoder) byteArray(arr []byte) error {
 // the byte array is empty. This is byte alignment agnostic.
 func (e *encoder) writeBlk(arr []byte) {
 	for len(arr) > 0 {
-		chunkLen := len(arr)
-
-		if chunkLen > 255 {
-			chunkLen = 255
-		}
+		chunkLen := min(len(arr), 255)
 
 		e.buffer = append(e.buffer, byte(chunkLen))
 		e.buffer = append(e.buffer, arr[:chunkLen]...)
