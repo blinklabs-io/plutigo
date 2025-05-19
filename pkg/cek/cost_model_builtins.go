@@ -213,6 +213,20 @@ var DefaultBuiltinCosts = BuiltinCosts{
 			slope:     8356,
 		},
 	},
+	builtin.Blake2b_224: &CostingFunc[Arguments]{
+		mem: &ConstantCost{4},
+		cpu: &LinearCost{
+			intercept: 207616,
+			slope:     8310,
+		},
+	},
+	builtin.Keccak_256: &CostingFunc[Arguments]{
+		mem: &ConstantCost{4},
+		cpu: &LinearCost{
+			intercept: 2261318,
+			slope:     64571,
+		},
+	},
 	builtin.VerifyEd25519Signature: &CostingFunc[Arguments]{
 		mem: &ConstantCost{10},
 		cpu: &ThreeLinearInY{LinearCost{
