@@ -410,6 +410,142 @@ var DefaultBuiltinCosts = BuiltinCosts{
 		mem: &ConstantCost{32},
 		cpu: &ConstantCost{7391},
 	},
+	builtin.Bls12_381_G1_Add: &CostingFunc[Arguments]{
+		mem: &ConstantCost{18},
+		cpu: &ConstantCost{962335},
+	},
+	builtin.Bls12_381_G1_Neg: &CostingFunc[Arguments]{
+		mem: &ConstantCost{18},
+		cpu: &ConstantCost{267929},
+	},
+	builtin.Bls12_381_G1_ScalarMul: &CostingFunc[Arguments]{
+		mem: &ConstantCost{18},
+		cpu: &LinearInX{LinearCost{
+			intercept: 76433006,
+			slope:     8868,
+		}},
+	},
+	builtin.Bls12_381_G1_Equal: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &ConstantCost{442008},
+	},
+	builtin.Bls12_381_G1_Compress: &CostingFunc[Arguments]{
+		mem: &ConstantCost{6},
+		cpu: &ConstantCost{2780678},
+	},
+	builtin.Bls12_381_G1_Uncompress: &CostingFunc[Arguments]{
+		mem: &ConstantCost{18},
+		cpu: &ConstantCost{52948122},
+	},
+	builtin.Bls12_381_G1_HashToGroup: &CostingFunc[Arguments]{
+		mem: &ConstantCost{18},
+		cpu: &LinearInX{LinearCost{
+			intercept: 52538055,
+			slope:     3756,
+		}},
+	},
+	builtin.Bls12_381_G2_Add: &CostingFunc[Arguments]{
+		mem: &ConstantCost{36},
+		cpu: &ConstantCost{1995836},
+	},
+	builtin.Bls12_381_G2_Neg: &CostingFunc[Arguments]{
+		mem: &ConstantCost{36},
+		cpu: &ConstantCost{284546},
+	},
+	builtin.Bls12_381_G2_ScalarMul: &CostingFunc[Arguments]{
+		mem: &ConstantCost{36},
+		cpu: &LinearInX{LinearCost{
+			intercept: 158221314,
+			slope:     26549,
+		}},
+	},
+	builtin.Bls12_381_G2_Equal: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &ConstantCost{901022},
+	},
+	builtin.Bls12_381_G2_Compress: &CostingFunc[Arguments]{
+		mem: &ConstantCost{12},
+		cpu: &ConstantCost{3227919},
+	},
+	builtin.Bls12_381_G2_Uncompress: &CostingFunc[Arguments]{
+		mem: &ConstantCost{36},
+		cpu: &ConstantCost{74698472},
+	},
+	builtin.Bls12_381_G2_HashToGroup: &CostingFunc[Arguments]{
+		mem: &ConstantCost{36},
+		cpu: &LinearInX{LinearCost{
+			intercept: 166917843,
+			slope:     4307,
+		}},
+	},
+	builtin.Bls12_381_MillerLoop: &CostingFunc[Arguments]{
+		mem: &ConstantCost{72},
+		cpu: &ConstantCost{254006273},
+	},
+	builtin.Bls12_381_MulMlResult: &CostingFunc[Arguments]{
+		mem: &ConstantCost{72},
+		cpu: &ConstantCost{2174038},
+	},
+	builtin.Bls12_381_FinalVerify: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &ConstantCost{333849714},
+	},
+	builtin.IntegerToByteString: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{7391},
+	},
+	builtin.ByteStringToInteger: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{7391},
+	},
+	builtin.AndByteString: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{7391},
+	},
+	builtin.OrByteString: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{7391},
+	},
+	builtin.XorByteString: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{7391},
+	},
+	builtin.ComplementByteString: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{7391},
+	},
+	builtin.ReadBit: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &ConstantCost{95336},
+	},
+	builtin.WriteBits: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{7391},
+	},
+	builtin.ReplicateByte: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{7391},
+	},
+	builtin.ShiftByteString: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{7391},
+	},
+	builtin.RotateByteString: &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{7391},
+	},
+	builtin.CountSetBits: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &ConstantCost{7391},
+	},
+	builtin.FindFirstSetBit: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &ConstantCost{7391},
+	},
+	builtin.Ripemd_160: &CostingFunc[Arguments]{
+		mem: &ConstantCost{3},
+		cpu: &ConstantCost{7391},
+	},
 }
 
 type CostingFunc[T Arguments] struct {
