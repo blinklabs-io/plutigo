@@ -29,6 +29,8 @@ const (
 	Sha2_256                        DefaultFunction = 18
 	Sha3_256                        DefaultFunction = 19
 	Blake2b_256                     DefaultFunction = 20
+	Keccak_256                      DefaultFunction = 71
+	Blake2b_224                     DefaultFunction = 72
 	VerifyEd25519Signature          DefaultFunction = 21
 	VerifyEcdsaSecp256k1Signature   DefaultFunction = 52
 	VerifySchnorrSecp256k1Signature DefaultFunction = 53
@@ -76,6 +78,47 @@ const (
 	MkPairData    DefaultFunction = 48
 	MkNilData     DefaultFunction = 49
 	MkNilPairData DefaultFunction = 50
+
+	// BLS Builtins
+	Bls12_381_G1_Add         DefaultFunction = 54
+	Bls12_381_G1_Neg         DefaultFunction = 55
+	Bls12_381_G1_ScalarMul   DefaultFunction = 56
+	Bls12_381_G1_Equal       DefaultFunction = 57
+	Bls12_381_G1_Compress    DefaultFunction = 58
+	Bls12_381_G1_Uncompress  DefaultFunction = 59
+	Bls12_381_G1_HashToGroup DefaultFunction = 60
+	Bls12_381_G2_Add         DefaultFunction = 61
+	Bls12_381_G2_Neg         DefaultFunction = 62
+	Bls12_381_G2_ScalarMul   DefaultFunction = 63
+	Bls12_381_G2_Equal       DefaultFunction = 64
+	Bls12_381_G2_Compress    DefaultFunction = 65
+	Bls12_381_G2_Uncompress  DefaultFunction = 66
+	Bls12_381_G2_HashToGroup DefaultFunction = 67
+	Bls12_381_MillerLoop     DefaultFunction = 68
+	Bls12_381_MulMlResult    DefaultFunction = 69
+	Bls12_381_FinalVerify    DefaultFunction = 70
+
+	// Conversions
+	IntegerToByteString DefaultFunction = 73
+	ByteStringToInteger DefaultFunction = 74
+
+	// Logical
+	AndByteString        DefaultFunction = 75
+	OrByteString         DefaultFunction = 76
+	XorByteString        DefaultFunction = 77
+	ComplementByteString DefaultFunction = 78
+	ReadBit              DefaultFunction = 79
+	WriteBits            DefaultFunction = 80
+	ReplicateByte        DefaultFunction = 81
+
+	// Bitwise
+	ShiftByteString  DefaultFunction = 82
+	RotateByteString DefaultFunction = 83
+	CountSetBits     DefaultFunction = 84
+	FindFirstSetBit  DefaultFunction = 85
+
+	// Ripemd_160
+	Ripemd_160 DefaultFunction = 86
 )
 
 var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
@@ -103,6 +146,8 @@ var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
 	"sha2_256":                        Sha2_256,
 	"sha3_256":                        Sha3_256,
 	"blake2b_256":                     Blake2b_256,
+	"keccak_256":                      Keccak_256,
+	"blake2b_224":                     Blake2b_224,
 	"verifyEd25519Signature":          VerifyEd25519Signature,
 	"verifyEcdsaSecp256K1Signature":   VerifyEcdsaSecp256k1Signature,
 	"verifySchnorrSecp256K1Signature": VerifySchnorrSecp256k1Signature,
@@ -150,6 +195,42 @@ var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
 	"mkPairData":    MkPairData,
 	"mkNilData":     MkNilData,
 	"mkNilPairData": MkNilPairData,
+	// BLS Builtins
+	"bls12_381_G1_add":         Bls12_381_G1_Add,
+	"bls12_381_G1_neg":         Bls12_381_G1_Neg,
+	"bls12_381_G1_scalarMul":   Bls12_381_G1_ScalarMul,
+	"bls12_381_G1_equal":       Bls12_381_G1_Equal,
+	"bls12_381_G1_compress":    Bls12_381_G1_Compress,
+	"bls12_381_G1_uncompress":  Bls12_381_G1_Uncompress,
+	"bls12_381_G1_hashToGroup": Bls12_381_G1_HashToGroup,
+	"bls12_381_G2_add":         Bls12_381_G2_Add,
+	"bls12_381_G2_neg":         Bls12_381_G2_Neg,
+	"bls12_381_G2_scalarMul":   Bls12_381_G2_ScalarMul,
+	"bls12_381_G2_equal":       Bls12_381_G2_Equal,
+	"bls12_381_G2_compress":    Bls12_381_G2_Compress,
+	"bls12_381_G2_uncompress":  Bls12_381_G2_Uncompress,
+	"bls12_381_G2_hashToGroup": Bls12_381_G2_HashToGroup,
+	"bls12_381_millerLoop":     Bls12_381_MillerLoop,
+	"bls12_381_mulMlResult":    Bls12_381_MulMlResult,
+	"bls12_381_finalVerify":    Bls12_381_FinalVerify,
+	// Conversions
+	"integerToByteString": IntegerToByteString,
+	"byteStringToInteger": ByteStringToInteger,
+	// Logical
+	"andByteString":        AndByteString,
+	"orByteString":         OrByteString,
+	"xorByteString":        XorByteString,
+	"complementByteString": ComplementByteString,
+	"readBit":              ReadBit,
+	"writeBits":            WriteBits,
+	"replicateByte":        ReplicateByte,
+	// Bitwise
+	"shiftByteString":  ShiftByteString,
+	"rotateByteString": RotateByteString,
+	"countSetBits":     CountSetBits,
+	"findFirstSetBit":  FindFirstSetBit,
+	// Ripemd_160
+	"ripemd_160": Ripemd_160,
 }
 
 func (f DefaultFunction) ForceCount() int {
@@ -198,6 +279,10 @@ func (f DefaultFunction) ForceCount() int {
 	case Sha3_256:
 		return 0
 	case Blake2b_256:
+		return 0
+	case Keccak_256:
+		return 0
+	case Blake2b_224:
 		return 0
 	case VerifyEd25519Signature:
 		return 0
@@ -279,6 +364,68 @@ func (f DefaultFunction) ForceCount() int {
 		return 0
 	case MkNilPairData:
 		return 0
+	case Bls12_381_G1_Add:
+		return 0
+	case Bls12_381_G1_Neg:
+		return 0
+	case Bls12_381_G1_ScalarMul:
+		return 0
+	case Bls12_381_G1_Equal:
+		return 0
+	case Bls12_381_G1_Compress:
+		return 0
+	case Bls12_381_G1_Uncompress:
+		return 0
+	case Bls12_381_G1_HashToGroup:
+		return 0
+	case Bls12_381_G2_Add:
+		return 0
+	case Bls12_381_G2_Neg:
+		return 0
+	case Bls12_381_G2_ScalarMul:
+		return 0
+	case Bls12_381_G2_Equal:
+		return 0
+	case Bls12_381_G2_Compress:
+		return 0
+	case Bls12_381_G2_Uncompress:
+		return 0
+	case Bls12_381_G2_HashToGroup:
+		return 0
+	case Bls12_381_MillerLoop:
+		return 0
+	case Bls12_381_MulMlResult:
+		return 0
+	case Bls12_381_FinalVerify:
+		return 0
+	case IntegerToByteString:
+		return 0
+	case ByteStringToInteger:
+		return 0
+	case AndByteString:
+		return 0
+	case OrByteString:
+		return 0
+	case XorByteString:
+		return 0
+	case ComplementByteString:
+		return 0
+	case ReadBit:
+		return 0
+	case WriteBits:
+		return 0
+	case ReplicateByte:
+		return 0
+	case ShiftByteString:
+		return 0
+	case RotateByteString:
+		return 0
+	case CountSetBits:
+		return 0
+	case FindFirstSetBit:
+		return 0
+	case Ripemd_160:
+		return 0
 
 	default:
 		panic("Forces")
@@ -331,6 +478,10 @@ func (f DefaultFunction) Arity() int {
 	case Sha3_256:
 		return 1
 	case Blake2b_256:
+		return 1
+	case Keccak_256:
+		return 1
+	case Blake2b_224:
 		return 1
 	case VerifyEd25519Signature:
 		return 3
@@ -412,6 +563,68 @@ func (f DefaultFunction) Arity() int {
 		return 1
 	case MkNilPairData:
 		return 1
+	case Bls12_381_G1_Add:
+		return 2
+	case Bls12_381_G1_Neg:
+		return 1
+	case Bls12_381_G1_ScalarMul:
+		return 2
+	case Bls12_381_G1_Equal:
+		return 2
+	case Bls12_381_G1_Compress:
+		return 1
+	case Bls12_381_G1_Uncompress:
+		return 1
+	case Bls12_381_G1_HashToGroup:
+		return 2
+	case Bls12_381_G2_Add:
+		return 2
+	case Bls12_381_G2_Neg:
+		return 1
+	case Bls12_381_G2_ScalarMul:
+		return 2
+	case Bls12_381_G2_Equal:
+		return 2
+	case Bls12_381_G2_Compress:
+		return 1
+	case Bls12_381_G2_Uncompress:
+		return 1
+	case Bls12_381_G2_HashToGroup:
+		return 2
+	case Bls12_381_MillerLoop:
+		return 2
+	case Bls12_381_MulMlResult:
+		return 2
+	case Bls12_381_FinalVerify:
+		return 2
+	case IntegerToByteString:
+		return 3
+	case ByteStringToInteger:
+		return 2
+	case AndByteString:
+		return 3
+	case OrByteString:
+		return 3
+	case XorByteString:
+		return 3
+	case ComplementByteString:
+		return 1
+	case ReadBit:
+		return 2
+	case WriteBits:
+		return 3
+	case ReplicateByte:
+		return 2
+	case ShiftByteString:
+		return 2
+	case RotateByteString:
+		return 2
+	case CountSetBits:
+		return 1
+	case FindFirstSetBit:
+		return 1
+	case Ripemd_160:
+		return 1
 
 	default:
 		panic("WTF")
@@ -465,6 +678,10 @@ func (f DefaultFunction) String() string {
 		return "sha3_256"
 	case Blake2b_256:
 		return "blake2b_256"
+	case Keccak_256:
+		return "keccak_256"
+	case Blake2b_224:
+		return "blake2b_224"
 	case VerifyEd25519Signature:
 		return "verifyEd25519Signature"
 	case VerifyEcdsaSecp256k1Signature:
@@ -545,6 +762,68 @@ func (f DefaultFunction) String() string {
 		return "mkNilData"
 	case MkNilPairData:
 		return "mkNilPairData"
+	case Bls12_381_G1_Add:
+		return "bls12_381_G1_add"
+	case Bls12_381_G1_Neg:
+		return "bls12_381_G1_neg"
+	case Bls12_381_G1_ScalarMul:
+		return "bls12_381_G1_scalarMul"
+	case Bls12_381_G1_Equal:
+		return "bls12_381_G1_equal"
+	case Bls12_381_G1_Compress:
+		return "bls12_381_G1_compress"
+	case Bls12_381_G1_Uncompress:
+		return "bls12_381_G1_uncompress"
+	case Bls12_381_G1_HashToGroup:
+		return "bls12_381_G1_hashToGroup"
+	case Bls12_381_G2_Add:
+		return "bls12_381_G2_add"
+	case Bls12_381_G2_Neg:
+		return "bls12_381_G2_neg"
+	case Bls12_381_G2_ScalarMul:
+		return "bls12_381_G2_scalarMul"
+	case Bls12_381_G2_Equal:
+		return "bls12_381_G2_equal"
+	case Bls12_381_G2_Compress:
+		return "bls12_381_G2_compress"
+	case Bls12_381_G2_Uncompress:
+		return "bls12_381_G2_uncompress"
+	case Bls12_381_G2_HashToGroup:
+		return "bls12_381_G2_hashToGroup"
+	case Bls12_381_MillerLoop:
+		return "bls12_381_millerLoop"
+	case Bls12_381_MulMlResult:
+		return "bls12_381_mulMlResult"
+	case Bls12_381_FinalVerify:
+		return "bls12_381_finalVerify"
+	case IntegerToByteString:
+		return "integerToByteString"
+	case ByteStringToInteger:
+		return "byteStringToInteger"
+	case AndByteString:
+		return "andByteString"
+	case OrByteString:
+		return "orByteString"
+	case XorByteString:
+		return "xorByteString"
+	case ComplementByteString:
+		return "complementByteString"
+	case ReadBit:
+		return "readBit"
+	case WriteBits:
+		return "writeBits"
+	case ReplicateByte:
+		return "replicateByte"
+	case ShiftByteString:
+		return "shiftByteString"
+	case RotateByteString:
+		return "rotateByteString"
+	case CountSetBits:
+		return "countSetBits"
+	case FindFirstSetBit:
+		return "findFirstSetBit"
+	case Ripemd_160:
+		return "ripemd_160"
 	default:
 		panic("unknown builtin")
 	}
@@ -554,7 +833,7 @@ func (f DefaultFunction) String() string {
 const MinDefaultFunction byte = 0
 
 // Smallest DefaultFunction
-const MaxDefaultFunction byte = 74
+const MaxDefaultFunction byte = 86
 
 func FromByte(tag byte) (DefaultFunction, error) {
 	// only need to check if greater than because

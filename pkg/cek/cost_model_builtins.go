@@ -1,6 +1,8 @@
 package cek
 
-import "github.com/blinklabs-io/plutigo/pkg/builtin"
+import (
+	"github.com/blinklabs-io/plutigo/pkg/builtin"
+)
 
 type BuiltinCosts map[builtin.DefaultFunction]*CostingFunc[Arguments]
 
@@ -213,6 +215,20 @@ var DefaultBuiltinCosts = BuiltinCosts{
 			slope:     8356,
 		},
 	},
+	builtin.Blake2b_224: &CostingFunc[Arguments]{
+		mem: &ConstantCost{4},
+		cpu: &LinearCost{
+			intercept: 207616,
+			slope:     8310,
+		},
+	},
+	builtin.Keccak_256: &CostingFunc[Arguments]{
+		mem: &ConstantCost{4},
+		cpu: &LinearCost{
+			intercept: 2261318,
+			slope:     64571,
+		},
+	},
 	builtin.VerifyEd25519Signature: &CostingFunc[Arguments]{
 		mem: &ConstantCost{10},
 		cpu: &ThreeLinearInY{LinearCost{
@@ -395,6 +411,216 @@ var DefaultBuiltinCosts = BuiltinCosts{
 	builtin.MkNilPairData: &CostingFunc[Arguments]{
 		mem: &ConstantCost{32},
 		cpu: &ConstantCost{7391},
+	},
+	builtin.Bls12_381_G1_Add: &CostingFunc[Arguments]{
+		mem: &ConstantCost{18},
+		cpu: &ConstantCost{962335},
+	},
+	builtin.Bls12_381_G1_Neg: &CostingFunc[Arguments]{
+		mem: &ConstantCost{18},
+		cpu: &ConstantCost{267929},
+	},
+	builtin.Bls12_381_G1_ScalarMul: &CostingFunc[Arguments]{
+		mem: &ConstantCost{18},
+		cpu: &LinearInX{LinearCost{
+			intercept: 76433006,
+			slope:     8868,
+		}},
+	},
+	builtin.Bls12_381_G1_Equal: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &ConstantCost{442008},
+	},
+	builtin.Bls12_381_G1_Compress: &CostingFunc[Arguments]{
+		mem: &ConstantCost{6},
+		cpu: &ConstantCost{2780678},
+	},
+	builtin.Bls12_381_G1_Uncompress: &CostingFunc[Arguments]{
+		mem: &ConstantCost{18},
+		cpu: &ConstantCost{52948122},
+	},
+	builtin.Bls12_381_G1_HashToGroup: &CostingFunc[Arguments]{
+		mem: &ConstantCost{18},
+		cpu: &LinearInX{LinearCost{
+			intercept: 52538055,
+			slope:     3756,
+		}},
+	},
+	builtin.Bls12_381_G2_Add: &CostingFunc[Arguments]{
+		mem: &ConstantCost{36},
+		cpu: &ConstantCost{1995836},
+	},
+	builtin.Bls12_381_G2_Neg: &CostingFunc[Arguments]{
+		mem: &ConstantCost{36},
+		cpu: &ConstantCost{284546},
+	},
+	builtin.Bls12_381_G2_ScalarMul: &CostingFunc[Arguments]{
+		mem: &ConstantCost{36},
+		cpu: &LinearInX{LinearCost{
+			intercept: 158221314,
+			slope:     26549,
+		}},
+	},
+	builtin.Bls12_381_G2_Equal: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &ConstantCost{901022},
+	},
+	builtin.Bls12_381_G2_Compress: &CostingFunc[Arguments]{
+		mem: &ConstantCost{12},
+		cpu: &ConstantCost{3227919},
+	},
+	builtin.Bls12_381_G2_Uncompress: &CostingFunc[Arguments]{
+		mem: &ConstantCost{36},
+		cpu: &ConstantCost{74698472},
+	},
+	builtin.Bls12_381_G2_HashToGroup: &CostingFunc[Arguments]{
+		mem: &ConstantCost{36},
+		cpu: &LinearInX{LinearCost{
+			intercept: 166917843,
+			slope:     4307,
+		}},
+	},
+	builtin.Bls12_381_MillerLoop: &CostingFunc[Arguments]{
+		mem: &ConstantCost{72},
+		cpu: &ConstantCost{254006273},
+	},
+	builtin.Bls12_381_MulMlResult: &CostingFunc[Arguments]{
+		mem: &ConstantCost{72},
+		cpu: &ConstantCost{2174038},
+	},
+	builtin.Bls12_381_FinalVerify: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &ConstantCost{333849714},
+	},
+	builtin.IntegerToByteString: &CostingFunc[Arguments]{
+		mem: &ThreeLiteralInYorLinearInZ{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &ThreeQuadraticInZ{QuadraticFunction{
+			coeff0: 1293828,
+			coeff1: 28716,
+			coeff2: 63,
+		}},
+	},
+	builtin.ByteStringToInteger: &CostingFunc[Arguments]{
+		mem: &LinearInY{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &QuadraticInYModel{QuadraticFunction{
+			coeff0: 1006041,
+			coeff1: 43623,
+			coeff2: 251,
+		}},
+	},
+	builtin.AndByteString: &CostingFunc[Arguments]{
+		mem: &ThreeLinearInMaxYZ{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &ThreeLinearInYandZ{TwoVariableLinearSize{
+			intercept: 100181,
+			slope1:    726,
+			slope2:    719,
+		}},
+	},
+	builtin.OrByteString: &CostingFunc[Arguments]{
+		mem: &ThreeLinearInMaxYZ{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &ThreeLinearInYandZ{TwoVariableLinearSize{
+			intercept: 100181,
+			slope1:    726,
+			slope2:    719,
+		}},
+	},
+	builtin.XorByteString: &CostingFunc[Arguments]{
+		mem: &ThreeLinearInMaxYZ{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &ThreeLinearInYandZ{TwoVariableLinearSize{
+			intercept: 100181,
+			slope1:    726,
+			slope2:    719,
+		}},
+	},
+	builtin.ComplementByteString: &CostingFunc[Arguments]{
+		mem: &LinearCost{
+			intercept: 0,
+			slope:     1,
+		},
+		cpu: &LinearCost{
+			intercept: 107878,
+			slope:     680,
+		},
+	},
+	builtin.ReadBit: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &ConstantCost{95336},
+	},
+	builtin.WriteBits: &CostingFunc[Arguments]{
+		mem: &ThreeLinearInX{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &ThreeLinearInY{LinearCost{
+			intercept: 281145,
+			slope:     18848,
+		}},
+	},
+	builtin.ReplicateByte: &CostingFunc[Arguments]{
+		mem: &LinearInX{LinearCost{
+			intercept: 1,
+			slope:     1,
+		}},
+		cpu: &LinearInX{LinearCost{
+			intercept: 180194,
+			slope:     159,
+		}},
+	},
+	builtin.ShiftByteString: &CostingFunc[Arguments]{
+		mem: &LinearInX{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &LinearInX{LinearCost{
+			intercept: 158519,
+			slope:     8942,
+		}},
+	},
+	builtin.RotateByteString: &CostingFunc[Arguments]{
+		mem: &LinearInX{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &LinearInX{LinearCost{
+			intercept: 159378,
+			slope:     8813,
+		}},
+	},
+	builtin.CountSetBits: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &LinearCost{
+			intercept: 107490,
+			slope:     3298,
+		},
+	},
+	builtin.FindFirstSetBit: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &LinearCost{
+			intercept: 106057,
+			slope:     655,
+		},
+	},
+	builtin.Ripemd_160: &CostingFunc[Arguments]{
+		mem: &ConstantCost{3},
+		cpu: &LinearCost{
+			intercept: 1964219,
+			slope:     24520,
+		},
 	},
 }
 

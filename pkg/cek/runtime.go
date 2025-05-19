@@ -15,6 +15,7 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/data"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 	"golang.org/x/crypto/blake2b"
+	legacysha3 "golang.org/x/crypto/sha3"
 )
 
 func (m *Machine[T]) CostOne(b *builtin.DefaultFunction, x func() ExMem) error {
@@ -724,6 +725,59 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 
 		con := &syn.Bool{
 			Inner: res,
+		}
+
+		evalValue = &Constant{
+			Constant: con,
+		}
+	case builtin.Blake2b_224:
+		arg1, err := unwrapByteString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, byteArrayExMem(arg1))
+		if err != nil {
+			return nil, err
+		}
+
+		hasher, err := blake2b.New(28, nil) // 28 bytes = 224 bits
+		if err != nil {
+			return nil, err
+		}
+
+		// Write data and compute the hash
+		hasher.Write(arg1)
+
+		res := hasher.Sum(nil)
+
+		con := &syn.ByteString{
+			Inner: res[:],
+		}
+
+		evalValue = &Constant{
+			Constant: con,
+		}
+	case builtin.Keccak_256:
+		arg1, err := unwrapByteString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, byteArrayExMem(arg1))
+		if err != nil {
+			return nil, err
+		}
+
+		hash := legacysha3.NewLegacyKeccak256()
+
+		// Write data and compute the hash
+		hash.Write(arg1)
+
+		res := hash.Sum(nil)
+
+		con := &syn.ByteString{
+			Inner: res[:],
 		}
 
 		evalValue = &Constant{
