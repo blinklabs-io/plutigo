@@ -1,6 +1,8 @@
 package cek
 
-import "github.com/blinklabs-io/plutigo/pkg/builtin"
+import (
+	"github.com/blinklabs-io/plutigo/pkg/builtin"
+)
 
 type BuiltinCosts map[builtin.DefaultFunction]*CostingFunc[Arguments]
 
@@ -491,60 +493,134 @@ var DefaultBuiltinCosts = BuiltinCosts{
 		cpu: &ConstantCost{333849714},
 	},
 	builtin.IntegerToByteString: &CostingFunc[Arguments]{
-		mem: &ConstantCost{32},
-		cpu: &ConstantCost{7391},
+		mem: &ThreeLiteralInYorLinearInZ{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &ThreeQuadraticInZ{QuadraticFunction{
+			coeff0: 1293828,
+			coeff1: 28716,
+			coeff2: 63,
+		}},
 	},
 	builtin.ByteStringToInteger: &CostingFunc[Arguments]{
-		mem: &ConstantCost{32},
-		cpu: &ConstantCost{7391},
+		mem: &LinearInY{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &QuadraticInYModel{QuadraticFunction{
+			coeff0: 1006041,
+			coeff1: 43623,
+			coeff2: 251,
+		}},
 	},
 	builtin.AndByteString: &CostingFunc[Arguments]{
-		mem: &ConstantCost{32},
-		cpu: &ConstantCost{7391},
+		mem: &ThreeLinearInMaxYZ{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &ThreeLinearInYandZ{TwoVariableLinearSize{
+			intercept: 100181,
+			slope1:    726,
+			slope2:    719,
+		}},
 	},
 	builtin.OrByteString: &CostingFunc[Arguments]{
-		mem: &ConstantCost{32},
-		cpu: &ConstantCost{7391},
+		mem: &ThreeLinearInMaxYZ{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &ThreeLinearInYandZ{TwoVariableLinearSize{
+			intercept: 100181,
+			slope1:    726,
+			slope2:    719,
+		}},
 	},
 	builtin.XorByteString: &CostingFunc[Arguments]{
-		mem: &ConstantCost{32},
-		cpu: &ConstantCost{7391},
+		mem: &ThreeLinearInMaxYZ{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &ThreeLinearInYandZ{TwoVariableLinearSize{
+			intercept: 100181,
+			slope1:    726,
+			slope2:    719,
+		}},
 	},
 	builtin.ComplementByteString: &CostingFunc[Arguments]{
-		mem: &ConstantCost{32},
-		cpu: &ConstantCost{7391},
+		mem: &LinearCost{
+			intercept: 0,
+			slope:     1,
+		},
+		cpu: &LinearCost{
+			intercept: 107878,
+			slope:     680,
+		},
 	},
 	builtin.ReadBit: &CostingFunc[Arguments]{
 		mem: &ConstantCost{1},
 		cpu: &ConstantCost{95336},
 	},
 	builtin.WriteBits: &CostingFunc[Arguments]{
-		mem: &ConstantCost{32},
-		cpu: &ConstantCost{7391},
+		mem: &ThreeLinearInX{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &ThreeLinearInY{LinearCost{
+			intercept: 281145,
+			slope:     18848,
+		}},
 	},
 	builtin.ReplicateByte: &CostingFunc[Arguments]{
-		mem: &ConstantCost{32},
-		cpu: &ConstantCost{7391},
+		mem: &LinearInX{LinearCost{
+			intercept: 1,
+			slope:     1,
+		}},
+		cpu: &LinearInX{LinearCost{
+			intercept: 180194,
+			slope:     159,
+		}},
 	},
 	builtin.ShiftByteString: &CostingFunc[Arguments]{
-		mem: &ConstantCost{32},
-		cpu: &ConstantCost{7391},
+		mem: &LinearInX{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &LinearInX{LinearCost{
+			intercept: 158519,
+			slope:     8942,
+		}},
 	},
 	builtin.RotateByteString: &CostingFunc[Arguments]{
-		mem: &ConstantCost{32},
-		cpu: &ConstantCost{7391},
+		mem: &LinearInX{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &LinearInX{LinearCost{
+			intercept: 159378,
+			slope:     8813,
+		}},
 	},
 	builtin.CountSetBits: &CostingFunc[Arguments]{
 		mem: &ConstantCost{1},
-		cpu: &ConstantCost{7391},
+		cpu: &LinearCost{
+			intercept: 107490,
+			slope:     3298,
+		},
 	},
 	builtin.FindFirstSetBit: &CostingFunc[Arguments]{
 		mem: &ConstantCost{1},
-		cpu: &ConstantCost{7391},
+		cpu: &LinearCost{
+			intercept: 106057,
+			slope:     655,
+		},
 	},
 	builtin.Ripemd_160: &CostingFunc[Arguments]{
 		mem: &ConstantCost{3},
-		cpu: &ConstantCost{7391},
+		cpu: &LinearCost{
+			intercept: 1964219,
+			slope:     24520,
+		},
 	},
 }
 
