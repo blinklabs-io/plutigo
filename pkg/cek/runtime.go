@@ -14,7 +14,8 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/builtin"
 	"github.com/blinklabs-io/plutigo/pkg/data"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
-	"github.com/phoreproject/bls"
+	blst "github.com/supranational/blst/bindings/go"
+
 	"golang.org/x/crypto/blake2b"
 	legacysha3 "golang.org/x/crypto/sha3"
 )
@@ -1511,10 +1512,10 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		// err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
-		// if err != nil {
-		// 	return nil, err
-		// }
+		err = m.CostTwo(&b.Func, blsG1ExMem(arg1), blsG1ExMem(arg2))
+		if err != nil {
+			return nil, err
+		}
 
 		newG1 := arg1.Add(arg2)
 
@@ -1524,9 +1525,45 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			},
 		}
 	case builtin.Bls12_381_G1_Neg:
-		panic("implement Bls12_381_G1_Neg")
+		arg1, err := unwrapBls12_381G1Element[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, blsG1ExMem(arg1))
+		if err != nil {
+			return nil, err
+		}
+		g1Neg := blst.P1Generator().Sub(arg1)
+
+		evalValue = &Constant{
+			Constant: &syn.Bls12_381G1Element{
+				Inner: g1Neg,
+			},
+		}
 	case builtin.Bls12_381_G1_ScalarMul:
-		panic("implement Bls12_381_G1_ScalarMul")
+		arg1, err := unwrapInteger[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapBls12_381G1Element[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostTwo(&b.Func, bigIntExMem(arg1), blsG1ExMem(arg2))
+		if err != nil {
+			return nil, err
+		}
+
+		newG1 := arg2.Mult(arg1.Bytes())
+
+		evalValue = &Constant{
+			Constant: &syn.Bls12_381G1Element{
+				Inner: newG1,
+			},
+		}
 	case builtin.Bls12_381_G1_Equal:
 		panic("implement Bls12_381_G1_Equal")
 	case builtin.Bls12_381_G1_Compress:
@@ -1754,8 +1791,8 @@ func unwrapData[T syn.Eval](value Value[T]) (data.PlutusData, error) {
 	return i, nil
 }
 
-func unwrapBls12_381G1Element[T syn.Eval](value Value[T]) (*bls.G1Projective, error) {
-	var i *bls.G1Projective
+func unwrapBls12_381G1Element[T syn.Eval](value Value[T]) (*blst.P1, error) {
+	var i *blst.P1
 
 	switch v := value.(type) {
 	case *Constant:
@@ -1772,8 +1809,8 @@ func unwrapBls12_381G1Element[T syn.Eval](value Value[T]) (*bls.G1Projective, er
 	return i, nil
 }
 
-func unwrapBls12_381G2Element[T syn.Eval](value Value[T]) (*bls.G2Projective, error) {
-	var i *bls.G2Projective
+func unwrapBls12_381G2Element[T syn.Eval](value Value[T]) (*blst.P2, error) {
+	var i *blst.P2
 
 	switch v := value.(type) {
 	case *Constant:
