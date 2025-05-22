@@ -6,6 +6,7 @@ toolchain go1.24.3
 
 require (
 	github.com/fxamacker/cbor/v2 v2.8.0
+	github.com/phoreproject/bls v0.0.0-20200525203911-a88a5ae26844
 	golang.org/x/crypto v0.38.0
 )
 

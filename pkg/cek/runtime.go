@@ -14,6 +14,7 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/builtin"
 	"github.com/blinklabs-io/plutigo/pkg/data"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
+	"github.com/phoreproject/bls"
 	"golang.org/x/crypto/blake2b"
 	legacysha3 "golang.org/x/crypto/sha3"
 )
@@ -1499,6 +1500,89 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 		evalValue = Constant{
 			Constant: &l,
 		}
+	case builtin.Bls12_381_G1_Add:
+		arg1, err := unwrapBls12_381G1Element[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapBls12_381G1Element[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		// err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
+		// if err != nil {
+		// 	return nil, err
+		// }
+
+		newG1 := arg1.Add(arg2)
+
+		evalValue = &Constant{
+			Constant: &syn.Bls12_381G1Element{
+				Inner: newG1,
+			},
+		}
+	case builtin.Bls12_381_G1_Neg:
+		panic("implement Bls12_381_G1_Neg")
+	case builtin.Bls12_381_G1_ScalarMul:
+		panic("implement Bls12_381_G1_ScalarMul")
+	case builtin.Bls12_381_G1_Equal:
+		panic("implement Bls12_381_G1_Equal")
+	case builtin.Bls12_381_G1_Compress:
+		panic("implement Bls12_381_G1_Compress")
+	case builtin.Bls12_381_G1_Uncompress:
+		panic("implement Bls12_381_G1_Uncompress")
+	case builtin.Bls12_381_G1_HashToGroup:
+		panic("implement Bls12_381_G1_HashToGroup")
+	case builtin.Bls12_381_G2_Add:
+		panic("implement Bls12_381_G2_Add")
+	case builtin.Bls12_381_G2_Neg:
+		panic("implement Bls12_381_G2_Neg")
+	case builtin.Bls12_381_G2_ScalarMul:
+		panic("implement Bls12_381_G2_ScalarMul")
+	case builtin.Bls12_381_G2_Equal:
+		panic("implement Bls12_381_G2_Equal")
+	case builtin.Bls12_381_G2_Compress:
+		panic("implement Bls12_381_G2_Compress")
+	case builtin.Bls12_381_G2_Uncompress:
+		panic("implement Bls12_381_G2_Uncompress")
+	case builtin.Bls12_381_G2_HashToGroup:
+		panic("implement Bls12_381_G2_HashToGroup")
+	case builtin.Bls12_381_MillerLoop:
+		panic("implement Bls12_381_MillerLoop")
+	case builtin.Bls12_381_MulMlResult:
+		panic("implement Bls12_381_MulMlResult")
+	case builtin.Bls12_381_FinalVerify:
+		panic("implement Bls12_381_FinalVerify")
+	case builtin.IntegerToByteString:
+		panic("implement IntegerToByteString")
+	case builtin.ByteStringToInteger:
+		panic("implement ByteStringToInteger")
+	case builtin.AndByteString:
+		panic("implement AndByteString")
+	case builtin.OrByteString:
+		panic("implement OrByteString")
+	case builtin.XorByteString:
+		panic("implement XorByteString")
+	case builtin.ComplementByteString:
+		panic("implement ComplementByteString")
+	case builtin.ReadBit:
+		panic("implement ReadBit")
+	case builtin.WriteBits:
+		panic("implement WriteBits")
+	case builtin.ReplicateByte:
+		panic("implement ReplicateByte")
+	case builtin.ShiftByteString:
+		panic("implement ShiftByteString")
+	case builtin.RotateByteString:
+		panic("implement RotateByteString")
+	case builtin.CountSetBits:
+		panic("implement CountSetBits")
+	case builtin.FindFirstSetBit:
+		panic("implement FindFirstSetBit")
+	case builtin.Ripemd_160:
+		panic("implement Ripemd_160")
 	default:
 		panic(fmt.Sprintf("unknown builtin: %v", b.Func))
 	}
@@ -1662,6 +1746,42 @@ func unwrapData[T syn.Eval](value Value[T]) (data.PlutusData, error) {
 			i = c.Inner
 		default:
 			return nil, errors.New("Value not a Data")
+		}
+	default:
+		return nil, errors.New("Value not a Constant")
+	}
+
+	return i, nil
+}
+
+func unwrapBls12_381G1Element[T syn.Eval](value Value[T]) (*bls.G1Projective, error) {
+	var i *bls.G1Projective
+
+	switch v := value.(type) {
+	case *Constant:
+		switch c := v.Constant.(type) {
+		case *syn.Bls12_381G1Element:
+			i = c.Inner
+		default:
+			return nil, errors.New("Value not an Integer")
+		}
+	default:
+		return nil, errors.New("Value not a Constant")
+	}
+
+	return i, nil
+}
+
+func unwrapBls12_381G2Element[T syn.Eval](value Value[T]) (*bls.G2Projective, error) {
+	var i *bls.G2Projective
+
+	switch v := value.(type) {
+	case *Constant:
+		switch c := v.Constant.(type) {
+		case *syn.Bls12_381G2Element:
+			i = c.Inner
+		default:
+			return nil, errors.New("Value not an Integer")
 		}
 	default:
 		return nil, errors.New("Value not a Constant")
