@@ -227,7 +227,6 @@ func (m *Machine[T]) returnCompute(
 	switch c := context.(type) {
 	case *FrameAwaitArg[T]:
 		state, err = m.applyEvaluate(c.Ctx, c.Value, value)
-
 		if err != nil {
 			return nil, err
 		}
@@ -242,13 +241,11 @@ func (m *Machine[T]) returnCompute(
 		}
 	case *FrameAwaitFunValue[T]:
 		state, err = m.applyEvaluate(c.Ctx, value, c.Value)
-
 		if err != nil {
 			return nil, err
 		}
 	case *FrameForce[T]:
 		state, err = m.forceEvaluate(c.Ctx, value)
-
 		if err != nil {
 			return nil, err
 		}
@@ -341,7 +338,6 @@ func (m *Machine[T]) forceEvaluate(
 				var err error
 
 				resolved, err = m.evalBuiltinApp(b)
-
 				if err != nil {
 					return nil, err
 				}
@@ -393,7 +389,6 @@ func (m *Machine[T]) applyEvaluate(
 				var err error
 
 				resolved, err = m.evalBuiltinApp(b)
-
 				if err != nil {
 					return nil, err
 				}
@@ -565,8 +560,7 @@ func (m *Machine[T]) stepAndMaybeSpend(step StepKind) error {
 
 func (m *Machine[T]) spendUnbudgetedSteps() error {
 	for i := range len(m.unbudgetedSteps) - 1 {
-		unspent_step_budget :=
-			m.costs.machineCosts.get(StepKind(i))
+		unspent_step_budget := m.costs.machineCosts.get(StepKind(i))
 
 		unspent_step_budget.occurrences(m.unbudgetedSteps[i])
 

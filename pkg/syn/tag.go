@@ -1,31 +1,37 @@
 package syn
 
 // Widths
-const TermTagWidth byte = 4
-const ConstTagWidth byte = 4
-const BuiltinTagWidth byte = 7
+const (
+	TermTagWidth    byte = 4
+	ConstTagWidth   byte = 4
+	BuiltinTagWidth byte = 7
+)
 
 // Term Tags
-const VarTag byte = 0
-const DelayTag byte = 1
-const LambdaTag byte = 2
-const ApplyTag byte = 3
-const ConstantTag byte = 4
-const ForceTag byte = 5
-const ErrorTag byte = 6
-const BuiltinTag byte = 7
-const ConstrTag byte = 8
-const CaseTag byte = 9
+const (
+	VarTag      byte = 0
+	DelayTag    byte = 1
+	LambdaTag   byte = 2
+	ApplyTag    byte = 3
+	ConstantTag byte = 4
+	ForceTag    byte = 5
+	ErrorTag    byte = 6
+	BuiltinTag  byte = 7
+	ConstrTag   byte = 8
+	CaseTag     byte = 9
+)
 
 // Constant Tags
-const IntegerTag byte = 0
-const ByteStringTag byte = 1
-const StringTag byte = 2
-const UnitTag byte = 3
-const BoolTag byte = 4
-const DataTag byte = 8
-const ProtoListOneTag byte = 7
-const ProtoListTwoTag byte = 5
-const ProtoPairOneTag byte = 7
-const ProtoPairTwoTag byte = 7
-const ProtoPairThreeTag byte = 6
+const (
+	IntegerTag        byte = 0
+	ByteStringTag     byte = 1
+	StringTag         byte = 2
+	UnitTag           byte = 3
+	BoolTag           byte = 4
+	DataTag           byte = 8
+	ProtoListOneTag   byte = 7
+	ProtoListTwoTag   byte = 5
+	ProtoPairOneTag   byte = 7
+	ProtoPairTwoTag   byte = 7
+	ProtoPairThreeTag byte = 6
+)

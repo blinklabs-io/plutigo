@@ -28,5 +28,3 @@ jobs:
           go-version: ${{ matrix.go-version }}
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
-        with:
-          args: --disable unused
