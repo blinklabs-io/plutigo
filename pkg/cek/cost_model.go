@@ -17,10 +17,12 @@ var DefaultCostModel = CostModel{
 	builtinCosts: DefaultBuiltinCosts,
 }
 
-const PAIR_COST = 1
-const CONS_COST = 3
-const NIL_COST = 1
-const DATA_COST = 4
+const (
+	PAIR_COST = 1
+	CONS_COST = 3
+	NIL_COST  = 1
+	DATA_COST = 4
+)
 
 type ExMem int
 

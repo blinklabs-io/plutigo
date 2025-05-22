@@ -92,7 +92,7 @@ func main() {
 
 		prettyProgram := syn.Pretty[syn.Name](program)
 
-		_ = os.WriteFile(filename, []byte(prettyProgram), 0644)
+		_ = os.WriteFile(filename, []byte(prettyProgram), 0o644)
 
 		fmt.Println("done.")
 	}

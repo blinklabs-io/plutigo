@@ -94,7 +94,6 @@ func (p *Parser) ParseProgram() (*Program[Name], error) {
 		}
 
 		n, err := strconv.ParseUint(p.curToken.Literal, 10, 32)
-
 		if err != nil {
 			return nil, fmt.Errorf(
 				"invalid version number %s at position %d: %w",
@@ -116,7 +115,6 @@ func (p *Parser) ParseProgram() (*Program[Name], error) {
 	}
 
 	term, err := p.ParseTerm()
-
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +203,6 @@ func (p *Parser) parseLambda() (Term[Name], error) {
 	p.nextToken()
 
 	body, err := p.ParseTerm()
-
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +220,6 @@ func (p *Parser) parseDelay() (Term[Name], error) {
 	}
 
 	term, err := p.ParseTerm()
-
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +237,6 @@ func (p *Parser) parseForce() (Term[Name], error) {
 	}
 
 	term, err := p.ParseTerm()
-
 	if err != nil {
 		return nil, err
 	}
@@ -628,7 +623,6 @@ func (p *Parser) parseConstantValue(typ Typ) (IConstant, error) {
 
 		for p.curToken.Type != lex.TokenRBracket {
 			item, err := p.parseConstantValue(t.Typ)
-
 			if err != nil {
 				return nil, err
 			}
@@ -747,7 +741,6 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 
 		for p.curToken.Type != lex.TokenRBracket {
 			item, err := p.parsePlutusData()
-
 			if err != nil {
 				return nil, err
 			}
@@ -889,7 +882,6 @@ func (p *Parser) parseTypeSpec() (Typ, error) {
 		p.nextToken()
 
 		typ, err := p.parseInnerTypeSpec()
-
 		if err != nil {
 			return nil, err
 		}

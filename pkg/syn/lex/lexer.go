@@ -216,7 +216,6 @@ func (l *Lexer) NextToken() Token {
 		l.readChar()
 	case '#':
 		literal, err := l.readByteString()
-
 		if err != nil {
 			tok.Type = TokenError
 			tok.Literal = err.Error()
@@ -246,7 +245,6 @@ func (l *Lexer) NextToken() Token {
 		tok.Value = bytes
 	case '"':
 		literal, err := l.readString()
-
 		if err != nil {
 			tok.Type = TokenError
 
