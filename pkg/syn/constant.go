@@ -4,6 +4,7 @@ import (
 	"math/big"
 
 	"github.com/blinklabs-io/plutigo/pkg/data"
+	"github.com/phoreproject/bls"
 )
 
 type IConstant interface {
@@ -97,4 +98,24 @@ func (Data) isConstant() {}
 
 func (Data) Typ() Typ {
 	return &TData{}
+}
+
+type Bls12_381G1Element struct {
+	Inner *bls.G1Projective
+}
+
+func (Bls12_381G1Element) isConstant() {}
+
+func (Bls12_381G1Element) Typ() Typ {
+	return &TBls12_381G1Element{}
+}
+
+type Bls12_381G2Element struct {
+	Inner *bls.G2Projective
+}
+
+func (Bls12_381G2Element) isConstant() {}
+
+func (Bls12_381G2Element) Typ() Typ {
+	return &TBls12_381G1Element{}
 }
