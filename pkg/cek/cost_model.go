@@ -5,7 +5,7 @@ import (
 
 	"github.com/blinklabs-io/plutigo/pkg/data"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
-	blst "github.com/supranational/blst/bindings/go"
+	"github.com/phoreproject/bls"
 )
 
 type CostModel struct {
@@ -134,15 +134,17 @@ func pairExMem(x syn.IConstant, y syn.IConstant) func() ExMem {
 	}
 }
 
-func blsG1ExMem(b *blst.P1) func() ExMem {
+func blsG1ExMem(b *bls.G1Projective) func() ExMem {
 	return func() ExMem {
-		return ExMem(blst.BLST_P1_COMPRESS_BYTES * 3 / 8)
+		// return ExMem(bls.BLST_P1_COMPRESS_BYTES * 3 / 8)
+		return ExMem(0)
 	}
 }
 
-func blsG2ExMem(b *blst.P1) func() ExMem {
+func blsG2ExMem(b *bls.G2Projective) func() ExMem {
 	return func() ExMem {
-		return ExMem(blst.BLST_P2_COMPRESS_BYTES * 3 / 8)
+		// return ExMem(bls.BLST_P2_COMPRESS_BYTES * 3 / 8)
+		return ExMem(0)
 	}
 }
 

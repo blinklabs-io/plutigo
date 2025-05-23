@@ -14,7 +14,7 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/builtin"
 	"github.com/blinklabs-io/plutigo/pkg/data"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
-	blst "github.com/supranational/blst/bindings/go"
+	"github.com/phoreproject/bls"
 
 	"golang.org/x/crypto/blake2b"
 	legacysha3 "golang.org/x/crypto/sha3"
@@ -1534,7 +1534,9 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 		if err != nil {
 			return nil, err
 		}
-		g1Neg := blst.P1Generator().Sub(arg1)
+
+		g1Neg := arg1.Copy()
+		g1Neg.NegAssign()
 
 		evalValue = &Constant{
 			Constant: &syn.Bls12_381G1Element{
@@ -1557,7 +1559,12 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		newG1 := arg2.Mult(arg1.Bytes())
+		temp, err := bls.FQReprFromBigInt(arg1)
+		if err != nil {
+			return nil, errors.New("idk what happened")
+		}
+
+		newG1 := arg2.Mul(temp)
 
 		evalValue = &Constant{
 			Constant: &syn.Bls12_381G1Element{
@@ -1791,8 +1798,8 @@ func unwrapData[T syn.Eval](value Value[T]) (data.PlutusData, error) {
 	return i, nil
 }
 
-func unwrapBls12_381G1Element[T syn.Eval](value Value[T]) (*blst.P1, error) {
-	var i *blst.P1
+func unwrapBls12_381G1Element[T syn.Eval](value Value[T]) (*bls.G1Projective, error) {
+	var i *bls.G1Projective
 
 	switch v := value.(type) {
 	case *Constant:
@@ -1809,8 +1816,8 @@ func unwrapBls12_381G1Element[T syn.Eval](value Value[T]) (*blst.P1, error) {
 	return i, nil
 }
 
-func unwrapBls12_381G2Element[T syn.Eval](value Value[T]) (*blst.P2, error) {
-	var i *blst.P2
+func unwrapBls12_381G2Element[T syn.Eval](value Value[T]) (*bls.G2Projective, error) {
+	var i *bls.G2Projective
 
 	switch v := value.(type) {
 	case *Constant:
