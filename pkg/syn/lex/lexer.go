@@ -124,7 +124,7 @@ func (l *Lexer) readString() (string, error) {
 }
 
 func (l *Lexer) readByteString() (string, error) {
-	start := l.pos + 1 // Skip #
+	start := l.pos + 1 // Skip prefix (# or x)
 
 	for {
 		l.readChar()
@@ -243,6 +243,61 @@ func (l *Lexer) NextToken() Token {
 		}
 
 		tok.Value = bytes
+	case '0':
+		if l.peekChar() == 'x' {
+			l.readChar() // Consume '0'
+
+			literal, err := l.readByteString() // 0x prefix
+			if err != nil {
+				tok.Type = TokenError
+				tok.Literal = err.Error()
+				return tok
+			}
+
+			tok.Type = TokenByteString
+			tok.Literal = literal
+
+			// Convert hex to bytes
+			bytes := make([]byte, len(literal)/2)
+
+			for i := 0; i < len(literal); i += 2 {
+				var val uint8
+				_, err = fmt.Sscanf(literal[i:i+2], "%x", &val)
+				if err != nil {
+					tok.Type = TokenError
+					tok.Literal = err.Error()
+					return tok
+				}
+				bytes[i/2] = val
+			}
+
+			tok.Value = bytes
+		} else {
+			literal, err := l.readNumber()
+
+			if err != nil {
+				tok.Type = TokenError
+
+				tok.Literal = err.Error()
+
+				return tok
+			}
+
+			tok.Type = TokenNumber
+			tok.Literal = literal
+
+			n := new(big.Int)
+
+			if _, ok := n.SetString(literal, 10); !ok {
+				tok.Type = TokenError
+
+				tok.Literal = fmt.Sprintf("invalid number %s at position %d", literal, l.pos)
+
+				return tok
+			}
+
+			tok.Value = n
+		}
 	case '"':
 		literal, err := l.readString()
 		if err != nil {
