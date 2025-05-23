@@ -1561,7 +1561,7 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 
 		temp, err := bls.FQReprFromBigInt(arg1)
 		if err != nil {
-			return nil, errors.New("idk what happened")
+			return nil, err
 		}
 
 		newG1 := arg2.Mul(temp)
@@ -1572,7 +1572,28 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			},
 		}
 	case builtin.Bls12_381_G1_Equal:
-		panic("implement Bls12_381_G1_Equal")
+		arg1, err := unwrapBls12_381G1Element[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapBls12_381G1Element[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostTwo(&b.Func, blsG1ExMem(arg1), blsG1ExMem(arg2))
+		if err != nil {
+			return nil, err
+		}
+
+		isEqual := arg1.Equal(arg2)
+
+		evalValue = &Constant{
+			Constant: &syn.Bool{
+				Inner: isEqual,
+			},
+		}
 	case builtin.Bls12_381_G1_Compress:
 		panic("implement Bls12_381_G1_Compress")
 	case builtin.Bls12_381_G1_Uncompress:
