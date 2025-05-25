@@ -15,7 +15,6 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/data"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
-
 	"golang.org/x/crypto/blake2b"
 	legacysha3 "golang.org/x/crypto/sha3"
 )

@@ -274,7 +274,6 @@ func (l *Lexer) NextToken() Token {
 			tok.Value = bytes
 		} else {
 			literal, err := l.readNumber()
-
 			if err != nil {
 				tok.Type = TokenError
 

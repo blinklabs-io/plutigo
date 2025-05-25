@@ -3,9 +3,8 @@ package syn
 import (
 	"math/big"
 
-	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
-
 	"github.com/blinklabs-io/plutigo/pkg/data"
+	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
 
 type IConstant interface {

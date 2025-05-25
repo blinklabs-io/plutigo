@@ -20,7 +20,6 @@ func TestParse(t *testing.T) {
 		input := "(program 1.1.0 (con integer 1))"
 
 		program, err := syn.Parse(input)
-
 		if err != nil {
 			t.Fatalf("syn.Parse(%q) failed: %v", input, err)
 		}
@@ -118,7 +117,6 @@ func TestParseTerm(t *testing.T) {
 			parser := syn.NewParser(tc.input)
 
 			got, err := parser.ParseTerm()
-
 			if err != nil {
 				t.Fatalf("parseApplication(%q) failed: %v", tc.input, err)
 			}
@@ -294,7 +292,6 @@ func TestConformance(t *testing.T) {
 				return nil
 			},
 		)
-
 		if err != nil {
 			t.Errorf("Error walking %s directory: %v", category, err)
 		}
