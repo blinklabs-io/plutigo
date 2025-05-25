@@ -120,3 +120,13 @@ func (Bls12_381G2Element) isConstant() {}
 func (Bls12_381G2Element) Typ() Typ {
 	return &TBls12_381G1Element{}
 }
+
+type Bls12_381MlResult struct {
+	Inner *bls.GT
+}
+
+func (Bls12_381MlResult) isConstant() {}
+
+func (Bls12_381MlResult) Typ() Typ {
+	return &TBls12_381MlResult{}
+}

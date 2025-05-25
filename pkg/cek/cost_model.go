@@ -134,15 +134,21 @@ func pairExMem(x syn.IConstant, y syn.IConstant) func() ExMem {
 	}
 }
 
-func blsG1ExMem(b *bls.G1Affine) func() ExMem {
+func blsG1ExMem() func() ExMem {
 	return func() ExMem {
 		return ExMem(bls.SizeOfG1AffineCompressed * 3 / 8)
 	}
 }
 
-func blsG2ExMem(b *bls.G2Affine) func() ExMem {
+func blsG2ExMem() func() ExMem {
 	return func() ExMem {
 		return ExMem(bls.SizeOfG2AffineCompressed * 3 / 8)
+	}
+}
+
+func blsMlResultExMem() func() ExMem {
+	return func() ExMem {
+		return ExMem(bls.SizeOfGT / 8)
 	}
 }
 

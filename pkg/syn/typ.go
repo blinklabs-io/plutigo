@@ -48,3 +48,7 @@ func (TBls12_381G1Element) isTyp() {}
 type TBls12_381G2Element struct{}
 
 func (TBls12_381G2Element) isTyp() {}
+
+type TBls12_381MlResult struct{}
+
+func (TBls12_381MlResult) isTyp() {}

@@ -1512,7 +1512,7 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		err = m.CostTwo(&b.Func, blsG1ExMem(arg1), blsG1ExMem(arg2))
+		err = m.CostTwo(&b.Func, blsG1ExMem(), blsG1ExMem())
 		if err != nil {
 			return nil, err
 		}
@@ -1530,7 +1530,7 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		err = m.CostOne(&b.Func, blsG1ExMem(arg1))
+		err = m.CostOne(&b.Func, blsG1ExMem())
 		if err != nil {
 			return nil, err
 		}
@@ -1553,7 +1553,7 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		err = m.CostTwo(&b.Func, bigIntExMem(arg1), blsG1ExMem(arg2))
+		err = m.CostTwo(&b.Func, bigIntExMem(arg1), blsG1ExMem())
 		if err != nil {
 			return nil, err
 		}
@@ -1576,7 +1576,7 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		err = m.CostTwo(&b.Func, blsG1ExMem(arg1), blsG1ExMem(arg2))
+		err = m.CostTwo(&b.Func, blsG1ExMem(), blsG1ExMem())
 		if err != nil {
 			return nil, err
 		}
@@ -1589,31 +1589,303 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			},
 		}
 	case builtin.Bls12_381_G1_Compress:
-		panic("implement Bls12_381_G1_Compress")
+		arg1, err := unwrapBls12_381G1Element[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, blsG1ExMem())
+		if err != nil {
+			return nil, err
+		}
+
+		b := arg1.Bytes()
+
+		evalValue = &Constant{
+			Constant: &syn.ByteString{
+				Inner: b[:],
+			},
+		}
 	case builtin.Bls12_381_G1_Uncompress:
-		panic("implement Bls12_381_G1_Uncompress")
+		arg1, err := unwrapByteString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, byteArrayExMem(arg1))
+		if err != nil {
+			return nil, err
+		}
+
+		uncompressed := new(bls.G1Affine)
+
+		_, err = uncompressed.SetBytes(arg1)
+		if err != nil {
+			return nil, err
+		}
+
+		evalValue = &Constant{
+			Constant: &syn.Bls12_381G1Element{
+				Inner: uncompressed,
+			},
+		}
 	case builtin.Bls12_381_G1_HashToGroup:
-		panic("implement Bls12_381_G1_HashToGroup")
+		arg1, err := unwrapByteString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapByteString[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostTwo(&b.Func, byteArrayExMem(arg1), byteArrayExMem(arg2))
+		if err != nil {
+			return nil, err
+		}
+
+		if len(arg2) > 255 {
+			return nil, errors.New("hash to curve dst too big")
+		}
+
+		point, err := bls.HashToG1(arg1, arg2)
+		if err != nil {
+			return nil, err
+		}
+
+		evalValue = &Constant{
+			Constant: &syn.Bls12_381G1Element{
+				Inner: &point,
+			},
+		}
 	case builtin.Bls12_381_G2_Add:
-		panic("implement Bls12_381_G2_Add")
+		arg1, err := unwrapBls12_381G2Element[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapBls12_381G2Element[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostTwo(&b.Func, blsG2ExMem(), blsG2ExMem())
+		if err != nil {
+			return nil, err
+		}
+
+		newG2 := new(bls.G2Affine).Add(arg1, arg2)
+
+		evalValue = &Constant{
+			Constant: &syn.Bls12_381G2Element{
+				Inner: newG2,
+			},
+		}
 	case builtin.Bls12_381_G2_Neg:
-		panic("implement Bls12_381_G2_Neg")
+		arg1, err := unwrapBls12_381G2Element[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, blsG2ExMem())
+		if err != nil {
+			return nil, err
+		}
+
+		g1Neg := new(bls.G2Affine).Neg(arg1)
+
+		evalValue = &Constant{
+			Constant: &syn.Bls12_381G2Element{
+				Inner: g1Neg,
+			},
+		}
 	case builtin.Bls12_381_G2_ScalarMul:
-		panic("implement Bls12_381_G2_ScalarMul")
+		arg1, err := unwrapInteger[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapBls12_381G2Element[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostTwo(&b.Func, bigIntExMem(arg1), blsG2ExMem())
+		if err != nil {
+			return nil, err
+		}
+
+		newG2 := arg2.ScalarMultiplicationBase(arg1)
+
+		evalValue = &Constant{
+			Constant: &syn.Bls12_381G2Element{
+				Inner: newG2,
+			},
+		}
 	case builtin.Bls12_381_G2_Equal:
-		panic("implement Bls12_381_G2_Equal")
+		arg1, err := unwrapBls12_381G2Element[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapBls12_381G2Element[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostTwo(&b.Func, blsG2ExMem(), blsG2ExMem())
+		if err != nil {
+			return nil, err
+		}
+
+		isEqual := arg1.Equal(arg2)
+
+		evalValue = &Constant{
+			Constant: &syn.Bool{
+				Inner: isEqual,
+			},
+		}
 	case builtin.Bls12_381_G2_Compress:
-		panic("implement Bls12_381_G2_Compress")
+		arg1, err := unwrapBls12_381G2Element[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, blsG2ExMem())
+		if err != nil {
+			return nil, err
+		}
+
+		b := arg1.Bytes()
+
+		evalValue = &Constant{
+			Constant: &syn.ByteString{
+				Inner: b[:],
+			},
+		}
 	case builtin.Bls12_381_G2_Uncompress:
-		panic("implement Bls12_381_G2_Uncompress")
+		arg1, err := unwrapByteString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostOne(&b.Func, byteArrayExMem(arg1))
+		if err != nil {
+			return nil, err
+		}
+
+		uncompressed := new(bls.G2Affine)
+
+		_, err = uncompressed.SetBytes(arg1)
+		if err != nil {
+			return nil, err
+		}
+
+		evalValue = &Constant{
+			Constant: &syn.Bls12_381G2Element{
+				Inner: uncompressed,
+			},
+		}
 	case builtin.Bls12_381_G2_HashToGroup:
-		panic("implement Bls12_381_G2_HashToGroup")
+		arg1, err := unwrapByteString[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapByteString[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostTwo(&b.Func, byteArrayExMem(arg1), byteArrayExMem(arg2))
+		if err != nil {
+			return nil, err
+		}
+
+		if len(arg2) > 255 {
+			return nil, errors.New("hash to curve dst too big")
+		}
+
+		point, err := bls.HashToG2(arg1, arg2)
+		if err != nil {
+			return nil, err
+		}
+
+		evalValue = &Constant{
+			Constant: &syn.Bls12_381G2Element{
+				Inner: &point,
+			},
+		}
 	case builtin.Bls12_381_MillerLoop:
-		panic("implement Bls12_381_MillerLoop")
+		arg1, err := unwrapBls12_381G1Element[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapBls12_381G2Element[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostTwo(&b.Func, blsG1ExMem(), blsG2ExMem())
+		if err != nil {
+			return nil, err
+		}
+
+		mlResult, err := bls.MillerLoop([]bls.G1Affine{*arg1}, []bls.G2Affine{*arg2})
+
+		evalValue = &Constant{
+			Constant: &syn.Bls12_381MlResult{
+				Inner: &mlResult,
+			},
+		}
 	case builtin.Bls12_381_MulMlResult:
-		panic("implement Bls12_381_MulMlResult")
+		arg1, err := unwrapBls12_381MlResult[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapBls12_381MlResult[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostTwo(&b.Func, blsMlResultExMem(), blsMlResultExMem())
+		if err != nil {
+			return nil, err
+		}
+
+		newMl := new(bls.GT).Mul(arg1, arg2)
+
+		evalValue = &Constant{
+			Constant: &syn.Bls12_381MlResult{
+				Inner: newMl,
+			},
+		}
 	case builtin.Bls12_381_FinalVerify:
-		panic("implement Bls12_381_FinalVerify")
+		arg1, err := unwrapBls12_381MlResult[T](b.Args[0])
+		if err != nil {
+			return nil, err
+		}
+
+		arg2, err := unwrapBls12_381MlResult[T](b.Args[1])
+		if err != nil {
+			return nil, err
+		}
+
+		err = m.CostTwo(&b.Func, blsMlResultExMem(), blsMlResultExMem())
+		if err != nil {
+			return nil, err
+		}
+
+		verified := arg1.Equal(arg2)
+
+		evalValue = &Constant{
+			Constant: &syn.Bool{
+				Inner: verified,
+			},
+		}
 	case builtin.IntegerToByteString:
 		panic("implement IntegerToByteString")
 	case builtin.ByteStringToInteger:
@@ -1822,7 +2094,7 @@ func unwrapBls12_381G1Element[T syn.Eval](value Value[T]) (*bls.G1Affine, error)
 		case *syn.Bls12_381G1Element:
 			i = c.Inner
 		default:
-			return nil, errors.New("Value not an Integer")
+			return nil, errors.New("Value not a G1Element")
 		}
 	default:
 		return nil, errors.New("Value not a Constant")
@@ -1840,7 +2112,25 @@ func unwrapBls12_381G2Element[T syn.Eval](value Value[T]) (*bls.G2Affine, error)
 		case *syn.Bls12_381G2Element:
 			i = c.Inner
 		default:
-			return nil, errors.New("Value not an Integer")
+			return nil, errors.New("Value not a G2Element")
+		}
+	default:
+		return nil, errors.New("Value not a Constant")
+	}
+
+	return i, nil
+}
+
+func unwrapBls12_381MlResult[T syn.Eval](value Value[T]) (*bls.GT, error) {
+	var i *bls.GT
+
+	switch v := value.(type) {
+	case *Constant:
+		switch c := v.Constant.(type) {
+		case *syn.Bls12_381MlResult:
+			i = c.Inner
+		default:
+			return nil, errors.New("Value not an MlResult")
 		}
 	default:
 		return nil, errors.New("Value not a Constant")
