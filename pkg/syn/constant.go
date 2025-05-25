@@ -4,6 +4,7 @@ import (
 	"math/big"
 
 	"github.com/blinklabs-io/plutigo/pkg/data"
+	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
 
 type IConstant interface {
@@ -97,4 +98,34 @@ func (Data) isConstant() {}
 
 func (Data) Typ() Typ {
 	return &TData{}
+}
+
+type Bls12_381G1Element struct {
+	Inner *bls.G1Jac
+}
+
+func (Bls12_381G1Element) isConstant() {}
+
+func (Bls12_381G1Element) Typ() Typ {
+	return &TBls12_381G1Element{}
+}
+
+type Bls12_381G2Element struct {
+	Inner *bls.G2Jac
+}
+
+func (Bls12_381G2Element) isConstant() {}
+
+func (Bls12_381G2Element) Typ() Typ {
+	return &TBls12_381G1Element{}
+}
+
+type Bls12_381MlResult struct {
+	Inner *bls.GT
+}
+
+func (Bls12_381MlResult) isConstant() {}
+
+func (Bls12_381MlResult) Typ() Typ {
+	return &TBls12_381MlResult{}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/builtin"
 	"github.com/blinklabs-io/plutigo/pkg/data"
 	"github.com/blinklabs-io/plutigo/pkg/syn/lex"
+	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
 
 type Parser struct {
@@ -538,6 +539,66 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 		}
 
 		return &Constant{Con: &ProtoPair{FstType: ts.First, SndType: ts.Second, First: first, Second: second}}, nil
+	case *TBls12_381G1Element:
+		if p.curToken.Type != lex.TokenByteString {
+			return nil, fmt.Errorf("expected bytestring value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		}
+
+		b, ok := p.curToken.Value.([]byte)
+		if !ok {
+			return nil, fmt.Errorf("invalid bytestring value %s at position %d", p.curToken.Literal, p.curToken.Position)
+		}
+
+		p.nextToken()
+
+		if err := p.expect(lex.TokenRParen); err != nil {
+			return nil, err
+		}
+
+		if len(b) != 48 {
+			return nil, fmt.Errorf("bls12_381_g1_element must be 48 bytes, got %d", len(b))
+		}
+
+		uncompressed := new(bls.G1Affine)
+
+		_, err := uncompressed.SetBytes(b)
+		if err != nil {
+			return nil, err
+		}
+
+		jac := new(bls.G1Jac).FromAffine(uncompressed)
+
+		return &Constant{Con: &Bls12_381G1Element{Inner: jac}}, nil
+	case *TBls12_381G2Element:
+		if p.curToken.Type != lex.TokenByteString {
+			return nil, fmt.Errorf("expected bytestring value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		}
+
+		b, ok := p.curToken.Value.([]byte)
+		if !ok {
+			return nil, fmt.Errorf("invalid bytestring value %s at position %d", p.curToken.Literal, p.curToken.Position)
+		}
+
+		p.nextToken()
+
+		if err := p.expect(lex.TokenRParen); err != nil {
+			return nil, err
+		}
+
+		if len(b) != 96 {
+			return nil, fmt.Errorf("bls12_381_g2_element must be 96 bytes, got %d", len(b))
+		}
+
+		uncompressed := new(bls.G2Affine)
+
+		_, err := uncompressed.SetBytes(b)
+		if err != nil {
+			return nil, err
+		}
+
+		jac := new(bls.G2Jac).FromAffine(uncompressed)
+
+		return &Constant{Con: &Bls12_381G2Element{Inner: jac}}, nil
 	default:
 		return nil, fmt.Errorf("unexpected type spec %v at position %d", typeSpec, p.curToken.Position)
 	}
@@ -924,6 +985,10 @@ func (p *Parser) parseInnerTypeSpec() (Typ, error) {
 			return &TBool{}, nil
 		case "data":
 			return &TData{}, nil
+		case "bls12_381_G1_element":
+			return &TBls12_381G1Element{}, nil
+		case "bls12_381_G2_element":
+			return &TBls12_381G2Element{}, nil
 		default:
 			return nil, fmt.Errorf(
 				"unknown type %s at position %d",

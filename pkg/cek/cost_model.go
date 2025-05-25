@@ -5,6 +5,7 @@ import (
 
 	"github.com/blinklabs-io/plutigo/pkg/data"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
+	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
 
 type CostModel struct {
@@ -130,6 +131,24 @@ func listExMem(l []syn.IConstant) func() ExMem {
 func pairExMem(x syn.IConstant, y syn.IConstant) func() ExMem {
 	return func() ExMem {
 		return ExMem(PAIR_COST + iconstantExMem(x)() + iconstantExMem(y)())
+	}
+}
+
+func blsG1ExMem() func() ExMem {
+	return func() ExMem {
+		return ExMem(bls.SizeOfG1AffineCompressed * 3 / 8)
+	}
+}
+
+func blsG2ExMem() func() ExMem {
+	return func() ExMem {
+		return ExMem(bls.SizeOfG2AffineCompressed * 3 / 8)
+	}
+}
+
+func blsMlResultExMem() func() ExMem {
+	return func() ExMem {
+		return ExMem(bls.SizeOfGT / 8)
 	}
 }
 
