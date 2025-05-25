@@ -9,7 +9,7 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/builtin"
 	"github.com/blinklabs-io/plutigo/pkg/data"
 	"github.com/blinklabs-io/plutigo/pkg/syn/lex"
-	"github.com/phoreproject/bls"
+	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
 
 type Parser struct {
@@ -559,15 +559,14 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			return nil, fmt.Errorf("bls12_381_g1_element must be 48 bytes, got %d", len(b))
 		}
 
-		var arr [48]byte
-		copy(arr[:], b)
+		uncompressed := new(bls.G1Affine)
 
-		uncompressed, err := bls.DecompressG1(arr)
+		_, err := uncompressed.SetBytes(b)
 		if err != nil {
 			return nil, err
 		}
 
-		return &Constant{Con: &Bls12_381G1Element{Inner: uncompressed.ToProjective()}}, nil
+		return &Constant{Con: &Bls12_381G1Element{Inner: uncompressed}}, nil
 	case *TBls12_381G2Element:
 		if p.curToken.Type != lex.TokenByteString {
 			return nil, fmt.Errorf("expected bytestring value, got %v at position %d", p.curToken.Type, p.curToken.Position)
@@ -588,15 +587,14 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			return nil, fmt.Errorf("bls12_381_g2_element must be 96 bytes, got %d", len(b))
 		}
 
-		var arr [96]byte
-		copy(arr[:], b)
+		uncompressed := new(bls.G2Affine)
 
-		uncompressed, err := bls.DecompressG2(arr)
+		_, err := uncompressed.SetBytes(b)
 		if err != nil {
 			return nil, err
 		}
 
-		return &Constant{Con: &Bls12_381G2Element{Inner: uncompressed.ToProjective()}}, nil
+		return &Constant{Con: &Bls12_381G2Element{Inner: uncompressed}}, nil
 	default:
 		return nil, fmt.Errorf("unexpected type spec %v at position %d", typeSpec, p.curToken.Position)
 	}

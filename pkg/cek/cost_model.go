@@ -5,7 +5,7 @@ import (
 
 	"github.com/blinklabs-io/plutigo/pkg/data"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
-	"github.com/phoreproject/bls"
+	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
 
 type CostModel struct {
@@ -134,20 +134,15 @@ func pairExMem(x syn.IConstant, y syn.IConstant) func() ExMem {
 	}
 }
 
-const BLST_SCALAR_BYTES = 256 / 8
-const BLST_FP_BYTES = 384 / 8
-const BLST_P1_COMPRESS_BYTES = BLST_FP_BYTES
-const BLST_P2_COMPRESS_BYTES = BLST_FP_BYTES * 2
-
-func blsG1ExMem(b *bls.G1Projective) func() ExMem {
+func blsG1ExMem(b *bls.G1Affine) func() ExMem {
 	return func() ExMem {
-		return ExMem(BLST_P1_COMPRESS_BYTES * 3 / 8)
+		return ExMem(bls.SizeOfG1AffineCompressed * 3 / 8)
 	}
 }
 
-func blsG2ExMem(b *bls.G2Projective) func() ExMem {
+func blsG2ExMem(b *bls.G2Affine) func() ExMem {
 	return func() ExMem {
-		return ExMem(BLST_P2_COMPRESS_BYTES * 3 / 8)
+		return ExMem(bls.SizeOfG2AffineCompressed * 3 / 8)
 	}
 }
 

@@ -14,7 +14,7 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/builtin"
 	"github.com/blinklabs-io/plutigo/pkg/data"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
-	"github.com/phoreproject/bls"
+	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 
 	"golang.org/x/crypto/blake2b"
 	legacysha3 "golang.org/x/crypto/sha3"
@@ -1517,7 +1517,7 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		newG1 := arg1.Add(arg2)
+		newG1 := new(bls.G1Affine).Add(arg1, arg2)
 
 		evalValue = &Constant{
 			Constant: &syn.Bls12_381G1Element{
@@ -1535,8 +1535,7 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		g1Neg := arg1.Copy()
-		g1Neg.NegAssign()
+		g1Neg := new(bls.G1Affine).Neg(arg1)
 
 		evalValue = &Constant{
 			Constant: &syn.Bls12_381G1Element{
@@ -1559,12 +1558,7 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		temp, err := bls.FQReprFromBigInt(arg1)
-		if err != nil {
-			return nil, err
-		}
-
-		newG1 := arg2.Mul(temp)
+		newG1 := arg2.ScalarMultiplicationBase(arg1)
 
 		evalValue = &Constant{
 			Constant: &syn.Bls12_381G1Element{
@@ -1819,8 +1813,8 @@ func unwrapData[T syn.Eval](value Value[T]) (data.PlutusData, error) {
 	return i, nil
 }
 
-func unwrapBls12_381G1Element[T syn.Eval](value Value[T]) (*bls.G1Projective, error) {
-	var i *bls.G1Projective
+func unwrapBls12_381G1Element[T syn.Eval](value Value[T]) (*bls.G1Affine, error) {
+	var i *bls.G1Affine
 
 	switch v := value.(type) {
 	case *Constant:
@@ -1837,8 +1831,8 @@ func unwrapBls12_381G1Element[T syn.Eval](value Value[T]) (*bls.G1Projective, er
 	return i, nil
 }
 
-func unwrapBls12_381G2Element[T syn.Eval](value Value[T]) (*bls.G2Projective, error) {
-	var i *bls.G2Projective
+func unwrapBls12_381G2Element[T syn.Eval](value Value[T]) (*bls.G2Affine, error) {
+	var i *bls.G2Affine
 
 	switch v := value.(type) {
 	case *Constant:

@@ -3,7 +3,7 @@ package syn
 import (
 	"math/big"
 
-	"github.com/phoreproject/bls"
+	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 
 	"github.com/blinklabs-io/plutigo/pkg/data"
 )
@@ -102,7 +102,7 @@ func (Data) Typ() Typ {
 }
 
 type Bls12_381G1Element struct {
-	Inner *bls.G1Projective
+	Inner *bls.G1Affine
 }
 
 func (Bls12_381G1Element) isConstant() {}
@@ -112,7 +112,7 @@ func (Bls12_381G1Element) Typ() Typ {
 }
 
 type Bls12_381G2Element struct {
-	Inner *bls.G2Projective
+	Inner *bls.G2Affine
 }
 
 func (Bls12_381G2Element) isConstant() {}

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/blinklabs-io/plutigo/pkg/data"
-	"github.com/phoreproject/bls"
 )
 
 // Pretty Print a Program
@@ -300,13 +299,13 @@ func (pp *PrettyPrinter) printConstant(c *Constant) {
 	case *Bls12_381G1Element:
 		pp.write("bls12_381_G1_element 0x")
 
-		for _, b := range bls.CompressG1(con.Inner.ToAffine()) {
+		for _, b := range con.Inner.Bytes() {
 			pp.builder.WriteString(fmt.Sprintf("%02x", b))
 		}
 	case *Bls12_381G2Element:
 		pp.write("bls12_381_G2_element 0x")
 
-		for _, b := range bls.CompressG2(con.Inner.ToAffine()) {
+		for _, b := range con.Inner.Bytes() {
 			pp.builder.WriteString(fmt.Sprintf("%02x", b))
 		}
 	default:
