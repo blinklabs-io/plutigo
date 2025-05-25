@@ -566,7 +566,9 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			return nil, err
 		}
 
-		return &Constant{Con: &Bls12_381G1Element{Inner: uncompressed}}, nil
+		jac := new(bls.G1Jac).FromAffine(uncompressed)
+
+		return &Constant{Con: &Bls12_381G1Element{Inner: jac}}, nil
 	case *TBls12_381G2Element:
 		if p.curToken.Type != lex.TokenByteString {
 			return nil, fmt.Errorf("expected bytestring value, got %v at position %d", p.curToken.Type, p.curToken.Position)
@@ -594,7 +596,9 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			return nil, err
 		}
 
-		return &Constant{Con: &Bls12_381G2Element{Inner: uncompressed}}, nil
+		jac := new(bls.G2Jac).FromAffine(uncompressed)
+
+		return &Constant{Con: &Bls12_381G2Element{Inner: jac}}, nil
 	default:
 		return nil, fmt.Errorf("unexpected type spec %v at position %d", typeSpec, p.curToken.Position)
 	}

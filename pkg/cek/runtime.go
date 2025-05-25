@@ -1517,7 +1517,9 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		newG1 := new(bls.G1Affine).Add(arg1, arg2)
+		newG1 := new(bls.G1Jac).Set(arg1)
+
+		newG1.AddAssign(arg2)
 
 		evalValue = &Constant{
 			Constant: &syn.Bls12_381G1Element{
@@ -1535,7 +1537,7 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		g1Neg := new(bls.G1Affine).Neg(arg1)
+		g1Neg := new(bls.G1Jac).Neg(arg1)
 
 		evalValue = &Constant{
 			Constant: &syn.Bls12_381G1Element{
@@ -1558,7 +1560,7 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		newG1 := arg2.ScalarMultiplicationBase(arg1)
+		newG1 := new(bls.G1Jac).ScalarMultiplication(arg2, arg1)
 
 		evalValue = &Constant{
 			Constant: &syn.Bls12_381G1Element{
@@ -1581,11 +1583,9 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		isEqual := arg1.Equal(arg2)
-
 		evalValue = &Constant{
 			Constant: &syn.Bool{
-				Inner: isEqual,
+				Inner: arg1.Equal(arg2),
 			},
 		}
 	case builtin.Bls12_381_G1_Compress:
@@ -1599,7 +1599,7 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		b := arg1.Bytes()
+		b := new(bls.G1Affine).FromJacobian(arg1).Bytes()
 
 		evalValue = &Constant{
 			Constant: &syn.ByteString{
@@ -1624,9 +1624,11 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
+		jac := new(bls.G1Jac).FromAffine(uncompressed)
+
 		evalValue = &Constant{
 			Constant: &syn.Bls12_381G1Element{
-				Inner: uncompressed,
+				Inner: jac,
 			},
 		}
 	case builtin.Bls12_381_G1_HashToGroup:
@@ -1649,14 +1651,19 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, errors.New("hash to curve dst too big")
 		}
 
+		// TODO probably impement our own HashToG1
+		// that doesn't needlessly convert final result Jac to Affine
+		// That's an extremely wasteful calculation
 		point, err := bls.HashToG1(arg1, arg2)
 		if err != nil {
 			return nil, err
 		}
 
+		jac := new(bls.G1Jac).FromAffine(&point)
+
 		evalValue = &Constant{
 			Constant: &syn.Bls12_381G1Element{
-				Inner: &point,
+				Inner: jac,
 			},
 		}
 	case builtin.Bls12_381_G2_Add:
@@ -1675,7 +1682,9 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		newG2 := new(bls.G2Affine).Add(arg1, arg2)
+		newG2 := new(bls.G2Jac).Set(arg1)
+
+		newG2.AddAssign(arg2)
 
 		evalValue = &Constant{
 			Constant: &syn.Bls12_381G2Element{
@@ -1693,7 +1702,7 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		g1Neg := new(bls.G2Affine).Neg(arg1)
+		g1Neg := new(bls.G2Jac).Neg(arg1)
 
 		evalValue = &Constant{
 			Constant: &syn.Bls12_381G2Element{
@@ -1716,7 +1725,7 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		newG2 := arg2.ScalarMultiplicationBase(arg1)
+		newG2 := new(bls.G2Jac).ScalarMultiplication(arg2, arg1)
 
 		evalValue = &Constant{
 			Constant: &syn.Bls12_381G2Element{
@@ -1739,11 +1748,9 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		isEqual := arg1.Equal(arg2)
-
 		evalValue = &Constant{
 			Constant: &syn.Bool{
-				Inner: isEqual,
+				Inner: arg1.Equal(arg2),
 			},
 		}
 	case builtin.Bls12_381_G2_Compress:
@@ -1757,7 +1764,7 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		b := arg1.Bytes()
+		b := new(bls.G2Affine).FromJacobian(arg1).Bytes()
 
 		evalValue = &Constant{
 			Constant: &syn.ByteString{
@@ -1782,9 +1789,11 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
+		jac := new(bls.G2Jac).FromAffine(uncompressed)
+
 		evalValue = &Constant{
 			Constant: &syn.Bls12_381G2Element{
-				Inner: uncompressed,
+				Inner: jac,
 			},
 		}
 	case builtin.Bls12_381_G2_HashToGroup:
@@ -1807,14 +1816,19 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, errors.New("hash to curve dst too big")
 		}
 
+		// TODO probably impement our own HashToG2
+		// that doesn't needlessly convert final result Jac to Affine
+		// That's an extremely wasteful calculation
 		point, err := bls.HashToG2(arg1, arg2)
 		if err != nil {
 			return nil, err
 		}
 
+		jac := new(bls.G2Jac).FromAffine(&point)
+
 		evalValue = &Constant{
 			Constant: &syn.Bls12_381G2Element{
-				Inner: &point,
+				Inner: jac,
 			},
 		}
 	case builtin.Bls12_381_MillerLoop:
@@ -1833,7 +1847,14 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		mlResult, err := bls.MillerLoop([]bls.G1Affine{*arg1}, []bls.G2Affine{*arg2})
+		arg1Affine := new(bls.G1Affine).FromJacobian(arg1)
+
+		arg2Affine := new(bls.G2Affine).FromJacobian(arg2)
+
+		mlResult, err := bls.MillerLoop([]bls.G1Affine{*arg1Affine}, []bls.G2Affine{*arg2Affine})
+		if err != nil {
+			return nil, err
+		}
 
 		evalValue = &Constant{
 			Constant: &syn.Bls12_381MlResult{
@@ -1879,11 +1900,32 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		verified := arg1.Equal(arg2)
+		// What the C code does
+		// int blst_fp12_finalverify(const vec384fp12 GT1, const vec384fp12 GT2)
+		// {
+		//     vec384fp12 GT;
+
+		//     vec_copy(GT, GT1, sizeof(GT));
+		//     conjugate_fp12(GT);
+		//     mul_fp12(GT, GT, GT2);
+		//     final_exp(GT, GT);
+
+		//     /* return GT==1 */
+		//     return (int)(vec_is_equal(GT[0][0], BLS12_381_Rx.p2, sizeof(GT[0][0])) &
+		//                  vec_is_zero(GT[0][1], sizeof(GT) - sizeof(GT[0][0])));
+		// }
+
+		var one bls.GT
+		one.SetOne()
+
+		arg1Conj := new(bls.GT).Conjugate(arg1)
+
+		// Note FinalExponentiation automatically multiplies all extra args
+		verify := bls.FinalExponentiation(arg1Conj, arg2)
 
 		evalValue = &Constant{
 			Constant: &syn.Bool{
-				Inner: verified,
+				Inner: one.Equal(&verify),
 			},
 		}
 	case builtin.IntegerToByteString:
@@ -2085,8 +2127,8 @@ func unwrapData[T syn.Eval](value Value[T]) (data.PlutusData, error) {
 	return i, nil
 }
 
-func unwrapBls12_381G1Element[T syn.Eval](value Value[T]) (*bls.G1Affine, error) {
-	var i *bls.G1Affine
+func unwrapBls12_381G1Element[T syn.Eval](value Value[T]) (*bls.G1Jac, error) {
+	var i *bls.G1Jac
 
 	switch v := value.(type) {
 	case *Constant:
@@ -2103,8 +2145,8 @@ func unwrapBls12_381G1Element[T syn.Eval](value Value[T]) (*bls.G1Affine, error)
 	return i, nil
 }
 
-func unwrapBls12_381G2Element[T syn.Eval](value Value[T]) (*bls.G2Affine, error) {
-	var i *bls.G2Affine
+func unwrapBls12_381G2Element[T syn.Eval](value Value[T]) (*bls.G2Jac, error) {
+	var i *bls.G2Jac
 
 	switch v := value.(type) {
 	case *Constant:

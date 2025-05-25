@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/blinklabs-io/plutigo/pkg/data"
+	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
 
 // Pretty Print a Program
@@ -299,13 +300,17 @@ func (pp *PrettyPrinter) printConstant(c *Constant) {
 	case *Bls12_381G1Element:
 		pp.write("bls12_381_G1_element 0x")
 
-		for _, b := range con.Inner.Bytes() {
+		affine := new(bls.G1Affine).FromJacobian(con.Inner)
+
+		for _, b := range affine.Bytes() {
 			pp.builder.WriteString(fmt.Sprintf("%02x", b))
 		}
 	case *Bls12_381G2Element:
 		pp.write("bls12_381_G2_element 0x")
 
-		for _, b := range con.Inner.Bytes() {
+		affine := new(bls.G2Affine).FromJacobian(con.Inner)
+
+		for _, b := range affine.Bytes() {
 			pp.builder.WriteString(fmt.Sprintf("%02x", b))
 		}
 	default:

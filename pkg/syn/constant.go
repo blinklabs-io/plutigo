@@ -102,7 +102,7 @@ func (Data) Typ() Typ {
 }
 
 type Bls12_381G1Element struct {
-	Inner *bls.G1Affine
+	Inner *bls.G1Jac
 }
 
 func (Bls12_381G1Element) isConstant() {}
@@ -112,7 +112,7 @@ func (Bls12_381G1Element) Typ() Typ {
 }
 
 type Bls12_381G2Element struct {
-	Inner *bls.G2Affine
+	Inner *bls.G2Jac
 }
 
 func (Bls12_381G2Element) isConstant() {}
