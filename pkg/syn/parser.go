@@ -1,6 +1,7 @@
 package syn
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -18,6 +19,7 @@ type Parser struct {
 	peekToken     lex.Token
 	interned      map[string]Unique
 	uniqueCounter Unique
+	version       [3]uint32
 }
 
 func NewParser(input string) *Parser {
@@ -114,6 +116,8 @@ func (p *Parser) ParseProgram() (*Program[Name], error) {
 			}
 		}
 	}
+
+	p.version = version
 
 	term, err := p.ParseTerm()
 	if err != nil {
@@ -284,6 +288,10 @@ func (p *Parser) parseBuiltin() (Term[Name], error) {
 }
 
 func (p *Parser) parseConstr() (Term[Name], error) {
+	if p.isBefore_v1_1_0() {
+		return nil, errors.New("constr can't be used before 1.1.0")
+	}
+
 	if err := p.expect(lex.TokenConstr); err != nil {
 		return nil, err
 	}
@@ -329,6 +337,10 @@ func (p *Parser) parseConstr() (Term[Name], error) {
 }
 
 func (p *Parser) parseCase() (Term[Name], error) {
+	if p.isBefore_v1_1_0() {
+		return nil, errors.New("case can't be used before 1.1.0")
+	}
+
 	if err := p.expect(lex.TokenCase); err != nil {
 		return nil, err
 	}
@@ -1066,4 +1078,8 @@ func (p *Parser) parseApply() (Term[Name], error) {
 	}
 
 	return result, nil
+}
+
+func (p *Parser) isBefore_v1_1_0() bool {
+	return p.version[0] < 2 && p.version[1] < 1
 }

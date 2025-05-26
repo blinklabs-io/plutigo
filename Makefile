@@ -1,5 +1,5 @@
 # Makefile for Go project
-.PHONY: test test-one fmt clean play play-fmt play-flat build
+.PHONY: test test-match bench fmt clean play play-fmt play-flat build
 
 test: ## Run tests
 	@echo "Running tests..."
@@ -8,6 +8,10 @@ test: ## Run tests
 test-match: ## Run specific tests (usage: make test-one TEST=TestName)
 	@echo "Running test: $(TEST)..."
 	@go test -run $(TEST) -v ./...
+
+bench: ## Run tests
+	@echo "Running benchmarks..."
+	@go test -v -bench=. -run='^$$' ./...
 
 fmt: ## Format Go code
 	@gofmt -w -s .

@@ -80,7 +80,7 @@ func (l *Lexer) skipWhitespace() {
 func (l *Lexer) readIdentifier() string {
 	start := l.pos
 
-	for unicode.IsLetter(l.ch) || unicode.IsDigit(l.ch) || l.ch == '_' {
+	for unicode.IsLetter(l.ch) || unicode.IsDigit(l.ch) || l.ch == '_' || l.ch == '\'' {
 		l.readChar()
 	}
 

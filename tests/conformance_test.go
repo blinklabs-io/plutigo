@@ -207,7 +207,7 @@ func TestConformance(t *testing.T) {
 
 					// Convert to NamedDeBruijn
 
-					dProgram, err := syn.NameToNamedDeBruijn(program)
+					dProgram, err := syn.NameToDeBruijn(program)
 					if err != nil {
 						if string(expectedText) == "evaluation failure" {
 							return
@@ -221,7 +221,7 @@ func TestConformance(t *testing.T) {
 
 					// Evaluate program
 
-					machine := cek.NewMachine[syn.NamedDeBruijn](200)
+					machine := cek.NewMachine[syn.DeBruijn](200)
 
 					result, err := machine.Run(dProgram.Term)
 					if err != nil {
@@ -243,7 +243,7 @@ func TestConformance(t *testing.T) {
 						)
 					}
 
-					dExpected, err := syn.NameToNamedDeBruijn(expected)
+					dExpected, err := syn.NameToDeBruijn(expected)
 					if err != nil {
 						t.Fatalf(
 							"Failed to convert program to DeBruijn: %v",
@@ -252,8 +252,8 @@ func TestConformance(t *testing.T) {
 					}
 
 					// Compare results
-					prettyResult := syn.PrettyTerm[syn.NamedDeBruijn](result)
-					prettyExpected := syn.PrettyTerm[syn.NamedDeBruijn](
+					prettyResult := syn.PrettyTerm[syn.DeBruijn](result)
+					prettyExpected := syn.PrettyTerm[syn.DeBruijn](
 						dExpected.Term,
 					)
 
