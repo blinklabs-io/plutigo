@@ -14,10 +14,10 @@ import (
 
 	"github.com/blinklabs-io/plutigo/pkg/data"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
+	"github.com/btcsuite/btcd/btcec/v2"
+	ecdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
+	schnorr "github.com/btcsuite/btcd/btcec/v2/schnorr"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
-	secp256k1 "github.com/decred/dcrd/dcrec/secp256k1/v4"
-	ecdsa "github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
-	schnorr "github.com/decred/dcrd/dcrec/secp256k1/v4/schnorr"
 	"golang.org/x/crypto/blake2b"
 	legacyripemd160 "golang.org/x/crypto/ripemd160" //nolint:staticcheck
 	legacysha3 "golang.org/x/crypto/sha3"
@@ -785,12 +785,12 @@ func verifyEcdsaSecp256K1Signature[T syn.Eval](m *Machine[T], b *Builtin[T]) (Va
 		return nil, err
 	}
 
-	key, err := secp256k1.ParsePubKey(publicKey)
+	key, err := btcec.ParsePubKey(publicKey)
 	if err != nil {
 		return nil, err
 	}
 
-	sig, err := ecdsa.ParseDERSignature(signature)
+	sig, err := ecdsa.ParseSignature(signature)
 	if err != nil {
 		return nil, err
 	}
@@ -832,41 +832,10 @@ func verifySchnorrSecp256K1Signature[T syn.Eval](m *Machine[T], b *Builtin[T]) (
 		return nil, err
 	}
 
-	if len(publicKey) != 32 {
-		str := fmt.Sprintf("malformed public key: invalid length: %d",
-			len(publicKey))
-		return nil, errors.New(str)
+	key, err := btcec.ParsePubKey(publicKey)
+	if err != nil {
+		return nil, err
 	}
-
-	var x, y secp256k1.FieldVal
-
-	// // Parse the x coordinate while ensuring that it is in the allowed
-	// // range.
-	if overflow := x.SetByteSlice(publicKey); overflow {
-		str := "invalid public key: x >= field prime"
-		return nil, errors.New(str)
-	}
-
-	// NOTE THIS DOESN'T WORK BECAUSE DCRD USES blake for hashing as a part of
-	// signature verification where bicoin uses sha256
-	// // Attempt to calculate the y coordinate for the given x coordinate such
-	// // that the result pair is a point on the secp256k1 curve and the
-	// // solution with desired oddness is chosen.
-	// // Based on BIP-340 - Note that the correctness of verification relies on the fact that lift_x always returns a point with an even Y coordinate.
-	// // A hypothetical verification algorithm that treats points as public keys, and takes the point P directly as input would fail
-	// // any time a point with odd Y is used.
-	// // While it is possible to correct for this by negating points with odd Y coordinate before further processing,
-	// // this would result in a scheme where every (message, signature) pair is valid for two public keys
-	// // (a type of malleability that exists for ECDSA as well, but we don't wish to retain). We avoid these problems by treating
-	// // just the X coordinate as public key.
-	wantOddY := false
-	if !secp256k1.DecompressY(&x, wantOddY, &y) {
-		str := fmt.Sprintf("invalid public key: x coordinate %v is not on "+
-			"the secp256k1 curve", x)
-		return nil, errors.New(str)
-	}
-
-	key := secp256k1.NewPublicKey(&x, &y)
 
 	sig, err := schnorr.ParseSignature(signature)
 	if err != nil {
