@@ -149,8 +149,8 @@ var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
 	"keccak_256":                      Keccak_256,
 	"blake2b_224":                     Blake2b_224,
 	"verifyEd25519Signature":          VerifyEd25519Signature,
-	"verifyEcdsaSecp256K1Signature":   VerifyEcdsaSecp256k1Signature,
-	"verifySchnorrSecp256K1Signature": VerifySchnorrSecp256k1Signature,
+	"verifyEcdsaSecp256k1Signature":   VerifyEcdsaSecp256k1Signature,
+	"verifySchnorrSecp256k1Signature": VerifySchnorrSecp256k1Signature,
 	// String functions
 	"appendString": AppendString,
 	"equalsString": EqualsString,
@@ -685,9 +685,9 @@ func (f DefaultFunction) String() string {
 	case VerifyEd25519Signature:
 		return "verifyEd25519Signature"
 	case VerifyEcdsaSecp256k1Signature:
-		return "verifyEcdsaSecp256K1Signature"
+		return "verifyEcdsaSecp256k1Signature"
 	case VerifySchnorrSecp256k1Signature:
-		return "verifySchnorrSecp256K1Signature"
+		return "verifySchnorrSecp256k1Signature"
 	// String functions
 	case AppendString:
 		return "appendString"
