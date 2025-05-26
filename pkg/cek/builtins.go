@@ -608,7 +608,6 @@ func sha2256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func sha3256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-
 	arg1, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -631,7 +630,6 @@ func sha3256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func blake2B256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-
 	arg1, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -705,7 +703,6 @@ func verifyEd25519Signature[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T],
 }
 
 func blake2B224[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-
 	arg1, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -736,7 +733,6 @@ func blake2B224[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func keccak256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-
 	arg1, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
