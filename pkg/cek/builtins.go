@@ -1337,7 +1337,6 @@ func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}}
 
 	return value, nil
-
 }
 
 func iData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1356,7 +1355,6 @@ func iData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}}
 
 	return value, nil
-
 }
 
 func bData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1375,7 +1373,6 @@ func bData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}}
 
 	return value, nil
-
 }
 
 func unConstrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
