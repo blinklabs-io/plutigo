@@ -1579,7 +1579,6 @@ func serialiseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	value := &Constant{con}
 
 	return value, nil
-
 }
 
 func mkPairData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
