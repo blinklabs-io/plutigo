@@ -52,6 +52,7 @@ func BenchmarkFlatFiles(b *testing.B) {
 
 		// Register a sub-benchmark for this file.
 		b.Run(benchmarkName, func(b *testing.B) {
+
 			for b.Loop() {
 				program, err := syn.Decode[syn.DeBruijn](content)
 				if err != nil {
@@ -67,7 +68,6 @@ func BenchmarkFlatFiles(b *testing.B) {
 			}
 		})
 	}
-
 }
 
 // loadFile reads the entire file into a byte slice.
@@ -77,5 +77,6 @@ func loadFile(path string) ([]byte, error) {
 		return nil, err
 	}
 	defer f.Close()
+
 	return io.ReadAll(f)
 }
