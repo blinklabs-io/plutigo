@@ -183,17 +183,17 @@ func dataExMem(x data.PlutusData) func() ExMem {
 			// Cost 4 per item switch
 			acc += DataCost
 			switch dat := d.(type) {
-			case data.Constr:
+			case *data.Constr:
 				costStack = append(costStack, dat.Fields...)
-			case data.List:
+			case *data.List:
 				costStack = append(costStack, dat.Items...)
-			case data.Map:
+			case *data.Map:
 				for _, pair := range dat.Pairs {
 					costStack = append(costStack, pair[0], pair[1])
 				}
-			case data.Integer:
+			case *data.Integer:
 				acc += bigIntExMem(dat.Inner)()
-			case data.ByteString:
+			case *data.ByteString:
 				acc += byteArrayExMem(dat.Inner)()
 			default:
 				panic("Unreachable")

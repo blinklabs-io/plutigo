@@ -1557,7 +1557,26 @@ func equalsData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func serialiseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	panic("implement SerialiseData")
+	arg1, err := unwrapData[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	err = m.CostOne(&b.Func, dataExMem(arg1))
+	if err != nil {
+		return nil, err
+	}
+
+	encoded, err := data.Encode(arg1)
+
+	con := &syn.ByteString{
+		Inner: encoded,
+	}
+
+	value := &Constant{con}
+
+	return value, nil
+
 }
 
 func mkPairData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
