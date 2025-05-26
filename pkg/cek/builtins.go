@@ -1568,6 +1568,9 @@ func serialiseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	encoded, err := data.Encode(arg1)
+	if err != nil {
+		return nil, err
+	}
 
 	con := &syn.ByteString{
 		Inner: encoded,
