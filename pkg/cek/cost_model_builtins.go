@@ -4,7 +4,7 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/builtin"
 )
 
-type BuiltinCosts map[builtin.DefaultFunction]*CostingFunc[Arguments]
+type BuiltinCosts [87]*CostingFunc[Arguments]
 
 var DefaultBuiltinCosts = BuiltinCosts{
 	builtin.AddInteger: &CostingFunc[Arguments]{

@@ -10,6 +10,7 @@ import (
 
 type Machine[T syn.Eval] struct {
 	costs    CostModel
+	builtins Builtins[T]
 	slippage uint32
 	ExBudget ExBudget
 	Logs     []string
@@ -20,6 +21,7 @@ type Machine[T syn.Eval] struct {
 func NewMachine[T syn.Eval](slippage uint32) *Machine[T] {
 	return &Machine[T]{
 		costs:    DefaultCostModel,
+		builtins: newBuiltins[T](),
 		slippage: slippage,
 		ExBudget: DefaultExBudget,
 		Logs:     make([]string, 0),

@@ -12,6 +12,110 @@ import (
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
 
+type Builtins[T syn.Eval] [87]func(*Machine[T], *Builtin[T]) (Value[T], error)
+
+func newBuiltins[T syn.Eval]() Builtins[T] {
+	return Builtins[T]{
+		builtin.AddInteger:            addInteger[T],
+		builtin.SubtractInteger:       subtractInteger[T],
+		builtin.MultiplyInteger:       multiplyInteger[T],
+		builtin.DivideInteger:         divideInteger[T],
+		builtin.QuotientInteger:       quotientInteger[T],
+		builtin.RemainderInteger:      remainderInteger[T],
+		builtin.ModInteger:            modInteger[T],
+		builtin.EqualsInteger:         equalsInteger[T],
+		builtin.LessThanInteger:       lessThanInteger[T],
+		builtin.LessThanEqualsInteger: lessThanEqualsInteger[T],
+
+		builtin.AppendByteString:         appendByteString[T],
+		builtin.ConsByteString:           consByteString[T],
+		builtin.SliceByteString:          sliceByteString[T],
+		builtin.LengthOfByteString:       lengthOfByteString[T],
+		builtin.IndexByteString:          indexByteString[T],
+		builtin.EqualsByteString:         equalsByteString[T],
+		builtin.LessThanByteString:       lessThanByteString[T],
+		builtin.LessThanEqualsByteString: lessThanEqualsByteString[T],
+
+		builtin.Sha2_256:                        sha2256[T],
+		builtin.Sha3_256:                        sha3256[T],
+		builtin.Blake2b_256:                     blake2B256[T],
+		builtin.VerifyEd25519Signature:          verifyEd25519Signature[T],
+		builtin.Blake2b_224:                     blake2B224[T],
+		builtin.Keccak_256:                      keccak256[T],
+		builtin.VerifyEcdsaSecp256k1Signature:   verifyEcdsaSecp256K1Signature[T],
+		builtin.VerifySchnorrSecp256k1Signature: verifySchnorrSecp256K1Signature[T],
+
+		builtin.AppendString: appendString[T],
+		builtin.EqualsString: equalsString[T],
+		builtin.EncodeUtf8:   encodeUtf8[T],
+		builtin.DecodeUtf8:   decodeUtf8[T],
+
+		builtin.IfThenElse:    ifThenElse[T],
+		builtin.ChooseUnit:    chooseUnit[T],
+		builtin.Trace:         trace[T],
+		builtin.FstPair:       fstPair[T],
+		builtin.SndPair:       sndPair[T],
+		builtin.ChooseList:    chooseList[T],
+		builtin.MkCons:        mkCons[T],
+		builtin.HeadList:      headList[T],
+		builtin.TailList:      tailList[T],
+		builtin.NullList:      nullList[T],
+		builtin.ChooseData:    chooseData[T],
+		builtin.ConstrData:    constrData[T],
+		builtin.MapData:       mapData[T],
+		builtin.ListData:      listData[T],
+		builtin.IData:         iData[T],
+		builtin.BData:         bData[T],
+		builtin.UnConstrData:  unConstrData[T],
+		builtin.UnMapData:     unMapData[T],
+		builtin.UnListData:    unListData[T],
+		builtin.UnIData:       unIData[T],
+		builtin.UnBData:       unBData[T],
+		builtin.EqualsData:    equalsData[T],
+		builtin.SerialiseData: serialiseData[T],
+		builtin.MkPairData:    mkPairData[T],
+		builtin.MkNilData:     mkNilData[T],
+		builtin.MkNilPairData: mkNilPairData[T],
+
+		builtin.Bls12_381_G1_Add:         bls12381G1Add[T],
+		builtin.Bls12_381_G1_Neg:         bls12381G1Neg[T],
+		builtin.Bls12_381_G1_ScalarMul:   bls12381G1ScalarMul[T],
+		builtin.Bls12_381_G1_Equal:       bls12381G1Equal[T],
+		builtin.Bls12_381_G1_Compress:    bls12381G1Compress[T],
+		builtin.Bls12_381_G1_Uncompress:  bls12381G1Uncompress[T],
+		builtin.Bls12_381_G1_HashToGroup: bls12381G1HashToGroup[T],
+		builtin.Bls12_381_G2_Add:         bls12381G2Add[T],
+		builtin.Bls12_381_G2_Neg:         bls12381G2Neg[T],
+		builtin.Bls12_381_G2_ScalarMul:   bls12381G2ScalarMul[T],
+		builtin.Bls12_381_G2_Equal:       bls12381G2Equal[T],
+		builtin.Bls12_381_G2_Compress:    bls12381G2Compress[T],
+		builtin.Bls12_381_G2_Uncompress:  bls12381G2Uncompress[T],
+		builtin.Bls12_381_G2_HashToGroup: bls12381G2HashToGroup[T],
+		builtin.Bls12_381_MillerLoop:     bls12381MillerLoop[T],
+		builtin.Bls12_381_MulMlResult:    bls12381MulMlResult[T],
+		builtin.Bls12_381_FinalVerify:    bls12381FinalVerify[T],
+
+		builtin.IntegerToByteString:  integerToByteString[T],
+		builtin.ByteStringToInteger:  byteStringToInteger[T],
+		builtin.AndByteString:        andByteString[T],
+		builtin.OrByteString:         orByteString[T],
+		builtin.XorByteString:        xorByteString[T],
+		builtin.ComplementByteString: complementByteString[T],
+		builtin.ReadBit:              readBit[T],
+		builtin.WriteBits:            writeBits[T],
+		builtin.ReplicateByte:        replicateByte[T],
+		builtin.ShiftByteString:      shiftByteString[T],
+		builtin.RotateByteString:     rotateByteString[T],
+		builtin.CountSetBits:         countSetBits[T],
+		builtin.FindFirstSetBit:      findFirstSetBit[T],
+		builtin.Ripemd_160:           ripemd160[T],
+	}
+}
+
+func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
+	return m.builtins[b.Func](m, b)
+}
+
 func (m *Machine[T]) CostOne(b *builtin.DefaultFunction, x func() ExMem) error {
 	model := m.costs.builtinCosts[*b]
 
@@ -83,274 +187,6 @@ func (m *Machine[T]) CostSix(
 	err := m.spendBudget(CostSextuple(cf, x, y, z, xx, yy, zz))
 
 	return err
-}
-
-func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
-	switch b.Func {
-	case builtin.AddInteger:
-		return addInteger(m, b)
-
-	case builtin.SubtractInteger:
-		return subtractInteger(m, b)
-
-	case builtin.MultiplyInteger:
-		return multiplyInteger(m, b)
-
-	case builtin.DivideInteger:
-		return divideInteger(m, b)
-
-	case builtin.QuotientInteger:
-		return quotientInteger(m, b)
-
-	case builtin.RemainderInteger:
-		return remainderInteger(m, b)
-
-	case builtin.ModInteger:
-		return modInteger(m, b)
-
-	case builtin.EqualsInteger:
-		return equalsInteger(m, b)
-
-	case builtin.LessThanInteger:
-		return lessThanInteger(m, b)
-
-	case builtin.LessThanEqualsInteger:
-		return lessThanEqualsInteger(m, b)
-
-	case builtin.AppendByteString:
-		return appendByteString(m, b)
-
-	case builtin.ConsByteString:
-		return consByteString(m, b)
-
-	case builtin.SliceByteString:
-		return sliceByteString(m, b)
-
-	case builtin.LengthOfByteString:
-		return lengthOfByteString(m, b)
-
-	case builtin.IndexByteString:
-		return indexByteString(m, b)
-
-	case builtin.EqualsByteString:
-		return equalsByteString(m, b)
-
-	case builtin.LessThanByteString:
-		return lessThanByteString(m, b)
-
-	case builtin.LessThanEqualsByteString:
-		return lessThanEqualsByteString(m, b)
-
-	case builtin.Sha2_256:
-		return sha2256(m, b)
-
-	case builtin.Sha3_256:
-		return sha3256(m, b)
-
-	case builtin.Blake2b_256:
-		return blake2B256(m, b)
-
-	case builtin.VerifyEd25519Signature:
-		return verifyEd25519Signature(m, b)
-
-	case builtin.Blake2b_224:
-		return blake2B224(m, b)
-
-	case builtin.Keccak_256:
-		return keccak256(m, b)
-
-	case builtin.VerifyEcdsaSecp256k1Signature:
-		return verifyEcdsaSecp256K1Signature(m, b)
-
-	case builtin.VerifySchnorrSecp256k1Signature:
-		return verifySchnorrSecp256K1Signature(m, b)
-
-	case builtin.AppendString:
-		return appendString(m, b)
-
-	case builtin.EqualsString:
-		return equalsString(m, b)
-
-	case builtin.EncodeUtf8:
-		return encodeUtf8(m, b)
-
-	case builtin.DecodeUtf8:
-		return decodeUtf8(m, b)
-
-	case builtin.IfThenElse:
-		return ifThenElse(m, b)
-
-	case builtin.ChooseUnit:
-		return chooseUnit(m, b)
-
-	case builtin.Trace:
-		return trace(m, b)
-
-	case builtin.FstPair:
-		return fstPair(m, b)
-
-	case builtin.SndPair:
-		return sndPair(m, b)
-
-	case builtin.ChooseList:
-		return chooseList(m, b)
-
-	case builtin.MkCons:
-		return mkCons(m, b)
-
-	case builtin.HeadList:
-		return headList(m, b)
-
-	case builtin.TailList:
-		return tailList(m, b)
-
-	case builtin.NullList:
-		return nullList(m, b)
-
-	case builtin.ChooseData:
-		return chooseData(m, b)
-
-	case builtin.ConstrData:
-		return constrData(m, b)
-
-	case builtin.MapData:
-		return mapData(m, b)
-
-	case builtin.ListData:
-		return listData(m, b)
-
-	case builtin.IData:
-		return iData(m, b)
-
-	case builtin.BData:
-		return bData(m, b)
-
-	case builtin.UnConstrData:
-		return unConstrData(m, b)
-
-	case builtin.UnMapData:
-		return unMapData(m, b)
-
-	case builtin.UnListData:
-		return unListData(m, b)
-
-	case builtin.UnIData:
-		return unIData(m, b)
-
-	case builtin.UnBData:
-		return unBData(m, b)
-
-	case builtin.EqualsData:
-		return equalsData(m, b)
-
-	case builtin.SerialiseData:
-		return serialiseData(m, b)
-
-	case builtin.MkPairData:
-		return mkPairData(m, b)
-
-	case builtin.MkNilData:
-		return mkNilData(m, b)
-
-	case builtin.MkNilPairData:
-		return mkNilPairData(m, b)
-
-	case builtin.Bls12_381_G1_Add:
-		return bls12381G1Add(m, b)
-
-	case builtin.Bls12_381_G1_Neg:
-		return bls12381G1Neg(m, b)
-
-	case builtin.Bls12_381_G1_ScalarMul:
-		return bls12381G1ScalarMul(m, b)
-
-	case builtin.Bls12_381_G1_Equal:
-		return bls12381G1Equal(m, b)
-
-	case builtin.Bls12_381_G1_Compress:
-		return bls12381G1Compress(m, b)
-
-	case builtin.Bls12_381_G1_Uncompress:
-		return bls12381G1Uncompress(m, b)
-
-	case builtin.Bls12_381_G1_HashToGroup:
-		return bls12381G1HashToGroup(m, b)
-
-	case builtin.Bls12_381_G2_Add:
-		return bls12381G2Add(m, b)
-
-	case builtin.Bls12_381_G2_Neg:
-		return bls12381G2Neg(m, b)
-
-	case builtin.Bls12_381_G2_ScalarMul:
-		return bls12381G2ScalarMul(m, b)
-
-	case builtin.Bls12_381_G2_Equal:
-		return bls12381G2Equal(m, b)
-
-	case builtin.Bls12_381_G2_Compress:
-		return bls12381G2Compress(m, b)
-
-	case builtin.Bls12_381_G2_Uncompress:
-		return bls12381G2Uncompress(m, b)
-
-	case builtin.Bls12_381_G2_HashToGroup:
-		return bls12381G2HashToGroup(m, b)
-
-	case builtin.Bls12_381_MillerLoop:
-		return bls12381MillerLoop(m, b)
-
-	case builtin.Bls12_381_MulMlResult:
-		return bls12381MulMlResult(m, b)
-
-	case builtin.Bls12_381_FinalVerify:
-		return bls12381FinalVerify(m, b)
-
-	case builtin.IntegerToByteString:
-		return integerToByteString(m, b)
-
-	case builtin.ByteStringToInteger:
-		return byteStringToInteger(m, b)
-
-	case builtin.AndByteString:
-		return andByteString(m, b)
-
-	case builtin.OrByteString:
-		return orByteString(m, b)
-
-	case builtin.XorByteString:
-		return xorByteString(m, b)
-
-	case builtin.ComplementByteString:
-		return complementByteString(m, b)
-
-	case builtin.ReadBit:
-		return readBit(m, b)
-
-	case builtin.WriteBits:
-		return writeBits(m, b)
-
-	case builtin.ReplicateByte:
-		return replicateByte(m, b)
-
-	case builtin.ShiftByteString:
-		return shiftByteString(m, b)
-
-	case builtin.RotateByteString:
-		return rotateByteString(m, b)
-
-	case builtin.CountSetBits:
-		return countSetBits(m, b)
-
-	case builtin.FindFirstSetBit:
-		return findFirstSetBit(m, b)
-
-	case builtin.Ripemd_160:
-		return ripemd160(m, b)
-
-	default:
-		panic(fmt.Sprintf("unknown builtin: %v", b.Func))
-	}
 }
 
 func unwrapConstant[T syn.Eval](value Value[T]) (*Constant, error) {
