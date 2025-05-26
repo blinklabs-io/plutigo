@@ -19,7 +19,7 @@ import (
 	ecdsa "github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
 	schnorr "github.com/decred/dcrd/dcrec/secp256k1/v4/schnorr"
 	"golang.org/x/crypto/blake2b"
-	legacyripemd160 "golang.org/x/crypto/ripemd160"
+	legacyripemd160 "golang.org/x/crypto/ripemd160" //nolint:staticcheck
 	legacysha3 "golang.org/x/crypto/sha3"
 )
 
@@ -559,7 +559,6 @@ func lessThanByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], err
 }
 
 func lessThanEqualsByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-
 	arg1, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -1265,7 +1264,7 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	var dataList []data.PlutusData
+	dataList := []data.PlutusData{}
 
 	for _, item := range arg2.List {
 		itemData := item.(*syn.Data)
@@ -1298,7 +1297,7 @@ func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	var dataList [][2]data.PlutusData
+	dataList := [][2]data.PlutusData{}
 
 	for _, item := range arg1.List {
 		pair := item.(*syn.ProtoPair)
@@ -1328,7 +1327,7 @@ func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	var dataList []data.PlutusData
+	dataList := []data.PlutusData{}
 
 	for _, item := range arg1.List {
 		itemData := item.(*syn.Data)
@@ -2159,7 +2158,7 @@ func integerToByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], er
 
 	// Convert size to int64
 	if !size.IsInt64() {
-		return nil, fmt.Errorf("integerToByteString: size too large")
+		return nil, errors.New("integerToByteString: size too large")
 	}
 
 	sizeInt64 := size.Int64()
