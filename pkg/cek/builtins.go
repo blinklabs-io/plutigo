@@ -15,6 +15,9 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/data"
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
+	secp256k1 "github.com/decred/dcrd/dcrec/secp256k1/v4"
+	ecdsa "github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
+	schnorr "github.com/decred/dcrd/dcrec/secp256k1/v4/schnorr"
 	"golang.org/x/crypto/blake2b"
 	legacyripemd160 "golang.org/x/crypto/ripemd160"
 	legacysha3 "golang.org/x/crypto/sha3"
@@ -762,11 +765,97 @@ func keccak256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func verifyEcdsaSecp256K1Signature[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	panic("implement VerifyEcdsaSecp256k1Signature")
+	publicKey, err := unwrapByteString[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	message, err := unwrapByteString[T](b.Args[1])
+	if err != nil {
+		return nil, err
+	}
+
+	signature, err := unwrapByteString[T](b.Args[2])
+	if err != nil {
+		return nil, err
+	}
+
+	err = m.CostThree(
+		&b.Func,
+		byteArrayExMem(publicKey),
+		byteArrayExMem(message),
+		byteArrayExMem(signature),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	key, err := secp256k1.ParsePubKey(publicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	sig, err := ecdsa.ParseDERSignature(signature)
+	if err != nil {
+		return nil, err
+	}
+
+	res := sig.Verify(message, key)
+
+	con := &syn.Bool{
+		Inner: res,
+	}
+
+	value := &Constant{con}
+
+	return value, nil
 }
 
 func verifySchnorrSecp256K1Signature[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	panic("implement VerifySchnorrSecp256k1Signature")
+	publicKey, err := unwrapByteString[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	message, err := unwrapByteString[T](b.Args[1])
+	if err != nil {
+		return nil, err
+	}
+
+	signature, err := unwrapByteString[T](b.Args[2])
+	if err != nil {
+		return nil, err
+	}
+
+	err = m.CostThree(
+		&b.Func,
+		byteArrayExMem(publicKey),
+		byteArrayExMem(message),
+		byteArrayExMem(signature),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	key, err := schnorr.ParsePubKey(publicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	sig, err := schnorr.ParseSignature(signature)
+	if err != nil {
+		return nil, err
+	}
+
+	res := sig.Verify(message, key)
+
+	con := &syn.Bool{
+		Inner: res,
+	}
+
+	value := &Constant{con}
+
+	return value, nil
 }
 
 func appendString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
