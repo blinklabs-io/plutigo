@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"math/bits"
 	"reflect"
 	"unicode/utf8"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/syn"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 	"golang.org/x/crypto/blake2b"
+	legacyripemd160 "golang.org/x/crypto/ripemd160"
 	legacysha3 "golang.org/x/crypto/sha3"
 )
 
@@ -1124,7 +1126,7 @@ func chooseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return bytesBranch, nil
 
 	default:
-		panic("unreachable")
+		return nil, errors.New("unexpected data variant")
 	}
 }
 
@@ -2015,57 +2017,823 @@ func bls12381FinalVerify[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], er
 }
 
 func integerToByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	panic("implement IntegerToByteString")
+	// Unwrap arguments
+	endianness, err := unwrapBool[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	size, err := unwrapInteger[T](b.Args[1])
+	if err != nil {
+		return nil, err
+	}
+
+	input, err := unwrapInteger[T](b.Args[2])
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for negative input
+	if input.Sign() < 0 {
+		return nil, fmt.Errorf("integerToByteString: negative input %v", input)
+	}
+
+	// Convert size to int64
+	if !size.IsInt64() {
+		return nil, fmt.Errorf("integerToByteString: size too large")
+	}
+
+	sizeInt64 := size.Int64()
+
+	if sizeInt64 < 0 {
+		return nil, fmt.Errorf("integerToByteString: negative size %v", sizeInt64)
+	}
+
+	sizeUnwrapped := int(sizeInt64)
+
+	if sizeUnwrapped > IntegerToByteStringMaximumOutputLength {
+		return nil, errors.New("integerToByteString: size too large")
+	}
+
+	// Apply cost
+	err = m.CostThree(&b.Func, boolExMem(endianness), sizeExMem(sizeUnwrapped), bigIntExMem(input))
+	if err != nil {
+		return nil, err
+	}
+
+	// NOTE:
+	// We ought to also check for negative size and too large sizes. These checks
+	// however happens prior to calling the builtin as part of the costing step. So by
+	// the time we reach this builtin call, the size can be assumed to be
+	//
+	// >= 0 && < INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH
+
+	// Check for zero size with large input
+	if sizeInt64 == 0 && (input.BitLen()-1) >= 8*IntegerToByteStringMaximumOutputLength {
+		required := (input.BitLen() + 7) / 8
+
+		return nil, fmt.Errorf(
+			"integerToByteString: input requires %d bytes, exceeds max %d",
+			required, IntegerToByteStringMaximumOutputLength,
+		)
+	}
+
+	// Handle zero input
+	if input.Sign() == 0 {
+		bytes := make([]byte, sizeUnwrapped)
+		value := &Constant{&syn.ByteString{
+			Inner: bytes,
+		}}
+		return value, nil
+	}
+
+	// Convert integer to bytes (big-endian by default in Go)
+	bytes := input.Bytes()
+
+	// Check if bytes exceed specified size
+	if sizeInt64 != 0 && len(bytes) > sizeUnwrapped {
+		return nil, fmt.Errorf(
+			"integerToByteString: size %d too small, need %d",
+			sizeUnwrapped, len(bytes),
+		)
+	}
+
+	// Handle padding
+	if sizeUnwrapped > 0 {
+		paddingSize := sizeUnwrapped - len(bytes)
+		padding := make([]byte, paddingSize)
+
+		if endianness {
+			// Big-endian: padding | bytes
+			bytes = append(padding, bytes...)
+		} else {
+			// Little-endian: bytes | padding
+			// Reverse bytes for little-endian
+			for i, j := 0, len(bytes)-1; i < j; i, j = i+1, j-1 {
+				bytes[i], bytes[j] = bytes[j], bytes[i]
+			}
+			bytes = append(bytes, padding...)
+		}
+	} else if !endianness {
+		// Little-endian with zero size: reverse bytes
+		for i, j := 0, len(bytes)-1; i < j; i, j = i+1, j-1 {
+			bytes[i], bytes[j] = bytes[j], bytes[i]
+		}
+	}
+
+	value := &Constant{&syn.ByteString{
+		Inner: bytes,
+	}}
+
+	return value, nil
 }
 
 func byteStringToInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	panic("implement ByteStringToInteger")
+	// Unwrap arguments
+	endianness, err := unwrapBool[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	bytes, err := unwrapByteString[T](b.Args[1])
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply cost
+	err = m.CostTwo(&b.Func, boolExMem(endianness), byteArrayExMem(bytes))
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert bytes to integer
+	newInt := new(big.Int)
+
+	if endianness {
+		// Big-endian: use bytes directly
+		newInt.SetBytes(bytes)
+	} else {
+		// Little-endian: reverse bytes before conversion
+		reversed := make([]byte, len(bytes))
+
+		for i, j := 0, len(bytes)-1; i < len(bytes); i, j = i+1, j-1 {
+			reversed[i] = bytes[j]
+		}
+
+		newInt.SetBytes(reversed)
+	}
+
+	value := &Constant{&syn.Integer{
+		Inner: newInt,
+	}}
+
+	return value, nil
 }
 
 func andByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	panic("implement AndByteString")
+	// Unwrap arguments
+	shouldPad, err := unwrapBool[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	bytes1, err := unwrapByteString[T](b.Args[1])
+	if err != nil {
+		return nil, err
+	}
+
+	bytes2, err := unwrapByteString[T](b.Args[2])
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply cost
+	err = m.CostThree(&b.Func, boolExMem(shouldPad), byteArrayExMem(bytes1), byteArrayExMem(bytes2))
+	if err != nil {
+		return nil, err
+	}
+
+	// Determine output length
+	var result []byte
+	if shouldPad {
+		// Pad shorter string with 0xFF, use longer length
+		maxLen := len(bytes1)
+		if len(bytes2) > maxLen {
+			maxLen = len(bytes2)
+		}
+		result = make([]byte, maxLen)
+
+		for i := 0; i < maxLen; i++ {
+			var b1, b2 byte
+			if i < len(bytes1) {
+				b1 = bytes1[i]
+			} else {
+				b1 = 0xFF
+			}
+
+			if i < len(bytes2) {
+				b2 = bytes2[i]
+			} else {
+				b2 = 0xFF
+			}
+
+			result[i] = b1 & b2
+		}
+	} else {
+		// Use shorter length, no padding
+		minLen := len(bytes1)
+		if len(bytes2) < minLen {
+			minLen = len(bytes2)
+		}
+
+		result = make([]byte, minLen)
+
+		for i := 0; i < minLen; i++ {
+			result[i] = bytes1[i] & bytes2[i]
+		}
+	}
+
+	value := &Constant{&syn.ByteString{
+		Inner: result,
+	}}
+
+	return value, nil
 }
 
 func orByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	panic("implement OrByteString")
+	// Unwrap arguments
+	shouldPad, err := unwrapBool[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	bytes1, err := unwrapByteString[T](b.Args[1])
+	if err != nil {
+		return nil, err
+	}
+
+	bytes2, err := unwrapByteString[T](b.Args[2])
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply cost
+	err = m.CostThree(&b.Func, boolExMem(shouldPad), byteArrayExMem(bytes1), byteArrayExMem(bytes2))
+	if err != nil {
+		return nil, err
+	}
+
+	// Determine output length
+	var result []byte
+	if shouldPad {
+		// Pad shorter string with 0x00, use longer length
+		maxLen := len(bytes1)
+		if len(bytes2) > maxLen {
+			maxLen = len(bytes2)
+		}
+		result = make([]byte, maxLen)
+
+		for i := 0; i < maxLen; i++ {
+			var b1, b2 byte
+			if i < len(bytes1) {
+				b1 = bytes1[i]
+			} else {
+				b1 = 0x00
+			}
+			if i < len(bytes2) {
+				b2 = bytes2[i]
+			} else {
+				b2 = 0x00
+			}
+			result[i] = b1 | b2
+		}
+	} else {
+		// Use shorter length, no padding
+		minLen := len(bytes1)
+		if len(bytes2) < minLen {
+			minLen = len(bytes2)
+		}
+		result = make([]byte, minLen)
+
+		for i := 0; i < minLen; i++ {
+			result[i] = bytes1[i] | bytes2[i]
+		}
+	}
+
+	value := &Constant{&syn.ByteString{
+		Inner: result,
+	}}
+
+	return value, nil
 }
 
 func xorByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	panic("implement XorByteString")
+	// Unwrap arguments
+	shouldPad, err := unwrapBool[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	bytes1, err := unwrapByteString[T](b.Args[1])
+	if err != nil {
+		return nil, err
+	}
+
+	bytes2, err := unwrapByteString[T](b.Args[2])
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply cost
+	err = m.CostThree(&b.Func, boolExMem(shouldPad), byteArrayExMem(bytes1), byteArrayExMem(bytes2))
+	if err != nil {
+		return nil, err
+	}
+
+	// Determine output length
+	var result []byte
+	if shouldPad {
+		// Pad shorter string with 0x00, use longer length
+		maxLen := len(bytes1)
+		if len(bytes2) > maxLen {
+			maxLen = len(bytes2)
+		}
+
+		result = make([]byte, maxLen)
+
+		for i := 0; i < maxLen; i++ {
+			var b1, b2 byte
+			if i < len(bytes1) {
+				b1 = bytes1[i]
+			} else {
+				b1 = 0x00
+			}
+
+			if i < len(bytes2) {
+				b2 = bytes2[i]
+			} else {
+				b2 = 0x00
+			}
+
+			result[i] = b1 ^ b2
+		}
+	} else {
+		// Use shorter length, no padding
+		minLen := len(bytes1)
+		if len(bytes2) < minLen {
+			minLen = len(bytes2)
+		}
+
+		result = make([]byte, minLen)
+
+		for i := 0; i < minLen; i++ {
+			result[i] = bytes1[i] ^ bytes2[i]
+		}
+	}
+
+	value := &Constant{&syn.ByteString{
+		Inner: result,
+	}}
+
+	return value, nil
 }
 
 func complementByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	panic("implement ComplementByteString")
+	// Unwrap argument
+	bytes, err := unwrapByteString[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply cost
+	err = m.CostOne(&b.Func, byteArrayExMem(bytes))
+	if err != nil {
+		return nil, err
+	}
+
+	// Compute complement
+	result := make([]byte, len(bytes))
+	for i, b := range bytes {
+		result[i] = b ^ 0xFF
+	}
+
+	value := &Constant{&syn.ByteString{
+		Inner: result,
+	}}
+
+	return value, nil
 }
 
 func readBit[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	panic("implement ReadBit")
+	// Unwrap arguments
+	bytes, err := unwrapByteString[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	bitIndex, err := unwrapInteger[T](b.Args[1])
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply cost
+	err = m.CostTwo(&b.Func, byteArrayExMem(bytes), bigIntExMem(bitIndex))
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for empty byte string
+	if len(bytes) == 0 {
+		return nil, errors.New("readBit: empty byte array")
+	}
+
+	// Validate bit index
+	if bitIndex.Sign() < 0 || bitIndex.Cmp(big.NewInt(int64(len(bytes)*8))) >= 0 {
+		return nil, errors.New("readBit: bit index out of bounds")
+	}
+
+	// Convert bit index to int64
+	bitIndexInt, ok := bitIndex.Int64(), bitIndex.IsInt64()
+	if !ok {
+		return nil, errors.New("readBit: bit index too large")
+	}
+
+	// Compute byte index and bit offset
+	byteIndex := bitIndexInt / 8
+	bitOffset := bitIndexInt % 8
+
+	// Flip byte index (little-endian interpretation)
+	flippedIndex := len(bytes) - 1 - int(byteIndex)
+
+	// Extract bit
+	byteVal := bytes[flippedIndex]
+	bitTest := (byteVal>>bitOffset)&1 == 1
+
+	value := &Constant{&syn.Bool{
+		Inner: bitTest,
+	}}
+
+	return value, nil
 }
 
 func writeBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	panic("implement WriteBits")
+	// Unwrap arguments
+	bytes, err := unwrapByteString[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	indices, err := unwrapList[T](&syn.TInteger{}, b.Args[1])
+	if err != nil {
+		return nil, err
+	}
+
+	setBit, err := unwrapBool[T](b.Args[2])
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply cost
+	err = m.CostThree(&b.Func, byteArrayExMem(bytes), listLengthExMem(indices.List), boolExMem(setBit))
+	if err != nil {
+		return nil, err
+	}
+
+	// Clone bytes to avoid modifying the input
+	result := make([]byte, len(bytes))
+	copy(result, bytes)
+
+	// Process each bit index
+	for _, index := range indices.List {
+		// Unwrap integer from list element
+		bitIndex, ok := index.(*syn.Integer)
+		if !ok {
+			return nil, fmt.Errorf("writeBits: expected integer in indices list, got %T", index)
+		}
+
+		// Validate bit index
+		if bitIndex.Inner.Sign() < 0 || bitIndex.Inner.Cmp(big.NewInt(int64(len(bytes)*8))) >= 0 {
+			return nil, errors.New("writeBits: bit index out of bounds")
+		}
+
+		// Convert bit index to int64
+		bitIndexInt, ok := bitIndex.Inner.Int64(), bitIndex.Inner.IsInt64()
+		if !ok {
+			return nil, errors.New("writeBits: bit index too large")
+		}
+
+		// Compute byte index and bit offset
+		byteIndex := bitIndexInt / 8
+		bitOffset := bitIndexInt % 8
+
+		// Flip byte index (little-endian interpretation)
+		flippedIndex := len(bytes) - 1 - int(byteIndex)
+
+		// Create bit mask
+		bitMask := byte(1) << bitOffset
+
+		// Set or clear the bit
+		if setBit {
+			result[flippedIndex] |= bitMask
+		} else {
+			result[flippedIndex] &= ^bitMask
+		}
+	}
+
+	value := &Constant{&syn.ByteString{
+		Inner: result,
+	}}
+
+	return value, nil
 }
 
 func replicateByte[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	panic("implement ReplicateByte")
+	// Unwrap arguments
+	size, err := unwrapInteger[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	byteVal, err := unwrapInteger[T](b.Args[1])
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate size
+	if size.Sign() < 0 {
+		return nil, errors.New("replicateByte: negative size")
+	}
+	if !size.IsInt64() {
+		return nil, errors.New("replicateByte: size too large")
+	}
+	sizeInt := int(size.Int64())
+
+	if sizeInt > IntegerToByteStringMaximumOutputLength {
+		return nil, errors.New("replicateByte: size too large")
+	}
+
+	// Validate byte
+	if !byteVal.IsInt64() || byteVal.Int64() < 0 || byteVal.Int64() > 255 {
+		return nil, fmt.Errorf("replicateByte: byte value %v out of bounds (0-255)", byteVal)
+	}
+	byteUint := byte(byteVal.Int64())
+
+	// Apply cost
+	err = m.CostTwo(&b.Func, sizeExMem(sizeInt), bigIntExMem(byteVal))
+	if err != nil {
+		return nil, err
+	}
+
+	// Create result
+	var result []byte
+	if sizeInt == 0 {
+		result = []byte{}
+	} else {
+		result = make([]byte, sizeInt)
+		for i := 0; i < sizeInt; i++ {
+			result[i] = byteUint
+		}
+	}
+
+	value := &Constant{&syn.ByteString{
+		Inner: result,
+	}}
+
+	return value, nil
 }
 
 func shiftByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	panic("implement ShiftByteString")
+	// Unwrap arguments
+	bytes, err := unwrapByteString[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	shift, err := unwrapInteger[T](b.Args[1])
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply cost
+	err = m.CostTwo(&b.Func, byteArrayExMem(bytes), bigIntExMem(shift))
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if shift exceeds total bits
+	totalBits := big.NewInt(int64(len(bytes) * 8))
+	if shift.Abs(shift).Cmp(totalBits) >= 0 {
+		result := make([]byte, len(bytes))
+		return &Constant{&syn.ByteString{Inner: result}}, nil
+	}
+
+	// Convert shift to int64
+	if !shift.IsInt64() {
+		return nil, errors.New("shiftByteString: shift value too large")
+	}
+	shiftVal := shift.Int64()
+	absShift := shiftVal
+	if shiftVal < 0 {
+		absShift = -shiftVal
+	}
+
+	// Clone input bytes
+	result := make([]byte, len(bytes))
+	copy(result, bytes)
+
+	// Perform shift
+	isLeftShift := shiftVal >= 0
+	absShiftInt := int(absShift)
+	byteShift := absShiftInt / 8
+	bitShift := absShiftInt % 8
+
+	if isLeftShift {
+		// Left shift
+		if byteShift > 0 {
+			// Shift whole bytes
+			for i := 0; i < len(result)-byteShift; i++ {
+				result[i] = result[i+byteShift]
+			}
+			for i := len(result) - byteShift; i < len(result); i++ {
+				result[i] = 0
+			}
+		}
+		if bitShift > 0 {
+			// Shift remaining bits
+			carry := uint8(0)
+			for i := 0; i < len(result); i++ {
+				newCarry := (result[i] >> (8 - bitShift)) << (8 - bitShift)
+				result[i] = (result[i] << bitShift) | (carry >> (8 - bitShift))
+				carry = newCarry
+			}
+		}
+	} else {
+		// Right shift
+		if byteShift > 0 {
+			// Shift whole bytes
+			for i := len(result) - 1; i >= byteShift; i-- {
+				result[i] = result[i-byteShift]
+			}
+			for i := 0; i < byteShift; i++ {
+				result[i] = 0
+			}
+		}
+		if bitShift > 0 {
+			// Shift remaining bits
+			carry := uint8(0)
+			for i := len(result) - 1; i >= 0; i-- {
+				newCarry := (result[i] << (8 - bitShift)) >> (8 - bitShift)
+				result[i] = (result[i] >> bitShift) | (carry << (8 - bitShift))
+				carry = newCarry
+			}
+		}
+	}
+
+	value := &Constant{&syn.ByteString{
+		Inner: result,
+	}}
+
+	return value, nil
 }
 
 func rotateByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	panic("implement RotateByteString")
+	// Unwrap arguments
+	bytes, err := unwrapByteString[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	shift, err := unwrapInteger[T](b.Args[1])
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply cost
+	err = m.CostTwo(&b.Func, byteArrayExMem(bytes), bigIntExMem(shift))
+	if err != nil {
+		return nil, err
+	}
+
+	// Handle empty byte string
+	if len(bytes) == 0 {
+		return &Constant{&syn.ByteString{Inner: []byte{}}}, nil
+	}
+
+	// Normalize shift value
+	totalBits := big.NewInt(int64(len(bytes) * 8))
+	normalizedShift := new(big.Int).Mod(shift, totalBits)
+	if normalizedShift.Sign() < 0 {
+		normalizedShift.Add(normalizedShift, totalBits)
+	}
+
+	// Convert normalized shift to int64
+	if !normalizedShift.IsInt64() {
+		return nil, errors.New("rotateByteString: normalized shift too large")
+	}
+	shiftVal := int(normalizedShift.Int64())
+
+	// If shift is 0, return original bytes
+	if shiftVal == 0 {
+		result := make([]byte, len(bytes))
+		copy(result, bytes)
+		return &Constant{&syn.ByteString{Inner: result}}, nil
+	}
+
+	// Compute byte and bit shifts
+	byteShift := shiftVal / 8
+	bitShift := shiftVal % 8
+
+	// Perform rotation
+	result := make([]byte, len(bytes))
+	for i := 0; i < len(bytes); i++ {
+		// Source byte index (rotated left)
+		srcIndex := (i + byteShift) % len(bytes)
+		if srcIndex < 0 {
+			srcIndex += len(bytes)
+		}
+
+		// Get current and next byte for bit rotation
+		currByte := bytes[srcIndex]
+		nextIndex := (srcIndex + 1) % len(bytes)
+		nextByte := bytes[nextIndex]
+
+		// Rotate bits
+		result[i] = (currByte << bitShift) | (nextByte >> (8 - bitShift))
+	}
+
+	value := &Constant{&syn.ByteString{
+		Inner: result,
+	}}
+
+	return value, nil
 }
 
 func countSetBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	panic("implement CountSetBits")
+	// Unwrap argument
+	bytes, err := unwrapByteString[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply cost
+	err = m.CostOne(&b.Func, byteArrayExMem(bytes))
+	if err != nil {
+		return nil, err
+	}
+
+	// Count set bits
+	count := 0
+	for _, b := range bytes {
+		count += bits.OnesCount8(b)
+	}
+
+	value := &Constant{&syn.Integer{
+		Inner: big.NewInt(int64(count)),
+	}}
+
+	return value, nil
 }
 
 func findFirstSetBit[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	panic("implement FindFirstSetBit")
+	// Unwrap argument
+	bytes, err := unwrapByteString[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply cost
+	err = m.CostOne(&b.Func, byteArrayExMem(bytes))
+	if err != nil {
+		return nil, err
+	}
+
+	// Find first set bit in little-endian order
+	for byteIndex := len(bytes) - 1; byteIndex >= 0; byteIndex-- {
+		value := bytes[byteIndex]
+		if value == 0 {
+			continue
+		}
+
+		// Check bits from LSB to MSB
+		for bit := 0; bit < 8; bit++ {
+			if (value & (1 << bit)) != 0 {
+				// Bit index: bit position + byte offset
+				bitIndex := bit + byteIndex*8
+
+				return &Constant{&syn.Integer{
+					Inner: big.NewInt(int64(bitIndex)),
+				}}, nil
+			}
+		}
+	}
+
+	// No bits set
+	return &Constant{&syn.Integer{
+		Inner: big.NewInt(-1),
+	}}, nil
 }
 
 func ripemd160[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	panic("implement Ripemd_160")
+	// Unwrap argument
+	arg1, err := unwrapByteString[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply cost
+	err = m.CostOne(&b.Func, byteArrayExMem(arg1))
+	if err != nil {
+		return nil, err
+	}
+
+	// Compute RIPEMD-160 hash
+	hasher := legacyripemd160.New()
+	hasher.Write(arg1)
+	bytes := hasher.Sum(nil)
+
+	value := &Constant{&syn.ByteString{
+		Inner: bytes,
+	}}
+
+	return value, nil
 }

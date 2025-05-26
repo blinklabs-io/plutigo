@@ -19,10 +19,10 @@ var DefaultCostModel = CostModel{
 }
 
 const (
-	PAIR_COST = 1
-	CONS_COST = 3
-	NIL_COST  = 1
-	DATA_COST = 4
+	PairCost = 1
+	ConsCost = 3
+	NilCost  = 1
+	DataCost = 4
 )
 
 type ExMem int
@@ -38,25 +38,37 @@ func iconstantExMem(c syn.IConstant) func() ExMem {
 		var ex func() ExMem
 
 		switch x := c.(type) {
-		case syn.Integer:
+		case *syn.Integer:
 			ex = bigIntExMem(x.Inner)
-		case syn.ByteString:
+		case *syn.ByteString:
 			ex = byteArrayExMem(x.Inner)
-		case syn.Bool:
+		case *syn.Bool:
 			ex = boolExMem(x.Inner)
-		case syn.String:
+		case *syn.String:
 			ex = stringExMem(x.Inner)
-		case syn.Unit:
+		case *syn.Unit:
 			ex = unitExMem()
-		case syn.ProtoList:
+		case *syn.ProtoList:
 			ex = listExMem(x.List)
-		case syn.ProtoPair:
+		case *syn.ProtoPair:
 			ex = pairExMem(x.First, x.Second)
 		default:
 			panic("Oh no!")
 		}
 
 		return ex()
+	}
+}
+
+// Return a function so we can have lazy
+// costing of params for the case of constant functions
+func sizeExMem(i int) func() ExMem {
+	return func() ExMem {
+		if i == 0 {
+			return ExMem(0)
+		}
+
+		return ExMem(((i - 1) / 8) + 1)
 	}
 }
 
@@ -116,21 +128,27 @@ func unitExMem() func() ExMem {
 	}
 }
 
+func listLengthExMem(l []syn.IConstant) func() ExMem {
+	return func() ExMem {
+		return ExMem(len(l))
+	}
+}
+
 func listExMem(l []syn.IConstant) func() ExMem {
 	return func() ExMem {
 		var accExMem ExMem
 
 		for _, item := range l {
-			accExMem += iconstantExMem(item)() + CONS_COST
+			accExMem += iconstantExMem(item)() + ConsCost
 		}
 
-		return ExMem(NIL_COST + accExMem)
+		return ExMem(NilCost + accExMem)
 	}
 }
 
 func pairExMem(x syn.IConstant, y syn.IConstant) func() ExMem {
 	return func() ExMem {
-		return ExMem(PAIR_COST + iconstantExMem(x)() + iconstantExMem(y)())
+		return ExMem(PairCost + iconstantExMem(x)() + iconstantExMem(y)())
 	}
 }
 
@@ -163,7 +181,7 @@ func dataExMem(x data.PlutusData) func() ExMem {
 			d := costStack[0]
 			costStack = costStack[1:]
 			// Cost 4 per item switch
-			acc += DATA_COST
+			acc += DataCost
 			switch dat := d.(type) {
 			case data.Constr:
 				costStack = append(costStack, dat.Fields...)
@@ -211,7 +229,7 @@ func equalsDataExMem(
 		yLen = len(costStackX) != 0, len(costStackY) != 0 {
 		if xLen {
 			// Cost 4 per item switch
-			xAcc += DATA_COST
+			xAcc += DataCost
 			d := costStackX[0]
 			costStackX = costStackX[1:]
 			switch dat := d.(type) {
@@ -234,7 +252,7 @@ func equalsDataExMem(
 
 		if yLen {
 			// Cost 4 per item switch
-			yAcc += DATA_COST
+			yAcc += DataCost
 			d := costStackY[0]
 			costStackY = costStackY[1:]
 			switch dat := d.(type) {

@@ -12,6 +12,8 @@ import (
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
 
+const IntegerToByteStringMaximumOutputLength = 8192
+
 type Builtins[T syn.Eval] [87]func(*Machine[T], *Builtin[T]) (Value[T], error)
 
 func newBuiltins[T syn.Eval]() Builtins[T] {
