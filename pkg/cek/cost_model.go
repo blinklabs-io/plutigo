@@ -215,17 +215,17 @@ func equalsDataExMem(
 			d := costStackX[0]
 			costStackX = costStackX[1:]
 			switch dat := d.(type) {
-			case data.Constr:
+			case *data.Constr:
 				costStackX = append(costStackX, dat.Fields...)
-			case data.List:
+			case *data.List:
 				costStackX = append(costStackX, dat.Items...)
-			case data.Map:
+			case *data.Map:
 				for _, pair := range dat.Pairs {
 					costStackX = append(costStackX, pair[0], pair[1])
 				}
-			case data.Integer:
+			case *data.Integer:
 				xAcc += bigIntExMem(dat.Inner)()
-			case data.ByteString:
+			case *data.ByteString:
 				xAcc += byteArrayExMem(dat.Inner)()
 			default:
 				panic("Unreachable")
@@ -238,17 +238,17 @@ func equalsDataExMem(
 			d := costStackY[0]
 			costStackY = costStackY[1:]
 			switch dat := d.(type) {
-			case data.Constr:
+			case *data.Constr:
 				costStackY = append(costStackY, dat.Fields...)
-			case data.List:
+			case *data.List:
 				costStackY = append(costStackY, dat.Items...)
-			case data.Map:
+			case *data.Map:
 				for _, pair := range dat.Pairs {
 					costStackY = append(costStackY, pair[0], pair[1])
 				}
-			case data.Integer:
+			case *data.Integer:
 				yAcc += bigIntExMem(dat.Inner)()
-			case data.ByteString:
+			case *data.ByteString:
 				yAcc += byteArrayExMem(dat.Inner)()
 			default:
 				panic("Unreachable")

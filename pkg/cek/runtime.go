@@ -379,7 +379,7 @@ func unwrapInteger[T syn.Eval](value Value[T]) (*big.Int, error) {
 			return nil, errors.New("Value not an Integer")
 		}
 	default:
-		return nil, errors.New("Value not a Constant")
+		return nil, errors.New("Value not a Constant Integer")
 	}
 
 	return i, nil
@@ -397,7 +397,7 @@ func unwrapByteString[T syn.Eval](value Value[T]) ([]byte, error) {
 			return nil, errors.New("Value not a ByteString")
 		}
 	default:
-		return nil, errors.New("Value not a Constant")
+		return nil, errors.New("Value not a Constant ByteString")
 	}
 
 	return i, nil
@@ -415,7 +415,7 @@ func unwrapString[T syn.Eval](value Value[T]) (string, error) {
 			return "", errors.New("Value not a String")
 		}
 	default:
-		return "", errors.New("Value not a Constant")
+		return "", errors.New("Value not a Constant String")
 	}
 
 	return i, nil
@@ -433,7 +433,7 @@ func unwrapBool[T syn.Eval](value Value[T]) (bool, error) {
 			return false, errors.New("Value not a Bool")
 		}
 	default:
-		return false, errors.New("Value not a Constant")
+		return false, errors.New("Value not a Constant Bool")
 	}
 
 	return i, nil
@@ -449,7 +449,7 @@ func unwrapUnit[T syn.Eval](value Value[T]) error {
 			return errors.New("Value not a Unit")
 		}
 	default:
-		return errors.New("Value not a Constant")
+		return errors.New("Value not a Constant Unit")
 	}
 }
 
@@ -466,12 +466,13 @@ func unwrapList[T syn.Eval](
 			if typ != nil && !reflect.DeepEqual(typ, c.LTyp) {
 				return nil, fmt.Errorf("Value not a List of type %v", typ)
 			}
+
 			i = c
 		default:
 			return nil, errors.New("Value not a List")
 		}
 	default:
-		return nil, errors.New("Value not a Constant")
+		return nil, errors.New("Value not a Constant List")
 	}
 
 	return i, nil
@@ -493,7 +494,7 @@ func unwrapPair[T syn.Eval](
 			return nil, nil, errors.New("Value not a Pair")
 		}
 	default:
-		return nil, nil, errors.New("Value not a Constant")
+		return nil, nil, errors.New("Value not a Constant Pair")
 	}
 
 	return i, j, nil
@@ -511,7 +512,7 @@ func unwrapData[T syn.Eval](value Value[T]) (data.PlutusData, error) {
 			return nil, errors.New("Value not a Data")
 		}
 	default:
-		return nil, errors.New("Value not a Constant")
+		return nil, errors.New("Value not a Constant Data")
 	}
 
 	return i, nil
@@ -529,7 +530,7 @@ func unwrapBls12_381G1Element[T syn.Eval](value Value[T]) (*bls.G1Jac, error) {
 			return nil, errors.New("Value not a G1Element")
 		}
 	default:
-		return nil, errors.New("Value not a Constant")
+		return nil, errors.New("Value not a Constant G1Element")
 	}
 
 	return i, nil
@@ -547,7 +548,7 @@ func unwrapBls12_381G2Element[T syn.Eval](value Value[T]) (*bls.G2Jac, error) {
 			return nil, errors.New("Value not a G2Element")
 		}
 	default:
-		return nil, errors.New("Value not a Constant")
+		return nil, errors.New("Value not a Constant G2Element")
 	}
 
 	return i, nil
@@ -565,7 +566,7 @@ func unwrapBls12_381MlResult[T syn.Eval](value Value[T]) (*bls.GT, error) {
 			return nil, errors.New("Value not an MlResult")
 		}
 	default:
-		return nil, errors.New("Value not a Constant")
+		return nil, errors.New("Value not a Constant MlResult")
 	}
 
 	return i, nil

@@ -530,7 +530,7 @@ func (f DefaultFunction) Arity() int {
 	case ChooseData:
 		return 6
 	case ConstrData:
-		return 1
+		return 2
 	case MapData:
 		return 1
 	case ListData:

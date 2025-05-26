@@ -1134,7 +1134,7 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	arg2, err := unwrapList[T](syn.TData{}, b.Args[1])
+	arg2, err := unwrapList[T](&syn.TData{}, b.Args[1])
 	if err != nil {
 		return nil, err
 	}
@@ -1147,11 +1147,11 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	var dataList []data.PlutusData
 
 	for _, item := range arg2.List {
-		itemData := item.(syn.Data)
+		itemData := item.(*syn.Data)
 		dataList = append(dataList, itemData.Inner)
 	}
 
-	value := Constant{&syn.Data{
+	value := &Constant{&syn.Data{
 		Inner: &data.Constr{
 			Tag:    uint(arg1.Int64()),
 			Fields: dataList,
@@ -1162,10 +1162,11 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	pairType := syn.TPair{
-		First:  syn.TData{},
-		Second: syn.TData{},
+	pairType := &syn.TPair{
+		First:  &syn.TData{},
+		Second: &syn.TData{},
 	}
+
 	arg1, err := unwrapList[T](pairType, b.Args[0])
 	if err != nil {
 		return nil, err
@@ -1180,13 +1181,13 @@ func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	for _, item := range arg1.List {
 		pair := item.(syn.ProtoPair)
-		fst := pair.First.(syn.Data)
-		snd := pair.Second.(syn.Data)
+		fst := pair.First.(*syn.Data)
+		snd := pair.Second.(*syn.Data)
 
 		dataList = append(dataList, [2]data.PlutusData{fst.Inner, snd.Inner})
 	}
 
-	value := Constant{&syn.Data{
+	value := &Constant{&syn.Data{
 		Inner: &data.Map{
 			Pairs: dataList,
 		},
@@ -1196,7 +1197,7 @@ func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapList[T](syn.TData{}, b.Args[0])
+	arg1, err := unwrapList[T](&syn.TData{}, b.Args[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1209,11 +1210,11 @@ func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	var dataList []data.PlutusData
 
 	for _, item := range arg1.List {
-		itemData := item.(syn.Data)
+		itemData := item.(*syn.Data)
 		dataList = append(dataList, itemData.Inner)
 	}
 
-	value := Constant{&syn.Data{
+	value := &Constant{&syn.Data{
 		Inner: &data.List{
 			Items: dataList,
 		},
@@ -1286,15 +1287,15 @@ func unConstrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 
 		pair = &syn.ProtoPair{
-			FstType: syn.TInteger{},
-			SndType: syn.TList{
-				Typ: syn.TData{},
+			FstType: &syn.TInteger{},
+			SndType: &syn.TList{
+				Typ: &syn.TData{},
 			},
 			First: &syn.Integer{
 				Inner: big.NewInt(int64(constr.Tag)),
 			},
 			Second: &syn.ProtoList{
-				LTyp: syn.TData{},
+				LTyp: &syn.TData{},
 				List: fields,
 			},
 		}
@@ -1325,12 +1326,12 @@ func unMapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 		for _, item := range l.Pairs {
 			pair := &syn.ProtoPair{
-				FstType: syn.TData{},
-				SndType: syn.TData{},
-				First: syn.Data{
+				FstType: &syn.TData{},
+				SndType: &syn.TData{},
+				First: &syn.Data{
 					Inner: item[0],
 				},
-				Second: syn.Data{
+				Second: &syn.Data{
 					Inner: item[1],
 				},
 			}
@@ -1339,9 +1340,9 @@ func unMapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 
 		dataMap = &syn.ProtoList{
-			LTyp: syn.TPair{
-				First:  syn.TData{},
-				Second: syn.TData{},
+			LTyp: &syn.TPair{
+				First:  &syn.TData{},
+				Second: &syn.TData{},
 			},
 			List: items,
 		}
@@ -1379,7 +1380,7 @@ func unListData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 
 		list = &syn.ProtoList{
-			LTyp: syn.TData{},
+			LTyp: &syn.TData{},
 			List: items,
 		}
 	default:
@@ -1468,7 +1469,7 @@ func equalsData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		Inner: reflect.DeepEqual(arg1, arg2),
 	}
 
-	value := Constant{result}
+	value := &Constant{result}
 
 	return value, nil
 }
@@ -1494,8 +1495,8 @@ func mkPairData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	pair := syn.ProtoPair{
-		FstType: syn.TData{},
-		SndType: syn.TData{},
+		FstType: &syn.TData{},
+		SndType: &syn.TData{},
 		First: &syn.Data{
 			Inner: arg1,
 		},
@@ -1504,7 +1505,7 @@ func mkPairData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		},
 	}
 
-	value := Constant{&pair}
+	value := &Constant{&pair}
 
 	return value, nil
 }
@@ -1521,11 +1522,11 @@ func mkNilData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	l := syn.ProtoList{
-		LTyp: syn.TData{},
+		LTyp: &syn.TData{},
 		List: []syn.IConstant{},
 	}
 
-	value := Constant{&l}
+	value := &Constant{&l}
 
 	return value, nil
 }
@@ -1542,14 +1543,14 @@ func mkNilPairData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	l := syn.ProtoList{
-		LTyp: syn.TPair{
-			First:  syn.TData{},
-			Second: syn.TData{},
+		LTyp: &syn.TPair{
+			First:  &syn.TData{},
+			Second: &syn.TData{},
 		},
 		List: []syn.IConstant{},
 	}
 
-	value := Constant{&l}
+	value := &Constant{&l}
 
 	return value, nil
 }
