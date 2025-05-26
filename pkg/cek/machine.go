@@ -269,7 +269,7 @@ func (m *Machine[T]) returnCompute(
 			rest := fields[1:]
 
 			frame := &FrameConstr[T]{
-				Ctx:            context,
+				Ctx:            c.Ctx,
 				Tag:            c.Tag,
 				Fields:         rest,
 				ResolvedFields: resolvedFields,

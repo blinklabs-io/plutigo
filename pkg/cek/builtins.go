@@ -584,7 +584,6 @@ func lessThanEqualsByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T
 }
 
 func sha2256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-
 	arg1, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -1182,7 +1181,7 @@ func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	var dataList [][2]data.PlutusData
 
 	for _, item := range arg1.List {
-		pair := item.(syn.ProtoPair)
+		pair := item.(*syn.ProtoPair)
 		fst := pair.First.(*syn.Data)
 		snd := pair.Second.(*syn.Data)
 
