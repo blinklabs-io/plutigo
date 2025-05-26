@@ -832,7 +832,7 @@ func verifySchnorrSecp256K1Signature[T syn.Eval](m *Machine[T], b *Builtin[T]) (
 		return nil, err
 	}
 
-	key, err := btcec.ParsePubKey(publicKey)
+	key, err := schnorr.ParsePubKey(publicKey)
 	if err != nil {
 		return nil, err
 	}
