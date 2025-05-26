@@ -1,6 +1,7 @@
 package data
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -57,7 +58,7 @@ func encodeConstr(c *Constr) (any, error) {
 		// Tags 7-127 map to CBOR tags 1280-1400
 		cborTag = 1280 + uint64(c.Tag-7)
 	case c.Tag == 102:
-		return nil, fmt.Errorf("tagged data (tag 102) not implemented")
+		return nil, errors.New("tagged data (tag 102) not implemented")
 	default:
 		return nil, fmt.Errorf("unsupported Constr tag: %d", c.Tag)
 	}
