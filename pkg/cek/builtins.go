@@ -17,6 +17,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2"
 	ecdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	schnorr "github.com/btcsuite/btcd/btcec/v2/schnorr"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 	"golang.org/x/crypto/blake2b"
 	legacyripemd160 "golang.org/x/crypto/ripemd160" //nolint:staticcheck
@@ -785,17 +786,40 @@ func verifyEcdsaSecp256K1Signature[T syn.Eval](m *Machine[T], b *Builtin[T]) (Va
 		return nil, err
 	}
 
+	if len(publicKey) != 33 {
+		return nil, errors.New("invalid public key length")
+	}
+
+	if len(signature) != 64 {
+		return nil, errors.New("invalid signature length")
+	}
+
+	if len(message) != 32 {
+		return nil, errors.New("invalid message length")
+	}
+
 	key, err := btcec.ParsePubKey(publicKey)
 	if err != nil {
 		return nil, err
 	}
 
-	sig, err := ecdsa.ParseSignature(signature)
-	if err != nil {
-		return nil, err
+	r := new(btcec.ModNScalar)
+
+	overflow := r.SetByteSlice(signature[0:32])
+	if overflow {
+		return nil, errors.New("invalid signature (r)")
 	}
 
-	res := sig.Verify(message, key)
+	s := new(btcec.ModNScalar)
+	overflow = s.SetByteSlice(signature[32:])
+	if overflow {
+		return nil, errors.New("invalid signature (s)")
+	}
+
+	sig := ecdsa.NewSignature(r, s)
+
+	// Check s is less then half the field prime (BIP-146)
+	res := sig.Verify(message, key) && !s.IsOverHalfOrder()
 
 	con := &syn.Bool{
 		Inner: res,
@@ -832,17 +856,29 @@ func verifySchnorrSecp256K1Signature[T syn.Eval](m *Machine[T], b *Builtin[T]) (
 		return nil, err
 	}
 
+	if len(signature) != 64 {
+		return nil, errors.New("invalid signature length")
+	}
+
 	key, err := schnorr.ParsePubKey(publicKey)
 	if err != nil {
 		return nil, err
 	}
 
-	sig, err := schnorr.ParseSignature(signature)
-	if err != nil {
-		return nil, err
-	}
+	r := new(btcec.FieldVal)
 
-	res := sig.Verify(message, key)
+	// Overflow is fine - part of CONF tests
+	r.SetByteSlice(signature[0:32])
+
+	s := new(btcec.ModNScalar)
+
+	// Overflow is fine - part of CONF tests
+	s.SetByteSlice(signature[32:])
+
+	// Had to copy the code and take out the message size check
+	// since BIP-340 in practice supports any message size even
+	// though only 32 bytes is practically used
+	res := verify(r, s, message, key)
 
 	con := &syn.Bool{
 		Inner: res,
@@ -851,6 +887,127 @@ func verifySchnorrSecp256K1Signature[T syn.Eval](m *Machine[T], b *Builtin[T]) (
 	value := &Constant{con}
 
 	return value, nil
+}
+
+func schnorrVerify(r *btcec.FieldVal, s *btcec.ModNScalar, msg []byte, pubKey *btcec.PublicKey) error {
+	// The algorithm for producing a BIP-340 signature is described in
+	// README.md and is reproduced here for reference:
+	//
+	// 1. Fail if m is not 32 bytes
+	// 2. P = lift_x(int(pk)).
+	// 3. r = int(sig[0:32]); fail is r >= p.
+	// 4. s = int(sig[32:64]); fail if s >= n.
+	// 5. e = int(tagged_hash("BIP0340/challenge", bytes(r) || bytes(P) || M)) mod n.
+	// 6. R = s*G - e*P
+	// 7. Fail if is_infinite(R)
+	// 8. Fail if not hash_even_y(R)
+	// 9. Fail is x(R) != r.
+	// 10. Return success iff failure did not occur before reaching this point.
+
+	// DONT DO THIS WE NEED VARIABLE LENGTH FOR CONF TESTS
+	// Step 1.
+	//
+	// Fail if m is not 32 bytes
+	// if len(hash) != scalarSize {
+	// 	str := fmt.Sprintf("wrong size for message (got %v, want %v)",
+	// 		len(hash), scalarSize)
+	// 	return signatureError(ecdsa_schnorr.ErrInvalidHashLen, str)
+	// }
+
+	// Already done before
+	// Step 2.
+	//
+	// P = lift_x(int(pk))
+	//
+	// Fail if P is not a point on the curve
+	// pubKey, err := ParsePubKey(pubKeyBytes)
+	// if err != nil {
+	// 	return err
+	// }
+	// if !pubKey.IsOnCurve() {
+	// 	str := "pubkey point is not on curve"
+	// 	return signatureError(ecdsa_schnorr.ErrPubKeyNotOnCurve, str)
+	// }
+
+	// Step 3.
+	//
+	// Fail if r >= p
+	//
+	// Note this is already handled by the fact r is a field element.
+
+	// Step 4.
+	//
+	// Fail if s >= n
+	//
+	// Note this is already handled by the fact s is a mod n scalar.
+
+	// Step 5.
+	//
+	// e = int(tagged_hash("BIP0340/challenge", bytes(r) || bytes(P) || M)) mod n.
+	var rBytes [32]byte
+
+	r.PutBytesUnchecked(rBytes[:])
+	pBytes := schnorr.SerializePubKey(pubKey)
+
+	commitment := chainhash.TaggedHash(
+		chainhash.TagBIP0340Challenge, rBytes[:], pBytes, msg,
+	)
+
+	var e btcec.ModNScalar
+	e.SetBytes((*[32]byte)(commitment))
+
+	// Negate e here so we can use AddNonConst below to subtract the s*G
+	// point from e*P.
+	e.Negate()
+
+	// Step 6.
+	//
+	// R = s*G - e*P
+	var P, R, sG, eP btcec.JacobianPoint
+	pubKey.AsJacobian(&P)
+	btcec.ScalarBaseMultNonConst(s, &sG)
+	btcec.ScalarMultNonConst(&e, &P, &eP)
+	btcec.AddNonConst(&sG, &eP, &R)
+
+	// Step 7.
+	//
+	// Fail if R is the point at infinity
+	if (R.X.IsZero() && R.Y.IsZero()) || R.Z.IsZero() {
+		str := "calculated R point is the point at infinity"
+		return errors.New(str)
+	}
+
+	// Step 8.
+	//
+	// Fail if R.y is odd
+	//
+	// Note that R must be in affine coordinates for this check.
+	R.ToAffine()
+	if R.Y.IsOdd() {
+		str := "calculated R y-value is odd"
+		return errors.New(str)
+	}
+
+	// Step 9.
+	//
+	// Verified if R.x == r
+	//
+	// Note that R must be in affine coordinates for this check.
+	if !r.Equals(&R.X) {
+		str := "calculated R point was not given R"
+		return errors.New(str)
+	}
+
+	// Step 10.
+	//
+	// Return success iff failure did not occur before reaching this point.
+	return nil
+}
+
+// Verify returns whether or not the signature is valid for the provided hash
+// and secp256k1 public key.
+func verify(r *btcec.FieldVal, s *btcec.ModNScalar, msg []byte, pubKey *btcec.PublicKey) bool {
+	return schnorrVerify(r, s, msg, pubKey) == nil
 }
 
 func appendString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
