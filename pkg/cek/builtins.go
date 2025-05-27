@@ -786,34 +786,34 @@ func verifyEcdsaSecp256K1Signature[T syn.Eval](m *Machine[T], b *Builtin[T]) (Va
 		return nil, err
 	}
 
-	key, err := btcec.ParsePubKey(publicKey)
-	if err != nil {
-		return nil, err
-	}
-
 	if len(publicKey) != 33 {
-		return nil, errors.New("Invalid public key length")
+		return nil, errors.New("invalid public key length")
 	}
 
 	if len(signature) != 64 {
-		return nil, errors.New("Invalid signature length")
+		return nil, errors.New("invalid signature length")
 	}
 
 	if len(message) != 32 {
-		return nil, errors.New("Invalid message length")
+		return nil, errors.New("invalid message length")
+	}
+
+	key, err := btcec.ParsePubKey(publicKey)
+	if err != nil {
+		return nil, err
 	}
 
 	r := new(btcec.ModNScalar)
 
 	overflow := r.SetByteSlice(signature[0:32])
 	if overflow {
-		return nil, errors.New("Invalid signature (r)")
+		return nil, errors.New("invalid signature (r)")
 	}
 
 	s := new(btcec.ModNScalar)
 	overflow = s.SetByteSlice(signature[32:])
 	if overflow {
-		return nil, errors.New("Invalid signature (s)")
+		return nil, errors.New("invalid signature (s)")
 	}
 
 	sig := ecdsa.NewSignature(r, s)
@@ -857,7 +857,7 @@ func verifySchnorrSecp256K1Signature[T syn.Eval](m *Machine[T], b *Builtin[T]) (
 	}
 
 	if len(signature) != 64 {
-		return nil, errors.New("Invalid signature length")
+		return nil, errors.New("invalid signature length")
 	}
 
 	key, err := schnorr.ParsePubKey(publicKey)
