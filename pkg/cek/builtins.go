@@ -2881,80 +2881,63 @@ func shiftByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error)
 		return nil, err
 	}
 
-	// Check if shift exceeds total bits
-	totalBits := big.NewInt(int64(len(bytes) * 8))
-	if shift.Abs(shift).Cmp(totalBits) >= 0 {
+	// Check if shift exceeds total bits - return all zeros
+	totalBitsInt := int64(len(bytes) * 8)
+	totalBitsBig := big.NewInt(totalBitsInt)
+	absShift := new(big.Int).Abs(shift)
+	if absShift.Cmp(totalBitsBig) >= 0 {
 		result := make([]byte, len(bytes))
 		return &Constant{&syn.ByteString{Inner: result}}, nil
 	}
 
-	// Convert shift to int64
+	// Convert shift to int
 	if !shift.IsInt64() {
 		return nil, errors.New("shiftByteString: shift value too large")
 	}
-	shiftVal := shift.Int64()
-	absShift := shiftVal
-	if shiftVal < 0 {
-		absShift = -shiftVal
+	shiftVal := int(shift.Int64())
+
+	if shiftVal == 0 {
+		return b.Args[0], nil
 	}
 
-	// Clone input bytes
-	result := make([]byte, len(bytes))
-	copy(result, bytes)
+	// Convert bytes to bit array (MSB0)
+	totalBits := len(bytes) * 8
+	bits := make([]bool, totalBits)
 
-	// Perform shift
-	isLeftShift := shiftVal >= 0
-	absShiftInt := int(absShift)
-	byteShift := absShiftInt / 8
-	bitShift := absShiftInt % 8
+	// Read bits from bytes (MSB0 order)
+	for i := 0; i < totalBits; i++ {
+		byteIdx := i / 8
+		bitIdx := 7 - (i % 8) // MSB0: leftmost bit first
+		bits[i] = (bytes[byteIdx] & (1 << bitIdx)) != 0
+	}
 
-	if isLeftShift {
-		// Left shift
-		if byteShift > 0 {
-			// Shift whole bytes
-			for i := 0; i < len(result)-byteShift; i++ {
-				result[i] = result[i+byteShift]
-			}
-			for i := len(result) - byteShift; i < len(result); i++ {
-				result[i] = 0
-			}
-		}
-		if bitShift > 0 {
-			// Shift remaining bits
-			carry := uint8(0)
-			for i := 0; i < len(result); i++ {
-				newCarry := (result[i] >> (8 - bitShift)) << (8 - bitShift)
-				result[i] = (result[i] << bitShift) | (carry >> (8 - bitShift))
-				carry = newCarry
-			}
+	// Create result bit array
+	resultBits := make([]bool, totalBits)
+
+	if shiftVal > 0 {
+		// Positive = left shift
+		for i := 0; i < totalBits-shiftVal; i++ {
+			resultBits[i] = bits[i+shiftVal]
 		}
 	} else {
-		// Right shift
-		if byteShift > 0 {
-			// Shift whole bytes
-			for i := len(result) - 1; i >= byteShift; i-- {
-				result[i] = result[i-byteShift]
-			}
-			for i := 0; i < byteShift; i++ {
-				result[i] = 0
-			}
-		}
-		if bitShift > 0 {
-			// Shift remaining bits
-			carry := uint8(0)
-			for i := len(result) - 1; i >= 0; i-- {
-				newCarry := (result[i] << (8 - bitShift)) >> (8 - bitShift)
-				result[i] = (result[i] >> bitShift) | (carry << (8 - bitShift))
-				carry = newCarry
-			}
+		// Negative = right shift
+		shiftAmount := -shiftVal
+		for i := shiftAmount; i < totalBits; i++ {
+			resultBits[i] = bits[i-shiftAmount]
 		}
 	}
 
-	value := &Constant{&syn.ByteString{
-		Inner: result,
-	}}
+	// Convert bit array back to bytes
+	result := make([]byte, len(bytes))
+	for i := 0; i < totalBits; i++ {
+		if resultBits[i] {
+			byteIdx := i / 8
+			bitIdx := 7 - (i % 8) // MSB0: leftmost bit first
+			result[byteIdx] |= (1 << bitIdx)
+		}
+	}
 
-	return value, nil
+	return &Constant{&syn.ByteString{Inner: result}}, nil
 }
 
 func rotateByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
