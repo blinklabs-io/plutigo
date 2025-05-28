@@ -1,3 +1,9 @@
 (program 1.0.0
-    [ (builtin serialiseData) (con data (Constr 0 [])) ]
+  [
+    [
+      (builtin shiftByteString)
+      (con bytestring #ebfc)
+    ]
+    (con integer 5)
+  ]
 )

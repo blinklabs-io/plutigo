@@ -254,7 +254,7 @@ func (l *Lexer) NextToken() Token {
 				return tok
 			}
 
-			tok.Type = TokenByteString
+			tok.Type = TokenPoint
 			tok.Literal = literal
 
 			// Convert hex to bytes
