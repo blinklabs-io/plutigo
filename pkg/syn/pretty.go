@@ -225,7 +225,7 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T], isTopLevel bool) {
 	case *Error:
 		pp.write("(error )")
 	case *Constant:
-		pp.printConstant(t)
+		pp.printConstant(t, false)
 	default:
 		fmt.Println(reflect.TypeOf(t))
 		panic(fmt.Sprintf("unknown term: %v", t))
@@ -233,30 +233,46 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T], isTopLevel bool) {
 }
 
 // printConstant formats a Constant node
-func (pp *PrettyPrinter) printConstant(c *Constant) {
-	pp.write("(con ")
+func (pp *PrettyPrinter) printConstant(c *Constant, inCollection bool) {
+	if !inCollection {
+		pp.write("(con ")
+	}
 
 	switch con := c.Con.(type) {
 	case *Integer:
-		pp.write("integer ")
+		if !inCollection {
+			pp.write("integer ")
+		}
 
 		pp.write(con.Inner.String())
 	case *ByteString:
-		pp.write("bytestring #")
+		if !inCollection {
+			pp.write("bytestring #")
+		}
 
 		for _, b := range con.Inner {
 			pp.builder.WriteString(fmt.Sprintf("%02x", b))
 		}
 	case *String:
-		pp.write("string \"")
+		if !inCollection {
+			pp.write("string ")
+		}
+
+		pp.write("\"")
 
 		pp.write(escapeString(con.Inner))
 
 		pp.write("\"")
 	case *Unit:
-		pp.write("unit ()")
+		if !inCollection {
+			pp.write("unit ")
+		}
+
+		pp.write("()")
 	case *Bool:
-		pp.write("bool ")
+		if !inCollection {
+			pp.write("bool ")
+		}
 
 		if con.Inner {
 			pp.write("True")
@@ -264,9 +280,12 @@ func (pp *PrettyPrinter) printConstant(c *Constant) {
 			pp.write("False")
 		}
 	case *ProtoList:
-		pp.write("(list ")
-		pp.printType(con.LTyp)
-		pp.write(") ")
+		if !inCollection {
+			pp.write("(list ")
+			pp.printType(con.LTyp)
+			pp.write(") ")
+		}
+
 		if len(con.List) == 0 {
 			pp.write("[]")
 		} else {
@@ -274,7 +293,7 @@ func (pp *PrettyPrinter) printConstant(c *Constant) {
 			pp.increaseIndent()
 			for i, item := range con.List {
 				pp.writeIndent()
-				pp.printConstant(&Constant{Con: item})
+				pp.printConstant(&Constant{Con: item}, true)
 				if i < len(con.List)-1 {
 					pp.write(",")
 				}
@@ -285,20 +304,33 @@ func (pp *PrettyPrinter) printConstant(c *Constant) {
 			pp.write("]")
 		}
 	case *ProtoPair:
-		pp.write("(pair ")
-		pp.printType(con.FstType)
-		pp.write(" ")
-		pp.printType(con.SndType)
-		pp.write(") (")
-		pp.printConstant(&Constant{Con: con.First})
+		if !inCollection {
+			pp.write("(pair ")
+			pp.printType(con.FstType)
+			pp.write(" ")
+			pp.printType(con.SndType)
+			pp.write(") ")
+		}
+		pp.write("(")
+		pp.printConstant(&Constant{Con: con.First}, true)
 		pp.write(", ")
-		pp.printConstant(&Constant{Con: con.Second})
+		pp.printConstant(&Constant{Con: con.Second}, true)
 		pp.write(")")
 	case *Data:
-		pp.write("data ")
+		if !inCollection {
+			pp.write("data ")
+			pp.write("(")
+		}
+
 		pp.printPlutusData(con.Inner)
+
+		if !inCollection {
+			pp.write(")")
+		}
 	case *Bls12_381G1Element:
-		pp.write("bls12_381_G1_element 0x")
+		if !inCollection {
+			pp.write("bls12_381_G1_element 0x")
+		}
 
 		affine := new(bls.G1Affine).FromJacobian(con.Inner)
 
@@ -306,7 +338,9 @@ func (pp *PrettyPrinter) printConstant(c *Constant) {
 			pp.builder.WriteString(fmt.Sprintf("%02x", b))
 		}
 	case *Bls12_381G2Element:
-		pp.write("bls12_381_G2_element 0x")
+		if !inCollection {
+			pp.write("bls12_381_G2_element 0x")
+		}
 
 		affine := new(bls.G2Affine).FromJacobian(con.Inner)
 
@@ -317,7 +351,9 @@ func (pp *PrettyPrinter) printConstant(c *Constant) {
 		pp.write(fmt.Sprintf("unknown constant: %v", c))
 	}
 
-	pp.write(")")
+	if !inCollection {
+		pp.write(")")
+	}
 }
 
 // printType formats a Typ interface
