@@ -14,7 +14,7 @@ import (
 
 const IntegerToByteStringMaximumOutputLength = 8192
 
-type Builtins[T syn.Eval] [87]func(*Machine[T], *Builtin[T]) (Value[T], error)
+type Builtins[T syn.Eval] [builtin.TotalBuiltinCount]func(*Machine[T], *Builtin[T]) (Value[T], error)
 
 func newBuiltins[T syn.Eval]() Builtins[T] {
 	return Builtins[T]{
@@ -111,6 +111,15 @@ func newBuiltins[T syn.Eval]() Builtins[T] {
 		builtin.CountSetBits:         countSetBits[T],
 		builtin.FindFirstSetBit:      findFirstSetBit[T],
 		builtin.Ripemd_160:           ripemd160[T],
+		// Batch 6
+		builtin.ExpModInteger: expModInteger[T],
+		builtin.CaseList:      caseList[T],
+		builtin.CaseData:      caseData[T],
+		builtin.DropList:      dropList[T],
+		// Arrays
+		builtin.LengthOfArray: lengthOfArray[T],
+		builtin.ListToArray:   listToArray[T],
+		builtin.IndexArray:    indexArray[T],
 	}
 }
 

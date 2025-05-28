@@ -3105,3 +3105,62 @@ func ripemd160[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	return value, nil
 }
+
+func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	a, err := unwrapInteger[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	bb, err := unwrapInteger[T](b.Args[1])
+	if err != nil {
+		return nil, err
+	}
+
+	mm, err := unwrapInteger[T](b.Args[2])
+	if err != nil {
+		return nil, err
+	}
+
+	err = m.CostThree(&b.Func, bigIntExMem(a), bigIntExMem(bb), bigIntExMem(mm))
+	if err != nil {
+		return nil, err
+	}
+
+	if mm.Sign() == -1 {
+		return nil, errors.New("expModInteger: negative modulus")
+	}
+
+	z := new(big.Int)
+	z.Exp(a, bb, mm)
+
+	value := &Constant{&syn.Integer{
+		Inner: z,
+	}}
+
+	return value, nil
+}
+
+func caseList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	panic("implement caseList")
+}
+
+func caseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	panic("implement caseData")
+}
+
+func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	panic("implement dropList")
+}
+
+func lengthOfArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	panic("implement lengthOfArray")
+}
+
+func listToArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	panic("implement listToArray")
+}
+
+func indexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	panic("implement indexArray")
+}
