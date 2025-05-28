@@ -3051,30 +3051,34 @@ func findFirstSetBit[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error)
 		return nil, err
 	}
 
-	// Find first set bit in little-endian order
+	var bitIndex int = -1
+
+	// Find first set bit - iterate bytes in reverse order (like Rust .rev())
 	for byteIndex := len(bytes) - 1; byteIndex >= 0; byteIndex-- {
 		value := bytes[byteIndex]
 		if value == 0 {
 			continue
 		}
 
-		// Check bits from LSB to MSB
-		for bit := 0; bit < 8; bit++ {
-			if (value & (1 << bit)) != 0 {
-				// Bit index: bit position + byte offset
-				bitIndex := bit + byteIndex*8
+		for pos := range 7 {
+			if value&(1<<pos) != 0 {
+				bitIndex = pos + (len(bytes)-byteIndex-1)*8
 
-				return &Constant{&syn.Integer{
-					Inner: big.NewInt(int64(bitIndex)),
-				}}, nil
+				break
 			}
+		}
+
+		if byteIndex != -1 {
+			break
 		}
 	}
 
+	value := &Constant{&syn.Integer{
+		Inner: big.NewInt(int64(bitIndex)),
+	}}
+
 	// No bits set
-	return &Constant{&syn.Integer{
-		Inner: big.NewInt(-1),
-	}}, nil
+	return value, nil
 }
 
 func ripemd160[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
