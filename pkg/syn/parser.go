@@ -552,7 +552,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 
 		return &Constant{Con: &ProtoPair{FstType: ts.First, SndType: ts.Second, First: first, Second: second}}, nil
 	case *TBls12_381G1Element:
-		if p.curToken.Type != lex.TokenByteString {
+		if p.curToken.Type != lex.TokenPoint {
 			return nil, fmt.Errorf("expected bytestring value, got %v at position %d", p.curToken.Type, p.curToken.Position)
 		}
 
@@ -582,7 +582,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 
 		return &Constant{Con: &Bls12_381G1Element{Inner: jac}}, nil
 	case *TBls12_381G2Element:
-		if p.curToken.Type != lex.TokenByteString {
+		if p.curToken.Type != lex.TokenPoint {
 			return nil, fmt.Errorf("expected bytestring value, got %v at position %d", p.curToken.Type, p.curToken.Position)
 		}
 

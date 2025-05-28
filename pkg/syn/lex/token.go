@@ -15,6 +15,7 @@ const (
 	TokenIdentifier   // e.g., x, addInteger
 	TokenString       // e.g., "hello"
 	TokenByteString   // e.g., #aaBB
+	TokenPoint        // e.g., 0xc0000
 	TokenTrue         // True
 	TokenFalse        // False
 	TokenUnit         // ()
