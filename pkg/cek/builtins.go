@@ -127,8 +127,16 @@ func divideInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	var newInt big.Int
+	var remainder big.Int
 
-	newInt.Div(arg1, arg2) // Division (rounds toward zero)
+	// Perform division
+	newInt.Quo(arg1, arg2)
+	remainder.Rem(arg1, arg2)
+
+	// Adjust for floor division if remainder exists and signs differ
+	if remainder.Sign() != 0 && arg1.Sign() != arg2.Sign() {
+		newInt.Sub(&newInt, big.NewInt(1))
+	}
 
 	value := &Constant{&syn.Integer{
 		Inner: &newInt,
@@ -230,12 +238,19 @@ func modInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	var newInt big.Int
+	var quotient, remainder big.Int
 
-	newInt.Mod(arg1, arg2) // Modulus (always non-negative)
+	// Compute quotient and remainder
+	quotient.Quo(arg1, arg2)
+	remainder.Rem(arg1, arg2)
+
+	// Adjust for floored modulo if remainder exists and signs differ
+	if remainder.Sign() != 0 && arg1.Sign() != arg2.Sign() {
+		remainder.Add(&remainder, arg2)
+	}
 
 	value := &Constant{&syn.Integer{
-		Inner: &newInt,
+		Inner: &remainder,
 	}}
 
 	return value, nil
