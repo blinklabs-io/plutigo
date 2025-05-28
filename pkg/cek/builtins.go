@@ -1954,6 +1954,10 @@ func bls12381G1Uncompress[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], e
 		return nil, err
 	}
 
+	if len(arg1) != bls.SizeOfG1AffineCompressed {
+		return nil, errors.New("bytestring is too long")
+	}
+
 	uncompressed := new(bls.G1Affine)
 
 	_, err = uncompressed.SetBytes(arg1)
@@ -2131,6 +2135,10 @@ func bls12381G2Uncompress[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], e
 	err = m.CostOne(&b.Func, byteArrayExMem(arg1))
 	if err != nil {
 		return nil, err
+	}
+
+	if len(arg1) != bls.SizeOfG2AffineCompressed {
+		return nil, errors.New("bytestring is too long")
 	}
 
 	uncompressed := new(bls.G2Affine)
