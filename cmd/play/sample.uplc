@@ -1,9 +1,3 @@
 (program 1.0.0
-  [
-    [
-      (builtin shiftByteString)
-      (con bytestring #ebfc)
-    ]
-    (con integer 5)
-  ]
+  (con (list integer) [1, 2, 3, 4])
 )
