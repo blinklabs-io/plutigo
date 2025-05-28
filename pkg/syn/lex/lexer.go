@@ -1,8 +1,10 @@
 package lex
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math/big"
+	"strconv"
 	"unicode"
 )
 
@@ -106,20 +108,138 @@ func (l *Lexer) readNumber() (string, error) {
 }
 
 func (l *Lexer) readString() (string, error) {
-	start := l.pos + 1 // Skip opening quote
-
+	var tmpString string
+	leftoverChar := false
 	for {
-		l.readChar()
+		if !leftoverChar {
+			l.readChar()
+		}
+		leftoverChar = false
 
 		if l.ch == 0 {
 			return "", fmt.Errorf("unterminated string at position %d", l.pos)
 		}
 
+		if l.ch == '\\' {
+			// Read next character to determine escape sequence type
+			l.readChar()
+			// Check for "simple" escape
+			tmpEscape := `\` + string(l.ch)
+			if val, ok := escapeMap[tmpEscape]; ok {
+				tmpString += val
+				continue
+			}
+			// Unicode escape
+			if tmpEscape == `\u` {
+				var unicodeHex string
+				for {
+					l.readChar()
+					unicodeHex += string(l.ch)
+					tmpHex := fmt.Sprintf("%04s", unicodeHex)
+					if _, err := hex.DecodeString(tmpHex); err != nil {
+						// Strip off last hex character
+						unicodeHex = unicodeHex[:len(unicodeHex)-1]
+						leftoverChar = true
+						break
+					}
+					if len(unicodeHex) >= 4 {
+						break
+					}
+				}
+				if len(unicodeHex) < 2 {
+					return "", fmt.Errorf("unicode escape sequence too short: \\u%s", unicodeHex)
+				}
+				// Pad hex string for parsing
+				tmpHex := fmt.Sprintf("%04s", unicodeHex)
+				r, err := hex.DecodeString(tmpHex)
+				if err != nil {
+					return "", fmt.Errorf("invalid unicode escape sequence: \\u%s", unicodeHex)
+				}
+				tmpString += string(r)
+				continue
+			}
+			// Hex escape
+			if tmpEscape == `\x` {
+				var hexStr string
+				for {
+					l.readChar()
+					hexStr += string(l.ch)
+					tmpHex := fmt.Sprintf("%04s", hexStr)
+					if _, err := hex.DecodeString(tmpHex); err != nil {
+						// Strip off last hex character
+						hexStr = hexStr[:len(hexStr)-1]
+						leftoverChar = true
+						break
+					}
+					if len(hexStr) >= 4 {
+						break
+					}
+				}
+				if len(hexStr) < 2 {
+					return "", fmt.Errorf("hex escape sequence too short: \\x%s", hexStr)
+				}
+				// Pad hex string for parsing
+				tmpHex := fmt.Sprintf("%04s", hexStr)
+				r, err := hex.DecodeString(tmpHex)
+				if err != nil {
+					return "", fmt.Errorf("invalid hex escape sequence: \\x%s", hexStr)
+				}
+				tmpString += string(r)
+				continue
+			}
+			// Octal escape
+			if tmpEscape == `\o` {
+				var octalStr string
+				for {
+					l.readChar()
+					if l.ch > unicode.MaxASCII || !unicode.IsDigit(l.ch) {
+						leftoverChar = true
+						break
+					}
+					octalStr += string(l.ch)
+					if len(octalStr) >= 3 {
+						break
+					}
+				}
+				tmpOctal, err := strconv.ParseUint(octalStr, 8, 16)
+				if err != nil {
+					return "", fmt.Errorf("invalid octal escape sequence: \\o%s", octalStr)
+				}
+				tmpString += string(rune(tmpOctal))
+				continue
+			}
+			// Check for unknown non-numeric escape
+			if l.ch > unicode.MaxASCII || !unicode.IsDigit(l.ch) {
+				return "", fmt.Errorf("unknown escape sequence: %s", tmpEscape)
+			}
+			// Decimal escape
+			decStr := string(l.ch)
+			for {
+				l.readChar()
+				if l.ch > unicode.MaxASCII || !unicode.IsDigit(l.ch) {
+					leftoverChar = true
+					break
+				}
+				decStr += string(l.ch)
+				if len(decStr) >= 4 {
+					break
+				}
+			}
+			tmpDec, err := strconv.ParseUint(decStr, 10, 16)
+			if err != nil {
+				return "", fmt.Errorf("invalid decimal escape sequence: \\%s", decStr)
+			}
+			tmpString += string(rune(tmpDec))
+			continue
+		}
+
 		if l.ch == '"' {
 			l.readChar() // Consume closing quote
 
-			return l.input[start : l.pos-1], nil
+			return tmpString, nil
 		}
+
+		tmpString += string(l.ch)
 	}
 }
 
