@@ -3051,7 +3051,7 @@ func findFirstSetBit[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error)
 		return nil, err
 	}
 
-	var bitIndex int = -1
+	bitIndex := -1
 
 	// Find first set bit - iterate bytes in reverse order (like Rust .rev())
 	for byteIndex := len(bytes) - 1; byteIndex >= 0; byteIndex-- {
