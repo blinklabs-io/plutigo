@@ -1,5 +1,5 @@
 # Makefile for Go project
-.PHONY: test test-match bench fmt clean play play-fmt play-flat build
+.PHONY: test test-match bench fmt clean play play-fmt play-flat build download-plutus-tests
 
 test: ## Run tests
 	@echo "Running tests..."
@@ -30,3 +30,18 @@ play-flat: ## Run some uplc from flat
 
 play-fmt: ## Format the uplc sample code
 	@go run ./cmd/play/ -f cmd/play/sample.uplc
+
+download-plutus-tests:
+	@echo "Downloading latest plutus tests..."
+
+	@rm -rf tests/conformance
+
+	@curl -L -s https://github.com/IntersectMBO/plutus/archive/master.tar.gz | tar xz -C /tmp
+
+	@mkdir -p tests/conformance
+
+	@mv /tmp/plutus-master/plutus-conformance/test-cases/uplc/evaluation/* tests/conformance/
+
+	@rm -rf /tmp/plutus-master
+
+	@echo "Download complete. Test cases are now in tests/conformance/"
