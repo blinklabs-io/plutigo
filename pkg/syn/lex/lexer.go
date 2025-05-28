@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
+	"strings"
 	"unicode"
 )
 
@@ -180,6 +181,8 @@ func (l *Lexer) readString() (string, error) {
 				}
 				// Pad hex string for parsing
 				tmpHex := fmt.Sprintf("%04s", hexStr)
+				// Strip out any leading zero bytes
+				tmpHex = strings.TrimPrefix(tmpHex, "00")
 				r, err := hex.DecodeString(tmpHex)
 				if err != nil {
 					return "", fmt.Errorf("invalid hex escape sequence: \\x%s", hexStr)
