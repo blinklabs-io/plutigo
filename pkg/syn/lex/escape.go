@@ -9,4 +9,5 @@ var escapeMap = map[string]string{
 	`\t`: "\t",
 	`\v`: "\v",
 	`\"`: `"`,
+	`\\`: `\`,
 }

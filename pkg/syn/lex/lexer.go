@@ -10,14 +10,14 @@ import (
 )
 
 type Lexer struct {
-	input   string
+	input   []rune
 	pos     int
 	readPos int
 	ch      rune
 }
 
 func NewLexer(input string) *Lexer {
-	l := &Lexer{input: input}
+	l := &Lexer{input: []rune(input)}
 
 	l.readChar()
 
@@ -28,7 +28,7 @@ func (l *Lexer) readChar() {
 	if l.readPos >= len(l.input) {
 		l.ch = 0
 	} else {
-		l.ch = rune(l.input[l.readPos])
+		l.ch = l.input[l.readPos]
 	}
 
 	l.pos = l.readPos
@@ -87,7 +87,7 @@ func (l *Lexer) readIdentifier() string {
 		l.readChar()
 	}
 
-	return l.input[start:l.pos]
+	return string(l.input[start:l.pos])
 }
 
 func (l *Lexer) readNumber() (string, error) {
@@ -105,7 +105,7 @@ func (l *Lexer) readNumber() (string, error) {
 		l.readChar()
 	}
 
-	return l.input[start:l.pos], nil
+	return string(l.input[start:l.pos]), nil
 }
 
 func (l *Lexer) readString() (string, error) {
@@ -258,7 +258,7 @@ func (l *Lexer) readByteString() (string, error) {
 			l.ch == ')',
 			l.ch == ']',
 			l.ch == ',':
-			literal := l.input[start:l.pos]
+			literal := string(l.input[start:l.pos])
 
 			if len(literal)%2 != 0 {
 				return "", fmt.Errorf(
