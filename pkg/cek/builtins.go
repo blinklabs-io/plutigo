@@ -20,7 +20,7 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 	"golang.org/x/crypto/blake2b"
-	legacyripemd160 "golang.org/x/crypto/ripemd160" //nolint:staticcheck
+	legacyripemd160 "golang.org/x/crypto/ripemd160" //nolint:staticcheck,gosec
 	legacysha3 "golang.org/x/crypto/sha3"
 )
 
@@ -2501,7 +2501,7 @@ func integerToByteString[T syn.Eval](
 
 		if endianness {
 			// Big-endian: padding | bytes
-			bytes = append(padding, bytes...)
+			bytes = append(padding, bytes...) //nolint:makezero
 		} else {
 			// Little-endian: bytes | padding
 			// Reverse bytes for little-endian
@@ -3253,7 +3253,7 @@ func ripemd160[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	// Compute RIPEMD-160 hash
-	hasher := legacyripemd160.New()
+	hasher := legacyripemd160.New() //nolint:gosec
 	hasher.Write(arg1)
 	bytes := hasher.Sum(nil)
 
