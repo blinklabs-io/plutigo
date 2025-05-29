@@ -1306,7 +1306,17 @@ type ExpMod struct {
 func (ExpMod) isArguments() {}
 
 func (l ExpMod) CostThree(aa, ee, mm ExMem) int {
-	cost0 := l.coeff00 + l.coeff11*int(ee)*int(mm) + l.coeff12*int(ee)*int(mm)*int(mm)
+	cost0 := l.coeff00 + l.coeff11*int(
+		ee,
+	)*int(
+		mm,
+	) + l.coeff12*int(
+		ee,
+	)*int(
+		mm,
+	)*int(
+		mm,
+	)
 
 	if int(aa) <= int(mm) {
 		return cost0

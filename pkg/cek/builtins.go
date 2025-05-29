@@ -51,7 +51,10 @@ func addInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return value, nil
 }
 
-func subtractInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func subtractInteger[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapInteger[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -78,7 +81,10 @@ func subtractInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error)
 	return value, nil
 }
 
-func multiplyInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func multiplyInteger[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapInteger[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -145,7 +151,10 @@ func divideInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return value, nil
 }
 
-func quotientInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func quotientInteger[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapInteger[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -181,7 +190,10 @@ func quotientInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error)
 	return value, nil
 }
 
-func remainderInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func remainderInteger[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapInteger[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -283,7 +295,10 @@ func equalsInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return value, nil
 }
 
-func lessThanInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func lessThanInteger[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapInteger[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -310,7 +325,10 @@ func lessThanInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error)
 	return value, nil
 }
 
-func lessThanEqualsInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func lessThanEqualsInteger[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapInteger[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -337,7 +355,10 @@ func lessThanEqualsInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], 
 	return value, nil
 }
 
-func appendByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func appendByteString[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -365,7 +386,10 @@ func appendByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error
 	return value, nil
 }
 
-func consByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func consByteString[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapInteger[T](b.Args[0]) // skip
 	if err != nil {
 		return nil, err
@@ -402,7 +426,10 @@ func consByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) 
 	return value, nil
 }
 
-func sliceByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func sliceByteString[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapInteger[T](b.Args[0]) // skip
 	if err != nil {
 		return nil, err
@@ -465,7 +492,10 @@ func sliceByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error)
 	return value, nil
 }
 
-func lengthOfByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func lengthOfByteString[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -485,7 +515,10 @@ func lengthOfByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], err
 	return value, nil
 }
 
-func indexByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func indexByteString[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -522,7 +555,10 @@ func indexByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error)
 	return value, nil
 }
 
-func equalsByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func equalsByteString[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -547,7 +583,10 @@ func equalsByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error
 	return value, nil
 }
 
-func lessThanByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func lessThanByteString[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -574,7 +613,10 @@ func lessThanByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], err
 	return value, nil
 }
 
-func lessThanEqualsByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func lessThanEqualsByteString[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -667,7 +709,10 @@ func blake2B256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return value, nil
 }
 
-func verifyEd25519Signature[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func verifyEd25519Signature[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	publicKey, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -775,7 +820,10 @@ func keccak256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return value, nil
 }
 
-func verifyEcdsaSecp256K1Signature[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func verifyEcdsaSecp256K1Signature[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	publicKey, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -845,7 +893,10 @@ func verifyEcdsaSecp256K1Signature[T syn.Eval](m *Machine[T], b *Builtin[T]) (Va
 	return value, nil
 }
 
-func verifySchnorrSecp256K1Signature[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func verifySchnorrSecp256K1Signature[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	publicKey, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -904,7 +955,12 @@ func verifySchnorrSecp256K1Signature[T syn.Eval](m *Machine[T], b *Builtin[T]) (
 	return value, nil
 }
 
-func schnorrVerify(r *btcec.FieldVal, s *btcec.ModNScalar, msg []byte, pubKey *btcec.PublicKey) error {
+func schnorrVerify(
+	r *btcec.FieldVal,
+	s *btcec.ModNScalar,
+	msg []byte,
+	pubKey *btcec.PublicKey,
+) error {
 	// The algorithm for producing a BIP-340 signature is described in
 	// README.md and is reproduced here for reference:
 	//
@@ -1021,7 +1077,12 @@ func schnorrVerify(r *btcec.FieldVal, s *btcec.ModNScalar, msg []byte, pubKey *b
 
 // Verify returns whether or not the signature is valid for the provided hash
 // and secp256k1 public key.
-func verify(r *btcec.FieldVal, s *btcec.ModNScalar, msg []byte, pubKey *btcec.PublicKey) bool {
+func verify(
+	r *btcec.FieldVal,
+	s *btcec.ModNScalar,
+	msg []byte,
+	pubKey *btcec.PublicKey,
+) bool {
 	return schnorrVerify(r, s, msg, pubKey) == nil
 }
 
@@ -1877,7 +1938,10 @@ func bls12381G1Neg[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return value, nil
 }
 
-func bls12381G1ScalarMul[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func bls12381G1ScalarMul[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapInteger[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -1900,7 +1964,10 @@ func bls12381G1ScalarMul[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], er
 	return value, nil
 }
 
-func bls12381G1Equal[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func bls12381G1Equal[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapBls12_381G1Element[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -1923,7 +1990,10 @@ func bls12381G1Equal[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error)
 	return value, nil
 }
 
-func bls12381G1Compress[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func bls12381G1Compress[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapBls12_381G1Element[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -1943,7 +2013,10 @@ func bls12381G1Compress[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], err
 	return value, nil
 }
 
-func bls12381G1Uncompress[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func bls12381G1Uncompress[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -1974,7 +2047,10 @@ func bls12381G1Uncompress[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], e
 	return value, nil
 }
 
-func bls12381G1HashToGroup[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func bls12381G1HashToGroup[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -2058,7 +2134,10 @@ func bls12381G2Neg[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return value, nil
 }
 
-func bls12381G2ScalarMul[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func bls12381G2ScalarMul[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapInteger[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -2083,7 +2162,10 @@ func bls12381G2ScalarMul[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], er
 	return value, nil
 }
 
-func bls12381G2Equal[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func bls12381G2Equal[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapBls12_381G2Element[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -2106,7 +2188,10 @@ func bls12381G2Equal[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error)
 	return value, nil
 }
 
-func bls12381G2Compress[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func bls12381G2Compress[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapBls12_381G2Element[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -2126,7 +2211,10 @@ func bls12381G2Compress[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], err
 	return value, nil
 }
 
-func bls12381G2Uncompress[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func bls12381G2Uncompress[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -2157,7 +2245,10 @@ func bls12381G2Uncompress[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], e
 	return value, nil
 }
 
-func bls12381G2HashToGroup[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func bls12381G2HashToGroup[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -2194,7 +2285,10 @@ func bls12381G2HashToGroup[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], 
 	return value, nil
 }
 
-func bls12381MillerLoop[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func bls12381MillerLoop[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapBls12_381G1Element[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -2214,7 +2308,10 @@ func bls12381MillerLoop[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], err
 
 	arg2Affine := new(bls.G2Affine).FromJacobian(arg2)
 
-	mlResult, err := bls.MillerLoop([]bls.G1Affine{*arg1Affine}, []bls.G2Affine{*arg2Affine})
+	mlResult, err := bls.MillerLoop(
+		[]bls.G1Affine{*arg1Affine},
+		[]bls.G2Affine{*arg2Affine},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -2226,7 +2323,10 @@ func bls12381MillerLoop[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], err
 	return value, nil
 }
 
-func bls12381MulMlResult[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func bls12381MulMlResult[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapBls12_381MlResult[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -2251,7 +2351,10 @@ func bls12381MulMlResult[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], er
 	return value, nil
 }
 
-func bls12381FinalVerify[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func bls12381FinalVerify[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	arg1, err := unwrapBls12_381MlResult[T](b.Args[0])
 	if err != nil {
 		return nil, err
@@ -2297,7 +2400,10 @@ func bls12381FinalVerify[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], er
 	return value, nil
 }
 
-func integerToByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func integerToByteString[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	// Unwrap arguments
 	endianness, err := unwrapBool[T](b.Args[0])
 	if err != nil {
@@ -2327,7 +2433,10 @@ func integerToByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], er
 	sizeInt64 := size.Int64()
 
 	if sizeInt64 < 0 {
-		return nil, fmt.Errorf("integerToByteString: negative size %v", sizeInt64)
+		return nil, fmt.Errorf(
+			"integerToByteString: negative size %v",
+			sizeInt64,
+		)
 	}
 
 	sizeUnwrapped := int(sizeInt64)
@@ -2337,7 +2446,12 @@ func integerToByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], er
 	}
 
 	// Apply cost
-	err = m.CostThree(&b.Func, boolExMem(endianness), sizeExMem(sizeUnwrapped), bigIntExMem(input))
+	err = m.CostThree(
+		&b.Func,
+		boolExMem(endianness),
+		sizeExMem(sizeUnwrapped),
+		bigIntExMem(input),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -2350,7 +2464,8 @@ func integerToByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], er
 	// >= 0 && < INTEGER_TO_BYTE_STRING_MAXIMUM_OUTPUT_LENGTH
 
 	// Check for zero size with large input
-	if sizeInt64 == 0 && (input.BitLen()-1) >= 8*IntegerToByteStringMaximumOutputLength {
+	if sizeInt64 == 0 &&
+		(input.BitLen()-1) >= 8*IntegerToByteStringMaximumOutputLength {
 		required := (input.BitLen() + 7) / 8
 
 		return nil, fmt.Errorf(
@@ -2409,7 +2524,10 @@ func integerToByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], er
 	return value, nil
 }
 
-func byteStringToInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func byteStringToInteger[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	// Unwrap arguments
 	endianness, err := unwrapBool[T](b.Args[0])
 	if err != nil {
@@ -2469,7 +2587,12 @@ func andByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	// Apply cost
-	err = m.CostThree(&b.Func, boolExMem(shouldPad), byteArrayExMem(bytes1), byteArrayExMem(bytes2))
+	err = m.CostThree(
+		&b.Func,
+		boolExMem(shouldPad),
+		byteArrayExMem(bytes1),
+		byteArrayExMem(bytes2),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -2539,7 +2662,12 @@ func orByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	// Apply cost
-	err = m.CostThree(&b.Func, boolExMem(shouldPad), byteArrayExMem(bytes1), byteArrayExMem(bytes2))
+	err = m.CostThree(
+		&b.Func,
+		boolExMem(shouldPad),
+		byteArrayExMem(bytes1),
+		byteArrayExMem(bytes2),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -2606,7 +2734,12 @@ func xorByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	// Apply cost
-	err = m.CostThree(&b.Func, boolExMem(shouldPad), byteArrayExMem(bytes1), byteArrayExMem(bytes2))
+	err = m.CostThree(
+		&b.Func,
+		boolExMem(shouldPad),
+		byteArrayExMem(bytes1),
+		byteArrayExMem(bytes2),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -2659,7 +2792,10 @@ func xorByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return value, nil
 }
 
-func complementByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func complementByteString[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	// Unwrap argument
 	bytes, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
@@ -2709,7 +2845,8 @@ func readBit[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	// Validate bit index
-	if bitIndex.Sign() < 0 || bitIndex.Cmp(big.NewInt(int64(len(bytes)*8))) >= 0 {
+	if bitIndex.Sign() < 0 ||
+		bitIndex.Cmp(big.NewInt(int64(len(bytes)*8))) >= 0 {
 		return nil, errors.New("readBit: bit index out of bounds")
 	}
 
@@ -2755,7 +2892,12 @@ func writeBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	// Apply cost
-	err = m.CostThree(&b.Func, byteArrayExMem(bytes), listLengthExMem(indices.List), boolExMem(setBit))
+	err = m.CostThree(
+		&b.Func,
+		byteArrayExMem(bytes),
+		listLengthExMem(indices.List),
+		boolExMem(setBit),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -2769,11 +2911,15 @@ func writeBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		// Unwrap integer from list element
 		bitIndex, ok := index.(*syn.Integer)
 		if !ok {
-			return nil, fmt.Errorf("writeBits: expected integer in indices list, got %T", index)
+			return nil, fmt.Errorf(
+				"writeBits: expected integer in indices list, got %T",
+				index,
+			)
 		}
 
 		// Validate bit index
-		if bitIndex.Inner.Sign() < 0 || bitIndex.Inner.Cmp(big.NewInt(int64(len(bytes)*8))) >= 0 {
+		if bitIndex.Inner.Sign() < 0 ||
+			bitIndex.Inner.Cmp(big.NewInt(int64(len(bytes)*8))) >= 0 {
 			return nil, errors.New("writeBits: bit index out of bounds")
 		}
 
@@ -2835,7 +2981,10 @@ func replicateByte[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	// Validate byte
 	if !byteVal.IsInt64() || byteVal.Int64() < 0 || byteVal.Int64() > 255 {
-		return nil, fmt.Errorf("replicateByte: byte value %v out of bounds (0-255)", byteVal)
+		return nil, fmt.Errorf(
+			"replicateByte: byte value %v out of bounds (0-255)",
+			byteVal,
+		)
 	}
 	byteUint := byte(byteVal.Int64())
 
@@ -2863,7 +3012,10 @@ func replicateByte[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return value, nil
 }
 
-func shiftByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func shiftByteString[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	// Unwrap arguments
 	bytes, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
@@ -2940,7 +3092,10 @@ func shiftByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error)
 	return &Constant{&syn.ByteString{Inner: result}}, nil
 }
 
-func rotateByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func rotateByteString[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	// Unwrap arguments
 	bytes, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
@@ -3038,7 +3193,10 @@ func countSetBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return value, nil
 }
 
-func findFirstSetBit[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func findFirstSetBit[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	// Unwrap argument
 	bytes, err := unwrapByteString[T](b.Args[0])
 	if err != nil {
@@ -3163,8 +3321,12 @@ func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		gcd := new(big.Int)
 		gcd.GCD(nil, nil, reducedBase, mm)
 		if gcd.Cmp(big.NewInt(1)) != 0 {
-			return nil, fmt.Errorf("expModInteger: %s is not invertible modulo %s (gcd = %s)",
-				bb.String(), mm.String(), gcd.String())
+			return nil, fmt.Errorf(
+				"expModInteger: %s is not invertible modulo %s (gcd = %s)",
+				bb.String(),
+				mm.String(),
+				gcd.String(),
+			)
 		}
 
 		// Compute modular inverse using extended Euclidean algorithm

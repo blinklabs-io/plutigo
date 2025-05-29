@@ -43,7 +43,11 @@ func encodeConstr(c *Constr) (any, error) {
 	for i, field := range c.Fields {
 		encoded, err := encodeToRaw(field)
 		if err != nil {
-			return nil, fmt.Errorf("failed to encode Constr field %d: %w", i, err)
+			return nil, fmt.Errorf(
+				"failed to encode Constr field %d: %w",
+				i,
+				err,
+			)
 		}
 		fields[i] = encoded
 	}

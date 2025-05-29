@@ -148,13 +148,19 @@ func (l *Lexer) readString() (string, error) {
 					}
 				}
 				if len(unicodeHex) < 2 {
-					return "", fmt.Errorf("unicode escape sequence too short: \\u%s", unicodeHex)
+					return "", fmt.Errorf(
+						"unicode escape sequence too short: \\u%s",
+						unicodeHex,
+					)
 				}
 				// Pad hex string for parsing
 				tmpHex := fmt.Sprintf("%04s", unicodeHex)
 				r, err := hex.DecodeString(tmpHex)
 				if err != nil {
-					return "", fmt.Errorf("invalid unicode escape sequence: \\u%s", unicodeHex)
+					return "", fmt.Errorf(
+						"invalid unicode escape sequence: \\u%s",
+						unicodeHex,
+					)
 				}
 				tmpString += string(r)
 				continue
@@ -177,7 +183,10 @@ func (l *Lexer) readString() (string, error) {
 					}
 				}
 				if len(hexStr) < 2 {
-					return "", fmt.Errorf("hex escape sequence too short: \\x%s", hexStr)
+					return "", fmt.Errorf(
+						"hex escape sequence too short: \\x%s",
+						hexStr,
+					)
 				}
 				// Pad hex string for parsing
 				tmpHex := fmt.Sprintf("%04s", hexStr)
@@ -185,7 +194,10 @@ func (l *Lexer) readString() (string, error) {
 				tmpHex = strings.TrimPrefix(tmpHex, "00")
 				r, err := hex.DecodeString(tmpHex)
 				if err != nil {
-					return "", fmt.Errorf("invalid hex escape sequence: \\x%s", hexStr)
+					return "", fmt.Errorf(
+						"invalid hex escape sequence: \\x%s",
+						hexStr,
+					)
 				}
 				tmpString += string(r)
 				continue
@@ -206,7 +218,10 @@ func (l *Lexer) readString() (string, error) {
 				}
 				tmpOctal, err := strconv.ParseUint(octalStr, 8, 16)
 				if err != nil {
-					return "", fmt.Errorf("invalid octal escape sequence: \\o%s", octalStr)
+					return "", fmt.Errorf(
+						"invalid octal escape sequence: \\o%s",
+						octalStr,
+					)
 				}
 				tmpString += string(rune(tmpOctal))
 				continue
@@ -230,7 +245,10 @@ func (l *Lexer) readString() (string, error) {
 			}
 			tmpDec, err := strconv.ParseUint(decStr, 10, 16)
 			if err != nil {
-				return "", fmt.Errorf("invalid decimal escape sequence: \\%s", decStr)
+				return "", fmt.Errorf(
+					"invalid decimal escape sequence: \\%s",
+					decStr,
+				)
 			}
 			tmpString += string(rune(tmpDec))
 			continue
