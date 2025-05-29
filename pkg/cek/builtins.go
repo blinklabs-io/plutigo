@@ -2601,13 +2601,10 @@ func andByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	var result []byte
 	if shouldPad {
 		// Pad shorter string with 0xFF, use longer length
-		maxLen := len(bytes1)
-		if len(bytes2) > maxLen {
-			maxLen = len(bytes2)
-		}
+		maxLen := max(len(bytes2), len(bytes1))
 		result = make([]byte, maxLen)
 
-		for i := 0; i < maxLen; i++ {
+		for i := range maxLen {
 			var b1, b2 byte
 			if i < len(bytes1) {
 				b1 = bytes1[i]
@@ -2625,14 +2622,11 @@ func andByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	} else {
 		// Use shorter length, no padding
-		minLen := len(bytes1)
-		if len(bytes2) < minLen {
-			minLen = len(bytes2)
-		}
+		minLen := min(len(bytes2), len(bytes1))
 
 		result = make([]byte, minLen)
 
-		for i := 0; i < minLen; i++ {
+		for i := range minLen {
 			result[i] = bytes1[i] & bytes2[i]
 		}
 	}
@@ -2676,13 +2670,10 @@ func orByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	var result []byte
 	if shouldPad {
 		// Pad shorter string with 0x00, use longer length
-		maxLen := len(bytes1)
-		if len(bytes2) > maxLen {
-			maxLen = len(bytes2)
-		}
+		maxLen := max(len(bytes2), len(bytes1))
 		result = make([]byte, maxLen)
 
-		for i := 0; i < maxLen; i++ {
+		for i := range maxLen {
 			var b1, b2 byte
 			if i < len(bytes1) {
 				b1 = bytes1[i]
@@ -2698,13 +2689,10 @@ func orByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	} else {
 		// Use shorter length, no padding
-		minLen := len(bytes1)
-		if len(bytes2) < minLen {
-			minLen = len(bytes2)
-		}
+		minLen := min(len(bytes2), len(bytes1))
 		result = make([]byte, minLen)
 
-		for i := 0; i < minLen; i++ {
+		for i := range minLen {
 			result[i] = bytes1[i] | bytes2[i]
 		}
 	}
@@ -2748,14 +2736,11 @@ func xorByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	var result []byte
 	if shouldPad {
 		// Pad shorter string with 0x00, use longer length
-		maxLen := len(bytes1)
-		if len(bytes2) > maxLen {
-			maxLen = len(bytes2)
-		}
+		maxLen := max(len(bytes2), len(bytes1))
 
 		result = make([]byte, maxLen)
 
-		for i := 0; i < maxLen; i++ {
+		for i := range maxLen {
 			var b1, b2 byte
 			if i < len(bytes1) {
 				b1 = bytes1[i]
@@ -2773,14 +2758,11 @@ func xorByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	} else {
 		// Use shorter length, no padding
-		minLen := len(bytes1)
-		if len(bytes2) < minLen {
-			minLen = len(bytes2)
-		}
+		minLen := min(len(bytes2), len(bytes1))
 
 		result = make([]byte, minLen)
 
-		for i := 0; i < minLen; i++ {
+		for i := range minLen {
 			result[i] = bytes1[i] ^ bytes2[i]
 		}
 	}
@@ -3000,7 +2982,7 @@ func replicateByte[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		result = []byte{}
 	} else {
 		result = make([]byte, sizeInt)
-		for i := 0; i < sizeInt; i++ {
+		for i := range sizeInt {
 			result[i] = byteUint
 		}
 	}
@@ -3057,7 +3039,7 @@ func shiftByteString[T syn.Eval](
 	bits := make([]bool, totalBits)
 
 	// Read bits from bytes (MSB0 order)
-	for i := 0; i < totalBits; i++ {
+	for i := range totalBits {
 		byteIdx := i / 8
 		bitIdx := 7 - (i % 8) // MSB0: leftmost bit first
 		bits[i] = (bytes[byteIdx] & (1 << bitIdx)) != 0
@@ -3068,7 +3050,7 @@ func shiftByteString[T syn.Eval](
 
 	if shiftVal > 0 {
 		// Positive = left shift
-		for i := 0; i < totalBits-shiftVal; i++ {
+		for i := range totalBits - shiftVal {
 			resultBits[i] = bits[i+shiftVal]
 		}
 	} else {
@@ -3081,7 +3063,7 @@ func shiftByteString[T syn.Eval](
 
 	// Convert bit array back to bytes
 	result := make([]byte, len(bytes))
-	for i := 0; i < totalBits; i++ {
+	for i := range totalBits {
 		if resultBits[i] {
 			byteIdx := i / 8
 			bitIdx := 7 - (i % 8) // MSB0: leftmost bit first
@@ -3144,7 +3126,7 @@ func rotateByteString[T syn.Eval](
 
 	// Perform rotation
 	result := make([]byte, len(bytes))
-	for i := 0; i < len(bytes); i++ {
+	for i := range bytes {
 		// Source byte index (rotated left)
 		srcIndex := (i + byteShift) % len(bytes)
 		if srcIndex < 0 {
