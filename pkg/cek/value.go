@@ -90,7 +90,7 @@ func (b *Builtin[T]) ApplyArg(arg Value[T]) *Builtin[T] {
 	args := make([]Value[T], len(b.Args))
 	copy(args, b.Args)
 
-	args = append(args, arg)
+	args = append(args, arg) //nolint:makezero
 
 	return &Builtin[T]{
 		Func:   b.Func,
