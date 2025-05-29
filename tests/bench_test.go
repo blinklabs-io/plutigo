@@ -42,7 +42,10 @@ func BenchmarkFlatFiles(b *testing.B) {
 		filePath := filepath.Join(testRoot, file.Name())
 
 		// Use file name (without extension) as benchmark name.
-		benchmarkName := strings.TrimSuffix(file.Name(), filepath.Ext(file.Name()))
+		benchmarkName := strings.TrimSuffix(
+			file.Name(),
+			filepath.Ext(file.Name()),
+		)
 
 		// Load file contents before benchmark.
 		content, err := loadFile(filePath)

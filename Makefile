@@ -1,9 +1,21 @@
-# Makefile for Go project
-.PHONY: test test-match bench fmt clean play play-fmt play-flat build download-plutus-tests
+# Determine root directory
+ROOT_DIR=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+
+# Gather all .go files for use in dependencies below
+GO_FILES=$(shell find $(ROOT_DIR) -name '*.go')
+
+# Gather list of expected binaries
+BINARIES=$(shell cd $(ROOT_DIR)/cmd && ls -1 | grep -v ^common)
+
+.PHONY: mod-tidy test test-match bench format clean play play-fmt play-flat build download-plutus-tests
+
+mod-tidy:
+	# Needed to fetch new dependencies and add them to go.mod
+	@go mod tidy
 
 test: ## Run tests
 	@echo "Running tests..."
-	@go test -v ./...
+	@go test -v -race ./...
 
 test-match: ## Run specific tests (usage: make test-one TEST=TestName)
 	@echo "Running test: $(TEST)..."
@@ -13,11 +25,16 @@ bench: ## Run tests
 	@echo "Running benchmarks..."
 	@go test -v -bench=. -run='^$$' ./...
 
-fmt: ## Format Go code
-	@gofmt -w -s .
+format: ## Format Go code
+	@go fmt ./...
+	@gofmt -s -w $(GO_FILES)
+
+golines:
+	@golines -w --ignore-generated --chain-split-dots --max-len=80 --reformat-tags .
 
 clean: ## Remove test cache
 	@go clean -testcache
+	@rm -f $(BINARIES)
 
 build: ## Build play
 	@go build -o play ./cmd/play/
