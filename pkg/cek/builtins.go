@@ -3107,38 +3107,86 @@ func ripemd160[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	a, err := unwrapInteger[T](b.Args[0])
+	// Extract arguments
+	bb, err := unwrapInteger[T](b.Args[0])
 	if err != nil {
 		return nil, err
 	}
-
-	bb, err := unwrapInteger[T](b.Args[1])
+	e, err := unwrapInteger[T](b.Args[1])
 	if err != nil {
 		return nil, err
 	}
-
 	mm, err := unwrapInteger[T](b.Args[2])
 	if err != nil {
 		return nil, err
 	}
 
-	err = m.CostThree(&b.Func, bigIntExMem(a), bigIntExMem(bb), bigIntExMem(mm))
+	// Cost accounting
+	err = m.CostThree(&b.Func, bigIntExMem(bb), bigIntExMem(e), bigIntExMem(mm))
 	if err != nil {
 		return nil, err
 	}
 
-	if mm.Sign() == -1 {
-		return nil, errors.New("expModInteger: negative modulus")
+	// Validate modulus
+	if mm.Sign() <= 0 {
+		return nil, errors.New("expModInteger: invalid modulus m <= 0")
 	}
 
-	z := new(big.Int)
-	z.Exp(a, bb, mm)
+	// Special case: modulus is 1
+	if mm.Cmp(big.NewInt(1)) == 0 {
+		return &Constant{&syn.Integer{Inner: big.NewInt(0)}}, nil
+	}
 
-	value := &Constant{&syn.Integer{
-		Inner: z,
-	}}
+	// Handle different exponent cases
+	switch {
+	case e.Sign() == 0:
+		// Any number to the power of 0 is 1
+		return &Constant{&syn.Integer{Inner: big.NewInt(1)}}, nil
 
-	return value, nil
+	case e.Sign() > 0:
+		// Positive exponent: standard modular exponentiation
+		z := new(big.Int)
+		z.Exp(bb, e, mm)
+		return &Constant{&syn.Integer{Inner: z}}, nil
+
+	case bb.Sign() == 0:
+		// 0^negative is undefined
+		return nil, fmt.Errorf("expModInteger: 0^%s is undefined", e.String())
+
+	default:
+		// Negative exponent: need to compute modular inverse
+		// First, reduce the base modulo mm to handle negative bases correctly
+		reducedBase := new(big.Int)
+		reducedBase.Mod(bb, mm)
+
+		// Check if the reduced base and modulus are coprime
+		gcd := new(big.Int)
+		gcd.GCD(nil, nil, reducedBase, mm)
+		if gcd.Cmp(big.NewInt(1)) != 0 {
+			return nil, fmt.Errorf("expModInteger: %s is not invertible modulo %s (gcd = %s)",
+				bb.String(), mm.String(), gcd.String())
+		}
+
+		// Compute modular inverse using extended Euclidean algorithm
+		// We want to find x such that reducedBase * x ≡ 1 (mod mm)
+		// So we solve: reducedBase * x + mm * y = 1
+		x := new(big.Int)
+		y := new(big.Int)
+		gcdForInverse := new(big.Int)
+		gcdForInverse.GCD(x, y, reducedBase, mm)
+
+		// Make sure inverse is positive
+		if x.Sign() < 0 {
+			x.Add(x, mm)
+		}
+
+		// Now compute (inverse)^|exponent| mod modulus
+		absE := new(big.Int).Abs(e)
+		result := new(big.Int)
+		result.Exp(x, absE, mm)
+
+		return &Constant{&syn.Integer{Inner: result}}, nil
+	}
 }
 
 func caseList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
