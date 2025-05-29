@@ -4,7 +4,7 @@ import (
 	"github.com/blinklabs-io/plutigo/pkg/builtin"
 )
 
-type BuiltinCosts [87]*CostingFunc[Arguments]
+type BuiltinCosts [builtin.TotalBuiltinCount]*CostingFunc[Arguments]
 
 var DefaultBuiltinCosts = BuiltinCosts{
 	builtin.AddInteger: &CostingFunc[Arguments]{
@@ -603,25 +603,42 @@ var DefaultBuiltinCosts = BuiltinCosts{
 	},
 	builtin.CountSetBits: &CostingFunc[Arguments]{
 		mem: &ConstantCost{1},
-		cpu: &LinearCost{
+		cpu: &LinearInX{LinearCost{
 			intercept: 107490,
 			slope:     3298,
-		},
+		}},
 	},
 	builtin.FindFirstSetBit: &CostingFunc[Arguments]{
 		mem: &ConstantCost{1},
-		cpu: &LinearCost{
+		cpu: &LinearInX{LinearCost{
 			intercept: 106057,
 			slope:     655,
-		},
+		}},
 	},
 	builtin.Ripemd_160: &CostingFunc[Arguments]{
 		mem: &ConstantCost{3},
-		cpu: &LinearCost{
+		cpu: &LinearInX{LinearCost{
 			intercept: 1964219,
 			slope:     24520,
+		}},
+	},
+	builtin.ExpModInteger: &CostingFunc[Arguments]{
+		mem: &ThreeLinearInZ{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &ExpMod{
+			coeff00: 607153,
+			coeff11: 231697,
+			coeff12: 53144,
 		},
 	},
+	builtin.CaseList:      &CostingFunc[Arguments]{},
+	builtin.CaseData:      &CostingFunc[Arguments]{},
+	builtin.DropList:      &CostingFunc[Arguments]{},
+	builtin.LengthOfArray: &CostingFunc[Arguments]{},
+	builtin.ListToArray:   &CostingFunc[Arguments]{},
+	builtin.IndexArray:    &CostingFunc[Arguments]{},
 }
 
 type CostingFunc[T Arguments] struct {
@@ -1278,4 +1295,26 @@ type SixArgument interface {
 // Using existing ConstantCost for six arguments
 func (c ConstantCost) CostSix(a, b, c2, d, e, f ExMem) int {
 	return c.c
+}
+
+type ExpMod struct {
+	coeff00 int
+	coeff11 int
+	coeff12 int
+}
+
+func (ExpMod) isArguments() {}
+
+func (l ExpMod) CostThree(aa, ee, mm ExMem) int {
+	cost0 := l.coeff00 + l.coeff11*int(ee)*int(mm) + l.coeff12*int(ee)*int(mm)*int(mm)
+
+	if int(aa) <= int(mm) {
+		return cost0
+	} else {
+		return cost0 + (cost0 / 2)
+	}
+}
+
+func (ExpMod) HasConstants() []bool {
+	return []bool{false, false, false}
 }

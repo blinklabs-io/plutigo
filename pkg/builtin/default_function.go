@@ -119,6 +119,17 @@ const (
 
 	// Ripemd_160
 	Ripemd_160 DefaultFunction = 86
+
+	// Batch 6
+	ExpModInteger DefaultFunction = 87
+	CaseList      DefaultFunction = 88
+	CaseData      DefaultFunction = 89
+	DropList      DefaultFunction = 90
+
+	// Arrays
+	LengthOfArray DefaultFunction = 91
+	ListToArray   DefaultFunction = 92
+	IndexArray    DefaultFunction = 93
 )
 
 var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
@@ -231,9 +242,18 @@ var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
 	"findFirstSetBit":  FindFirstSetBit,
 	// Ripemd_160
 	"ripemd_160": Ripemd_160,
+	// Batch 6
+	"expModInteger": ExpModInteger,
+	"caseList":      CaseList,
+	"caseData":      CaseData,
+	"dropList":      DropList,
+	// Arrays
+	"lengthOfArray": LengthOfArray,
+	"listToArray":   ListToArray,
+	"indexArray":    IndexArray,
 }
 
-var defaultFunctionForceCount = [87]int{
+var defaultFunctionForceCount = [TotalBuiltinCount]int{
 	// Integer functions
 	AddInteger:            0,
 	SubtractInteger:       0,
@@ -338,13 +358,22 @@ var defaultFunctionForceCount = [87]int{
 	CountSetBits:             0,
 	FindFirstSetBit:          0,
 	Ripemd_160:               0,
+	// Batch 6
+	ExpModInteger: 0,
+	CaseList:      2,
+	CaseData:      1,
+	DropList:      1,
+	// Arrays
+	LengthOfArray: 1,
+	ListToArray:   1,
+	IndexArray:    1,
 }
 
 func (f DefaultFunction) ForceCount() int {
 	return defaultFunctionForceCount[f]
 }
 
-var defaultFunctionArity = [87]int{
+var defaultFunctionArity = [TotalBuiltinCount]int{
 	// Integer functions
 	AddInteger:            2,
 	SubtractInteger:       2,
@@ -449,13 +478,22 @@ var defaultFunctionArity = [87]int{
 	CountSetBits:             1,
 	FindFirstSetBit:          1,
 	Ripemd_160:               1,
+	// Batch 6
+	ExpModInteger: 3,
+	CaseList:      3,
+	CaseData:      6,
+	DropList:      2,
+	// Arrays
+	LengthOfArray: 1,
+	ListToArray:   1,
+	IndexArray:    2,
 }
 
 func (f DefaultFunction) Arity() int {
 	return defaultFunctionArity[f]
 }
 
-var defaultFunctionToString = [87]string{
+var defaultFunctionToString = [TotalBuiltinCount]string{
 	// Integer functions
 	AddInteger:            "addInteger",
 	SubtractInteger:       "subtractInteger",
@@ -560,6 +598,15 @@ var defaultFunctionToString = [87]string{
 	CountSetBits:             "countSetBits",
 	FindFirstSetBit:          "findFirstSetBit",
 	Ripemd_160:               "ripemd_160",
+	// Batch 6
+	ExpModInteger: "expModInteger",
+	CaseList:      "caseList",
+	CaseData:      "caseData",
+	DropList:      "dropList",
+	// Arrays
+	LengthOfArray: "lengthOfArray",
+	ListToArray:   "listToArray",
+	IndexArray:    "indexArray",
 }
 
 func (f DefaultFunction) String() string {
@@ -570,7 +617,10 @@ func (f DefaultFunction) String() string {
 const MinDefaultFunction byte = 0
 
 // Smallest DefaultFunction
-const MaxDefaultFunction byte = 86
+const MaxDefaultFunction byte = 93
+
+// Total Builtin Count
+const TotalBuiltinCount byte = MaxDefaultFunction + 1
 
 func FromByte(tag byte) (DefaultFunction, error) {
 	// only need to check if greater than because

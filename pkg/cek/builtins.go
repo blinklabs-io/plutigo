@@ -3105,3 +3105,110 @@ func ripemd160[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	return value, nil
 }
+
+func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	// Extract arguments
+	bb, err := unwrapInteger[T](b.Args[0])
+	if err != nil {
+		return nil, err
+	}
+	e, err := unwrapInteger[T](b.Args[1])
+	if err != nil {
+		return nil, err
+	}
+	mm, err := unwrapInteger[T](b.Args[2])
+	if err != nil {
+		return nil, err
+	}
+
+	// Cost accounting
+	err = m.CostThree(&b.Func, bigIntExMem(bb), bigIntExMem(e), bigIntExMem(mm))
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate modulus
+	if mm.Sign() <= 0 {
+		return nil, errors.New("expModInteger: invalid modulus m <= 0")
+	}
+
+	// Special case: modulus is 1
+	if mm.Cmp(big.NewInt(1)) == 0 {
+		return &Constant{&syn.Integer{Inner: big.NewInt(0)}}, nil
+	}
+
+	// Handle different exponent cases
+	switch {
+	case e.Sign() == 0:
+		// Any number to the power of 0 is 1
+		return &Constant{&syn.Integer{Inner: big.NewInt(1)}}, nil
+
+	case e.Sign() > 0:
+		// Positive exponent: standard modular exponentiation
+		z := new(big.Int)
+		z.Exp(bb, e, mm)
+		return &Constant{&syn.Integer{Inner: z}}, nil
+
+	case bb.Sign() == 0:
+		// 0^negative is undefined
+		return nil, fmt.Errorf("expModInteger: 0^%s is undefined", e.String())
+
+	default:
+		// Negative exponent: need to compute modular inverse
+		// First, reduce the base modulo mm to handle negative bases correctly
+		reducedBase := new(big.Int)
+		reducedBase.Mod(bb, mm)
+
+		// Check if the reduced base and modulus are coprime
+		gcd := new(big.Int)
+		gcd.GCD(nil, nil, reducedBase, mm)
+		if gcd.Cmp(big.NewInt(1)) != 0 {
+			return nil, fmt.Errorf("expModInteger: %s is not invertible modulo %s (gcd = %s)",
+				bb.String(), mm.String(), gcd.String())
+		}
+
+		// Compute modular inverse using extended Euclidean algorithm
+		// We want to find x such that reducedBase * x ≡ 1 (mod mm)
+		// So we solve: reducedBase * x + mm * y = 1
+		x := new(big.Int)
+		y := new(big.Int)
+		gcdForInverse := new(big.Int)
+		gcdForInverse.GCD(x, y, reducedBase, mm)
+
+		// Make sure inverse is positive
+		if x.Sign() < 0 {
+			x.Add(x, mm)
+		}
+
+		// Now compute (inverse)^|exponent| mod modulus
+		absE := new(big.Int).Abs(e)
+		result := new(big.Int)
+		result.Exp(x, absE, mm)
+
+		return &Constant{&syn.Integer{Inner: result}}, nil
+	}
+}
+
+func caseList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	panic("implement caseList")
+}
+
+func caseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	panic("implement caseData")
+}
+
+func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	panic("implement dropList")
+}
+
+func lengthOfArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	panic("implement lengthOfArray")
+}
+
+func listToArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	panic("implement listToArray")
+}
+
+func indexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	panic("implement indexArray")
+}
