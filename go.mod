@@ -9,7 +9,7 @@ require (
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0
 	github.com/consensys/gnark-crypto v0.17.0
 	github.com/fxamacker/cbor/v2 v2.8.0
-	golang.org/x/crypto v0.38.0
+	golang.org/x/crypto v0.39.0
 )
 
 require (
