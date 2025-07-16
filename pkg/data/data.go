@@ -5,6 +5,27 @@ import (
 	"math/big"
 )
 
+type PlutusDataWrapper struct {
+	Data PlutusData
+}
+
+func (p *PlutusDataWrapper) UnmarshalCBOR(data []byte) error {
+	tmpData, err := Decode(data)
+	if err != nil {
+		return err
+	}
+	p.Data = tmpData
+	return nil
+}
+
+func (p *PlutusDataWrapper) MarshalCBOR() ([]byte, error) {
+	tmpCbor, err := Encode(p.Data)
+	if err != nil {
+		return nil, err
+	}
+	return tmpCbor, nil
+}
+
 type PlutusData interface {
 	isPlutusData()
 
