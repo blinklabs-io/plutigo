@@ -76,7 +76,7 @@ func decodeRaw(v any) (PlutusData, error) {
 			items[i] = pd
 		}
 
-		return NewList(items), nil
+		return NewList(items...), nil
 
 	// Handle Map.
 	case map[any]any:
@@ -137,7 +137,7 @@ func decodeConstr(tag uint64, content any) (PlutusData, error) {
 		fields[i] = pd
 	}
 
-	return NewConstr(uint(tag), fields), nil
+	return NewConstr(uint(tag), fields...), nil
 }
 
 // decodeBignum decodes a big integer from CBOR tag content (expected to be bytes).
