@@ -831,7 +831,7 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 			return nil, err
 		}
 
-		return data.NewList(items), nil
+		return data.NewList(items...), nil
 	case lex.TokenMap:
 		p.nextToken()
 
@@ -928,7 +928,7 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 			return nil, err
 		}
 
-		return data.NewConstr(tag, fields), nil
+		return data.NewConstr(tag, fields...), nil
 	default:
 		return nil, fmt.Errorf(
 			"expected PlutusData constructor (I, B, List, Map, Constr), got %v at position %d",

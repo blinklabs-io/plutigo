@@ -46,7 +46,10 @@ func (c Constr) String() string {
 }
 
 // NewConstr creates a new Constr variant.
-func NewConstr(tag uint, fields []PlutusData) PlutusData {
+func NewConstr(tag uint, fields ...PlutusData) PlutusData {
+	if fields == nil {
+		fields = make([]PlutusData, 0)
+	}
 	return &Constr{tag, fields}
 }
 
@@ -114,6 +117,25 @@ func (l List) String() string {
 }
 
 // NewList creates a new List variant.
-func NewList(items []PlutusData) PlutusData {
+func NewList(items ...PlutusData) PlutusData {
 	return &List{items}
+}
+
+// IndefList
+
+type IndefList struct {
+	Items []PlutusData
+}
+
+func (IndefList) isPlutusData() {}
+
+func (l IndefList) String() string {
+	return fmt.Sprintf("IndefList%v", l.Items)
+}
+
+// NewIndefList creates a new IndefList
+func NewIndefList(items ...PlutusData) PlutusData {
+	return &IndefList{
+		Items: items,
+	}
 }

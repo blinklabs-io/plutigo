@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"slices"
 
 	"github.com/fxamacker/cbor/v2"
 )
@@ -31,6 +32,8 @@ func encodeToRaw(pd PlutusData) (any, error) {
 		return encodeByteString(v)
 	case *List:
 		return encodeList(v)
+	case *IndefList:
+		return encodeIndefList(v)
 	default:
 		return nil, fmt.Errorf("unknown PlutusData type: %T", pd)
 	}
@@ -39,17 +42,33 @@ func encodeToRaw(pd PlutusData) (any, error) {
 // encodeConstr encodes a Constr to CBOR tag format.
 func encodeConstr(c *Constr) (any, error) {
 	// Encode fields first
-	fields := make([]any, len(c.Fields))
-	for i, field := range c.Fields {
-		encoded, err := encodeToRaw(field)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"failed to encode Constr field %d: %w",
-				i,
-				err,
-			)
+	var fields any
+	if len(c.Fields) == 0 {
+		// Encode empty fields as simple array
+		fields = make([]any, 0)
+	} else {
+		// Encode as indefinite-length array
+		tmpData := []byte{
+			// Start an indefinite-length list
+			0x9F,
 		}
-		fields[i] = encoded
+		for i, item := range c.Fields {
+			encoded, err := encodeToRaw(item)
+			if err != nil {
+				return nil, fmt.Errorf("failed to encode Constr field %d: %w", i, err)
+			}
+			encodedCbor, err := cbor.Marshal(encoded)
+			if err != nil {
+				return nil, fmt.Errorf("failed to encode Constr field item %d: %w", i, err)
+			}
+			tmpData = slices.Concat(tmpData, encodedCbor)
+		}
+		tmpData = append(
+			tmpData,
+			// End indefinite-length list
+			0xff,
+		)
+		fields = cbor.RawMessage(tmpData)
 	}
 
 	// Determine CBOR tag based on Constr tag value
@@ -153,4 +172,29 @@ func encodeList(l *List) (any, error) {
 	}
 
 	return result, nil
+}
+
+// encodeIndefList encodes an IndefList to CBOR format
+func encodeIndefList(l *IndefList) (any, error) {
+	tmpData := []byte{
+		// Start an indefinite-length list
+		0x9F,
+	}
+	for i, item := range l.Items {
+		encoded, err := encodeToRaw(item)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encode indef-length list item %d: %w", i, err)
+		}
+		encodedCbor, err := cbor.Marshal(encoded)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encode indef-length list item %d: %w", i, err)
+		}
+		tmpData = slices.Concat(tmpData, encodedCbor)
+	}
+	tmpData = append(
+		tmpData,
+		// End indefinite-length list
+		0xff,
+	)
+	return cbor.RawMessage(tmpData), nil
 }
