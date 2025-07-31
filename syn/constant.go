@@ -3,7 +3,7 @@ package syn
 import (
 	"math/big"
 
-	"github.com/blinklabs-io/plutigo/pkg/data"
+	"github.com/blinklabs-io/plutigo/data"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
 

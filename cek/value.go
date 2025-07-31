@@ -3,8 +3,8 @@ package cek
 import (
 	"fmt"
 
-	"github.com/blinklabs-io/plutigo/pkg/builtin"
-	"github.com/blinklabs-io/plutigo/pkg/syn"
+	"github.com/blinklabs-io/plutigo/builtin"
+	"github.com/blinklabs-io/plutigo/syn"
 )
 
 type Value[T syn.Eval] interface {
@@ -29,7 +29,7 @@ func (c Constant) toExMem() ExMem {
 
 type Delay[T syn.Eval] struct {
 	Body syn.Term[T]
-	Env  Env[T]
+	Env  *Env[T]
 }
 
 func (d Delay[T]) String() string {
@@ -45,7 +45,7 @@ func (Delay[T]) toExMem() ExMem {
 type Lambda[T syn.Eval] struct {
 	ParameterName T
 	Body          syn.Term[T]
-	Env           Env[T]
+	Env           *Env[T]
 }
 
 func (l Lambda[T]) String() string {

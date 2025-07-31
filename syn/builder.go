@@ -3,7 +3,7 @@ package syn
 import (
 	"math/big"
 
-	"github.com/blinklabs-io/plutigo/pkg/builtin"
+	"github.com/blinklabs-io/plutigo/builtin"
 )
 
 type termInterner struct {

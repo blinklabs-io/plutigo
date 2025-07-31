@@ -1,7 +1,7 @@
 package syn
 
 import (
-	"github.com/blinklabs-io/plutigo/pkg/builtin"
+	"github.com/blinklabs-io/plutigo/builtin"
 )
 
 type Term[T any] interface {

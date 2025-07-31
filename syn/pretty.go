@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/blinklabs-io/plutigo/pkg/data"
+	"github.com/blinklabs-io/plutigo/data"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
 

@@ -12,8 +12,8 @@ import (
 	"reflect"
 	"unicode/utf8"
 
-	"github.com/blinklabs-io/plutigo/pkg/data"
-	"github.com/blinklabs-io/plutigo/pkg/syn"
+	"github.com/blinklabs-io/plutigo/data"
+	"github.com/blinklabs-io/plutigo/syn"
 	"github.com/btcsuite/btcd/btcec/v2"
 	ecdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	schnorr "github.com/btcsuite/btcd/btcec/v2/schnorr"

@@ -3,7 +3,7 @@ package cek
 import (
 	"fmt"
 
-	"github.com/blinklabs-io/plutigo/pkg/syn"
+	"github.com/blinklabs-io/plutigo/syn"
 )
 
 type MachineContext[T syn.Eval] interface {
@@ -24,7 +24,7 @@ func (f FrameAwaitArg[T]) String() string {
 func (f FrameAwaitArg[T]) isMachineContext() {}
 
 type FrameAwaitFunTerm[T syn.Eval] struct {
-	Env  Env[T]
+	Env  *Env[T]
 	Term syn.Term[T]
 	Ctx  MachineContext[T]
 }
@@ -62,7 +62,7 @@ func (f FrameForce[T]) String() string {
 func (f FrameForce[T]) isMachineContext() {}
 
 type FrameConstr[T syn.Eval] struct {
-	Env            Env[T]
+	Env            *Env[T]
 	Tag            uint
 	Fields         []syn.Term[T]
 	ResolvedFields []Value[T]
@@ -83,7 +83,7 @@ func (f FrameConstr[T]) String() string {
 func (f FrameConstr[T]) isMachineContext() {}
 
 type FrameCases[T syn.Eval] struct {
-	Env      Env[T]
+	Env      *Env[T]
 	Branches []syn.Term[T]
 	Ctx      MachineContext[T]
 }

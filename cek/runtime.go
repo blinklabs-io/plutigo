@@ -6,9 +6,9 @@ import (
 	"math/big"
 	"reflect"
 
-	"github.com/blinklabs-io/plutigo/pkg/builtin"
-	"github.com/blinklabs-io/plutigo/pkg/data"
-	"github.com/blinklabs-io/plutigo/pkg/syn"
+	"github.com/blinklabs-io/plutigo/builtin"
+	"github.com/blinklabs-io/plutigo/data"
+	"github.com/blinklabs-io/plutigo/syn"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
 
