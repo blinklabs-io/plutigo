@@ -15,7 +15,7 @@ func (e *Env[T]) Extend(data Value[T]) *Env[T] {
 }
 
 func (e *Env[T]) Lookup(name int) (Value[T], bool) {
-	var temp *Env[T] = e
+	temp := e
 
 	if name <= 0 {
 		return nil, false
