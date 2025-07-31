@@ -7,9 +7,9 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/blinklabs-io/plutigo/pkg/builtin"
-	"github.com/blinklabs-io/plutigo/pkg/data"
-	"github.com/blinklabs-io/plutigo/pkg/syn/lex"
+	"github.com/blinklabs-io/plutigo/builtin"
+	"github.com/blinklabs-io/plutigo/data"
+	"github.com/blinklabs-io/plutigo/syn/lex"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
 

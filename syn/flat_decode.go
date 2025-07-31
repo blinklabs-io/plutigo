@@ -6,8 +6,8 @@ import (
 	"math/big"
 	"unicode/utf8"
 
-	"github.com/blinklabs-io/plutigo/pkg/builtin"
-	"github.com/blinklabs-io/plutigo/pkg/data"
+	"github.com/blinklabs-io/plutigo/builtin"
+	"github.com/blinklabs-io/plutigo/data"
 )
 
 func Decode[T Binder](bytes []byte) (*Program[T], error) {

@@ -1,7 +1,7 @@
 package cek
 
 import (
-	"github.com/blinklabs-io/plutigo/pkg/builtin"
+	"github.com/blinklabs-io/plutigo/builtin"
 )
 
 type BuiltinCosts [builtin.TotalBuiltinCount]*CostingFunc[Arguments]

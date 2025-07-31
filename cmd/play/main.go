@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/blinklabs-io/plutigo/pkg/cek"
-	"github.com/blinklabs-io/plutigo/pkg/syn"
+	"github.com/blinklabs-io/plutigo/cek"
+	"github.com/blinklabs-io/plutigo/syn"
 )
 
 type Output struct {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/blinklabs-io/plutigo/pkg/syn"
+	"github.com/blinklabs-io/plutigo/syn"
 )
 
 type Machine[T syn.Eval] struct {
@@ -36,12 +36,10 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 		return nil, err
 	}
 
-	initialEnv := Env[T]([]Value[T]{})
-
 	var err error
 	var state MachineState[T] = &Compute[T]{
 		Ctx:  &NoFrame{},
-		Env:  initialEnv,
+		Env:  nil,
 		Term: term,
 	}
 
@@ -64,7 +62,7 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 
 func (m *Machine[T]) compute(
 	context MachineContext[T],
-	env Env[T],
+	env *Env[T],
 	term syn.Term[T],
 ) (MachineState[T], error) {
 	var state MachineState[T]
@@ -75,7 +73,7 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 
-		value, exists := env.lookup(t.Name.LookupIndex())
+		value, exists := env.Lookup(t.Name.LookupIndex())
 
 		if !exists {
 			return nil, errors.New("open term evaluated")
@@ -370,11 +368,7 @@ func (m *Machine[T]) applyEvaluate(
 
 	switch f := function.(type) {
 	case *Lambda[T]:
-		env := make(Env[T], len(f.Env))
-
-		copy(env, f.Env)
-
-		env = append(env, arg)
+		env := f.Env.Extend(arg)
 
 		state = &Compute[T]{
 			Ctx:  context,
@@ -484,14 +478,14 @@ func dischargeValue[T syn.Eval](value Value[T]) syn.Term[T] {
 	return dischargedTerm
 }
 
-func withEnv[T syn.Eval](lamCnt int, env Env[T], term syn.Term[T]) syn.Term[T] {
+func withEnv[T syn.Eval](lamCnt int, env *Env[T], term syn.Term[T]) syn.Term[T] {
 	var dischargedTerm syn.Term[T]
 
 	switch t := term.(type) {
 	case *syn.Var[T]:
 		if lamCnt >= t.Name.LookupIndex() {
 			dischargedTerm = t
-		} else if val, exists := env.lookup(t.Name.LookupIndex() - lamCnt); exists {
+		} else if val, exists := env.Lookup(t.Name.LookupIndex() - lamCnt); exists {
 			dischargedTerm = dischargeValue[T](val)
 		} else {
 			dischargedTerm = t

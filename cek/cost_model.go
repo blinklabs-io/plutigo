@@ -3,8 +3,8 @@ package cek
 import (
 	"math/big"
 
-	"github.com/blinklabs-io/plutigo/pkg/data"
-	"github.com/blinklabs-io/plutigo/pkg/syn"
+	"github.com/blinklabs-io/plutigo/data"
+	"github.com/blinklabs-io/plutigo/syn"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
 

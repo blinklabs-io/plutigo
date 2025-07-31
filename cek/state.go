@@ -1,6 +1,6 @@
 package cek
 
-import "github.com/blinklabs-io/plutigo/pkg/syn"
+import "github.com/blinklabs-io/plutigo/syn"
 
 type MachineState[T syn.Eval] interface {
 	isMachineState()
@@ -15,7 +15,7 @@ func (r Return[T]) isMachineState() {}
 
 type Compute[T syn.Eval] struct {
 	Ctx  MachineContext[T]
-	Env  Env[T]
+	Env  *Env[T]
 	Term syn.Term[T]
 }
 
