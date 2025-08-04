@@ -3,8 +3,8 @@ filippo.io/edwards25519 v1.1.0/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4
 github.com/aead/siphash v1.0.1/go.mod h1:Nywa3cDsYNNK3gaciGTWPwHt0wlpNV15vwmswBAUSII=
 github.com/bits-and-blooms/bitset v1.20.0 h1:2F+rfL86jE2d/bmw7OhqUg2Sj/1rURkBn3MdfoPyRVU=
 github.com/bits-and-blooms/bitset v1.20.0/go.mod h1:7hO7Gc7Pp1vODcmWvKMRA9BNmbv6a/7QIWpPxHddWR8=
-github.com/blinklabs-io/gouroboros v0.130.0 h1:UG3lJBOw/1AIhibSOAgTU5MHIohBjoTW4OEA/DabpsM=
-github.com/blinklabs-io/gouroboros v0.130.0/go.mod h1:Kh7ahMW4g9hkTbJgch1r33VV+sa0Auf24z4QIiRd32k=
+github.com/blinklabs-io/gouroboros v0.130.1 h1:OrNxV1z/YIqAYBkAJZcVi2lDg16rZ3RJCk9YxsJvp6M=
+github.com/blinklabs-io/gouroboros v0.130.1/go.mod h1:+tBHYgbI9TsFs31WQrLXItWLVQhcahXS5YzthS0bwfQ=
 github.com/btcsuite/btcd v0.20.1-beta/go.mod h1:wVuoA8VJLEcwgqHBwHmzLRazpKxTv13Px/pDuV7OomQ=
 github.com/btcsuite/btcd v0.22.0-beta.0.20220111032746-97732e52810c/go.mod h1:tjmYdS6MLJ5/s0Fj4DbLgSbDHbEqLJrtnHecBFkdz5M=
 github.com/btcsuite/btcd v0.23.5-0.20231215221805-96c9fd8078fd/go.mod h1:nm3Bko6zh6bWP60UxwoT5LzdGJsQJaPo6HjduXq9p6A=
