@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	lcommon "github.com/blinklabs-io/gouroboros/ledger/common"
-	"github.com/blinklabs-io/gouroboros/ledger/conway"
 	"github.com/blinklabs-io/plutigo/data"
 )
 
@@ -338,16 +337,16 @@ func collapseOutputs(outputs []lcommon.Utxo) []lcommon.TransactionOutput {
 	return ret
 }
 
-func sortedRedeemerKeys(redeemers lcommon.TransactionWitnessRedeemers) []conway.ConwayRedeemerKey {
+func sortedRedeemerKeys(redeemers lcommon.TransactionWitnessRedeemers) []lcommon.RedeemerKey {
 	tags := []lcommon.RedeemerTag{lcommon.RedeemerTagSpend, lcommon.RedeemerTagMint, lcommon.RedeemerTagCert, lcommon.RedeemerTagReward, lcommon.RedeemerTagVoting, lcommon.RedeemerTagProposing}
-	ret := make([]conway.ConwayRedeemerKey, 0)
+	ret := make([]lcommon.RedeemerKey, 0)
 	for _, tag := range tags {
 		idxs := redeemers.Indexes(tag)
 		slices.Sort(idxs)
 		for _, idx := range idxs {
 			ret = append(
 				ret,
-				conway.ConwayRedeemerKey{
+				lcommon.RedeemerKey{
 					Tag:   tag,
 					Index: uint32(idx),
 				},
@@ -362,8 +361,8 @@ func redeemersInfo(witnessSet lcommon.TransactionWitnessSet, toScriptPurpose toS
 	redeemers := witnessSet.Redeemers()
 	redeemerKeys := sortedRedeemerKeys(redeemers)
 	for _, key := range redeemerKeys {
-		lvData, exUnits := redeemers.Value(uint(key.Index), key.Tag)
-		datum := lazyValueToPlutusData(lvData)
+		redeemerValue := redeemers.Value(uint(key.Index), key.Tag)
+		datum := lazyValueToPlutusData(redeemerValue.Data)
 		purpose := toScriptPurpose(key, datum)
 		ret = append(
 			ret,
@@ -373,7 +372,7 @@ func redeemersInfo(witnessSet lcommon.TransactionWitnessSet, toScriptPurpose toS
 					Tag:     key.Tag,
 					Index:   key.Index,
 					Data:    datum,
-					ExUnits: exUnits,
+					ExUnits: redeemerValue.ExUnits,
 				},
 			},
 		)
@@ -381,7 +380,7 @@ func redeemersInfo(witnessSet lcommon.TransactionWitnessSet, toScriptPurpose toS
 	return ret
 }
 
-type toScriptPurposeFunc func(conway.ConwayRedeemerKey, data.PlutusData) ScriptInfo
+type toScriptPurposeFunc func(lcommon.RedeemerKey, data.PlutusData) ScriptInfo
 
 // scriptPurposeBuilder creates a reusable function preloaded with information about a particular transaction
 func scriptPurposeBuilder(
@@ -392,7 +391,7 @@ func scriptPurposeBuilder(
 	// TODO: proposal procedures
 	// TODO: votes
 ) toScriptPurposeFunc {
-	return func(redeemerKey conway.ConwayRedeemerKey, datum data.PlutusData) ScriptInfo {
+	return func(redeemerKey lcommon.RedeemerKey, datum data.PlutusData) ScriptInfo {
 		switch redeemerKey.Tag {
 		case lcommon.RedeemerTagSpend:
 			return ScriptInfoSpending{
