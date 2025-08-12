@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.24.3
 
 require (
-	github.com/blinklabs-io/gouroboros v0.130.0
+	github.com/blinklabs-io/gouroboros v0.130.1
 	github.com/btcsuite/btcd/btcec/v2 v2.3.5
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0
 	github.com/consensys/gnark-crypto v0.18.0
