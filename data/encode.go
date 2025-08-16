@@ -32,8 +32,6 @@ func encodeToRaw(pd PlutusData) (any, error) {
 		return encodeByteString(v)
 	case *List:
 		return encodeList(v)
-	case *IndefList:
-		return encodeIndefList(v)
 	default:
 		return nil, fmt.Errorf("unknown PlutusData type: %T", pd)
 	}
@@ -158,21 +156,10 @@ func encodeByteString(bs *ByteString) (any, error) {
 
 // encodeList encodes a List to CBOR array format.
 func encodeList(l *List) (any, error) {
-	result := make([]any, len(l.Items))
-
-	for i, item := range l.Items {
-		encoded, err := encodeToRaw(item)
-		if err != nil {
-			return nil, fmt.Errorf("failed to encode list item %d: %w", i, err)
-		}
-		result[i] = encoded
+	if len(l.Items) == 0 {
+		ret := make([]any, 0)
+		return ret, nil
 	}
-
-	return result, nil
-}
-
-// encodeIndefList encodes an IndefList to CBOR format
-func encodeIndefList(l *IndefList) (any, error) {
 	tmpData := []byte{
 		// Start an indefinite-length list
 		0x9F,
