@@ -116,13 +116,10 @@ func encodeMap(m *Map) (any, error) {
 
 // encodeInteger encodes an Integer to CBOR format.
 func encodeInteger(i *Integer) (any, error) {
-	// For small integers, encode directly
+	// Encode directly for values that fit in int64
 	if i.Inner.IsInt64() {
 		val := i.Inner.Int64()
-		// Check if it fits in the standard CBOR integer range
-		if val >= -2147483648 && val <= 2147483647 {
-			return val, nil
-		}
+		return val, nil
 	}
 
 	// For large integers, use CBOR bignum tags
