@@ -22,10 +22,7 @@ func (b *BuiltinArgs[T]) Iter() iter.Seq[Value[T]] {
 		temp := b
 		acc := []Value[T]{}
 
-		for {
-			if temp == nil {
-				break
-			}
+		for temp != nil {
 
 			acc = append(acc, temp.data)
 
@@ -37,7 +34,6 @@ func (b *BuiltinArgs[T]) Iter() iter.Seq[Value[T]] {
 				return
 			}
 		}
-
 	}
 }
 
@@ -51,10 +47,7 @@ func (b *BuiltinArgs[T]) Extend(data Value[T]) *BuiltinArgs[T] {
 func (b *BuiltinArgs[T]) Extract(holder *argHolder[T], count uint) {
 	temp := b
 
-	for {
-		if temp == nil {
-			break
-		}
+	for temp != nil {
 
 		holder[count-1] = temp.data
 
