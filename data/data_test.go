@@ -24,7 +24,11 @@ var testDefs = []struct {
 			NewInteger(big.NewInt(123)),
 			NewInteger(big.NewInt(456)),
 		),
-		CborHex: "82187b1901c8",
+		CborHex: "9f187b1901c8ff",
+	},
+	{
+		Data:    NewList(),
+		CborHex: "80",
 	},
 	{
 		Data: NewConstr(
@@ -42,19 +46,8 @@ var testDefs = []struct {
 			NewInteger(big.NewInt(1)),
 			NewInteger(big.NewInt(2)),
 		),
-		CborHex: "820102",
+		CborHex: "9f0102ff",
 	},
-	// TODO: figure out how to not fail this
-	// It works fine for encode, but we don't have a good way to capture an indef-length list on decode
-	/*
-		{
-			Data: NewIndefList(
-				NewInteger(big.NewInt(1)),
-				NewInteger(big.NewInt(2)),
-			),
-			CborHex: "9f0102ff",
-		},
-	*/
 }
 
 func TestPlutusDataEncode(t *testing.T) {

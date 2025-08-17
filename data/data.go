@@ -121,24 +121,8 @@ func (l List) String() string {
 
 // NewList creates a new List variant.
 func NewList(items ...PlutusData) PlutusData {
-	return &List{items}
-}
-
-// IndefList
-
-type IndefList struct {
-	Items []PlutusData
-}
-
-func (IndefList) isPlutusData() {}
-
-func (l IndefList) String() string {
-	return fmt.Sprintf("IndefList%v", l.Items)
-}
-
-// NewIndefList creates a new IndefList
-func NewIndefList(items ...PlutusData) PlutusData {
-	return &IndefList{
-		Items: items,
+	if items == nil {
+		items = make([]PlutusData, 0)
 	}
+	return &List{items}
 }
