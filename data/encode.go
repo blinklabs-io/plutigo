@@ -151,7 +151,8 @@ func encodeByteString(bs *ByteString) (any, error) {
 	// The Rust code shows special handling for byte strings longer than 64 bytes
 	// using indefinite-length encoding, but the Go CBOR library handles this automatically
 	// when using cbor.Marshal, so we can just return the bytes directly
-	return bs.Inner, nil
+	// NOTE: we use cbor.ByteString to allow it to be used as a map key
+	return cbor.ByteString(string(bs.Inner)), nil
 }
 
 // encodeList encodes a List to CBOR array format.
