@@ -104,6 +104,9 @@ func decodeRaw(v any) (PlutusData, error) {
 	case cbor.ByteString:
 		return NewByteString(x.Bytes()), nil
 
+	case big.Int:
+		return NewInteger(&x), nil
+
 	case int64:
 		return NewInteger(big.NewInt(x)), nil
 
