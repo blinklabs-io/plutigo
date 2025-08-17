@@ -66,7 +66,7 @@ func encodeConstr(c *Constr) (any, error) {
 			// End indefinite-length list
 			0xff,
 		)
-		fields = cbor.RawMessage(tmpData)
+		fields = RawMessageStr(string(tmpData))
 	}
 
 	// Determine CBOR tag based on Constr tag value
@@ -181,5 +181,21 @@ func encodeList(l *List) (any, error) {
 		// End indefinite-length list
 		0xff,
 	)
-	return cbor.RawMessage(tmpData), nil
+	return RawMessageStr(string(tmpData)), nil
+}
+
+// RawMessageStr is a hashable variant of cbor.RawMessage
+type RawMessageStr string
+
+func (r *RawMessageStr) UnmarshalCBOR(data []byte) error {
+	*r = RawMessageStr(string(data))
+	return nil
+}
+
+func (r RawMessageStr) MarshalCBOR() ([]byte, error) {
+	return []byte(r), nil
+}
+
+func (r RawMessageStr) Bytes() []byte {
+	return []byte(r)
 }
