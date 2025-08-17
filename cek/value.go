@@ -59,13 +59,14 @@ func (Lambda[T]) toExMem() ExMem {
 }
 
 type Builtin[T syn.Eval] struct {
-	Func   builtin.DefaultFunction
-	Forces uint
-	Args   []Value[T]
+	Func     builtin.DefaultFunction
+	Forces   uint
+	ArgCount uint
+	Args     *BuiltinArgs[T]
 }
 
 func (b Builtin[T]) String() string {
-	return fmt.Sprintf("Builtin[%d args, %d forces]", len(b.Args), b.Forces)
+	return fmt.Sprintf("Builtin[%d args, %d forces]", b.ArgCount, b.Forces)
 }
 
 func (b Builtin[T]) isValue() {}
@@ -75,7 +76,7 @@ func (b Builtin[T]) toExMem() ExMem {
 }
 
 func (b Builtin[T]) NeedsForce() bool {
-	return b.Func.ForceCount() > int(b.Forces)
+	return b.Func.ForceCount() > b.Forces
 }
 
 func (b *Builtin[T]) ConsumeForce() *Builtin[T] {
@@ -87,24 +88,20 @@ func (b *Builtin[T]) ConsumeForce() *Builtin[T] {
 }
 
 func (b *Builtin[T]) ApplyArg(arg Value[T]) *Builtin[T] {
-	args := make([]Value[T], len(b.Args))
-	copy(args, b.Args)
-
-	args = append(args, arg) //nolint:makezero
-
 	return &Builtin[T]{
-		Func:   b.Func,
-		Forces: b.Forces,
-		Args:   args,
+		Func:     b.Func,
+		Forces:   b.Forces,
+		ArgCount: b.ArgCount + 1,
+		Args:     b.Args.Extend(arg),
 	}
 }
 
 func (b *Builtin[T]) IsReady() bool {
-	return b.Func.Arity() == len(b.Args) && b.Func.ForceCount() == int(b.Forces)
+	return b.Func.Arity() == b.ArgCount && b.Func.ForceCount() == b.Forces
 }
 
 func (b *Builtin[T]) IsArrow() bool {
-	return b.Func.Arity() > len(b.Args)
+	return b.Func.Arity() > b.ArgCount
 }
 
 type Constr[T syn.Eval] struct {

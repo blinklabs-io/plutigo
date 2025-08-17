@@ -25,12 +25,14 @@ import (
 )
 
 func addInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapInteger[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapInteger[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](b.Args[1])
+	arg2, err := unwrapInteger[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -55,12 +57,14 @@ func subtractInteger[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapInteger[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapInteger[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](b.Args[1])
+	arg2, err := unwrapInteger[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -85,12 +89,14 @@ func multiplyInteger[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapInteger[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapInteger[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](b.Args[1])
+	arg2, err := unwrapInteger[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -112,12 +118,14 @@ func multiplyInteger[T syn.Eval](
 }
 
 func divideInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapInteger[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapInteger[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](b.Args[1])
+	arg2, err := unwrapInteger[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -155,12 +163,14 @@ func quotientInteger[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapInteger[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapInteger[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](b.Args[1])
+	arg2, err := unwrapInteger[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -194,12 +204,14 @@ func remainderInteger[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapInteger[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapInteger[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](b.Args[1])
+	arg2, err := unwrapInteger[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -230,12 +242,14 @@ func remainderInteger[T syn.Eval](
 }
 
 func modInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapInteger[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapInteger[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](b.Args[1])
+	arg2, err := unwrapInteger[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -269,12 +283,14 @@ func modInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func equalsInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapInteger[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapInteger[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](b.Args[1])
+	arg2, err := unwrapInteger[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -299,12 +315,14 @@ func lessThanInteger[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapInteger[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapInteger[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](b.Args[1])
+	arg2, err := unwrapInteger[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -329,12 +347,14 @@ func lessThanEqualsInteger[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapInteger[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapInteger[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](b.Args[1])
+	arg2, err := unwrapInteger[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -359,12 +379,14 @@ func appendByteString[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapByteString[T](b.Args[1])
+	arg2, err := unwrapByteString[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -390,12 +412,14 @@ func consByteString[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapInteger[T](b.Args[0]) // skip
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapInteger[T](m.argHolder[0]) // skip
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapByteString[T](b.Args[1]) // byte string
+	arg2, err := unwrapByteString[T](m.argHolder[1]) // byte string
 	if err != nil {
 		return nil, err
 	}
@@ -430,17 +454,19 @@ func sliceByteString[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapInteger[T](b.Args[0]) // skip
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapInteger[T](m.argHolder[0]) // skip
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](b.Args[1]) // take
+	arg2, err := unwrapInteger[T](m.argHolder[1]) // take
 	if err != nil {
 		return nil, err
 	}
 
-	arg3, err := unwrapByteString[T](b.Args[2]) // byte string
+	arg3, err := unwrapByteString[T](m.argHolder[2]) // byte string
 	if err != nil {
 		return nil, err
 	}
@@ -496,7 +522,9 @@ func lengthOfByteString[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -519,12 +547,14 @@ func indexByteString[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](b.Args[1])
+	arg2, err := unwrapInteger[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -559,12 +589,14 @@ func equalsByteString[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapByteString[T](b.Args[1])
+	arg2, err := unwrapByteString[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -587,12 +619,14 @@ func lessThanByteString[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapByteString[T](b.Args[1])
+	arg2, err := unwrapByteString[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -617,12 +651,14 @@ func lessThanEqualsByteString[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapByteString[T](b.Args[1])
+	arg2, err := unwrapByteString[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -644,7 +680,9 @@ func lessThanEqualsByteString[T syn.Eval](
 }
 
 func sha2256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -666,7 +704,9 @@ func sha2256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func sha3256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -688,7 +728,9 @@ func sha3256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func blake2B256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -713,17 +755,19 @@ func verifyEd25519Signature[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	publicKey, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	publicKey, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	message, err := unwrapByteString[T](b.Args[1])
+	message, err := unwrapByteString[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
 
-	signature, err := unwrapByteString[T](b.Args[2])
+	signature, err := unwrapByteString[T](m.argHolder[2])
 	if err != nil {
 		return nil, err
 	}
@@ -764,7 +808,9 @@ func verifyEd25519Signature[T syn.Eval](
 }
 
 func blake2B224[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -794,7 +840,9 @@ func blake2B224[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func keccak256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -824,17 +872,19 @@ func verifyEcdsaSecp256K1Signature[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	publicKey, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	publicKey, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	message, err := unwrapByteString[T](b.Args[1])
+	message, err := unwrapByteString[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
 
-	signature, err := unwrapByteString[T](b.Args[2])
+	signature, err := unwrapByteString[T](m.argHolder[2])
 	if err != nil {
 		return nil, err
 	}
@@ -897,17 +947,19 @@ func verifySchnorrSecp256K1Signature[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	publicKey, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	publicKey, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	message, err := unwrapByteString[T](b.Args[1])
+	message, err := unwrapByteString[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
 
-	signature, err := unwrapByteString[T](b.Args[2])
+	signature, err := unwrapByteString[T](m.argHolder[2])
 	if err != nil {
 		return nil, err
 	}
@@ -1087,12 +1139,14 @@ func verify(
 }
 
 func appendString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapString[T](b.Args[1])
+	arg2, err := unwrapString[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -1114,12 +1168,14 @@ func appendString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func equalsString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapString[T](b.Args[1])
+	arg2, err := unwrapString[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -1141,7 +1197,9 @@ func equalsString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func encodeUtf8[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1163,7 +1221,9 @@ func encodeUtf8[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func decodeUtf8[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1189,13 +1249,15 @@ func decodeUtf8[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func ifThenElse[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapBool[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapBool[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2 := b.Args[1]
-	arg3 := b.Args[2]
+	arg2 := m.argHolder[1]
+	arg3 := m.argHolder[2]
 
 	err = m.CostThree(
 		&b.Func,
@@ -1215,11 +1277,13 @@ func ifThenElse[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func chooseUnit[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	if err := unwrapUnit[T](b.Args[0]); err != nil {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	if err := unwrapUnit[T](m.argHolder[0]); err != nil {
 		return nil, err
 	}
 
-	arg2 := b.Args[1]
+	arg2 := m.argHolder[1]
 
 	err := m.CostTwo(&b.Func, unitExMem(), valueExMem[T](arg2))
 	if err != nil {
@@ -1232,12 +1296,14 @@ func chooseUnit[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func trace[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2 := b.Args[1]
+	arg2 := m.argHolder[1]
 
 	err = m.CostTwo(&b.Func, stringExMem(arg1), valueExMem[T](arg2))
 	if err != nil {
@@ -1252,7 +1318,9 @@ func trace[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func fstPair[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	fstPair, sndPair, err := unwrapPair[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	fstPair, sndPair, err := unwrapPair[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1268,7 +1336,9 @@ func fstPair[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func sndPair[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	fstPair, sndPair, err := unwrapPair[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	fstPair, sndPair, err := unwrapPair[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1284,14 +1354,16 @@ func sndPair[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func chooseList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	l, err := unwrapList[T](nil, b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	l, err := unwrapList[T](nil, m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	branchEmpty := b.Args[1]
+	branchEmpty := m.argHolder[1]
 
-	branchOtherwise := b.Args[2]
+	branchOtherwise := m.argHolder[2]
 
 	err = m.CostThree(
 		&b.Func,
@@ -1311,14 +1383,16 @@ func chooseList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func mkCons[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapConstant[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapConstant[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
 	typ := arg1.Constant.Typ()
 
-	arg2, err := unwrapList[T](typ, b.Args[1])
+	arg2, err := unwrapList[T](typ, m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -1339,7 +1413,9 @@ func mkCons[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func headList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapList[T](nil, b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapList[T](nil, m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1359,7 +1435,9 @@ func headList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func tailList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapList[T](nil, b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapList[T](nil, m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1384,7 +1462,9 @@ func tailList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func nullList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapList[T](nil, b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapList[T](nil, m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1402,16 +1482,18 @@ func nullList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func chooseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapData[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapData[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	constrBranch := b.Args[1]
-	mapBranch := b.Args[2]
-	listBranch := b.Args[3]
-	integerBranch := b.Args[4]
-	bytesBranch := b.Args[5]
+	constrBranch := m.argHolder[1]
+	mapBranch := m.argHolder[2]
+	listBranch := m.argHolder[3]
+	integerBranch := m.argHolder[4]
+	bytesBranch := m.argHolder[5]
 
 	err = m.CostSix(&b.Func,
 		dataExMem(arg1),
@@ -1447,12 +1529,14 @@ func chooseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapInteger[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapInteger[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapList[T](&syn.TData{}, b.Args[1])
+	arg2, err := unwrapList[T](&syn.TData{}, m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -1480,12 +1564,14 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	pairType := &syn.TPair{
 		First:  &syn.TData{},
 		Second: &syn.TData{},
 	}
 
-	arg1, err := unwrapList[T](pairType, b.Args[0])
+	arg1, err := unwrapList[T](pairType, m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1515,7 +1601,9 @@ func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapList[T](&syn.TData{}, b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapList[T](&syn.TData{}, m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1542,7 +1630,9 @@ func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func iData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapInteger[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapInteger[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1560,7 +1650,9 @@ func iData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func bData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1578,7 +1670,9 @@ func bData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func unConstrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapData[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapData[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1624,7 +1718,9 @@ func unConstrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func unMapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapData[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapData[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1671,7 +1767,9 @@ func unMapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func unListData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapData[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapData[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1708,7 +1806,9 @@ func unListData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func unIData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapData[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapData[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1736,7 +1836,9 @@ func unIData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func unBData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapData[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapData[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1764,12 +1866,14 @@ func unBData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func equalsData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapData[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapData[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapData[T](b.Args[1])
+	arg2, err := unwrapData[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -1790,7 +1894,9 @@ func equalsData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func serialiseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapData[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapData[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1815,12 +1921,14 @@ func serialiseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func mkPairData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapData[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapData[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapData[T](b.Args[1])
+	arg2, err := unwrapData[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -1847,7 +1955,9 @@ func mkPairData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func mkNilData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	err := unwrapUnit[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	err := unwrapUnit[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1868,7 +1978,9 @@ func mkNilData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func mkNilPairData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	err := unwrapUnit[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	err := unwrapUnit[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1892,12 +2004,14 @@ func mkNilPairData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func bls12381G1Add[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapBls12_381G1Element[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapBls12_381G1Element[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapBls12_381G1Element[T](b.Args[1])
+	arg2, err := unwrapBls12_381G1Element[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -1919,7 +2033,9 @@ func bls12381G1Add[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func bls12381G1Neg[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapBls12_381G1Element[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapBls12_381G1Element[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1942,12 +2058,14 @@ func bls12381G1ScalarMul[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapInteger[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapInteger[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapBls12_381G1Element[T](b.Args[1])
+	arg2, err := unwrapBls12_381G1Element[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -1968,12 +2086,14 @@ func bls12381G1Equal[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapBls12_381G1Element[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapBls12_381G1Element[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapBls12_381G1Element[T](b.Args[1])
+	arg2, err := unwrapBls12_381G1Element[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -1994,7 +2114,9 @@ func bls12381G1Compress[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapBls12_381G1Element[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapBls12_381G1Element[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -2017,7 +2139,9 @@ func bls12381G1Uncompress[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -2051,12 +2175,14 @@ func bls12381G1HashToGroup[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapByteString[T](b.Args[1])
+	arg2, err := unwrapByteString[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -2088,12 +2214,14 @@ func bls12381G1HashToGroup[T syn.Eval](
 }
 
 func bls12381G2Add[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapBls12_381G2Element[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapBls12_381G2Element[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapBls12_381G2Element[T](b.Args[1])
+	arg2, err := unwrapBls12_381G2Element[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -2115,7 +2243,9 @@ func bls12381G2Add[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func bls12381G2Neg[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	arg1, err := unwrapBls12_381G2Element[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapBls12_381G2Element[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -2138,12 +2268,14 @@ func bls12381G2ScalarMul[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapInteger[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapInteger[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapBls12_381G2Element[T](b.Args[1])
+	arg2, err := unwrapBls12_381G2Element[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -2166,12 +2298,14 @@ func bls12381G2Equal[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapBls12_381G2Element[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapBls12_381G2Element[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapBls12_381G2Element[T](b.Args[1])
+	arg2, err := unwrapBls12_381G2Element[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -2192,7 +2326,9 @@ func bls12381G2Compress[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapBls12_381G2Element[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapBls12_381G2Element[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -2215,7 +2351,9 @@ func bls12381G2Uncompress[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -2249,12 +2387,14 @@ func bls12381G2HashToGroup[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapByteString[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapByteString[T](b.Args[1])
+	arg2, err := unwrapByteString[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -2289,12 +2429,14 @@ func bls12381MillerLoop[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapBls12_381G1Element[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapBls12_381G1Element[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapBls12_381G2Element[T](b.Args[1])
+	arg2, err := unwrapBls12_381G2Element[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -2327,12 +2469,14 @@ func bls12381MulMlResult[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapBls12_381MlResult[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapBls12_381MlResult[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapBls12_381MlResult[T](b.Args[1])
+	arg2, err := unwrapBls12_381MlResult[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -2355,12 +2499,14 @@ func bls12381FinalVerify[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
-	arg1, err := unwrapBls12_381MlResult[T](b.Args[0])
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	arg1, err := unwrapBls12_381MlResult[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapBls12_381MlResult[T](b.Args[1])
+	arg2, err := unwrapBls12_381MlResult[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -2404,18 +2550,20 @@ func integerToByteString[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	// Unwrap arguments
-	endianness, err := unwrapBool[T](b.Args[0])
+	endianness, err := unwrapBool[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	size, err := unwrapInteger[T](b.Args[1])
+	size, err := unwrapInteger[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
 
-	input, err := unwrapInteger[T](b.Args[2])
+	input, err := unwrapInteger[T](m.argHolder[2])
 	if err != nil {
 		return nil, err
 	}
@@ -2528,13 +2676,15 @@ func byteStringToInteger[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	// Unwrap arguments
-	endianness, err := unwrapBool[T](b.Args[0])
+	endianness, err := unwrapBool[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	bytes, err := unwrapByteString[T](b.Args[1])
+	bytes, err := unwrapByteString[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -2570,18 +2720,20 @@ func byteStringToInteger[T syn.Eval](
 }
 
 func andByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	// Unwrap arguments
-	shouldPad, err := unwrapBool[T](b.Args[0])
+	shouldPad, err := unwrapBool[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	bytes1, err := unwrapByteString[T](b.Args[1])
+	bytes1, err := unwrapByteString[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
 
-	bytes2, err := unwrapByteString[T](b.Args[2])
+	bytes2, err := unwrapByteString[T](m.argHolder[2])
 	if err != nil {
 		return nil, err
 	}
@@ -2639,18 +2791,20 @@ func andByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func orByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	// Unwrap arguments
-	shouldPad, err := unwrapBool[T](b.Args[0])
+	shouldPad, err := unwrapBool[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	bytes1, err := unwrapByteString[T](b.Args[1])
+	bytes1, err := unwrapByteString[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
 
-	bytes2, err := unwrapByteString[T](b.Args[2])
+	bytes2, err := unwrapByteString[T](m.argHolder[2])
 	if err != nil {
 		return nil, err
 	}
@@ -2705,18 +2859,20 @@ func orByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func xorByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	// Unwrap arguments
-	shouldPad, err := unwrapBool[T](b.Args[0])
+	shouldPad, err := unwrapBool[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	bytes1, err := unwrapByteString[T](b.Args[1])
+	bytes1, err := unwrapByteString[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
 
-	bytes2, err := unwrapByteString[T](b.Args[2])
+	bytes2, err := unwrapByteString[T](m.argHolder[2])
 	if err != nil {
 		return nil, err
 	}
@@ -2778,8 +2934,10 @@ func complementByteString[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	// Unwrap argument
-	bytes, err := unwrapByteString[T](b.Args[0])
+	bytes, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -2804,13 +2962,15 @@ func complementByteString[T syn.Eval](
 }
 
 func readBit[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	// Unwrap arguments
-	bytes, err := unwrapByteString[T](b.Args[0])
+	bytes, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	bitIndex, err := unwrapInteger[T](b.Args[1])
+	bitIndex, err := unwrapInteger[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -2857,18 +3017,20 @@ func readBit[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func writeBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	// Unwrap arguments
-	bytes, err := unwrapByteString[T](b.Args[0])
+	bytes, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	indices, err := unwrapList[T](&syn.TInteger{}, b.Args[1])
+	indices, err := unwrapList[T](&syn.TInteger{}, m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
 
-	setBit, err := unwrapBool[T](b.Args[2])
+	setBit, err := unwrapBool[T](m.argHolder[2])
 	if err != nil {
 		return nil, err
 	}
@@ -2937,13 +3099,15 @@ func writeBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func replicateByte[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	// Unwrap arguments
-	size, err := unwrapInteger[T](b.Args[0])
+	size, err := unwrapInteger[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	byteVal, err := unwrapInteger[T](b.Args[1])
+	byteVal, err := unwrapInteger[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -2998,13 +3162,15 @@ func shiftByteString[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	// Unwrap arguments
-	bytes, err := unwrapByteString[T](b.Args[0])
+	bytes, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	shift, err := unwrapInteger[T](b.Args[1])
+	shift, err := unwrapInteger[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -3031,7 +3197,7 @@ func shiftByteString[T syn.Eval](
 	shiftVal := int(shift.Int64())
 
 	if shiftVal == 0 {
-		return b.Args[0], nil
+		return m.argHolder[0], nil
 	}
 
 	// Convert bytes to bit array (MSB0)
@@ -3078,13 +3244,15 @@ func rotateByteString[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	// Unwrap arguments
-	bytes, err := unwrapByteString[T](b.Args[0])
+	bytes, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	shift, err := unwrapInteger[T](b.Args[1])
+	shift, err := unwrapInteger[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -3150,8 +3318,10 @@ func rotateByteString[T syn.Eval](
 }
 
 func countSetBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	// Unwrap argument
-	bytes, err := unwrapByteString[T](b.Args[0])
+	bytes, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -3179,8 +3349,10 @@ func findFirstSetBit[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
 ) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	// Unwrap argument
-	bytes, err := unwrapByteString[T](b.Args[0])
+	bytes, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -3222,8 +3394,10 @@ func findFirstSetBit[T syn.Eval](
 }
 
 func ripemd160[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	// Unwrap argument
-	arg1, err := unwrapByteString[T](b.Args[0])
+	arg1, err := unwrapByteString[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -3247,16 +3421,18 @@ func ripemd160[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	// Extract arguments
-	bb, err := unwrapInteger[T](b.Args[0])
+	bb, err := unwrapInteger[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
-	e, err := unwrapInteger[T](b.Args[1])
+	e, err := unwrapInteger[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
-	mm, err := unwrapInteger[T](b.Args[2])
+	mm, err := unwrapInteger[T](m.argHolder[2])
 	if err != nil {
 		return nil, err
 	}
@@ -3334,25 +3510,37 @@ func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 }
 
 func caseList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	panic("implement caseList")
 }
 
 func caseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	panic("implement caseData")
 }
 
 func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	panic("implement dropList")
 }
 
 func lengthOfArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	panic("implement lengthOfArray")
 }
 
 func listToArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	panic("implement listToArray")
 }
 
 func indexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
 	panic("implement indexArray")
 }

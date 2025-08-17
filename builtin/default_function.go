@@ -253,7 +253,7 @@ var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
 	"indexArray":    IndexArray,
 }
 
-var defaultFunctionForceCount = [TotalBuiltinCount]int{
+var defaultFunctionForceCount = [TotalBuiltinCount]uint{
 	// Integer functions
 	AddInteger:            0,
 	SubtractInteger:       0,
@@ -369,11 +369,11 @@ var defaultFunctionForceCount = [TotalBuiltinCount]int{
 	IndexArray:    1,
 }
 
-func (f DefaultFunction) ForceCount() int {
+func (f DefaultFunction) ForceCount() uint {
 	return defaultFunctionForceCount[f]
 }
 
-var defaultFunctionArity = [TotalBuiltinCount]int{
+var defaultFunctionArity = [TotalBuiltinCount]uint{
 	// Integer functions
 	AddInteger:            2,
 	SubtractInteger:       2,
@@ -489,7 +489,7 @@ var defaultFunctionArity = [TotalBuiltinCount]int{
 	IndexArray:    2,
 }
 
-func (f DefaultFunction) Arity() int {
+func (f DefaultFunction) Arity() uint {
 	return defaultFunctionArity[f]
 }
 
