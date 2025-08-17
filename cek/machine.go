@@ -15,6 +15,7 @@ type Machine[T syn.Eval] struct {
 	ExBudget ExBudget
 	Logs     []string
 
+	argHolder       argHolder[T]
 	unbudgetedSteps [10]uint32
 }
 
@@ -26,6 +27,7 @@ func NewMachine[T syn.Eval](slippage uint32) *Machine[T] {
 		ExBudget: DefaultExBudget,
 		Logs:     make([]string, 0),
 
+		argHolder:       newArgHolder[T](),
 		unbudgetedSteps: [10]uint32{0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	}
 }
@@ -156,7 +158,7 @@ func (m *Machine[T]) compute(
 			Ctx: context,
 			Value: &Builtin[T]{
 				Func:   t.DefaultFunction,
-				Args:   []Value[T]{},
+				Args:   nil,
 				Forces: 0,
 			},
 		}
@@ -443,7 +445,7 @@ func dischargeValue[T syn.Eval](value Value[T]) syn.Term[T] {
 			}
 		}
 
-		for _, arg := range v.Args {
+		for arg := range v.Args.Iter() {
 			forcedTerm = &syn.Apply[T]{
 				Function: forcedTerm,
 				Argument: dischargeValue[T](arg),
