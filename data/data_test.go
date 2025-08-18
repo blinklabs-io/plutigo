@@ -107,6 +107,53 @@ var testDefs = []struct {
 		// 102([999, [_ 6, 7]])
 		CborHex: "d866821903e79f0607ff",
 	},
+	{
+		Data: NewMap(
+			[][2]PlutusData{
+				{
+					NewList(
+						NewInteger(big.NewInt(1)),
+						NewInteger(big.NewInt(2)),
+					),
+					NewMap(
+						[][2]PlutusData{
+							{
+								NewList(
+									NewByteString(nil),
+								),
+								NewConstr(
+									0,
+									NewInteger(big.NewInt(2)),
+									NewInteger(big.NewInt(1)),
+								),
+							},
+						},
+					),
+				},
+			},
+		),
+		// {[_ 1, 2]: {[_ h'']: 121_0([_ 2, 1])}}
+		CborHex: "a19f0102ffa19f40ffd8799f0201ff",
+	},
+	{
+		Data: NewMap(
+			[][2]PlutusData{
+				{
+					NewMap(
+						[][2]PlutusData{
+							{
+								NewInteger(big.NewInt(1)),
+								NewInteger(big.NewInt(2)),
+							},
+						},
+					),
+					NewInteger(big.NewInt(3)),
+				},
+			},
+		),
+		// {{1: 2}: 3}
+		CborHex: "a1a1010203",
+	},
 }
 
 func TestPlutusDataEncode(t *testing.T) {

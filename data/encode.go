@@ -100,13 +100,15 @@ func encodeMap(m *Map) (any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to encode map key: %w", err)
 		}
-
+		keyRaw, err := cbor.Marshal(key)
+		if err != nil {
+			return nil, fmt.Errorf("encode map key: %w", err)
+		}
 		value, err := encodeToRaw(pair[1])
 		if err != nil {
 			return nil, fmt.Errorf("failed to encode map value: %w", err)
 		}
-
-		result[key] = value
+		result[RawMessageStr(string(keyRaw))] = value
 	}
 
 	return result, nil
