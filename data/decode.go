@@ -60,30 +60,38 @@ func decodeCborRaw(data []byte) (any, error) {
 	}
 }
 
-func decodeCborRawList(data []byte) ([]any, error) {
+func decodeCborRawList(data []byte) (any, error) {
 	var tmpData []cbor.RawMessage
 	if err := cbor.Unmarshal(data, &tmpData); err != nil {
 		return nil, err
 	}
-	ret := make([]any, len(tmpData))
+	tmpItems := make([]PlutusData, len(tmpData))
 	for i, item := range tmpData {
 		tmp, err := decodeCborRaw(item)
 		if err != nil {
 			return nil, err
 		}
-		ret[i] = tmp
+		tmpPd, err := decodeRaw(tmp)
+		if err != nil {
+			return nil, err
+		}
+		tmpItems[i] = tmpPd
 	}
-	return ret, nil
+	return NewList(tmpItems...), nil
 }
 
-func decodeCborRawMap(data []byte) (map[any]any, error) {
+func decodeCborRawMap(data []byte) (any, error) {
 	var tmpData map[RawMessageStr]RawMessageStr
 	if err := cbor.Unmarshal(data, &tmpData); err != nil {
 		return nil, err
 	}
-	ret := make(map[any]any, len(tmpData))
+	pairs := make([][2]PlutusData, 0, len(tmpData))
 	for k, v := range tmpData {
 		tmpKey, err := decodeCborRaw(k.Bytes())
+		if err != nil {
+			return nil, err
+		}
+		tmpKeyPd, err := decodeRaw(tmpKey)
 		if err != nil {
 			return nil, err
 		}
@@ -91,9 +99,19 @@ func decodeCborRawMap(data []byte) (map[any]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		ret[tmpKey] = tmpVal
+		tmpValPd, err := decodeRaw(tmpVal)
+		if err != nil {
+			return nil, err
+		}
+		pairs = append(
+			pairs,
+			[2]PlutusData{
+				tmpKeyPd,
+				tmpValPd,
+			},
+		)
 	}
-	return ret, nil
+	return NewMap(pairs), nil
 }
 
 // decodeRaw converts a raw CBOR-decoded value into PlutusData.
@@ -152,6 +170,12 @@ func decodeRaw(v any) (PlutusData, error) {
 		return x, nil
 
 	case *Integer:
+		return x, nil
+
+	case *List:
+		return x, nil
+
+	case *Map:
 		return x, nil
 
 	default:
@@ -217,29 +241,16 @@ func decodeConstr(tag uint64, content cbor.RawMessage) (PlutusData, error) {
 	if err != nil {
 		return nil, err
 	}
-	arr, ok := tmpData.([]any)
+	tmpList, ok := tmpData.(*List)
 	if !ok {
 		return nil, fmt.Errorf(
 			"expected array for Constr tag %d, got %T",
 			tag,
-			content,
+			tmpData,
 		)
 	}
 
-	fields := make([]PlutusData, len(arr))
-
-	for i, item := range arr {
-		pd, err := decodeRaw(item)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"failed to decode Constr field %d: %w",
-				i,
-				err,
-			)
-		}
-
-		fields[i] = pd
-	}
+	fields := tmpList.Items
 
 	return NewConstr(uint(tag), fields...), nil
 }
