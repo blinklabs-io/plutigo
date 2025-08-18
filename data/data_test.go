@@ -98,6 +98,15 @@ var testDefs = []struct {
 		),
 		CborHex: "d8799fa1d8799f00190196ffd8799f1b17f2495b03141751ffff",
 	},
+	{
+		Data: NewConstr(
+			999,
+			NewInteger(big.NewInt(6)),
+			NewInteger(big.NewInt(7)),
+		),
+		// 102([999, [_ 6, 7]])
+		CborHex: "d866821903e79f0607ff",
+	},
 }
 
 func TestPlutusDataEncode(t *testing.T) {
