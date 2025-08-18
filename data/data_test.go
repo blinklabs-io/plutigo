@@ -48,6 +48,56 @@ var testDefs = []struct {
 		),
 		CborHex: "9f0102ff",
 	},
+	{
+		Data: NewMap(
+			[][2]PlutusData{
+				{
+					NewInteger(big.NewInt(1)),
+					NewInteger(big.NewInt(2)),
+				},
+			},
+		),
+		CborHex: "a10102",
+	},
+	{
+		Data: NewMap(
+			[][2]PlutusData{
+				{
+					NewConstr(
+						0,
+						NewInteger(big.NewInt(0)),
+						NewInteger(big.NewInt(406)),
+					),
+					NewConstr(
+						0,
+						NewInteger(big.NewInt(1725522262478821201)),
+					),
+				},
+			},
+		),
+		CborHex: "a1d8799f00190196ffd8799f1b17f2495b03141751ff",
+	},
+	{
+		Data: NewConstr(
+			0,
+			NewMap(
+				[][2]PlutusData{
+					{
+						NewConstr(
+							0,
+							NewInteger(big.NewInt(0)),
+							NewInteger(big.NewInt(406)),
+						),
+						NewConstr(
+							0,
+							NewInteger(big.NewInt(1725522262478821201)),
+						),
+					},
+				},
+			),
+		),
+		CborHex: "d8799fa1d8799f00190196ffd8799f1b17f2495b03141751ffff",
+	},
 }
 
 func TestPlutusDataEncode(t *testing.T) {
