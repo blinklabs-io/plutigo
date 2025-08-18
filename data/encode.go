@@ -1,7 +1,6 @@
 package data
 
 import (
-	"errors"
 	"fmt"
 	"math/big"
 	"slices"
@@ -78,8 +77,9 @@ func encodeConstr(c *Constr) (any, error) {
 	case c.Tag >= 7 && c.Tag <= 127:
 		// Tags 7-127 map to CBOR tags 1280-1400
 		cborTag = 1280 + uint64(c.Tag-7)
-	case c.Tag == 102:
-		return nil, errors.New("tagged data (tag 102) not implemented")
+	case c.Tag >= 128:
+		cborTag = 102
+		fields = []any{c.Tag, fields}
 	default:
 		return nil, fmt.Errorf("unsupported Constr tag: %d", c.Tag)
 	}

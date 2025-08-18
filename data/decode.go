@@ -1,7 +1,6 @@
 package data
 
 import (
-	"errors"
 	"fmt"
 	"math/big"
 
@@ -197,8 +196,15 @@ func decodeRawTag(tag cbor.RawTag) (PlutusData, error) {
 		ret, retErr = decodeBignum(tag.Content, true)
 
 	case 102:
-		return nil, errors.New("tagged data (tag 102) not implemented")
-
+		var tmpData struct {
+			_           struct{} `cbor:",toarray"`
+			Alternative uint64
+			FieldsRaw   cbor.RawMessage
+		}
+		if err := cbor.Unmarshal(tag.Content, &tmpData); err != nil {
+			return nil, err
+		}
+		ret, retErr = decodeConstr(tmpData.Alternative, tmpData.FieldsRaw)
 	default:
 		return nil, fmt.Errorf("unknown CBOR tag for PlutusData: %d", tag.Number)
 	}
