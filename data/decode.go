@@ -1,6 +1,7 @@
 package data
 
 import (
+	"bytes"
 	"fmt"
 	"math/big"
 
@@ -28,6 +29,22 @@ func Decode(b []byte) (PlutusData, error) {
 	return decodeRaw(v)
 }
 
+// cborUnmarshal acts like cbor.Unmarshal but allows us to set our own decoder options
+func cborUnmarshal(dataBytes []byte, dest any) error {
+	data := bytes.NewReader(dataBytes)
+	// Create a custom decoder that returns an error on unknown fields
+	decOptions := cbor.DecOptions{
+		// This defaults to 32, but there are blocks in the wild using >64 nested levels
+		MaxNestedLevels: 256,
+	}
+	decMode, err := decOptions.DecMode()
+	if err != nil {
+		return err
+	}
+	dec := decMode.NewDecoder(data)
+	return dec.Decode(dest)
+}
+
 // decodeCborRaw is an alternative to cbor.Unmarshal() that converts cbor.Tag to Constr
 // This is needed because cbor.Tag with a slice as the content (such as in a Constr) is
 // not hashable and cannot be used as a map key
@@ -36,7 +53,7 @@ func decodeCborRaw(data []byte) (any, error) {
 	switch cborType {
 	case CborTypeByteString:
 		var tmpData cbor.ByteString
-		if err := cbor.Unmarshal(data, &tmpData); err != nil {
+		if err := cborUnmarshal(data, &tmpData); err != nil {
 			return nil, err
 		}
 		return tmpData, nil
@@ -46,14 +63,14 @@ func decodeCborRaw(data []byte) (any, error) {
 		return decodeCborRawMap(data)
 	case CborTypeTag:
 		var tmpTag cbor.RawTag
-		if err := cbor.Unmarshal(data, &tmpTag); err != nil {
+		if err := cborUnmarshal(data, &tmpTag); err != nil {
 			return nil, err
 		}
 		return decodeRawTag(tmpTag)
 	default:
 		// Decode using default representation
 		var tmpData any
-		if err := cbor.Unmarshal(data, &tmpData); err != nil {
+		if err := cborUnmarshal(data, &tmpData); err != nil {
 			return nil, err
 		}
 		return tmpData, nil
@@ -62,7 +79,7 @@ func decodeCborRaw(data []byte) (any, error) {
 
 func decodeCborRawList(data []byte) (any, error) {
 	var tmpData []cbor.RawMessage
-	if err := cbor.Unmarshal(data, &tmpData); err != nil {
+	if err := cborUnmarshal(data, &tmpData); err != nil {
 		return nil, err
 	}
 	tmpItems := make([]PlutusData, len(tmpData))
@@ -82,7 +99,7 @@ func decodeCborRawList(data []byte) (any, error) {
 
 func decodeCborRawMap(data []byte) (any, error) {
 	var tmpData map[RawMessageStr]RawMessageStr
-	if err := cbor.Unmarshal(data, &tmpData); err != nil {
+	if err := cborUnmarshal(data, &tmpData); err != nil {
 		return nil, err
 	}
 	pairs := make([][2]PlutusData, 0, len(tmpData))
@@ -225,7 +242,7 @@ func decodeRawTag(tag cbor.RawTag) (PlutusData, error) {
 			Alternative uint64
 			FieldsRaw   cbor.RawMessage
 		}
-		if err := cbor.Unmarshal(tag.Content, &tmpData); err != nil {
+		if err := cborUnmarshal(tag.Content, &tmpData); err != nil {
 			return nil, err
 		}
 		ret, retErr = decodeConstr(tmpData.Alternative, tmpData.FieldsRaw)
