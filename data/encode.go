@@ -1,6 +1,7 @@
 package data
 
 import (
+	"bytes"
 	"fmt"
 	"math/big"
 	"slices"
@@ -15,7 +16,23 @@ func Encode(pd PlutusData) ([]byte, error) {
 		return nil, err
 	}
 
-	return cbor.Marshal(encoded)
+	return cborMarshal(encoded)
+}
+
+// cborMarshal acts like cbor.Marshal but allows us to set our own encoder options
+func cborMarshal(data any) ([]byte, error) {
+	buf := bytes.NewBuffer(nil)
+	opts := cbor.EncOptions{
+		// Make sure that maps have ordered keys
+		Sort: cbor.SortCoreDeterministic,
+	}
+	em, err := opts.EncMode()
+	if err != nil {
+		return nil, err
+	}
+	enc := em.NewEncoder(buf)
+	err = enc.Encode(data)
+	return buf.Bytes(), err
 }
 
 // encodeToRaw converts PlutusData to a CBOR-encodable representation.
@@ -54,7 +71,7 @@ func encodeConstr(c *Constr) (any, error) {
 			if err != nil {
 				return nil, fmt.Errorf("failed to encode Constr field %d: %w", i, err)
 			}
-			encodedCbor, err := cbor.Marshal(encoded)
+			encodedCbor, err := cborMarshal(encoded)
 			if err != nil {
 				return nil, fmt.Errorf("failed to encode Constr field item %d: %w", i, err)
 			}
@@ -100,7 +117,7 @@ func encodeMap(m *Map) (any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to encode map key: %w", err)
 		}
-		keyRaw, err := cbor.Marshal(key)
+		keyRaw, err := cborMarshal(key)
 		if err != nil {
 			return nil, fmt.Errorf("encode map key: %w", err)
 		}
@@ -172,7 +189,7 @@ func encodeList(l *List) (any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to encode indef-length list item %d: %w", i, err)
 		}
-		encodedCbor, err := cbor.Marshal(encoded)
+		encodedCbor, err := cborMarshal(encoded)
 		if err != nil {
 			return nil, fmt.Errorf("failed to encode indef-length list item %d: %w", i, err)
 		}
