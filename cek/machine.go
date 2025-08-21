@@ -54,7 +54,7 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 		case *Done[T]:
 			return v.term, nil
 		default:
-			panic("unknown machine state")
+			panic(fmt.Sprintf("unknown machine state: %T", state))
 		}
 		if err != nil {
 			return nil, err
@@ -213,7 +213,7 @@ func (m *Machine[T]) compute(
 			Term: t.Constr,
 		}
 	default:
-		panic(fmt.Sprintf("unknown term: %v", term))
+		panic(fmt.Sprintf("unknown term: %T: %v", term, term))
 	}
 
 	return state, nil

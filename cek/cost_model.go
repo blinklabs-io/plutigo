@@ -1,6 +1,7 @@
 package cek
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/blinklabs-io/plutigo/data"
@@ -53,7 +54,7 @@ func iconstantExMem(c syn.IConstant) func() ExMem {
 		case *syn.ProtoPair:
 			ex = pairExMem(x.First, x.Second)
 		default:
-			panic("Oh no!")
+			panic(fmt.Sprintf("invalid constant type: %T", c))
 		}
 
 		return ex()
