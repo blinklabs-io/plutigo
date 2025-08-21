@@ -3512,35 +3512,35 @@ func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 func caseList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	panic("implement caseList")
+	return nil, errors.New("unimplemented: caseList")
 }
 
 func caseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	panic("implement caseData")
+	return nil, errors.New("unimplemented: caseData")
 }
 
 func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	panic("implement dropList")
+	return nil, errors.New("unimplemented: dropList")
 }
 
 func lengthOfArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	panic("implement lengthOfArray")
+	return nil, errors.New("unimplemented: lengthOfArray")
 }
 
 func listToArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	panic("implement listToArray")
+	return nil, errors.New("unimplemented: listToArray")
 }
 
 func indexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	panic("implement indexArray")
+	return nil, errors.New("unimplemented: indexArray")
 }

@@ -236,12 +236,12 @@ func DecodeConstant(d *decoder) (IConstant, error) {
 	// ProtoList
 	case len(tags) >= 2 && tags[0] == ProtoListOneTag && tags[1] == ProtoListTwoTag:
 		// Handle PROTO_LIST_ONE, PROTO_LIST_TWO, rest...
-		panic("unimplemented: PROTO_LIST")
+		return nil, errors.New("unimplemented: PROTO_LIST")
 
 	// ProtoPair
 	case len(tags) >= 3 && tags[0] == ProtoPairOneTag && tags[1] == ProtoPairTwoTag && tags[2] == ProtoPairThreeTag:
 		// Handle PROTO_PAIR_ONE, PROTO_PAIR_TWO, PROTO_PAIR_THREE, rest...
-		panic("unimplemented: PROTO_PAIR")
+		return nil, errors.New("unimplemented: PROTO_PAIR")
 
 	// Data
 	case len(tags) == 1 && tags[0] == DataTag:

@@ -188,8 +188,7 @@ func nameToIndex[T any](
 			Branches: branches,
 		}
 	default:
-		fmt.Printf("%#v", t)
-		panic("HOW THE FUCK")
+		panic(fmt.Sprintf("unknown Term type: %T", term))
 	}
 
 	return converted, nil

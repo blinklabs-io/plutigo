@@ -2,7 +2,6 @@ package syn
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 
 	"github.com/blinklabs-io/plutigo/data"
@@ -227,8 +226,7 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T], isTopLevel bool) {
 	case *Constant:
 		pp.printConstant(t, false)
 	default:
-		fmt.Println(reflect.TypeOf(t))
-		panic(fmt.Sprintf("unknown term: %v", t))
+		panic(fmt.Sprintf("unknown term: %T: %v", t, t))
 	}
 }
 
