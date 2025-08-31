@@ -35,8 +35,9 @@ type PlutusData interface {
 // Constr
 
 type Constr struct {
-	Tag    uint
-	Fields []PlutusData
+	Tag      uint
+	Fields   []PlutusData
+	useIndef *bool
 }
 
 func (Constr) isPlutusData() {}
@@ -50,7 +51,15 @@ func NewConstr(tag uint, fields ...PlutusData) PlutusData {
 	if fields == nil {
 		fields = make([]PlutusData, 0)
 	}
-	return &Constr{tag, fields}
+	return &Constr{Tag: tag, Fields: fields}
+}
+
+// NewConstrDefIndef creates a Constr with the ability to specify whether it should use definite- or indefinite-length encoding
+func NewConstrDefIndef(useIndef bool, tag uint, fields ...PlutusData) PlutusData {
+	if fields == nil {
+		fields = make([]PlutusData, 0)
+	}
+	return &Constr{Tag: tag, Fields: fields, useIndef: &useIndef}
 }
 
 // Map
@@ -67,7 +76,7 @@ func (m Map) String() string {
 
 // NewMap creates a new Map variant.
 func NewMap(pairs [][2]PlutusData) PlutusData {
-	return &Map{pairs}
+	return &Map{Pairs: pairs}
 }
 
 // Integer
@@ -110,7 +119,8 @@ func NewByteString(value []byte) PlutusData {
 // List
 
 type List struct {
-	Items []PlutusData
+	Items    []PlutusData
+	useIndef *bool
 }
 
 func (List) isPlutusData() {}
@@ -124,5 +134,13 @@ func NewList(items ...PlutusData) PlutusData {
 	if items == nil {
 		items = make([]PlutusData, 0)
 	}
-	return &List{items}
+	return &List{Items: items}
+}
+
+// NewListDefIndef creates a list with the ability to specify whether it should use definite- or indefinite-length encoding
+func NewListDefIndef(useIndef bool, items ...PlutusData) PlutusData {
+	if items == nil {
+		items = make([]PlutusData, 0)
+	}
+	return &List{Items: items, useIndef: &useIndef}
 }

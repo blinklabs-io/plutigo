@@ -20,29 +20,32 @@ var testDefs = []struct {
 		CborHex: "1903e7",
 	},
 	{
-		Data: NewList(
+		Data: NewListDefIndef(
+			true,
 			NewInteger(big.NewInt(123)),
 			NewInteger(big.NewInt(456)),
 		),
 		CborHex: "9f187b1901c8ff",
 	},
 	{
-		Data:    NewList(),
+		Data:    NewListDefIndef(false),
 		CborHex: "80",
 	},
 	{
-		Data: NewConstr(
+		Data: NewConstrDefIndef(
+			true,
 			1,
 			NewByteString([]byte{0xab, 0xcd}),
 		),
 		CborHex: "d87a9f42abcdff",
 	},
 	{
-		Data:    NewConstr(0),
+		Data:    NewConstrDefIndef(false, 0),
 		CborHex: "d87980",
 	},
 	{
-		Data: NewList(
+		Data: NewListDefIndef(
+			true,
 			NewInteger(big.NewInt(1)),
 			NewInteger(big.NewInt(2)),
 		),
@@ -63,12 +66,14 @@ var testDefs = []struct {
 		Data: NewMap(
 			[][2]PlutusData{
 				{
-					NewConstr(
+					NewConstrDefIndef(
+						true,
 						0,
 						NewInteger(big.NewInt(0)),
 						NewInteger(big.NewInt(406)),
 					),
-					NewConstr(
+					NewConstrDefIndef(
+						true,
 						0,
 						NewInteger(big.NewInt(1725522262478821201)),
 					),
@@ -78,17 +83,20 @@ var testDefs = []struct {
 		CborHex: "a1d8799f00190196ffd8799f1b17f2495b03141751ff",
 	},
 	{
-		Data: NewConstr(
+		Data: NewConstrDefIndef(
+			true,
 			0,
 			NewMap(
 				[][2]PlutusData{
 					{
-						NewConstr(
+						NewConstrDefIndef(
+							true,
 							0,
 							NewInteger(big.NewInt(0)),
 							NewInteger(big.NewInt(406)),
 						),
-						NewConstr(
+						NewConstrDefIndef(
+							true,
 							0,
 							NewInteger(big.NewInt(1725522262478821201)),
 						),
@@ -99,7 +107,8 @@ var testDefs = []struct {
 		CborHex: "d8799fa1d8799f00190196ffd8799f1b17f2495b03141751ffff",
 	},
 	{
-		Data: NewConstr(
+		Data: NewConstrDefIndef(
+			true,
 			999,
 			NewInteger(big.NewInt(6)),
 			NewInteger(big.NewInt(7)),
@@ -111,17 +120,20 @@ var testDefs = []struct {
 		Data: NewMap(
 			[][2]PlutusData{
 				{
-					NewList(
+					NewListDefIndef(
+						true,
 						NewInteger(big.NewInt(1)),
 						NewInteger(big.NewInt(2)),
 					),
 					NewMap(
 						[][2]PlutusData{
 							{
-								NewList(
+								NewListDefIndef(
+									true,
 									NewByteString(nil),
 								),
-								NewConstr(
+								NewConstrDefIndef(
+									true,
 									0,
 									NewInteger(big.NewInt(2)),
 									NewInteger(big.NewInt(1)),
@@ -153,6 +165,17 @@ var testDefs = []struct {
 		),
 		// {{1: 2}: 3}
 		CborHex: "a1a1010203",
+	},
+	{
+		Data: NewConstrDefIndef(
+			false,
+			1,
+			NewConstrDefIndef(
+				false,
+				0,
+			),
+		),
+		CborHex: "d87a81d87980",
 	},
 }
 
