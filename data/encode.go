@@ -55,11 +55,27 @@ func encodeToRaw(pd PlutusData) (any, error) {
 
 // encodeConstr encodes a Constr to CBOR tag format.
 func encodeConstr(c *Constr) (any, error) {
+	useIndef := len(c.Fields) > 0
+	if c.useIndef != nil {
+		useIndef = *c.useIndef
+	}
 	// Encode fields first
 	var fields any
-	if len(c.Fields) == 0 {
+	if !useIndef {
 		// Encode empty fields as simple array
-		fields = make([]any, 0)
+		tmpFields := make([]any, len(c.Fields))
+		for i, item := range c.Fields {
+			encoded, err := encodeToRaw(item)
+			if err != nil {
+				return nil, fmt.Errorf("failed to encode Constr field %d: %w", i, err)
+			}
+			encodedCbor, err := cborMarshal(encoded)
+			if err != nil {
+				return nil, fmt.Errorf("failed to encode Constr field item %d: %w", i, err)
+			}
+			tmpFields[i] = cbor.RawMessage(encodedCbor)
+		}
+		fields = tmpFields
 	} else {
 		// Encode as indefinite-length array
 		tmpData := []byte{
@@ -176,8 +192,15 @@ func encodeByteString(bs *ByteString) (any, error) {
 
 // encodeList encodes a List to CBOR array format.
 func encodeList(l *List) (any, error) {
-	if len(l.Items) == 0 {
-		ret := make([]any, 0)
+	useIndef := len(l.Items) > 0
+	if l.useIndef != nil {
+		useIndef = *l.useIndef
+	}
+	if !useIndef {
+		ret := make([]any, len(l.Items))
+		for i, item := range l.Items {
+			ret[i] = item
+		}
 		return ret, nil
 	}
 	tmpData := []byte{

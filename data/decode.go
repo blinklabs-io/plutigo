@@ -16,6 +16,8 @@ const (
 
 	// Only the top 3 bytes are used to specify the type
 	CborTypeMask uint8 = 0xe0
+
+	CborIndefFlag uint8 = 0x1f
 )
 
 // Decode decodes a CBOR-encoded byte slice into a PlutusData value.
@@ -78,6 +80,7 @@ func decodeCborRaw(data []byte) (any, error) {
 }
 
 func decodeCborRawList(data []byte) (any, error) {
+	useIndef := (data[0] & CborIndefFlag) == CborIndefFlag
 	var tmpData []cbor.RawMessage
 	if err := cborUnmarshal(data, &tmpData); err != nil {
 		return nil, err
@@ -94,7 +97,9 @@ func decodeCborRawList(data []byte) (any, error) {
 		}
 		tmpItems[i] = tmpPd
 	}
-	return NewList(tmpItems...), nil
+	ret := NewList(tmpItems...)
+	ret.(*List).useIndef = &useIndef
+	return ret, nil
 }
 
 func decodeCborRawMap(data []byte) (any, error) {
@@ -128,7 +133,8 @@ func decodeCborRawMap(data []byte) (any, error) {
 			},
 		)
 	}
-	return NewMap(pairs), nil
+	ret := NewMap(pairs)
+	return ret, nil
 }
 
 // decodeRaw converts a raw CBOR-decoded value into PlutusData.
@@ -269,7 +275,9 @@ func decodeConstr(tag uint64, content cbor.RawMessage) (PlutusData, error) {
 
 	fields := tmpList.Items
 
-	return NewConstr(uint(tag), fields...), nil
+	ret := NewConstr(uint(tag), fields...)
+	ret.(*Constr).useIndef = tmpList.useIndef
+	return ret, nil
 }
 
 // decodeBignum decodes a big integer from CBOR tag content (expected to be bytes).
