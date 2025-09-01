@@ -23,8 +23,7 @@ func Encode(pd PlutusData) ([]byte, error) {
 func cborMarshal(data any) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 	opts := cbor.EncOptions{
-		// Make sure that maps have ordered keys
-		Sort: cbor.SortCoreDeterministic,
+		// NOTE: set any additional encoder options here
 	}
 	em, err := opts.EncMode()
 	if err != nil {
@@ -125,9 +124,12 @@ func encodeConstr(c *Constr) (any, error) {
 
 // encodeMap encodes a Map to CBOR map format.
 func encodeMap(m *Map) (any, error) {
-	// Convert to map[any]any for CBOR encoding
-	result := make(map[any]any, len(m.Pairs))
-
+	// The below is a hack to work around our CBOR library not supporting encoding a map
+	// with a specific key order. We pre-encode each key/value pair, build a dummy list to
+	// steal and modify its header, and build our own output from pieces. This avoids
+	// needing to support 6 different possible encodings of a map's header byte depending
+	// on length
+	tmpPairs := make([][]byte, 0, len(m.Pairs))
 	for _, pair := range m.Pairs {
 		key, err := encodeToRaw(pair[0])
 		if err != nil {
@@ -141,10 +143,29 @@ func encodeMap(m *Map) (any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to encode map value: %w", err)
 		}
-		result[RawMessageStr(string(keyRaw))] = value
+		valueRaw, err := cborMarshal(value)
+		if err != nil {
+			return nil, fmt.Errorf("encode map value: %w", err)
+		}
+		tmpPairs = append(
+			tmpPairs,
+			slices.Concat(keyRaw, valueRaw),
+		)
 	}
-
-	return result, nil
+	// Create dummy list with simple (one-byte) values so we can easily extract the header
+	tmpList := make([]bool, len(tmpPairs))
+	tmpListRaw, err := cborMarshal(tmpList)
+	if err != nil {
+		return nil, err
+	}
+	tmpListHeader := tmpListRaw[0 : len(tmpListRaw)-len(tmpPairs)]
+	// Modify header byte to switch type from array to map
+	tmpListHeader[0] |= 0x20
+	// Build return value
+	ret := bytes.NewBuffer(nil)
+	_, _ = ret.Write(tmpListHeader)
+	_, _ = ret.Write(slices.Concat(tmpPairs...))
+	return cbor.RawMessage(ret.Bytes()), nil
 }
 
 // encodeInteger encodes an Integer to CBOR format.

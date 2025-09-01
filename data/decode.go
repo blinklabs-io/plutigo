@@ -1,7 +1,6 @@
 package data
 
 import (
-	"bytes"
 	"fmt"
 	"math/big"
 
@@ -33,8 +32,6 @@ func Decode(b []byte) (PlutusData, error) {
 
 // cborUnmarshal acts like cbor.Unmarshal but allows us to set our own decoder options
 func cborUnmarshal(dataBytes []byte, dest any) error {
-	data := bytes.NewReader(dataBytes)
-	// Create a custom decoder that returns an error on unknown fields
 	decOptions := cbor.DecOptions{
 		// This defaults to 32, but there are blocks in the wild using >64 nested levels
 		MaxNestedLevels: 256,
@@ -43,8 +40,7 @@ func cborUnmarshal(dataBytes []byte, dest any) error {
 	if err != nil {
 		return err
 	}
-	dec := decMode.NewDecoder(data)
-	return dec.Decode(dest)
+	return decMode.Unmarshal(dataBytes, dest)
 }
 
 // decodeCborRaw is an alternative to cbor.Unmarshal() that converts cbor.Tag to Constr
@@ -103,13 +99,38 @@ func decodeCborRawList(data []byte) (any, error) {
 }
 
 func decodeCborRawMap(data []byte) (any, error) {
+	// The below is a hack to work around our CBOR library not supporting preserving key
+	// order when decoding a map. We decode our map to determine its length, create a dummy
+	// list the same length as our map to determine the header size, and then decode each
+	// key/value pair individually
 	var tmpData map[RawMessageStr]RawMessageStr
 	if err := cborUnmarshal(data, &tmpData); err != nil {
 		return nil, err
 	}
+	// Create dummy list of same length to determine map header length
+	tmpList := make([]bool, len(tmpData))
+	tmpListRaw, err := cborMarshal(tmpList)
+	if err != nil {
+		return nil, err
+	}
+	tmpListHeader := tmpListRaw[0 : len(tmpListRaw)-len(tmpData)]
+	// Strip off map header bytes
+	data = data[len(tmpListHeader):]
 	pairs := make([][2]PlutusData, 0, len(tmpData))
-	for k, v := range tmpData {
-		tmpKey, err := decodeCborRaw(k.Bytes())
+	var rawKey, rawVal cbor.RawMessage
+	// Read key/value pairs until we have no data left
+	for len(data) > 0 {
+		// Read raw key/value bytes
+		data, err = cbor.UnmarshalFirst(data, &rawKey)
+		if err != nil {
+			return nil, err
+		}
+		data, err = cbor.UnmarshalFirst(data, &rawVal)
+		if err != nil {
+			return nil, err
+		}
+		// Decode key/value
+		tmpKey, err := decodeCborRaw(rawKey)
 		if err != nil {
 			return nil, err
 		}
@@ -117,7 +138,7 @@ func decodeCborRawMap(data []byte) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		tmpVal, err := decodeCborRaw(v.Bytes())
+		tmpVal, err := decodeCborRaw(rawVal)
 		if err != nil {
 			return nil, err
 		}
