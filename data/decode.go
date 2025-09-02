@@ -120,6 +120,10 @@ func decodeCborRawMap(data []byte) (any, error) {
 	var rawKey, rawVal cbor.RawMessage
 	// Read key/value pairs until we have no data left
 	for len(data) > 0 {
+		// Check for "break" at end of indefinite-length map
+		if data[0] == 0xFF {
+			break
+		}
 		// Read raw key/value bytes
 		data, err = cbor.UnmarshalFirst(data, &rawKey)
 		if err != nil {
