@@ -52,7 +52,8 @@ var testDefs = []struct {
 		CborHex: "9f0102ff",
 	},
 	{
-		Data: NewMap(
+		Data: NewMapDefIndef(
+			false,
 			[][2]PlutusData{
 				{
 					NewInteger(big.NewInt(1)),
@@ -63,7 +64,8 @@ var testDefs = []struct {
 		CborHex: "a10102",
 	},
 	{
-		Data: NewMap(
+		Data: NewMapDefIndef(
+			false,
 			[][2]PlutusData{
 				{
 					NewConstrDefIndef(
@@ -86,7 +88,8 @@ var testDefs = []struct {
 		Data: NewConstrDefIndef(
 			true,
 			0,
-			NewMap(
+			NewMapDefIndef(
+				false,
 				[][2]PlutusData{
 					{
 						NewConstrDefIndef(
@@ -117,7 +120,8 @@ var testDefs = []struct {
 		CborHex: "d866821903e79f0607ff",
 	},
 	{
-		Data: NewMap(
+		Data: NewMapDefIndef(
+			false,
 			[][2]PlutusData{
 				{
 					NewListDefIndef(
@@ -125,7 +129,8 @@ var testDefs = []struct {
 						NewInteger(big.NewInt(1)),
 						NewInteger(big.NewInt(2)),
 					),
-					NewMap(
+					NewMapDefIndef(
+						false,
 						[][2]PlutusData{
 							{
 								NewListDefIndef(
@@ -148,10 +153,12 @@ var testDefs = []struct {
 		CborHex: "a19f0102ffa19f40ffd8799f0201ff",
 	},
 	{
-		Data: NewMap(
+		Data: NewMapDefIndef(
+			false,
 			[][2]PlutusData{
 				{
-					NewMap(
+					NewMapDefIndef(
+						false,
 						[][2]PlutusData{
 							{
 								NewInteger(big.NewInt(1)),
@@ -177,8 +184,10 @@ var testDefs = []struct {
 		),
 		CborHex: "d87a81d87980",
 	},
+	// Map with specific-order keys
 	{
-		Data: NewMap(
+		Data: NewMapDefIndef(
+			false,
 			[][2]PlutusData{
 				{
 					NewInteger(big.NewInt(2)),
@@ -196,6 +205,24 @@ var testDefs = []struct {
 		),
 		// {2:2,3:3,1:1}
 		CborHex: "a3020203030101",
+	},
+	// Indef-length map
+	{
+		Data: NewMapDefIndef(
+			true,
+			[][2]PlutusData{
+				{
+					NewByteString([]byte{0x01}),
+					NewInteger(big.NewInt(1)),
+				},
+				{
+					NewByteString([]byte{0x02}),
+					NewInteger(big.NewInt(2)),
+				},
+			},
+		),
+		// {_ h'01': 1, h'02': 2}
+		CborHex: "bf410101410202ff",
 	},
 }
 
