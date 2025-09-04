@@ -65,7 +65,8 @@ func NewConstrDefIndef(useIndef bool, tag uint, fields ...PlutusData) PlutusData
 // Map
 
 type Map struct {
-	Pairs [][2]PlutusData // Each pair is [key, value]
+	Pairs    [][2]PlutusData // Each pair is [key, value]
+	useIndef *bool
 }
 
 func (Map) isPlutusData() {}
@@ -77,6 +78,11 @@ func (m Map) String() string {
 // NewMap creates a new Map variant.
 func NewMap(pairs [][2]PlutusData) PlutusData {
 	return &Map{Pairs: pairs}
+}
+
+// NewMapDefIndef creates a new Map with the ability to specify whether it should use definite- or indefinite-length encoding
+func NewMapDefIndef(useIndef bool, pairs [][2]PlutusData) PlutusData {
+	return &Map{Pairs: pairs, useIndef: &useIndef}
 }
 
 // Integer

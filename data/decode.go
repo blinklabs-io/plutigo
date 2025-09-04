@@ -103,22 +103,29 @@ func decodeCborRawMap(data []byte) (any, error) {
 	// order when decoding a map. We decode our map to determine its length, create a dummy
 	// list the same length as our map to determine the header size, and then decode each
 	// key/value pair individually
+	useIndef := (data[0] & CborIndefFlag) == CborIndefFlag
 	var tmpData map[RawMessageStr]RawMessageStr
 	if err := cborUnmarshal(data, &tmpData); err != nil {
 		return nil, err
 	}
-	// Create dummy list of same length to determine map header length
-	tmpList := make([]bool, len(tmpData))
-	tmpListRaw, err := cborMarshal(tmpList)
-	if err != nil {
-		return nil, err
+	if useIndef {
+		// Strip off indef-length map header byte
+		data = data[1:]
+	} else {
+		// Create dummy list of same length to determine map header length
+		tmpList := make([]bool, len(tmpData))
+		tmpListRaw, err := cborMarshal(tmpList)
+		if err != nil {
+			return nil, err
+		}
+		tmpListHeader := tmpListRaw[0 : len(tmpListRaw)-len(tmpData)]
+		// Strip off map header bytes
+		data = data[len(tmpListHeader):]
 	}
-	tmpListHeader := tmpListRaw[0 : len(tmpListRaw)-len(tmpData)]
-	// Strip off map header bytes
-	data = data[len(tmpListHeader):]
 	pairs := make([][2]PlutusData, 0, len(tmpData))
 	var rawKey, rawVal cbor.RawMessage
 	// Read key/value pairs until we have no data left
+	var err error
 	for len(data) > 0 {
 		// Check for "break" at end of indefinite-length map
 		if data[0] == 0xFF {
@@ -159,6 +166,7 @@ func decodeCborRawMap(data []byte) (any, error) {
 		)
 	}
 	ret := NewMap(pairs)
+	ret.(*Map).useIndef = &useIndef
 	return ret, nil
 }
 

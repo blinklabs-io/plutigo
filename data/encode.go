@@ -129,6 +129,11 @@ func encodeMap(m *Map) (any, error) {
 	// steal and modify its header, and build our own output from pieces. This avoids
 	// needing to support 6 different possible encodings of a map's header byte depending
 	// on length
+	useIndef := false
+	if m.useIndef != nil {
+		useIndef = *m.useIndef
+	}
+	// Build encoded pairs
 	tmpPairs := make([][]byte, 0, len(m.Pairs))
 	for _, pair := range m.Pairs {
 		key, err := encodeToRaw(pair[0])
@@ -152,19 +157,27 @@ func encodeMap(m *Map) (any, error) {
 			slices.Concat(keyRaw, valueRaw),
 		)
 	}
-	// Create dummy list with simple (one-byte) values so we can easily extract the header
-	tmpList := make([]bool, len(tmpPairs))
-	tmpListRaw, err := cborMarshal(tmpList)
-	if err != nil {
-		return nil, err
-	}
-	tmpListHeader := tmpListRaw[0 : len(tmpListRaw)-len(tmpPairs)]
-	// Modify header byte to switch type from array to map
-	tmpListHeader[0] |= 0x20
 	// Build return value
 	ret := bytes.NewBuffer(nil)
-	_, _ = ret.Write(tmpListHeader)
+	if useIndef {
+		ret.WriteByte(CborTypeMap | CborIndefFlag)
+	} else {
+		// Create dummy list with simple (one-byte) values so we can easily extract the header
+		tmpList := make([]bool, len(tmpPairs))
+		tmpListRaw, err := cborMarshal(tmpList)
+		if err != nil {
+			return nil, err
+		}
+		tmpListHeader := tmpListRaw[0 : len(tmpListRaw)-len(tmpPairs)]
+		// Modify header byte to switch type from array to map
+		tmpListHeader[0] |= 0x20
+		_, _ = ret.Write(tmpListHeader)
+	}
 	_, _ = ret.Write(slices.Concat(tmpPairs...))
+	if useIndef {
+		// Indef-length "break" byte
+		ret.WriteByte(0xff)
+	}
 	return cbor.RawMessage(ret.Bytes()), nil
 }
 
