@@ -1709,7 +1709,7 @@ func unConstrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			},
 		}
 	default:
-		return nil, errors.New("data is not a constr")
+		return nil, fmt.Errorf("data is not a constr: %#v", arg1)
 	}
 
 	value := &Constant{pair}
