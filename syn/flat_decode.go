@@ -185,16 +185,19 @@ func DecodeTerm[T Binder](d *decoder) (Term[T], error) {
 }
 
 func DecodeConstant(d *decoder) (IConstant, error) {
-	tags, err := decodeConstantTags(d)
+	typ, err := decodeConstantType(d)
 	if err != nil {
 		return nil, err
 	}
+	return decodeConstantValue(d, typ)
+}
 
+func decodeConstantValue(d *decoder, typ Typ) (IConstant, error) {
 	var constant IConstant
 
-	switch {
+	switch t := typ.(type) {
 	// Integer
-	case len(tags) == 1 && tags[0] == IntegerTag:
+	case TInteger:
 		i, err := d.integer()
 		if err != nil {
 			return nil, err
@@ -203,7 +206,7 @@ func DecodeConstant(d *decoder) (IConstant, error) {
 		constant = &Integer{i}
 
 	// ByteString
-	case len(tags) == 1 && tags[0] == ByteStringTag:
+	case TByteString:
 		b, err := d.bytes()
 		if err != nil {
 			return nil, err
@@ -212,7 +215,7 @@ func DecodeConstant(d *decoder) (IConstant, error) {
 		constant = &ByteString{b}
 
 	// String
-	case len(tags) == 1 && tags[0] == StringTag:
+	case TString:
 		s, err := d.utf8()
 		if err != nil {
 			return nil, err
@@ -221,11 +224,11 @@ func DecodeConstant(d *decoder) (IConstant, error) {
 		constant = &String{s}
 
 	// Unit
-	case len(tags) == 1 && tags[0] == UnitTag:
+	case TUnit:
 		constant = &Unit{}
 
 	// Bool
-	case len(tags) == 1 && tags[0] == BoolTag:
+	case TBool:
 		v, err := d.bit()
 		if err != nil {
 			return nil, err
@@ -234,17 +237,35 @@ func DecodeConstant(d *decoder) (IConstant, error) {
 		constant = &Bool{v}
 
 	// ProtoList
-	case len(tags) >= 2 && tags[0] == ProtoListOneTag && tags[1] == ProtoListTwoTag:
-		// Handle PROTO_LIST_ONE, PROTO_LIST_TWO, rest...
-		return nil, errors.New("unimplemented: PROTO_LIST")
+	case TList:
+		items, err := DecodeList(d, func(d *decoder) (IConstant, error) { return decodeConstantValue(d, t.Typ) })
+		if err != nil {
+			return nil, err
+		}
+		constant = &ProtoList{
+			LTyp: t.Typ,
+			List: items,
+		}
 
 	// ProtoPair
-	case len(tags) >= 3 && tags[0] == ProtoPairOneTag && tags[1] == ProtoPairTwoTag && tags[2] == ProtoPairThreeTag:
-		// Handle PROTO_PAIR_ONE, PROTO_PAIR_TWO, PROTO_PAIR_THREE, rest...
-		return nil, errors.New("unimplemented: PROTO_PAIR")
+	case TPair:
+		first, err := decodeConstantValue(d, t.First)
+		if err != nil {
+			return nil, err
+		}
+		second, err := decodeConstantValue(d, t.Second)
+		if err != nil {
+			return nil, err
+		}
+		constant = &ProtoPair{
+			FstType: t.First,
+			SndType: t.Second,
+			First:   first,
+			Second:  second,
+		}
 
 	// Data
-	case len(tags) == 1 && tags[0] == DataTag:
+	case TData:
 		cborBytes, err := d.bytes()
 		if err != nil {
 			return nil, err
@@ -262,6 +283,56 @@ func DecodeConstant(d *decoder) (IConstant, error) {
 	}
 
 	return constant, nil
+}
+
+func decodeConstantType(d *decoder) (Typ, error) {
+	tags, err := decodeConstantTags(d)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case len(tags) == 1 && tags[0] == IntegerTag:
+		return TInteger{}, nil
+	case len(tags) == 1 && tags[0] == ByteStringTag:
+		return TByteString{}, nil
+	case len(tags) == 1 && tags[0] == StringTag:
+		return TString{}, nil
+	case len(tags) == 1 && tags[0] == UnitTag:
+		return TUnit{}, nil
+	case len(tags) == 1 && tags[0] == BoolTag:
+		return TBool{}, nil
+	// ProtoList
+	case len(tags) == 2 && tags[0] == ProtoListOneTag && tags[1] == ProtoListTwoTag:
+		subType, err := decodeConstantType(d)
+		if err != nil {
+			return nil, err
+		}
+		return TList{
+			Typ: subType,
+		}, nil
+	case len(tags) == 3 && tags[0] == ProtoListOneTag && tags[1] == ProtoListTwoTag && tags[2] == DataTag:
+		return TList{
+			Typ: TData{},
+		}, nil
+	// ProtoPair
+	case len(tags) >= 3 && tags[0] == ProtoPairOneTag && tags[1] == ProtoPairTwoTag && tags[2] == ProtoPairThreeTag:
+		subType1, err := decodeConstantType(d)
+		if err != nil {
+			return nil, err
+		}
+		subType2, err := decodeConstantType(d)
+		if err != nil {
+			return nil, err
+		}
+		return TPair{
+			First:  subType1,
+			Second: subType2,
+		}, nil
+	case len(tags) == 1 && tags[0] == DataTag:
+		return TData{}, nil
+	default:
+		return nil, fmt.Errorf("unknown type tag(s): %v", tags)
+	}
 }
 
 func decodeConstantTags(d *decoder) ([]byte, error) {
