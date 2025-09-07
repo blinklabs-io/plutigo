@@ -311,7 +311,7 @@ func unwrapList[T syn.Eval](
 		switch c := v.Constant.(type) {
 		case *syn.ProtoList:
 			if typ != nil && !reflect.DeepEqual(typ, c.LTyp) {
-				return nil, fmt.Errorf("Value not a List of type %v", typ)
+				return nil, fmt.Errorf("Value not a List of type %T", typ)
 			}
 
 			i = c
