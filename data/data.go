@@ -48,18 +48,16 @@ func (c Constr) String() string {
 
 // NewConstr creates a new Constr variant.
 func NewConstr(tag uint, fields ...PlutusData) PlutusData {
-	if fields == nil {
-		fields = make([]PlutusData, 0)
-	}
-	return &Constr{Tag: tag, Fields: fields}
+	tmpFields := make([]PlutusData, len(fields))
+	copy(tmpFields, fields)
+	return &Constr{Tag: tag, Fields: tmpFields}
 }
 
 // NewConstrDefIndef creates a Constr with the ability to specify whether it should use definite- or indefinite-length encoding
 func NewConstrDefIndef(useIndef bool, tag uint, fields ...PlutusData) PlutusData {
-	if fields == nil {
-		fields = make([]PlutusData, 0)
-	}
-	return &Constr{Tag: tag, Fields: fields, useIndef: &useIndef}
+	tmpFields := make([]PlutusData, len(fields))
+	copy(tmpFields, fields)
+	return &Constr{Tag: tag, Fields: tmpFields, useIndef: &useIndef}
 }
 
 // Map
@@ -77,12 +75,16 @@ func (m Map) String() string {
 
 // NewMap creates a new Map variant.
 func NewMap(pairs [][2]PlutusData) PlutusData {
-	return &Map{Pairs: pairs}
+	tmpPairs := make([][2]PlutusData, len(pairs))
+	copy(tmpPairs, pairs)
+	return &Map{Pairs: tmpPairs}
 }
 
 // NewMapDefIndef creates a new Map with the ability to specify whether it should use definite- or indefinite-length encoding
 func NewMapDefIndef(useIndef bool, pairs [][2]PlutusData) PlutusData {
-	return &Map{Pairs: pairs, useIndef: &useIndef}
+	tmpPairs := make([][2]PlutusData, len(pairs))
+	copy(tmpPairs, pairs)
+	return &Map{Pairs: tmpPairs, useIndef: &useIndef}
 }
 
 // Integer
@@ -99,7 +101,8 @@ func (i Integer) String() string {
 
 // NewInteger creates a new Integer variant.
 func NewInteger(value *big.Int) PlutusData {
-	return &Integer{value}
+	tmpVal := new(big.Int).Set(value)
+	return &Integer{tmpVal}
 }
 
 // ByteString
@@ -136,16 +139,14 @@ func (l List) String() string {
 
 // NewList creates a new List variant.
 func NewList(items ...PlutusData) PlutusData {
-	if items == nil {
-		items = make([]PlutusData, 0)
-	}
-	return &List{Items: items}
+	tmpItems := make([]PlutusData, len(items))
+	copy(tmpItems, items)
+	return &List{Items: tmpItems}
 }
 
 // NewListDefIndef creates a list with the ability to specify whether it should use definite- or indefinite-length encoding
 func NewListDefIndef(useIndef bool, items ...PlutusData) PlutusData {
-	if items == nil {
-		items = make([]PlutusData, 0)
-	}
-	return &List{Items: items, useIndef: &useIndef}
+	tmpItems := make([]PlutusData, len(items))
+	copy(tmpItems, items)
+	return &List{Items: tmpItems, useIndef: &useIndef}
 }
