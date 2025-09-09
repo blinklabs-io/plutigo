@@ -116,10 +116,9 @@ func (b ByteString) String() string {
 
 // NewByteString creates a new ByteString variant.
 func NewByteString(value []byte) PlutusData {
-	if value == nil {
-		value = make([]byte, 0)
-	}
-	return &ByteString{value}
+	tmpVal := make([]byte, len(value))
+	copy(tmpVal, value)
+	return &ByteString{tmpVal}
 }
 
 // List
