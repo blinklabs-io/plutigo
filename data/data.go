@@ -28,7 +28,7 @@ func (p *PlutusDataWrapper) MarshalCBOR() ([]byte, error) {
 
 type PlutusData interface {
 	isPlutusData()
-
+	Clone() PlutusData
 	fmt.Stringer
 }
 
@@ -41,6 +41,19 @@ type Constr struct {
 }
 
 func (Constr) isPlutusData() {}
+
+func (c Constr) Clone() PlutusData {
+	tmpFields := make([]PlutusData, len(c.Fields))
+	for i, field := range c.Fields {
+		tmpFields[i] = field.Clone()
+	}
+	var tmpIndef *bool
+	if c.useIndef != nil {
+		tmpIndef = new(bool)
+		*tmpIndef = *c.useIndef
+	}
+	return &Constr{Tag: c.Tag, Fields: tmpFields, useIndef: tmpIndef}
+}
 
 func (c Constr) String() string {
 	return fmt.Sprintf("Constr{tag: %d, fields: %v}", c.Tag, c.Fields)
@@ -69,6 +82,22 @@ type Map struct {
 
 func (Map) isPlutusData() {}
 
+func (m Map) Clone() PlutusData {
+	tmpPairs := make([][2]PlutusData, len(m.Pairs))
+	for i, pair := range m.Pairs {
+		tmpPairs[i] = [2]PlutusData{
+			pair[0].Clone(),
+			pair[1].Clone(),
+		}
+	}
+	var tmpIndef *bool
+	if m.useIndef != nil {
+		tmpIndef = new(bool)
+		*tmpIndef = *m.useIndef
+	}
+	return &Map{Pairs: tmpPairs, useIndef: tmpIndef}
+}
+
 func (m Map) String() string {
 	return fmt.Sprintf("Map%v", m.Pairs)
 }
@@ -95,6 +124,11 @@ type Integer struct {
 
 func (Integer) isPlutusData() {}
 
+func (i Integer) Clone() PlutusData {
+	tmpVal := new(big.Int).Set(i.Inner)
+	return &Integer{tmpVal}
+}
+
 func (i Integer) String() string {
 	return fmt.Sprintf("Integer(%s)", i.Inner.String())
 }
@@ -112,6 +146,12 @@ type ByteString struct {
 }
 
 func (ByteString) isPlutusData() {}
+
+func (b ByteString) Clone() PlutusData {
+	tmpVal := make([]byte, len(b.Inner))
+	copy(tmpVal, b.Inner)
+	return &ByteString{tmpVal}
+}
 
 func (b ByteString) String() string {
 	return fmt.Sprintf("ByteString(%x)", b.Inner)
@@ -132,6 +172,19 @@ type List struct {
 }
 
 func (List) isPlutusData() {}
+
+func (l List) Clone() PlutusData {
+	tmpItems := make([]PlutusData, len(l.Items))
+	for i, item := range l.Items {
+		tmpItems[i] = item.Clone()
+	}
+	var tmpIndef *bool
+	if l.useIndef != nil {
+		tmpIndef = new(bool)
+		*tmpIndef = *l.useIndef
+	}
+	return &List{Items: tmpItems, useIndef: tmpIndef}
+}
 
 func (l List) String() string {
 	return fmt.Sprintf("List%v", l.Items)
