@@ -93,8 +93,7 @@ func decodeCborRawList(data []byte) (any, error) {
 		}
 		tmpItems[i] = tmpPd
 	}
-	ret := NewList(tmpItems...)
-	ret.(*List).useIndef = &useIndef
+	ret := NewListDefIndef(useIndef, tmpItems...)
 	return ret, nil
 }
 
@@ -165,8 +164,7 @@ func decodeCborRawMap(data []byte) (any, error) {
 			},
 		)
 	}
-	ret := NewMap(pairs)
-	ret.(*Map).useIndef = &useIndef
+	ret := NewMapDefIndef(useIndef, pairs)
 	return ret, nil
 }
 
@@ -308,8 +306,7 @@ func decodeConstr(tag uint64, content cbor.RawMessage) (PlutusData, error) {
 
 	fields := tmpList.Items
 
-	ret := NewConstr(uint(tag), fields...)
-	ret.(*Constr).useIndef = tmpList.useIndef
+	ret := NewConstrDefIndef(*(tmpList.useIndef), uint(tag), fields...)
 	return ret, nil
 }
 
