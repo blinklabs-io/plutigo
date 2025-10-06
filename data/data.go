@@ -1,6 +1,7 @@
 package data
 
 import (
+	"bytes"
 	"fmt"
 	"math/big"
 )
@@ -29,6 +30,7 @@ func (p *PlutusDataWrapper) MarshalCBOR() ([]byte, error) {
 type PlutusData interface {
 	isPlutusData()
 	Clone() PlutusData
+	Equal(PlutusData) bool
 	fmt.Stringer
 }
 
@@ -53,6 +55,25 @@ func (c Constr) Clone() PlutusData {
 		*tmpIndef = *c.useIndef
 	}
 	return &Constr{Tag: c.Tag, Fields: tmpFields, useIndef: tmpIndef}
+}
+
+func (c Constr) Equal(pd PlutusData) bool {
+	pdConstr, ok := pd.(*Constr)
+	if !ok {
+		return false
+	}
+	if c.Tag != pdConstr.Tag {
+		return false
+	}
+	if len(c.Fields) != len(pdConstr.Fields) {
+		return false
+	}
+	for i := range c.Fields {
+		if !c.Fields[i].Equal(pdConstr.Fields[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 func (c Constr) String() string {
@@ -98,6 +119,22 @@ func (m Map) Clone() PlutusData {
 	return &Map{Pairs: tmpPairs, useIndef: tmpIndef}
 }
 
+func (m Map) Equal(pd PlutusData) bool {
+	pdMap, ok := pd.(*Map)
+	if !ok {
+		return false
+	}
+	for i, pair := range pdMap.Pairs {
+		if !pair[0].Equal(pdMap.Pairs[i][0]) {
+			return false
+		}
+		if !pair[1].Equal(pdMap.Pairs[i][1]) {
+			return false
+		}
+	}
+	return true
+}
+
 func (m Map) String() string {
 	return fmt.Sprintf("Map%v", m.Pairs)
 }
@@ -129,6 +166,17 @@ func (i Integer) Clone() PlutusData {
 	return &Integer{tmpVal}
 }
 
+func (i Integer) Equal(pd PlutusData) bool {
+	pdInt, ok := pd.(*Integer)
+	if !ok {
+		return false
+	}
+	if i.Inner.Cmp(pdInt.Inner) != 0 {
+		return false
+	}
+	return true
+}
+
 func (i Integer) String() string {
 	return fmt.Sprintf("Integer(%s)", i.Inner.String())
 }
@@ -151,6 +199,17 @@ func (b ByteString) Clone() PlutusData {
 	tmpVal := make([]byte, len(b.Inner))
 	copy(tmpVal, b.Inner)
 	return &ByteString{tmpVal}
+}
+
+func (b ByteString) Equal(pd PlutusData) bool {
+	pdByteString, ok := pd.(*ByteString)
+	if !ok {
+		return false
+	}
+	if !bytes.Equal(b.Inner, pdByteString.Inner) {
+		return false
+	}
+	return true
 }
 
 func (b ByteString) String() string {
@@ -184,6 +243,22 @@ func (l List) Clone() PlutusData {
 		*tmpIndef = *l.useIndef
 	}
 	return &List{Items: tmpItems, useIndef: tmpIndef}
+}
+
+func (l List) Equal(pd PlutusData) bool {
+	pdList, ok := pd.(*List)
+	if !ok {
+		return false
+	}
+	if len(l.Items) != len(pdList.Items) {
+		return false
+	}
+	for i := range l.Items {
+		if !l.Items[i].Equal(pdList.Items[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 func (l List) String() string {

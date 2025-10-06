@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"math/big"
 	"math/bits"
-	"reflect"
 	"unicode/utf8"
 
 	"github.com/blinklabs-io/plutigo/data"
@@ -1885,7 +1884,7 @@ func equalsData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	result := &syn.Bool{
-		Inner: reflect.DeepEqual(arg1, arg2),
+		Inner: arg1.Equal(arg2),
 	}
 
 	value := &Constant{result}
