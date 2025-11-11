@@ -1,30 +1,23 @@
-# This file was copied from the following URL and modified:
-# https://github.com/golangci/golangci-lint-action/blob/master/README.md#how-to-use
-
-name: golangci
+name: golangci-lint
 on:
   push:
     tags:
       - v*
     branches:
-      - master
       - main
   pull_request:
+
 permissions:
   contents: read
-  pull-requests: read
+
 jobs:
   golangci:
     name: lint
-    strategy:
-      matrix:
-        go-version: [1.24.x]
-        platform: [ubuntu-latest]
-    runs-on: ${{ matrix.platform }}
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0 https://github.com/actions/checkout/releases/tag/v5.0.0
+      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0 https://github.com/actions/setup-go/releases/tag/v6.0.0
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version: 1.24.x
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@0a35821d5c230e903fcfe077583637dea1b27b47 # v9.0.0 https://github.com/golangci/golangci-lint-action/releases/tag/v9.0.0
