@@ -543,7 +543,6 @@ func withEnv[T syn.Eval](lamCnt int, env *Env[T], term syn.Term[T]) syn.Term[T] 
 	return dischargedTerm
 }
 
-//go:inline
 func (m *Machine[T]) stepAndMaybeSpend(step StepKind) error {
 	m.unbudgetedSteps[step] += 1
 	m.unbudgetedSteps[9] += 1

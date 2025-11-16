@@ -7,7 +7,6 @@ type Env[T syn.Eval] struct {
 	next *Env[T]
 }
 
-//go:inline
 func (e *Env[T]) Extend(data Value[T]) *Env[T] {
 	return &Env[T]{
 		data: data,
@@ -15,7 +14,6 @@ func (e *Env[T]) Extend(data Value[T]) *Env[T] {
 	}
 }
 
-//go:inline
 func (e *Env[T]) Lookup(name int) (Value[T], bool) {
 	temp := e
 
