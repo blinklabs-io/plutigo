@@ -77,19 +77,12 @@ func sizeExMem(i int) func() ExMem {
 // costing of params for the case of constant functions
 func bigIntExMem(i *big.Int) func() ExMem {
 	return func() ExMem {
-		x := big.NewInt(0)
-
-		if x.Cmp(i) == 0 {
+		// Use Sign() to check for zero without allocation (avoids big.Int comparison)
+		if i.Sign() == 0 {
 			return ExMem(1)
-		} else {
-			x := big.NewInt(0)
-
-			x.Abs(i)
-
-			logResult := x.BitLen() - 1
-
-			return ExMem(logResult/64 + 1)
 		}
+		// Calculate number of 64-bit words needed: (bitLength - 1) / 64 + 1
+		return ExMem((i.BitLen()-1)/64 + 1)
 	}
 }
 
