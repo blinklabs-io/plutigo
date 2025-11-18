@@ -1329,11 +1329,414 @@ func (ExpMod) HasConstants() []bool {
 	return []bool{false, false, false}
 }
 
-var V2BuiltinCosts = DefaultBuiltinCosts
+var V1BuiltinCosts = func() BuiltinCosts {
+	var costs BuiltinCosts
+	// Initialize with V1 cost models
+	costs[builtin.AddInteger] = &CostingFunc[Arguments]{
+		mem: &MaxSizeModel{MaxSize{
+			intercept: 1,
+			slope:     1,
+		}},
+		cpu: &MaxSizeModel{MaxSize{
+			intercept: 205665,
+			slope:     812,
+		}},
+	}
+	costs[builtin.SubtractInteger] = &CostingFunc[Arguments]{
+		mem: &MaxSizeModel{MaxSize{
+			intercept: 1,
+			slope:     1,
+		}},
+		cpu: &MaxSizeModel{MaxSize{
+			intercept: 205665,
+			slope:     812,
+		}},
+	}
+	costs[builtin.MultiplyInteger] = &CostingFunc[Arguments]{
+		mem: &AddedSizesModel{AddedSizes{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &MultipliedSizesModel{MultipliedSizes{
+			intercept: 69522,
+			slope:     11687,
+		}},
+	}
+	costs[builtin.DivideInteger] = &CostingFunc[Arguments]{
+		mem: &SubtractedSizesModel{SubtractedSizes{
+			intercept: 0,
+			slope:     1,
+			minimum:   1,
+		}},
+		cpu: &ConstAboveDiagonalModel{
+			ConstantOrTwoArguments{
+				constant: 196500,
+				model: &MultipliedSizesModel{MultipliedSizes{
+					intercept: 453240,
+					slope:     220,
+				}},
+			},
+		},
+	}
+	costs[builtin.QuotientInteger] = &CostingFunc[Arguments]{
+		mem: &SubtractedSizesModel{SubtractedSizes{
+			intercept: 0,
+			slope:     1,
+			minimum:   1,
+		}},
+		cpu: &ConstAboveDiagonalModel{
+			ConstantOrTwoArguments{
+				constant: 196500,
+				model: &MultipliedSizesModel{MultipliedSizes{
+					intercept: 453240,
+					slope:     220,
+				}},
+			},
+		},
+	}
+	costs[builtin.RemainderInteger] = &CostingFunc[Arguments]{
+		mem: &LinearInY{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &ConstAboveDiagonalModel{
+			ConstantOrTwoArguments{
+				constant: 196500,
+				model: &MultipliedSizesModel{MultipliedSizes{
+					intercept: 453240,
+					slope:     220,
+				}},
+			},
+		},
+	}
+	costs[builtin.ModInteger] = &CostingFunc[Arguments]{
+		mem: &LinearInY{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &ConstAboveDiagonalModel{
+			ConstantOrTwoArguments{
+				constant: 196500,
+				model: &MultipliedSizesModel{MultipliedSizes{
+					intercept: 453240,
+					slope:     220,
+				}},
+			},
+		},
+	}
+	costs[builtin.EqualsInteger] = &CostingFunc[Arguments]{
+		mem: &LinearOnDiagonalModel{
+			ConstantOrLinear{
+				constant:  1,
+				intercept: 0,
+				slope:     1,
+			},
+		},
+		cpu: &LinearOnDiagonalModel{
+			ConstantOrLinear{
+				constant:  1000,
+				intercept: 1000,
+				slope:     1,
+			},
+		},
+	}
+	costs[builtin.LessThanInteger] = &CostingFunc[Arguments]{
+		mem: &MaxSizeModel{MaxSize{
+			intercept: 1,
+			slope:     1,
+		}},
+		cpu: &MaxSizeModel{MaxSize{
+			intercept: 1000,
+			slope:     1,
+		}},
+	}
+	costs[builtin.LessThanEqualsInteger] = &CostingFunc[Arguments]{
+		mem: &MaxSizeModel{MaxSize{
+			intercept: 1,
+			slope:     1,
+		}},
+		cpu: &MaxSizeModel{MaxSize{
+			intercept: 1000,
+			slope:     1,
+		}},
+	}
+	costs[builtin.AppendByteString] = &CostingFunc[Arguments]{
+		mem: &AddedSizesModel{AddedSizes{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &AddedSizesModel{AddedSizes{
+			intercept: 1000,
+			slope:     571,
+		}},
+	}
+	costs[builtin.ConsByteString] = &CostingFunc[Arguments]{
+		mem: &AddedSizesModel{AddedSizes{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &AddedSizesModel{AddedSizes{
+			intercept: 1000,
+			slope:     221,
+		}},
+	}
+	costs[builtin.SliceByteString] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{4},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.LengthOfByteString] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{10},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.IndexByteString] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{4},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.EqualsByteString] = &CostingFunc[Arguments]{
+		mem: &LinearOnDiagonalModel{
+			ConstantOrLinear{
+				constant:  1,
+				intercept: 0,
+				slope:     1,
+			},
+		},
+		cpu: &LinearOnDiagonalModel{
+			ConstantOrLinear{
+				constant:  1000,
+				intercept: 1000,
+				slope:     1,
+			},
+		},
+	}
+	costs[builtin.LessThanByteString] = &CostingFunc[Arguments]{
+		mem: &LinearOnDiagonalModel{
+			ConstantOrLinear{
+				constant:  1,
+				intercept: 0,
+				slope:     1,
+			},
+		},
+		cpu: &LinearOnDiagonalModel{
+			ConstantOrLinear{
+				constant:  1000,
+				intercept: 1000,
+				slope:     1,
+			},
+		},
+	}
+	costs[builtin.LessThanEqualsByteString] = &CostingFunc[Arguments]{
+		mem: &LinearOnDiagonalModel{
+			ConstantOrLinear{
+				constant:  1,
+				intercept: 0,
+				slope:     1,
+			},
+		},
+		cpu: &LinearOnDiagonalModel{
+			ConstantOrLinear{
+				constant:  1000,
+				intercept: 1000,
+				slope:     1,
+			},
+		},
+	}
+	costs[builtin.Sha2_256] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{4},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.Sha3_256] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{4},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.Blake2b_256] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{4},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.VerifyEd25519Signature] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{10},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.AppendString] = &CostingFunc[Arguments]{
+		mem: &AddedSizesModel{AddedSizes{
+			intercept: 4,
+			slope:     1,
+		}},
+		cpu: &AddedSizesModel{AddedSizes{
+			intercept: 1000,
+			slope:     59957,
+		}},
+	}
+	costs[builtin.EqualsString] = &CostingFunc[Arguments]{
+		mem: &LinearOnDiagonalModel{
+			ConstantOrLinear{
+				constant:  1,
+				intercept: 0,
+				slope:     1,
+			},
+		},
+		cpu: &LinearOnDiagonalModel{
+			ConstantOrLinear{
+				constant:  1000,
+				intercept: 1000,
+				slope:     1,
+			},
+		},
+	}
+	costs[builtin.EncodeUtf8] = &CostingFunc[Arguments]{
+		mem: &LinearInY{LinearCost{
+			intercept: 4,
+			slope:     2,
+		}},
+		cpu: &LinearInY{LinearCost{
+			intercept: 1000,
+			slope:     28662,
+		}},
+	}
+	costs[builtin.DecodeUtf8] = &CostingFunc[Arguments]{
+		mem: &LinearInY{LinearCost{
+			intercept: 4,
+			slope:     2,
+		}},
+		cpu: &LinearInY{LinearCost{
+			intercept: 1000,
+			slope:     35892,
+		}},
+	}
+	costs[builtin.IfThenElse] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.ChooseUnit] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{4},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.Trace] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.FstPair] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.SndPair] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.ChooseList] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.MkCons] = &CostingFunc[Arguments]{
+		mem: &AddedSizesModel{AddedSizes{
+			intercept: 32,
+			slope:     32,
+		}},
+		cpu: &AddedSizesModel{AddedSizes{
+			intercept: 1000,
+			slope:     59957,
+		}},
+	}
+	costs[builtin.HeadList] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.TailList] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.NullList] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.ChooseData] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.ConstrData] = &CostingFunc[Arguments]{
+		mem: &LinearInY{LinearCost{
+			intercept: 32,
+			slope:     32,
+		}},
+		cpu: &LinearInY{LinearCost{
+			intercept: 1000,
+			slope:     5431,
+		}},
+	}
+	costs[builtin.MapData] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.ListData] = &CostingFunc[Arguments]{
+		mem: &LinearInY{LinearCost{
+			intercept: 32,
+			slope:     32,
+		}},
+		cpu: &LinearInY{LinearCost{
+			intercept: 1000,
+			slope:     5431,
+		}},
+	}
+	costs[builtin.IData] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.BData] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.UnConstrData] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.UnMapData] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.UnListData] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.UnIData] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.UnBData] = &CostingFunc[Arguments]{
+		mem: &ConstantCost{32},
+		cpu: &ConstantCost{1000},
+	}
+	costs[builtin.EqualsData] = &CostingFunc[Arguments]{
+		mem: &LinearOnDiagonalModel{
+			ConstantOrLinear{
+				constant:  32,
+				intercept: 32,
+				slope:     32,
+			},
+		},
+		cpu: &LinearOnDiagonalModel{
+			ConstantOrLinear{
+				constant:  1000,
+				intercept: 1000,
+				slope:     1,
+			},
+		},
+	}
+	costs[builtin.SerialiseData] = &CostingFunc[Arguments]{
+		mem: &LinearInY{LinearCost{
+			intercept: 0,
+			slope:     2,
+		}},
+		cpu: &LinearInY{LinearCost{
+			intercept: 1000,
+			slope:     533,
+		}},
+	}
+	return costs
+}()
 
-func init() {
+var V2BuiltinCosts = func() BuiltinCosts {
+	costs := DefaultBuiltinCosts
 	// Modify V2 costs where they differ from V3
-	V2BuiltinCosts[builtin.DivideInteger] = &CostingFunc[Arguments]{
+	costs[builtin.DivideInteger] = &CostingFunc[Arguments]{
 		mem: &SubtractedSizesModel{SubtractedSizes{
 			intercept: 0,
 			slope:     1,
@@ -1350,7 +1753,7 @@ func init() {
 		},
 	}
 	// Similarly for quotientInteger, remainderInteger, modInteger
-	V2BuiltinCosts[builtin.QuotientInteger] = &CostingFunc[Arguments]{
+	costs[builtin.QuotientInteger] = &CostingFunc[Arguments]{
 		mem: &SubtractedSizesModel{SubtractedSizes{
 			intercept: 0,
 			slope:     1,
@@ -1366,7 +1769,7 @@ func init() {
 			},
 		},
 	}
-	V2BuiltinCosts[builtin.RemainderInteger] = &CostingFunc[Arguments]{
+	costs[builtin.RemainderInteger] = &CostingFunc[Arguments]{
 		mem: &LinearInY{LinearCost{
 			intercept: 0,
 			slope:     1,
@@ -1381,7 +1784,7 @@ func init() {
 			},
 		},
 	}
-	V2BuiltinCosts[builtin.ModInteger] = &CostingFunc[Arguments]{
+	costs[builtin.ModInteger] = &CostingFunc[Arguments]{
 		mem: &LinearInY{LinearCost{
 			intercept: 0,
 			slope:     1,
@@ -1396,4 +1799,5 @@ func init() {
 			},
 		},
 	}
-}
+	return costs
+}()
