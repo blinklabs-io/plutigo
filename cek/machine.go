@@ -19,9 +19,15 @@ type Machine[T syn.Eval] struct {
 	unbudgetedSteps [10]uint32
 }
 
-func NewMachine[T syn.Eval](slippage uint32) *Machine[T] {
+func NewMachine[T syn.Eval](slippage uint32, costs ...CostModel) *Machine[T] {
+	var costModel CostModel
+	if len(costs) > 0 {
+		costModel = costs[0]
+	} else {
+		costModel = DefaultCostModel
+	}
 	return &Machine[T]{
-		costs:    DefaultCostModel,
+		costs:    costModel,
 		builtins: newBuiltins[T](),
 		slippage: slippage,
 		ExBudget: DefaultExBudget,

@@ -60,7 +60,8 @@ func main() {
 			}
 		}
 
-		machine := cek.NewMachine[syn.DeBruijn](200)
+		costModel := cek.GetCostModel(program.Version)
+		machine := cek.NewMachine[syn.DeBruijn](200, costModel)
 
 		term, err := machine.Run(program.Term)
 		if err != nil {
