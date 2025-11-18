@@ -1328,3 +1328,72 @@ func (l ExpMod) CostThree(aa, ee, mm ExMem) int {
 func (ExpMod) HasConstants() []bool {
 	return []bool{false, false, false}
 }
+
+var V2BuiltinCosts = DefaultBuiltinCosts
+
+func init() {
+	// Modify V2 costs where they differ from V3
+	V2BuiltinCosts[builtin.DivideInteger] = &CostingFunc[Arguments]{
+		mem: &SubtractedSizesModel{SubtractedSizes{
+			intercept: 0,
+			slope:     1,
+			minimum:   1,
+		}},
+		cpu: &ConstAboveDiagonalModel{
+			ConstantOrTwoArguments{
+				constant: 85848,
+				model: &MultipliedSizesModel{MultipliedSizes{
+					intercept: 228465,
+					slope:     122,
+				}},
+			},
+		},
+	}
+	// Similarly for quotientInteger, remainderInteger, modInteger
+	V2BuiltinCosts[builtin.QuotientInteger] = &CostingFunc[Arguments]{
+		mem: &SubtractedSizesModel{SubtractedSizes{
+			intercept: 0,
+			slope:     1,
+			minimum:   1,
+		}},
+		cpu: &ConstAboveDiagonalModel{
+			ConstantOrTwoArguments{
+				constant: 85848,
+				model: &MultipliedSizesModel{MultipliedSizes{
+					intercept: 228465,
+					slope:     122,
+				}},
+			},
+		},
+	}
+	V2BuiltinCosts[builtin.RemainderInteger] = &CostingFunc[Arguments]{
+		mem: &LinearInY{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &ConstAboveDiagonalModel{
+			ConstantOrTwoArguments{
+				constant: 85848,
+				model: &MultipliedSizesModel{MultipliedSizes{
+					intercept: 228465,
+					slope:     122,
+				}},
+			},
+		},
+	}
+	V2BuiltinCosts[builtin.ModInteger] = &CostingFunc[Arguments]{
+		mem: &LinearInY{LinearCost{
+			intercept: 0,
+			slope:     1,
+		}},
+		cpu: &ConstAboveDiagonalModel{
+			ConstantOrTwoArguments{
+				constant: 85848,
+				model: &MultipliedSizesModel{MultipliedSizes{
+					intercept: 228465,
+					slope:     122,
+				}},
+			},
+		},
+	}
+}

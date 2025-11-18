@@ -19,6 +19,24 @@ var DefaultCostModel = CostModel{
 	builtinCosts: DefaultBuiltinCosts,
 }
 
+var V2CostModel = CostModel{
+	machineCosts: DefaultMachineCosts, // Assuming machine costs are the same
+	builtinCosts: V2BuiltinCosts,
+}
+
+func GetCostModel(version [3]uint32) CostModel {
+	if version[0] == 1 && version[1] == 0 && version[2] == 0 {
+		// V1, but not supported, use V2
+		return V2CostModel
+	} else if version[0] == 1 && version[1] == 1 && version[2] == 0 {
+		// V2
+		return V2CostModel
+	} else {
+		// V3 or later
+		return DefaultCostModel
+	}
+}
+
 const (
 	PairCost = 1
 	ConsCost = 3
