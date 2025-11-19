@@ -17,10 +17,10 @@ import (
 	schnorr "github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
+	"github.com/ethereum/go-ethereum/crypto"
 	sha256 "github.com/minio/sha256-simd"
 	"golang.org/x/crypto/blake2b"
 	legacyripemd160 "golang.org/x/crypto/ripemd160" //nolint:staticcheck,gosec
-	legacysha3 "golang.org/x/crypto/sha3"
 )
 
 func addInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -851,12 +851,7 @@ func keccak256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	hash := legacysha3.NewLegacyKeccak256()
-
-	// Write data and compute the hash
-	hash.Write(arg1)
-
-	res := hash.Sum(nil)
+	res := crypto.Keccak256Hash(arg1)
 
 	con := &syn.ByteString{
 		Inner: res[:],
