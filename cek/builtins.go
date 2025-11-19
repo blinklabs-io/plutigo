@@ -3,7 +3,6 @@ package cek
 import (
 	"bytes"
 	"crypto/ed25519"
-	"crypto/sha256"
 	"crypto/sha3"
 	"errors"
 	"fmt"
@@ -18,6 +17,7 @@ import (
 	schnorr "github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
+	sha256 "github.com/minio/sha256-simd"
 	"golang.org/x/crypto/blake2b"
 	legacyripemd160 "golang.org/x/crypto/ripemd160" //nolint:staticcheck,gosec
 	legacysha3 "golang.org/x/crypto/sha3"
