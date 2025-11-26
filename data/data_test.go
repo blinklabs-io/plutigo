@@ -236,7 +236,11 @@ func TestPlutusDataEncode(t *testing.T) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 		if hex.EncodeToString(tmpCbor) != testDef.CborHex {
-			t.Errorf("did not get expected CBOR\n     got: %x\n  wanted: %s", tmpCbor, testDef.CborHex)
+			t.Errorf(
+				"did not get expected CBOR\n     got: %x\n  wanted: %s",
+				tmpCbor,
+				testDef.CborHex,
+			)
 		}
 	}
 }
@@ -252,7 +256,11 @@ func TestPlutusDataDecode(t *testing.T) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 		if !reflect.DeepEqual(tmpData.Data, testDef.Data) {
-			t.Errorf("did not get expected data\n     got: %#v\n  wanted: %#v", tmpData.Data, testDef.Data)
+			t.Errorf(
+				"did not get expected data\n     got: %#v\n  wanted: %#v",
+				tmpData.Data,
+				testDef.Data,
+			)
 		}
 	}
 }

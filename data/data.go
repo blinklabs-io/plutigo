@@ -88,7 +88,11 @@ func NewConstr(tag uint, fields ...PlutusData) PlutusData {
 }
 
 // NewConstrDefIndef creates a Constr with the ability to specify whether it should use definite- or indefinite-length encoding
-func NewConstrDefIndef(useIndef bool, tag uint, fields ...PlutusData) PlutusData {
+func NewConstrDefIndef(
+	useIndef bool,
+	tag uint,
+	fields ...PlutusData,
+) PlutusData {
 	tmpFields := make([]PlutusData, len(fields))
 	copy(tmpFields, fields)
 	return &Constr{Tag: tag, Fields: tmpFields, useIndef: &useIndef}

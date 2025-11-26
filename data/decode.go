@@ -1,6 +1,7 @@
 package data
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -47,6 +48,9 @@ func cborUnmarshal(dataBytes []byte, dest any) error {
 // This is needed because cbor.Tag with a slice as the content (such as in a Constr) is
 // not hashable and cannot be used as a map key
 func decodeCborRaw(data []byte) (any, error) {
+	if len(data) == 0 {
+		return nil, errors.New("empty data")
+	}
 	cborType := data[0] & CborTypeMask
 	switch cborType {
 	case CborTypeByteString:
@@ -284,7 +288,10 @@ func decodeRawTag(tag cbor.RawTag) (PlutusData, error) {
 		}
 		ret, retErr = decodeConstr(tmpData.Alternative, tmpData.FieldsRaw)
 	default:
-		return nil, fmt.Errorf("unknown CBOR tag for PlutusData: %d", tag.Number)
+		return nil, fmt.Errorf(
+			"unknown CBOR tag for PlutusData: %d",
+			tag.Number,
+		)
 	}
 	return ret, retErr
 }
