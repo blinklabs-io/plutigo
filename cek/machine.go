@@ -44,7 +44,6 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 		return nil, err
 	}
 
-	var err error
 	var state MachineState[T] = &Compute[T]{
 		Ctx:  &NoFrame{},
 		Env:  nil,
@@ -54,16 +53,27 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 	for {
 		switch v := state.(type) {
 		case *Compute[T]:
-			state, err = m.compute(v.Ctx, v.Env, v.Term)
+			newState, err := m.compute(v.Ctx, v.Env, v.Term)
+			if err != nil {
+				return nil, err
+			}
+			if newState == nil {
+				return nil, errors.New("compute returned nil state")
+			}
+			state = newState
 		case *Return[T]:
-			state, err = m.returnCompute(v.Ctx, v.Value)
+			newState, err := m.returnCompute(v.Ctx, v.Value)
+			if err != nil {
+				return nil, err
+			}
+			if newState == nil {
+				return nil, errors.New("returnCompute returned nil state")
+			}
+			state = newState
 		case *Done[T]:
 			return v.term, nil
 		default:
 			panic(fmt.Sprintf("unknown machine state: %T", state))
-		}
-		if err != nil {
-			return nil, err
 		}
 	}
 }
@@ -222,6 +232,10 @@ func (m *Machine[T]) compute(
 		panic(fmt.Sprintf("unknown term: %T: %v", term, term))
 	}
 
+	if state == nil {
+		return nil, errors.New("compute: state is nil")
+	}
+
 	return state, nil
 }
 
@@ -318,6 +332,10 @@ func (m *Machine[T]) returnCompute(
 		}
 	default:
 		panic(fmt.Sprintf("unknown context %v", context))
+	}
+
+	if state == nil {
+		return nil, errors.New("returnCompute: state is nil")
 	}
 
 	return state, nil
@@ -486,7 +504,11 @@ func dischargeValue[T syn.Eval](value Value[T]) syn.Term[T] {
 	return dischargedTerm
 }
 
-func withEnv[T syn.Eval](lamCnt int, env *Env[T], term syn.Term[T]) syn.Term[T] {
+func withEnv[T syn.Eval](
+	lamCnt int,
+	env *Env[T],
+	term syn.Term[T],
+) syn.Term[T] {
 	var dischargedTerm syn.Term[T]
 
 	switch t := term.(type) {

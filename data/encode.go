@@ -66,11 +66,19 @@ func encodeConstr(c *Constr) (any, error) {
 		for i, item := range c.Fields {
 			encoded, err := encodeToRaw(item)
 			if err != nil {
-				return nil, fmt.Errorf("failed to encode Constr field %d: %w", i, err)
+				return nil, fmt.Errorf(
+					"failed to encode Constr field %d: %w",
+					i,
+					err,
+				)
 			}
 			encodedCbor, err := cborMarshal(encoded)
 			if err != nil {
-				return nil, fmt.Errorf("failed to encode Constr field item %d: %w", i, err)
+				return nil, fmt.Errorf(
+					"failed to encode Constr field item %d: %w",
+					i,
+					err,
+				)
 			}
 			tmpFields[i] = cbor.RawMessage(encodedCbor)
 		}
@@ -244,11 +252,19 @@ func encodeList(l *List) (any, error) {
 	for i, item := range l.Items {
 		encoded, err := encodeToRaw(item)
 		if err != nil {
-			return nil, fmt.Errorf("failed to encode indef-length list item %d: %w", i, err)
+			return nil, fmt.Errorf(
+				"failed to encode indef-length list item %d: %w",
+				i,
+				err,
+			)
 		}
 		encodedCbor, err := cborMarshal(encoded)
 		if err != nil {
-			return nil, fmt.Errorf("failed to encode indef-length list item %d: %w", i, err)
+			return nil, fmt.Errorf(
+				"failed to encode indef-length list item %d: %w",
+				i,
+				err,
+			)
 		}
 		tmpData = slices.Concat(tmpData, encodedCbor)
 	}

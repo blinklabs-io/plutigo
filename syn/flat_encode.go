@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+
+	"github.com/blinklabs-io/plutigo/data"
 )
 
 func Encode[T Binder](program *Program[T]) ([]byte, error) {
@@ -80,7 +82,11 @@ func EncodeTerm[T Binder](e *encoder, term Term[T]) error {
 		if termError != nil {
 			return termError
 		}
-		panic("TODO")
+
+		err := EncodeConstant(e, t.Con)
+		if err != nil {
+			return err
+		}
 	case *Force[T]:
 		termError := e.encodeTermTag(5)
 		if termError != nil {
@@ -101,7 +107,8 @@ func EncodeTerm[T Binder](e *encoder, term Term[T]) error {
 		if termError != nil {
 			return termError
 		}
-		panic("TODO")
+
+		e.bits(BuiltinTagWidth, byte(t.DefaultFunction))
 	case *Constr[T]:
 		termError := e.encodeTermTag(8)
 		if termError != nil {
@@ -403,4 +410,99 @@ func (e *encoder) bigWord(c *big.Int) *encoder {
 	}
 
 	return e
+}
+
+func EncodeConstant(e *encoder, constant IConstant) error {
+	// Encode type tags
+	if err := encodeConstantType(e, constant.Typ()); err != nil {
+		return err
+	}
+
+	// Encode value based on type
+	return encodeConstantValue(e, constant)
+}
+
+func encodeConstantType(e *encoder, typ Typ) error {
+	switch t := typ.(type) {
+	case *TInteger:
+		e.one()
+		e.bits(ConstTagWidth, IntegerTag)
+		e.zero()
+	case *TByteString:
+		e.one()
+		e.bits(ConstTagWidth, ByteStringTag)
+		e.zero()
+	case *TString:
+		e.one()
+		e.bits(ConstTagWidth, StringTag)
+		e.zero()
+	case *TUnit:
+		e.one()
+		e.bits(ConstTagWidth, UnitTag)
+		e.zero()
+	case *TBool:
+		e.one()
+		e.bits(ConstTagWidth, BoolTag)
+		e.zero()
+	case *TData:
+		e.one()
+		e.bits(ConstTagWidth, DataTag)
+		e.zero()
+	case *TList:
+		e.bits(ConstTagWidth, ProtoListOneTag)
+		e.bits(ConstTagWidth, ProtoListTwoTag)
+		if err := encodeConstantType(e, t.Typ); err != nil {
+			return err
+		}
+	case *TPair:
+		e.bits(ConstTagWidth, ProtoPairOneTag)
+		e.bits(ConstTagWidth, ProtoPairTwoTag)
+		e.bits(ConstTagWidth, ProtoPairThreeTag)
+		if err := encodeConstantType(e, t.First); err != nil {
+			return err
+		}
+		if err := encodeConstantType(e, t.Second); err != nil {
+			return err
+		}
+	default:
+		return errors.New("unsupported constant type")
+	}
+	return nil
+}
+
+func encodeConstantValue(e *encoder, constant IConstant) error {
+	switch c := constant.(type) {
+	case *Integer:
+		e.integer(c.Inner)
+	case *ByteString:
+		return e.bytes(c.Inner)
+	case *String:
+		return e.utf8(c.Inner)
+	case *Unit:
+		// Unit has no value to encode
+	case *Bool:
+		if c.Inner {
+			e.one()
+		} else {
+			e.zero()
+		}
+	case *ProtoList:
+		return EncodeList(e, c.List, func(e *encoder, item IConstant) error {
+			return encodeConstantValue(e, item)
+		})
+	case *ProtoPair:
+		if err := encodeConstantValue(e, c.First); err != nil {
+			return err
+		}
+		return encodeConstantValue(e, c.Second)
+	case *Data:
+		cborBytes, err := data.Encode(c.Inner)
+		if err != nil {
+			return err
+		}
+		return e.bytes(cborBytes)
+	default:
+		return errors.New("unsupported constant value")
+	}
+	return nil
 }
