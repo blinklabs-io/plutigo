@@ -314,6 +314,10 @@ func (p *Parser) parseConstr() (Term[Name], error) {
 		)
 	}
 
+	if n < 0 {
+		return nil, fmt.Errorf("constr tag must be non-negative: %d", n)
+	}
+
 	tag := n
 
 	p.nextToken()
@@ -897,6 +901,10 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 				p.curToken.Position,
 				err,
 			)
+		}
+
+		if n < 0 {
+			return nil, fmt.Errorf("constr tag must be non-negative: %d", n)
 		}
 
 		tag := uint(n)

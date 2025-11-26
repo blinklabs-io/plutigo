@@ -4,6 +4,7 @@ run:
   tests: false
 linters:
   enable:
+    - gosec
     - perfsprint
     - prealloc
     - protogetter

@@ -61,7 +61,7 @@ func main() {
 		}
 
 		costModel := cek.GetCostModel(program.Version)
-		machine := cek.NewMachine[syn.DeBruijn](200, costModel)
+		machine := cek.NewMachine[syn.DeBruijn](program.Version, 200, costModel)
 
 		term, err := machine.Run(program.Term)
 		if err != nil {
@@ -93,7 +93,7 @@ func main() {
 
 		prettyProgram := syn.Pretty[syn.Name](program)
 
-		_ = os.WriteFile(filename, []byte(prettyProgram), 0o644)
+		_ = os.WriteFile(filename, []byte(prettyProgram), 0o600)
 
 		fmt.Println("done.")
 	}

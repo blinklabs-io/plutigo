@@ -6,6 +6,7 @@ import (
 	"crypto/sha3"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"math/bits"
 	"unicode/utf8"
@@ -428,14 +429,13 @@ func consByteString[T syn.Eval](
 		return nil, err
 	}
 
-	// TODO: handle PlutusSemantic Versioning
-
 	if !arg1.IsInt64() {
 		return nil, errors.New("int does not fit into a byte")
 	}
 
 	int_val := arg1.Int64()
 
+	// consByteString requires the integer to be in the range 0-255
 	if int_val < 0 || int_val > 255 {
 		return nil, errors.New("int does not fit into a byte")
 	}
@@ -1530,6 +1530,10 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
+	if arg1.Sign() < 0 {
+		return nil, errors.New("constructor tag must be non-negative")
+	}
+
 	arg2, err := unwrapList[T](&syn.TData{}, m.argHolder[1])
 	if err != nil {
 		return nil, err
@@ -1547,9 +1551,14 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		dataList = append(dataList, itemData.Inner)
 	}
 
+	tag := arg1.Uint64()
+	if tag > math.MaxUint {
+		return nil, errors.New("constructor tag too large")
+	}
+
 	value := &Constant{&syn.Data{
 		Inner: &data.Constr{
-			Tag:    uint(arg1.Int64()),
+			Tag:    uint(tag),
 			Fields: dataList,
 		},
 	}}
@@ -1679,6 +1688,10 @@ func unConstrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	var pair *syn.ProtoPair
 	switch constr := arg1.(type) {
 	case *data.Constr:
+		if constr.Tag > math.MaxInt64 {
+			return nil, errors.New("constructor tag too large for integer conversion")
+		}
+
 		var fields []syn.IConstant
 
 		for _, field := range constr.Fields {

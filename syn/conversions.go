@@ -3,6 +3,7 @@ package syn
 import (
 	"errors"
 	"fmt"
+	"math"
 )
 
 func NameToNamedDeBruijn(p *Program[Name]) (*Program[NamedDeBruijn], error) {
@@ -201,6 +202,10 @@ func (c *converter) getIndex(name *Name) (DeBruijn, error) {
 		if foundLevel, ok := scope.getByUnique(name.Unique); ok {
 			index := c.currentLevel - foundLevel
 
+			if index > math.MaxInt {
+				return 0, errors.New("DeBruijn index too large")
+			}
+
 			return DeBruijn(index), nil
 		}
 	}
@@ -212,8 +217,11 @@ func (c *converter) getIndex(name *Name) (DeBruijn, error) {
 //
 //nolint:unused
 func (c *converter) getUnique(index DeBruijn) (Unique, error) {
+	if index < 0 {
+		return 0, errors.New("negative DeBruijn index")
+	}
 	for i := len(c.levels) - 1; i >= 0; i-- {
-		indexVal := uint(index)
+		indexVal := uint(index) //nolint:gosec
 		if c.currentLevel < indexVal {
 			return 0, errors.New("FreeIndex")
 		}

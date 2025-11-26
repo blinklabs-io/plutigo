@@ -12,6 +12,7 @@ type Machine[T syn.Eval] struct {
 	costs    CostModel
 	builtins Builtins[T]
 	slippage uint32
+	version  [3]uint32
 	ExBudget ExBudget
 	Logs     []string
 
@@ -19,7 +20,7 @@ type Machine[T syn.Eval] struct {
 	unbudgetedSteps [10]uint32
 }
 
-func NewMachine[T syn.Eval](slippage uint32, costs ...CostModel) *Machine[T] {
+func NewMachine[T syn.Eval](version [3]uint32, slippage uint32, costs ...CostModel) *Machine[T] {
 	var costModel CostModel
 	if len(costs) > 0 {
 		costModel = costs[0]
@@ -30,12 +31,19 @@ func NewMachine[T syn.Eval](slippage uint32, costs ...CostModel) *Machine[T] {
 		costs:    costModel,
 		builtins: newBuiltins[T](),
 		slippage: slippage,
+		version:  version,
 		ExBudget: DefaultExBudget,
 		Logs:     make([]string, 0),
 
 		argHolder:       newArgHolder[T](),
 		unbudgetedSteps: [10]uint32{0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	}
+}
+
+// NewMachineWithVersionCosts creates a machine with version-appropriate cost models
+func NewMachineWithVersionCosts[T syn.Eval](version [3]uint32, slippage uint32) *Machine[T] {
+	costModel := GetCostModel(version)
+	return NewMachine[T](version, slippage, costModel)
 }
 
 func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
@@ -585,7 +593,7 @@ func (m *Machine[T]) stepAndMaybeSpend(step StepKind) error {
 }
 
 func (m *Machine[T]) spendUnbudgetedSteps() error {
-	for i := range len(m.unbudgetedSteps) - 1 {
+	for i := uint8(0); i < uint8(len(m.unbudgetedSteps)-1); i++ {
 		unspent_step_budget := m.costs.machineCosts.get(StepKind(i))
 
 		unspent_step_budget.occurrences(m.unbudgetedSteps[i])
