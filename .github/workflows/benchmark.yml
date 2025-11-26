@@ -20,7 +20,7 @@ jobs:
         platform: [ubuntu-latest]
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6.0.0
         with:
           submodules: true
       - uses: actions/setup-go@v6.1.0
