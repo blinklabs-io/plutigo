@@ -20,7 +20,11 @@ type Machine[T syn.Eval] struct {
 	unbudgetedSteps [10]uint32
 }
 
-func NewMachine[T syn.Eval](version [3]uint32, slippage uint32, costs ...CostModel) *Machine[T] {
+func NewMachine[T syn.Eval](
+	version [3]uint32,
+	slippage uint32,
+	costs ...CostModel,
+) *Machine[T] {
 	var costModel CostModel
 	if len(costs) > 0 {
 		costModel = costs[0]
@@ -41,7 +45,10 @@ func NewMachine[T syn.Eval](version [3]uint32, slippage uint32, costs ...CostMod
 }
 
 // NewMachineWithVersionCosts creates a machine with version-appropriate cost models
-func NewMachineWithVersionCosts[T syn.Eval](version [3]uint32, slippage uint32) *Machine[T] {
+func NewMachineWithVersionCosts[T syn.Eval](
+	version [3]uint32,
+	slippage uint32,
+) *Machine[T] {
 	costModel := GetCostModel(version)
 	return NewMachine[T](version, slippage, costModel)
 }

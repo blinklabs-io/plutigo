@@ -60,8 +60,7 @@ func (pp *PrettyPrinter) decreaseIndent() {
 
 // PrettyPrintTerm formats a Term[Name] to a string
 func prettyPrintTerm[T Binder](pp *PrettyPrinter, term Term[T]) string {
-	printTerm[T](pp, term, true)
-
+	printTerm[T](pp, term)
 	return pp.builder.String()
 }
 
@@ -89,7 +88,7 @@ func printProgram[T Binder](pp *PrettyPrinter, prog *Program[T]) {
 	pp.increaseIndent()
 	pp.writeIndent()
 
-	printTerm[T](pp, prog.Term, false)
+	printTerm[T](pp, prog.Term)
 
 	pp.decreaseIndent()
 	pp.write("\n")
@@ -100,7 +99,7 @@ func printProgram[T Binder](pp *PrettyPrinter, prog *Program[T]) {
 }
 
 // printTerm dispatches to the appropriate term printing method
-func printTerm[T Binder](pp *PrettyPrinter, term Term[T], isTopLevel bool) {
+func printTerm[T Binder](pp *PrettyPrinter, term Term[T]) {
 	switch t := term.(type) {
 	case *Var[T]:
 		pp.write(t.Name.TextName())
@@ -113,7 +112,7 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T], isTopLevel bool) {
 		pp.increaseIndent()
 		pp.writeIndent()
 
-		printTerm[T](pp, t.Body, false)
+		printTerm[T](pp, t.Body)
 
 		pp.decreaseIndent()
 		pp.write("\n")
@@ -127,7 +126,7 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T], isTopLevel bool) {
 		pp.increaseIndent()
 		pp.writeIndent()
 
-		printTerm[T](pp, t.Term, false)
+		printTerm[T](pp, t.Term)
 
 		pp.decreaseIndent()
 		pp.write("\n")
@@ -141,7 +140,7 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T], isTopLevel bool) {
 		pp.increaseIndent()
 		pp.writeIndent()
 
-		printTerm[T](pp, t.Term, false)
+		printTerm[T](pp, t.Term)
 
 		pp.decreaseIndent()
 		pp.write("\n")
@@ -155,12 +154,12 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T], isTopLevel bool) {
 		pp.increaseIndent()
 		pp.writeIndent()
 
-		printTerm[T](pp, t.Function, false)
+		printTerm[T](pp, t.Function)
 
 		pp.write("\n")
 		pp.writeIndent()
 
-		printTerm[T](pp, t.Argument, false)
+		printTerm[T](pp, t.Argument)
 
 		pp.decreaseIndent()
 		pp.write("\n")
@@ -183,7 +182,7 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T], isTopLevel bool) {
 			for _, field := range t.Fields {
 				pp.writeIndent()
 
-				printTerm[T](pp, field, false)
+				printTerm[T](pp, field)
 
 				pp.write("\n")
 			}
@@ -199,7 +198,7 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T], isTopLevel bool) {
 	case *Case[T]:
 		pp.write("(case ")
 
-		printTerm[T](pp, t.Constr, false)
+		printTerm[T](pp, t.Constr)
 
 		if len(t.Branches) > 0 {
 			pp.write("\n")
@@ -208,7 +207,7 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T], isTopLevel bool) {
 			for _, branch := range t.Branches {
 				pp.writeIndent()
 
-				printTerm[T](pp, branch, false)
+				printTerm[T](pp, branch)
 
 				pp.write("\n")
 			}

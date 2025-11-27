@@ -1551,14 +1551,18 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		dataList = append(dataList, itemData.Inner)
 	}
 
-	tag := arg1.Uint64()
-	if tag > math.MaxUint {
+	if arg1.BitLen() > 64 {
 		return nil, errors.New("constructor tag too large")
 	}
+	tag64 := arg1.Uint64()
+	if tag64 > uint64(math.MaxUint) {
+		return nil, errors.New("constructor tag too large")
+	}
+	tag := uint(tag64)
 
 	value := &Constant{&syn.Data{
 		Inner: &data.Constr{
-			Tag:    uint(tag),
+			Tag:    tag,
 			Fields: dataList,
 		},
 	}}

@@ -13,7 +13,7 @@ func TestEncodeDecodeConstant(t *testing.T) {
 	term := &Constant{Con: constant}
 
 	// Encode the term
-	encoded, err := Encode[DeBruijn](&Program[DeBruijn]{
+	encoded, err := Encode(&Program[DeBruijn]{
 		Version: [3]uint32{1, 0, 0},
 		Term:    term,
 	})
@@ -63,7 +63,7 @@ func TestEncodeDecodeBuiltin(t *testing.T) {
 			original := &Builtin{DefaultFunction: tt.fn}
 
 			// Encode the builtin term
-			encoded, err := Encode[DeBruijn](&Program[DeBruijn]{
+			encoded, err := Encode(&Program[DeBruijn]{
 				Version: [3]uint32{1, 0, 0},
 				Term:    original,
 			})
@@ -117,11 +117,11 @@ func TestEncodeDecodeConstantTerm(t *testing.T) {
 			constant: &Unit{},
 		},
 		{
-			name: "constant_bool_true",
+			name:     "constant_bool_true",
 			constant: &Bool{Inner: true},
 		},
 		{
-			name: "constant_bool_false",
+			name:     "constant_bool_false",
 			constant: &Bool{Inner: false},
 		},
 	}
