@@ -2,6 +2,7 @@ package syn
 
 import (
 	"fmt"
+	"math"
 )
 
 type Binder interface {
@@ -83,7 +84,11 @@ func (n NamedDeBruijn) VarEncode(e *encoder) error {
 		return err
 	}
 
-	e.word(uint(n.Index))
+	if n.Index < 0 {
+		return fmt.Errorf("negative DeBruijn index: %d", n.Index)
+	}
+
+	e.word(uint(n.Index)) //nolint:gosec
 
 	return nil
 }
@@ -97,6 +102,10 @@ func (n NamedDeBruijn) VarDecode(d *decoder) (Binder, error) {
 	i, err := d.word()
 	if err != nil {
 		return nil, err
+	}
+
+	if i > math.MaxInt {
+		return nil, fmt.Errorf("DeBruijn index too large: %d", i)
 	}
 
 	nd := NamedDeBruijn{
@@ -134,7 +143,10 @@ type Unique uint64
 type DeBruijn int
 
 func (n DeBruijn) VarEncode(e *encoder) error {
-	e.word(uint(n))
+	if n < 0 {
+		return fmt.Errorf("negative DeBruijn index: %d", n)
+	}
+	e.word(uint(n)) //nolint:gosec
 
 	return nil
 }
@@ -143,6 +155,10 @@ func (n DeBruijn) VarDecode(d *decoder) (Binder, error) {
 	i, err := d.word()
 	if err != nil {
 		return nil, err
+	}
+
+	if i > math.MaxInt {
+		return nil, fmt.Errorf("DeBruijn index too large: %d", i)
 	}
 
 	return DeBruijn(i), nil

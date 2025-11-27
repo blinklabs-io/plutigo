@@ -184,7 +184,7 @@ func (e *encoder) encodeTermTag(tag byte) error {
 }
 
 func (e *encoder) safeEncodeBits(numBits byte, val byte) error {
-	if 2<<numBits <= val {
+	if val >= (1 << numBits) {
 		return fmt.Errorf(
 			"overflow detected, cannot fit %d in %d bits",
 			val,
@@ -206,7 +206,7 @@ func (e *encoder) word(c uint) *encoder {
 	d := c
 
 	for {
-		w := uint8(d & 127)
+		w := uint8(d & 127) //nolint:gosec
 
 		d >>= 7
 
@@ -390,7 +390,11 @@ func (e *encoder) bigWord(c *big.Int) *encoder {
 		temp.Mod(d, big.NewInt(128))
 
 		// Convert to uint8
-		w := uint8(temp.Int64())
+		temp64 := temp.Int64()
+		if temp64 < 0 || temp64 > 255 {
+			panic("unexpected value")
+		}
+		w := uint8(temp64)
 
 		// d >>= 7
 		d.Rsh(d, 7)

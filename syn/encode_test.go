@@ -108,6 +108,22 @@ func TestEncodeDecodeConstantTerm(t *testing.T) {
 			name:     "constant_string",
 			constant: &String{Inner: "hello"},
 		},
+		{
+			name:     "constant_bytestring",
+			constant: &ByteString{Inner: []byte{0xde, 0xad, 0xbe, 0xef}},
+		},
+		{
+			name:     "constant_unit",
+			constant: &Unit{},
+		},
+		{
+			name: "constant_bool_true",
+			constant: &Bool{Inner: true},
+		},
+		{
+			name: "constant_bool_false",
+			constant: &Bool{Inner: false},
+		},
 	}
 
 	for _, tt := range tests {

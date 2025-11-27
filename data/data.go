@@ -128,7 +128,10 @@ func (m Map) Equal(pd PlutusData) bool {
 	if !ok {
 		return false
 	}
-	for i, pair := range pdMap.Pairs {
+	if len(m.Pairs) != len(pdMap.Pairs) {
+		return false
+	}
+	for i, pair := range m.Pairs {
 		if !pair[0].Equal(pdMap.Pairs[i][0]) {
 			return false
 		}
