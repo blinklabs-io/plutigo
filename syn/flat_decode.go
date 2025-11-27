@@ -35,7 +35,8 @@ func Decode[T Binder](bytes []byte) (*Program[T], error) {
 		return nil, err
 	}
 
-	if major > math.MaxUint32 || minor > math.MaxUint32 || patch > math.MaxUint32 {
+	if major > math.MaxUint32 || minor > math.MaxUint32 ||
+		patch > math.MaxUint32 {
 		return nil, errors.New("version numbers too large")
 	}
 
@@ -535,8 +536,19 @@ func (d *decoder) dropBits(numBits uint) {
 	d.pos += int(allUsedBits / 8)
 }
 
+// Ensures the buffer has the required bits passed in by required_bits.
+// Throws a NotEnoughBits error if there are less bits remaining in the
+// buffer than requiredBits.
+// Throws a BitsOverflow error if bits is more than MaxInt64
 func (d *decoder) ensureBits(requiredBits uint) error {
-	if int64(requiredBits) > int64((len(d.buffer)-d.pos)*8)-d.usedBits { //nolint:gosec
+	if requiredBits > math.MaxInt64 {
+		return fmt.Errorf("BitsOverflow(%d)", requiredBits)
+	}
+	if int64(
+		requiredBits,
+	) > int64(
+		(len(d.buffer)-d.pos)*8,
+	)-d.usedBits { //nolint:gosec
 		return fmt.Errorf("NotEnoughBits(%d)", requiredBits)
 	} else {
 		return nil

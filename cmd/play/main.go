@@ -91,7 +91,7 @@ func main() {
 			log.Fatalf("parse error: %v\n\n", err)
 		}
 
-		prettyProgram := syn.Pretty[syn.Name](program)
+		prettyProgram := syn.Pretty(program)
 
 		_ = os.WriteFile(filename, []byte(prettyProgram), 0o600)
 

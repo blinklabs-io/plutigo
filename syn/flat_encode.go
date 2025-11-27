@@ -230,7 +230,7 @@ func (e *encoder) word(c uint) *encoder {
 // number of bits to use is greater than unused bits. Expects that
 // number of bits to use is greater than or equal to required bits by the
 // value. The param num_bits is i64 to match unused_bits type.
-func (e *encoder) bits(numBits byte, val byte) *encoder {
+func (e *encoder) bits(numBits byte, val byte) {
 	if numBits == 1 && val == 0 {
 		e.zero()
 	} else if numBits == 1 && val == 1 {
@@ -264,8 +264,6 @@ func (e *encoder) bits(numBits byte, val byte) *encoder {
 			e.usedBits = used
 		}
 	}
-
-	return e
 }
 
 // A filler amount of end 0's followed by a 1 at the end of a byte.
@@ -306,13 +304,11 @@ func (e *encoder) one() *encoder {
 // Write the current byte out to the buffer and begin next byte to write
 // out. Add current byte to the buffer and set current byte and used
 // bits to 0.
-func (e *encoder) nextWord() *encoder {
+func (e *encoder) nextWord() {
 	e.buffer = append(e.buffer, e.currentByte)
 
 	e.currentByte = 0
 	e.usedBits = 0
-
-	return e
 }
 
 // Encode a string.

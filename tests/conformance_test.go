@@ -221,7 +221,10 @@ func TestConformance(t *testing.T) {
 
 					// Evaluate program
 
-					machine := cek.NewMachine[syn.DeBruijn](dProgram.Version, 200)
+					machine := cek.NewMachine[syn.DeBruijn](
+						dProgram.Version,
+						200,
+					)
 
 					result, err := machine.Run(dProgram.Term)
 					if err != nil {
