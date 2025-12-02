@@ -38,10 +38,6 @@ var (
 // getCompute returns a Compute state from the pool
 func getCompute[T syn.Eval]() *Compute[T] {
 	c := computePool.Get().(*Compute[syn.DeBruijn])
-	if debug {
-		// Runtime type assertion for safety in debug builds
-		_ = (*Compute[T])(unsafe.Pointer(c))
-	}
 	return (*Compute[T])(unsafe.Pointer(c))
 }
 
@@ -57,10 +53,6 @@ func putCompute[T syn.Eval](c *Compute[T]) {
 // getReturn returns a Return state from the pool
 func getReturn[T syn.Eval]() *Return[T] {
 	r := returnPool.Get().(*Return[syn.DeBruijn])
-	if debug {
-		// Runtime type assertion for safety in debug builds
-		_ = (*Return[T])(unsafe.Pointer(r))
-	}
 	return (*Return[T])(unsafe.Pointer(r))
 }
 
@@ -69,16 +61,12 @@ func putReturn[T syn.Eval](r *Return[T]) {
 	// Reset the state
 	r.Ctx = nil
 	r.Value = nil
-	returnPool.Put(r)
+	returnPool.Put((*Return[syn.DeBruijn])(unsafe.Pointer(r)))
 }
 
 // getDone returns a Done state from the pool
 func getDone[T syn.Eval]() *Done[T] {
 	d := donePool.Get().(*Done[syn.DeBruijn])
-	if debug {
-		// Runtime type assertion for safety in debug builds
-		_ = (*Done[T])(unsafe.Pointer(d))
-	}
 	return (*Done[T])(unsafe.Pointer(d))
 }
 
@@ -86,7 +74,7 @@ func getDone[T syn.Eval]() *Done[T] {
 func putDone[T syn.Eval](d *Done[T]) {
 	// Reset the state
 	d.term = nil
-	donePool.Put(d)
+	donePool.Put((*Done[syn.DeBruijn])(unsafe.Pointer(d)))
 }
 
 type Machine[T syn.Eval] struct {
@@ -140,10 +128,13 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 		return nil, err
 	}
 
-	var state MachineState[T] = getCompute[T]()
-	state.(*Compute[T]).Ctx = &NoFrame{}
-	state.(*Compute[T]).Env = nil
-	state.(*Compute[T]).Term = term
+	var state MachineState[T]
+
+	comp := getCompute[T]()
+	comp.Ctx = &NoFrame{}
+	comp.Env = nil
+	comp.Term = term
+	state = comp
 
 	for {
 		switch v := state.(type) {
@@ -200,9 +191,10 @@ func (m *Machine[T]) compute(
 			return nil, errors.New("open term evaluated")
 		}
 
-		state = getReturn[T]()
-		state.(*Return[T]).Ctx = context
-		state.(*Return[T]).Value = value
+		ret := getReturn[T]()
+		ret.Ctx = context
+		ret.Value = value
+		state = ret
 	case *syn.Delay[T]:
 		if err := m.stepAndMaybeSpend(ExDelay); err != nil {
 			return nil, err
@@ -213,9 +205,10 @@ func (m *Machine[T]) compute(
 			Env:  env,
 		}
 
-		state = getReturn[T]()
-		state.(*Return[T]).Ctx = context
-		state.(*Return[T]).Value = value
+		ret := getReturn[T]()
+		ret.Ctx = context
+		ret.Value = value
+		state = ret
 	case *syn.Lambda[T]:
 		if err := m.stepAndMaybeSpend(ExLambda); err != nil {
 			return nil, err
@@ -227,9 +220,10 @@ func (m *Machine[T]) compute(
 			Env:           env,
 		}
 
-		state = getReturn[T]()
-		state.(*Return[T]).Ctx = context
-		state.(*Return[T]).Value = value
+		ret := getReturn[T]()
+		ret.Ctx = context
+		ret.Value = value
+		state = ret
 	case *syn.Apply[T]:
 		if err := m.stepAndMaybeSpend(ExApply); err != nil {
 			return nil, err
@@ -241,20 +235,22 @@ func (m *Machine[T]) compute(
 			Ctx:  context,
 		}
 
-		state = getCompute[T]()
-		state.(*Compute[T]).Ctx = frame
-		state.(*Compute[T]).Env = env
-		state.(*Compute[T]).Term = t.Function
+		comp := getCompute[T]()
+		comp.Ctx = frame
+		comp.Env = env
+		comp.Term = t.Function
+		state = comp
 	case *syn.Constant:
 		if err := m.stepAndMaybeSpend(ExConstant); err != nil {
 			return nil, err
 		}
 
-		state = getReturn[T]()
-		state.(*Return[T]).Ctx = context
-		state.(*Return[T]).Value = &Constant{
+		ret := getReturn[T]()
+		ret.Ctx = context
+		ret.Value = &Constant{
 			Constant: t.Con,
 		}
+		state = ret
 	case *syn.Force[T]:
 		if err := m.stepAndMaybeSpend(ExForce); err != nil {
 			return nil, err
@@ -264,10 +260,11 @@ func (m *Machine[T]) compute(
 			Ctx: context,
 		}
 
-		state = getCompute[T]()
-		state.(*Compute[T]).Ctx = frame
-		state.(*Compute[T]).Env = env
-		state.(*Compute[T]).Term = t.Term
+		comp := getCompute[T]()
+		comp.Ctx = frame
+		comp.Env = env
+		comp.Term = t.Term
+		state = comp
 	case *syn.Error:
 		return nil, errors.New("error explicitly called")
 
@@ -276,13 +273,14 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 
-		state = getReturn[T]()
-		state.(*Return[T]).Ctx = context
-		state.(*Return[T]).Value = &Builtin[T]{
+		ret := getReturn[T]()
+		ret.Ctx = context
+		ret.Value = &Builtin[T]{
 			Func:   t.DefaultFunction,
 			Args:   nil,
 			Forces: 0,
 		}
+		state = ret
 	case *syn.Constr[T]:
 		if err := m.stepAndMaybeSpend(ExConstr); err != nil {
 			return nil, err
@@ -291,12 +289,13 @@ func (m *Machine[T]) compute(
 		fields := t.Fields
 
 		if len(fields) == 0 {
-			state = getReturn[T]()
-			state.(*Return[T]).Ctx = context
-			state.(*Return[T]).Value = &Constr[T]{
+			ret := getReturn[T]()
+			ret.Ctx = context
+			ret.Value = &Constr[T]{
 				Tag:    t.Tag,
 				Fields: []Value[T]{},
 			}
+			state = ret
 		} else {
 			first_field := fields[0]
 
@@ -310,10 +309,11 @@ func (m *Machine[T]) compute(
 				Env:            env,
 			}
 
-			state = getCompute[T]()
-			state.(*Compute[T]).Ctx = frame
-			state.(*Compute[T]).Env = env
-			state.(*Compute[T]).Term = first_field
+			comp := getCompute[T]()
+			comp.Ctx = frame
+			comp.Env = env
+			comp.Term = first_field
+			state = comp
 		}
 	case *syn.Case[T]:
 		if err := m.stepAndMaybeSpend(ExCase); err != nil {
@@ -326,10 +326,11 @@ func (m *Machine[T]) compute(
 			Branches: t.Branches,
 		}
 
-		state = getCompute[T]()
-		state.(*Compute[T]).Ctx = frame
-		state.(*Compute[T]).Env = env
-		state.(*Compute[T]).Term = t.Constr
+		comp := getCompute[T]()
+		comp.Ctx = frame
+		comp.Env = env
+		comp.Term = t.Constr
+		state = comp
 	default:
 		panic(fmt.Sprintf("unknown term: %T: %v", term, term))
 	}
@@ -355,13 +356,14 @@ func (m *Machine[T]) returnCompute(
 			return nil, err
 		}
 	case *FrameAwaitFunTerm[T]:
-		state = getCompute[T]()
-		state.(*Compute[T]).Ctx = &FrameAwaitArg[T]{
+		comp := getCompute[T]()
+		comp.Ctx = &FrameAwaitArg[T]{
 			Ctx:   c.Ctx,
 			Value: value,
 		}
-		state.(*Compute[T]).Env = c.Env
-		state.(*Compute[T]).Term = c.Term
+		comp.Env = c.Env
+		comp.Term = c.Term
+		state = comp
 	case *FrameAwaitFunValue[T]:
 		state, err = m.applyEvaluate(c.Ctx, value, c.Value)
 		if err != nil {
@@ -378,12 +380,13 @@ func (m *Machine[T]) returnCompute(
 		fields := c.Fields
 
 		if len(fields) == 0 {
-			state = getReturn[T]()
-			state.(*Return[T]).Ctx = c.Ctx
-			state.(*Return[T]).Value = &Constr[T]{
+			ret := getReturn[T]()
+			ret.Ctx = c.Ctx
+			ret.Value = &Constr[T]{
 				Tag:    c.Tag,
 				Fields: resolvedFields,
 			}
+			state = ret
 		} else {
 			first_field := fields[0]
 			rest := fields[1:]
@@ -396,10 +399,11 @@ func (m *Machine[T]) returnCompute(
 				Env:            c.Env,
 			}
 
-			state = getCompute[T]()
-			state.(*Compute[T]).Ctx = frame
-			state.(*Compute[T]).Env = c.Env
-			state.(*Compute[T]).Term = first_field
+			comp := getCompute[T]()
+			comp.Ctx = frame
+			comp.Env = c.Env
+			comp.Term = first_field
+			state = comp
 		}
 	case *FrameCases[T]:
 		switch v := value.(type) {
@@ -408,10 +412,11 @@ func (m *Machine[T]) returnCompute(
 				return nil, errors.New("MaxIntExceeded")
 			}
 			if indexExists(c.Branches, int(v.Tag)) {
-				state = getCompute[T]()
-				state.(*Compute[T]).Ctx = transferArgStack(v.Fields, c.Ctx)
-				state.(*Compute[T]).Env = c.Env
-				state.(*Compute[T]).Term = c.Branches[v.Tag]
+				comp := getCompute[T]()
+				comp.Ctx = transferArgStack(v.Fields, c.Ctx)
+				comp.Env = c.Env
+				comp.Term = c.Branches[v.Tag]
+				state = comp
 			} else {
 				return nil, errors.New("MissingCaseBranch")
 			}
@@ -425,8 +430,9 @@ func (m *Machine[T]) returnCompute(
 			}
 		}
 
-		state = getDone[T]()
-		state.(*Done[T]).term = dischargeValue[T](value)
+		done := getDone[T]()
+		done.term = dischargeValue[T](value)
+		state = done
 	default:
 		panic(fmt.Sprintf("unknown context %v", context))
 	}
@@ -446,10 +452,11 @@ func (m *Machine[T]) forceEvaluate(
 
 	switch v := value.(type) {
 	case *Delay[T]:
-		state = getCompute[T]()
-		state.(*Compute[T]).Ctx = context
-		state.(*Compute[T]).Env = v.Env
-		state.(*Compute[T]).Term = v.Body
+		comp := getCompute[T]()
+		comp.Ctx = context
+		comp.Env = v.Env
+		comp.Term = v.Body
+		state = comp
 	case *Builtin[T]:
 		if v.NeedsForce() {
 			var resolved Value[T]
@@ -467,9 +474,10 @@ func (m *Machine[T]) forceEvaluate(
 				resolved = b
 			}
 
-			state = getReturn[T]()
-			state.(*Return[T]).Ctx = context
-			state.(*Return[T]).Value = resolved
+			ret := getReturn[T]()
+			ret.Ctx = context
+			ret.Value = resolved
+			state = ret
 		} else {
 			return nil, errors.New("BuiltinTermArgumentExpected")
 		}
@@ -491,10 +499,11 @@ func (m *Machine[T]) applyEvaluate(
 	case *Lambda[T]:
 		env := f.Env.Extend(arg)
 
-		state = getCompute[T]()
-		state.(*Compute[T]).Ctx = context
-		state.(*Compute[T]).Env = env
-		state.(*Compute[T]).Term = f.Body
+		comp := getCompute[T]()
+		comp.Ctx = context
+		comp.Env = env
+		comp.Term = f.Body
+		state = comp
 	case *Builtin[T]:
 		if !f.NeedsForce() && f.IsArrow() {
 			var resolved Value[T]
@@ -512,9 +521,10 @@ func (m *Machine[T]) applyEvaluate(
 				resolved = b
 			}
 
-			state = getReturn[T]()
-			state.(*Return[T]).Ctx = context
-			state.(*Return[T]).Value = resolved
+			ret := getReturn[T]()
+			ret.Ctx = context
+			ret.Value = resolved
+			state = ret
 		} else {
 			return nil, errors.New("UnexpectedBuiltinTermArgument")
 		}
