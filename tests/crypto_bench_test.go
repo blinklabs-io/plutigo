@@ -108,9 +108,11 @@ func BenchmarkDirectCrypto(b *testing.B) {
 	b.Run("BLS_Pairing", func(b *testing.B) {
 		g1, _ := bls.HashToG1(message, dst)
 		g2, _ := bls.HashToG2([]byte("another message"), dst)
+		g1s := []bls.G1Affine{g1}
+		g2s := []bls.G2Affine{g2}
 		b.ResetTimer()
 		for b.Loop() {
-			bls.Pair([]bls.G1Affine{g1}, []bls.G2Affine{g2})
+			bls.Pair(g1s, g2s)
 		}
 	})
 }
