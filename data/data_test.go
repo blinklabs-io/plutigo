@@ -224,6 +224,31 @@ var testDefs = []struct {
 		// {_ h'01': 1, h'02': 2}
 		CborHex: "bf410101410202ff",
 	},
+	// Map with duplicate keys
+	{
+		Data: NewMapDefIndef(
+			false,
+			[][2]PlutusData{
+				{
+					NewByteString([]byte("6Key")),
+					NewByteString([]byte("1")),
+				},
+				{
+					NewByteString([]byte("5Key")),
+					NewByteString([]byte("7")),
+				},
+				{
+					NewByteString([]byte("6Key")),
+					NewByteString(nil),
+				},
+				{
+					NewByteString([]byte("5Key")),
+					NewByteString(nil),
+				},
+			},
+		),
+		CborHex: "a444364b6579413144354b6579413744364b65794044354b657940",
+	},
 }
 
 func TestPlutusDataEncode(t *testing.T) {
