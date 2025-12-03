@@ -264,3 +264,40 @@ func TestPlutusDataDecode(t *testing.T) {
 		}
 	}
 }
+
+func TestEncodeDecodeRoundTrip(t *testing.T) {
+	for _, testDef := range testDefs {
+		// Encode
+		wrapper := PlutusDataWrapper{Data: testDef.Data}
+		cborData, err := wrapper.MarshalCBOR()
+		if err != nil {
+			t.Fatalf("encode error: %v", err)
+		}
+
+		// Decode
+		var decodedWrapper PlutusDataWrapper
+		err = decodedWrapper.UnmarshalCBOR(cborData)
+		if err != nil {
+			t.Fatalf("decode error: %v", err)
+		}
+
+		// Check equal
+		if !reflect.DeepEqual(decodedWrapper.Data, testDef.Data) {
+			t.Errorf("round-trip failed for %v", testDef.Data)
+		}
+	}
+}
+
+func FuzzDecodeCBOR(f *testing.F) {
+	for _, testDef := range testDefs {
+		cborData, err := hex.DecodeString(testDef.CborHex)
+		if err != nil {
+			f.Fatalf("Failed to decode CborHex %q: %v", testDef.CborHex, err)
+		}
+		f.Add(cborData)
+	}
+	f.Fuzz(func(t *testing.T, data []byte) {
+		var wrapper PlutusDataWrapper
+		_ = wrapper.UnmarshalCBOR(data) // Ignore errors, just check no panic
+	})
+}
