@@ -105,9 +105,10 @@ func decodeCborRawMap(data []byte) (any, error) {
 	// The below is a hack to work around our CBOR library not supporting preserving key
 	// order when decoding a map. We decode our map to determine its length, create a dummy
 	// list the same length as our map to determine the header size, and then decode each
-	// key/value pair individually
+	// key/value pair individually. We use a pointer for the key to keep duplicates to get
+	// an accurate count for decoding
 	useIndef := (data[0] & CborIndefFlag) == CborIndefFlag
-	var tmpData map[RawMessageStr]RawMessageStr
+	var tmpData map[*RawMessageStr]RawMessageStr
 	if err := cborUnmarshal(data, &tmpData); err != nil {
 		return nil, err
 	}
