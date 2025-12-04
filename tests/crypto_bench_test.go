@@ -84,7 +84,9 @@ func BenchmarkDirectCrypto(b *testing.B) {
 		p, _ := bls.HashToG1(message, dst)
 		var jac bls.G1Jac
 		jac.FromAffine(&p)
-		scalar := new(big.Int).SetBytes([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16})
+		scalar := new(
+			big.Int,
+		).SetBytes([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16})
 		b.ResetTimer()
 		for b.Loop() {
 			var result bls.G1Jac
