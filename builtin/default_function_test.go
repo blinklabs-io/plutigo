@@ -88,7 +88,11 @@ func TestConstants(t *testing.T) {
 	}
 	expectedTotal := int(MaxDefaultFunction) - int(MinDefaultFunction) + 1
 	if int(TotalBuiltinCount) != expectedTotal {
-		t.Errorf("TotalBuiltinCount should be %d (MaxDefaultFunction - MinDefaultFunction + 1), got %d", expectedTotal, TotalBuiltinCount)
+		t.Errorf(
+			"TotalBuiltinCount should be %d (MaxDefaultFunction - MinDefaultFunction + 1), got %d",
+			expectedTotal,
+			TotalBuiltinCount,
+		)
 	}
 }
 
@@ -105,10 +109,19 @@ func FuzzFromByte(f *testing.F) {
 		df, err := FromByte(b)
 		if b <= MaxDefaultFunction {
 			if err != nil {
-				t.Errorf("FromByte(%d) should not error for valid byte, got %v", b, err)
+				t.Errorf(
+					"FromByte(%d) should not error for valid byte, got %v",
+					b,
+					err,
+				)
 			}
 			if df != DefaultFunction(b) {
-				t.Errorf("FromByte(%d) should return DefaultFunction(%d), got %v", b, b, df)
+				t.Errorf(
+					"FromByte(%d) should return DefaultFunction(%d), got %v",
+					b,
+					b,
+					df,
+				)
 			}
 		} else {
 			if err == nil {
