@@ -117,7 +117,7 @@ type Bls12_381G2Element struct {
 func (Bls12_381G2Element) isConstant() {}
 
 func (Bls12_381G2Element) Typ() Typ {
-	return &TBls12_381G1Element{}
+	return &TBls12_381G2Element{}
 }
 
 type Bls12_381MlResult struct {
