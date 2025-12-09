@@ -6,6 +6,10 @@ type biMap struct {
 }
 
 func (b *biMap) insert(unique Unique, level uint) {
+	// If unique already exists, remove the old level mapping
+	if oldLevel, exists := b.left[unique]; exists {
+		delete(b.right, oldLevel)
+	}
 	b.left[unique] = level
 	b.right[level] = unique
 }
