@@ -129,7 +129,7 @@ func (n NamedDeBruijn) TextName() string {
 }
 
 func (n NamedDeBruijn) String() string {
-	return fmt.Sprintf("NamedDeBruijn: %s %v", n.Text, n.Index)
+	return fmt.Sprintf("NamedDeBruijn: %s %d", n.Text, n.Index)
 }
 
 func (n NamedDeBruijn) LookupIndex() int {
