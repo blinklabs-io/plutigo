@@ -1,6 +1,7 @@
 package syn
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -20,31 +21,36 @@ func newTermInterner() *termInterner {
 
 func (b *termInterner) intern(currentTerm Term[Name]) {
 	switch term := (currentTerm).(type) {
-	case Var[Name]:
+	case *Var[Name]:
 		b.internName(&term.Name)
-	case Delay[Name]:
+	case *Delay[Name]:
 		b.intern(term.Term)
-	case Force[Name]:
+	case *Force[Name]:
 		b.intern(term.Term)
-	case Lambda[Name]:
+	case *Lambda[Name]:
 		b.internName(&term.ParameterName)
-
 		b.intern(term.Body)
-	case Apply[Name]:
+	case *Apply[Name]:
 		b.intern(term.Function)
 		b.intern(term.Argument)
-	case Case[Name]:
+	case *Constr[Name]:
+		for _, field := range term.Fields {
+			b.intern(field)
+		}
+	case *Case[Name]:
 		b.intern(term.Constr)
-
 		for _, branch := range term.Branches {
 			b.intern(branch)
 		}
-	case Constr[Name]:
-		for _, branch := range term.Fields {
-			b.intern(branch)
-		}
-	// Error, Constant, and Builtin have nothing further to intern.
+	case *Builtin:
+		// No names to intern
+	case *Constant:
+		// No names to intern
+	case *Error:
+		// No names to intern
 	default:
+		// Debug: print the type
+		println("intern: unhandled type", fmt.Sprintf("%T", currentTerm))
 		return
 	}
 }
@@ -54,9 +60,7 @@ func (b *termInterner) internName(name *Name) {
 		name.Unique = unique
 	} else {
 		name.Unique = b.uniqueCounter
-
 		b.interned[name.Text] = b.uniqueCounter
-
 		b.uniqueCounter++
 	}
 }
