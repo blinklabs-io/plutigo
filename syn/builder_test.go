@@ -8,20 +8,58 @@ import (
 )
 
 func TestIntern(t *testing.T) {
-	// Create a simple term
-	term := NewVar("x", Unique(0))
+	// Test interning a simple Var
+	name := Name{Text: "test", Unique: 0}
+	varTerm := &Var[Name]{Name: name}
 
-	// Intern the term
-	interned := Intern(term)
+	interned := Intern(varTerm)
 
-	// Check that the same term is returned
-	if interned != term {
-		t.Error("Intern should return the same term object")
+	// The unique should be assigned (0 for the first name)
+	if interned.(*Var[Name]).Name.Unique != 0 {
+		t.Errorf(
+			"Expected first interned name to have unique 0, got %d",
+			interned.(*Var[Name]).Name.Unique,
+		)
 	}
 
-	// Check that it's still a Var
-	if _, ok := interned.(*Var[Name]); !ok {
-		t.Error("Intern should preserve term type")
+	// Test interning a complex term with duplicate names
+	name1 := Name{Text: "x", Unique: 0}
+	name2 := Name{Text: "x", Unique: 0} // Same text
+
+	var1 := &Var[Name]{Name: name1}
+	var2 := &Var[Name]{Name: name2}
+
+	// Create a lambda that uses both vars
+	lambda := &Lambda[Name]{
+		ParameterName: Name{Text: "param", Unique: 0},
+		Body: &Apply[Name]{
+			Function: var1,
+			Argument: var2,
+		},
+	}
+
+	internedLambda := Intern(lambda)
+
+	// Check that duplicate names now have the same unique
+	paramUnique := internedLambda.(*Lambda[Name]).ParameterName.Unique
+	varXUnique := internedLambda.(*Lambda[Name]).Body.(*Apply[Name]).Function.(*Var[Name]).Name.Unique
+	varXUnique2 := internedLambda.(*Lambda[Name]).Body.(*Apply[Name]).Argument.(*Var[Name]).Name.Unique
+
+	if varXUnique != varXUnique2 {
+		t.Errorf(
+			"Duplicate variable names should have the same unique: %d != %d",
+			varXUnique,
+			varXUnique2,
+		)
+	}
+
+	// Different names should have different uniques
+	if paramUnique == varXUnique {
+		t.Errorf(
+			"Different names should have different uniques: param=%d, x=%d",
+			paramUnique,
+			varXUnique,
+		)
 	}
 }
 
@@ -216,7 +254,11 @@ func TestNewInteger(t *testing.T) {
 	}
 
 	if integerConst.Inner.Cmp(value) != 0 {
-		t.Errorf("Expected value %s, got %s", value.String(), integerConst.Inner.String())
+		t.Errorf(
+			"Expected value %s, got %s",
+			value.String(),
+			integerConst.Inner.String(),
+		)
 	}
 }
 
@@ -275,6 +317,152 @@ func TestSubtractInteger(t *testing.T) {
 	if builtinTerm.DefaultFunction != builtin.SubtractInteger {
 		t.Error("Expected SubtractInteger builtin")
 	}
+}
+
+func TestNameToNamedDeBruijn(t *testing.T) {
+	// Create a simple program: (lam x x)
+	program := NewProgram(
+		[3]uint32{1, 0, 0},
+		NewLambda(NewName("x", 0), NewVar("x", 0)),
+	)
+
+	converted, err := NameToNamedDeBruijn(program)
+	if err != nil {
+		t.Fatalf("NameToNamedDeBruijn failed: %v", err)
+	}
+
+	// Check that the lambda parameter has index 0
+	lambda := converted.Term.(*Lambda[NamedDeBruijn])
+	if lambda.ParameterName.Index != 0 {
+		t.Errorf("Expected parameter index 0, got %d", lambda.ParameterName.Index)
+	}
+	if lambda.ParameterName.Text != "x" {
+		t.Errorf("Expected parameter text 'x', got %s", lambda.ParameterName.Text)
+	}
+
+	// Check that the body variable has index 1
+	bodyVar := lambda.Body.(*Var[NamedDeBruijn])
+	if bodyVar.Name.Index != 1 {
+		t.Errorf("Expected body var index 1, got %d", bodyVar.Name.Index)
+	}
+	if bodyVar.Name.Text != "x" {
+		t.Errorf("Expected body var text 'x', got %s", bodyVar.Name.Text)
+	}
+}
+
+func TestNameToDeBruijn(t *testing.T) {
+	// Create a simple program: (lam x x)
+	program := NewProgram(
+		[3]uint32{1, 0, 0},
+		NewLambda(NewName("x", 0), NewVar("x", 0)),
+	)
+
+	converted, err := NameToDeBruijn(program)
+	if err != nil {
+		t.Fatalf("NameToDeBruijn failed: %v", err)
+	}
+
+	// Check that the lambda parameter has index 0
+	lambda := converted.Term.(*Lambda[DeBruijn])
+	if lambda.ParameterName != 0 {
+		t.Errorf("Expected parameter index 0, got %d", lambda.ParameterName)
+	}
+
+	// Check that the body variable has index 1 (1-based DeBruijn)
+	bodyVar := lambda.Body.(*Var[DeBruijn])
+	if bodyVar.Name != 1 {
+		t.Errorf("Expected body var index 1, got %d", bodyVar.Name)
+	}
+}
+
+func TestNameToDeBruijnComplex(t *testing.T) {
+	// Create a program with delay and force: (lam x (delay (force x)))
+	force := NewForce(NewVar("x", 0))
+	delay := NewDelay(force)
+
+	program := NewProgram(
+		[3]uint32{1, 0, 0},
+		NewLambda(NewName("x", 0), delay),
+	)
+
+	converted, err := NameToDeBruijn(program)
+	if err != nil {
+		t.Fatalf("NameToDeBruijn failed: %v", err)
+	}
+
+	// Check the structure
+	lambda := converted.Term.(*Lambda[DeBruijn])
+	if lambda.ParameterName != 0 {
+		t.Errorf("Expected lambda parameter index 0, got %d", lambda.ParameterName)
+	}
+
+	delayTerm := lambda.Body.(*Delay[DeBruijn])
+	forceTerm := delayTerm.Term.(*Force[DeBruijn])
+	varTerm := forceTerm.Term.(*Var[DeBruijn])
+
+	if varTerm.Name != 1 {
+		t.Errorf("Expected var index 1, got %d", varTerm.Name)
+	}
+}
+
+func TestNameToDeBruijnWithConstants(t *testing.T) {
+	// Create a program with constants and builtins: (lam x (addInteger x 1))
+	addInt := NewBuiltin(builtin.AddInteger)
+	one := NewSimpleInteger(1)
+	apply := NewApply(addInt, one)
+	apply2 := NewApply(apply, NewVar("x", 0))
+
+	program := NewProgram(
+		[3]uint32{1, 0, 0},
+		NewLambda(NewName("x", 0), apply2),
+	)
+
+	converted, err := NameToDeBruijn(program)
+	if err != nil {
+		t.Fatalf("NameToDeBruijn failed: %v", err)
+	}
+
+	// Check that constants and builtins are preserved
+	lambda := converted.Term.(*Lambda[DeBruijn])
+	applyTerm := lambda.Body.(*Apply[DeBruijn])
+	applyTerm2 := applyTerm.Function.(*Apply[DeBruijn])
+
+	// Check builtin
+	builtinTerm := applyTerm2.Function.(*Builtin)
+	if builtinTerm.DefaultFunction != builtin.AddInteger {
+		t.Errorf("Expected AddInteger builtin")
+	}
+
+	// Check constant
+	constTerm := applyTerm2.Argument.(*Constant)
+	intConst := constTerm.Con.(*Integer)
+	if intConst.Inner.Cmp(big.NewInt(1)) != 0 {
+		t.Errorf("Expected constant value 1")
+	}
+
+	// Check variable
+	varTerm := applyTerm.Argument.(*Var[DeBruijn])
+	if varTerm.Name != 1 {
+		t.Errorf("Expected var index 1, got %d", varTerm.Name)
+	}
+}
+
+func TestNameToDeBruijnWithError(t *testing.T) {
+	// Create a program with an error term: (lam x error)
+	program := NewProgram(
+		[3]uint32{1, 0, 0},
+		NewLambda(NewName("x", 0), &Error{}),
+	)
+
+	converted, err := NameToDeBruijn(program)
+	if err != nil {
+		t.Fatalf("NameToDeBruijn failed: %v", err)
+	}
+
+	// Check that error is preserved
+	lambda := converted.Term.(*Lambda[DeBruijn])
+	errorTerm := lambda.Body.(*Error)
+	_ = errorTerm // Just check it's the right type
 }
 
 func TestIfThenElse(t *testing.T) {

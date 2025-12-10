@@ -109,7 +109,9 @@ func TestProtoPairTyp(t *testing.T) {
 }
 
 func TestDataTyp(t *testing.T) {
-	dataConst := Data{Inner: data.NewInteger(big.NewInt(42))} // Simple integer data for testing
+	dataConst := Data{
+		Inner: data.NewInteger(big.NewInt(42)),
+	} // Simple integer data for testing
 
 	typ := dataConst.Typ()
 
@@ -119,7 +121,9 @@ func TestDataTyp(t *testing.T) {
 }
 
 func TestBls12_381G1ElementTyp(t *testing.T) {
-	g1 := Bls12_381G1Element{Inner: &bls.G1Jac{}} // Empty G1 element for testing
+	g1 := Bls12_381G1Element{
+		Inner: &bls.G1Jac{},
+	} // Empty G1 element for testing
 
 	typ := g1.Typ()
 
@@ -129,7 +133,9 @@ func TestBls12_381G1ElementTyp(t *testing.T) {
 }
 
 func TestBls12_381G2ElementTyp(t *testing.T) {
-	g2 := Bls12_381G2Element{Inner: &bls.G2Jac{}} // Empty G2 element for testing
+	g2 := Bls12_381G2Element{
+		Inner: &bls.G2Jac{},
+	} // Empty G2 element for testing
 
 	typ := g2.Typ()
 

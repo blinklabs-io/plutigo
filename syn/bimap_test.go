@@ -16,12 +16,24 @@ func TestBiMap(t *testing.T) {
 	bm.insert(unique1, level1)
 
 	if level, ok := bm.getByUnique(unique1); !ok || level != level1 {
-		t.Errorf("Expected to find level %d for unique %d, got %d, ok=%v", level1, unique1, level, ok)
+		t.Errorf(
+			"Expected to find level %d for unique %d, got %d, ok=%v",
+			level1,
+			unique1,
+			level,
+			ok,
+		)
 	}
 
 	// Test getByLevel
 	if unique, ok := bm.getByLevel(level1); !ok || unique != unique1 {
-		t.Errorf("Expected to find unique %d for level %d, got %d, ok=%v", unique1, level1, unique, ok)
+		t.Errorf(
+			"Expected to find unique %d for level %d, got %d, ok=%v",
+			unique1,
+			level1,
+			unique,
+			ok,
+		)
 	}
 
 	// Test non-existent unique
@@ -40,11 +52,23 @@ func TestBiMap(t *testing.T) {
 	bm.insert(unique2, level2)
 
 	if level, ok := bm.getByUnique(unique2); !ok || level != level2 {
-		t.Errorf("Expected to find level %d for unique %d, got %d, ok=%v", level2, unique2, level, ok)
+		t.Errorf(
+			"Expected to find level %d for unique %d, got %d, ok=%v",
+			level2,
+			unique2,
+			level,
+			ok,
+		)
 	}
 
 	if unique, ok := bm.getByLevel(level2); !ok || unique != unique2 {
-		t.Errorf("Expected to find unique %d for level %d, got %d, ok=%v", unique2, level2, unique, ok)
+		t.Errorf(
+			"Expected to find unique %d for level %d, got %d, ok=%v",
+			unique2,
+			level2,
+			unique,
+			ok,
+		)
 	}
 
 	// Test remove
@@ -60,7 +84,12 @@ func TestBiMap(t *testing.T) {
 
 	// Test that unique2 is still there
 	if level, ok := bm.getByUnique(unique2); !ok || level != level2 {
-		t.Errorf("Expected unique2 to still exist with level %d, got %d, ok=%v", level2, level, ok)
+		t.Errorf(
+			"Expected unique2 to still exist with level %d, got %d, ok=%v",
+			level2,
+			level,
+			ok,
+		)
 	}
 }
 
@@ -81,7 +110,12 @@ func TestBiMapOverwrite(t *testing.T) {
 
 	// Should find new level
 	if level, ok := bm.getByUnique(unique); !ok || level != level2 {
-		t.Errorf("Expected level %d after overwrite, got %d, ok=%v", level2, level, ok)
+		t.Errorf(
+			"Expected level %d after overwrite, got %d, ok=%v",
+			level2,
+			level,
+			ok,
+		)
 	}
 
 	// Old level should not exist
@@ -91,6 +125,12 @@ func TestBiMapOverwrite(t *testing.T) {
 
 	// New level should point to unique
 	if foundUnique, ok := bm.getByLevel(level2); !ok || foundUnique != unique {
-		t.Errorf("Expected level %d to point to unique %d, got %d, ok=%v", level2, unique, foundUnique, ok)
+		t.Errorf(
+			"Expected level %d to point to unique %d, got %d, ok=%v",
+			level2,
+			unique,
+			foundUnique,
+			ok,
+		)
 	}
 }

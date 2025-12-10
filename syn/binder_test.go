@@ -31,7 +31,11 @@ func TestNamedDeBruijnBinder(t *testing.T) {
 	// Test TextName
 	expectedTextName := "param_5"
 	if nd.TextName() != expectedTextName {
-		t.Errorf("Expected TextName %q, got %q", expectedTextName, nd.TextName())
+		t.Errorf(
+			"Expected TextName %q, got %q",
+			expectedTextName,
+			nd.TextName(),
+		)
 	}
 
 	// Test String
@@ -52,7 +56,11 @@ func TestDeBruijnBinder(t *testing.T) {
 	// Test TextName
 	expectedTextName := "i_7"
 	if db.TextName() != expectedTextName {
-		t.Errorf("Expected TextName %q, got %q", expectedTextName, db.TextName())
+		t.Errorf(
+			"Expected TextName %q, got %q",
+			expectedTextName,
+			db.TextName(),
+		)
 	}
 
 	// Test String
