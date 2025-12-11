@@ -406,7 +406,7 @@ func TestNameToDeBruijnComplex(t *testing.T) {
 }
 
 func TestNameToDeBruijnWithConstants(t *testing.T) {
-	// Create a program with constants and builtins: (lam x (addInteger x 1))
+	// Create a program with constants and builtins: (lam x ((addInteger 1) x))
 	addInt := NewBuiltin(builtin.AddInteger)
 	one := NewSimpleInteger(1)
 	apply := NewApply(addInt, one)

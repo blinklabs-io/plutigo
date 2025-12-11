@@ -2,6 +2,8 @@ package cek
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
 	"math/big"
 	"testing"
 
@@ -1911,5 +1913,546 @@ func TestBls12_381_FinalVerifyBuiltin(t *testing.T) {
 		t.Fatalf(
 			"expected final verification of identity elements to return true, got false",
 		)
+	}
+}
+
+func TestLessThanIntegerBuiltin(t *testing.T) {
+	tests := []struct {
+		name     string
+		arg1     int64
+		arg2     int64
+		expected bool
+	}{
+		{"less than true", 5, 10, true},
+		{"less than false", 10, 5, false},
+		{"equal", 5, 5, false},
+		{"negative numbers", -10, -5, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.LessThanInteger)
+
+			v1 := &Constant{&syn.Integer{Inner: big.NewInt(tt.arg1)}}
+			v2 := &Constant{&syn.Integer{Inner: big.NewInt(tt.arg2)}}
+
+			b = b.ApplyArg(v1)
+			b = b.ApplyArg(v2)
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			boolVal := expectBool(t, constVal)
+
+			if boolVal.Inner != tt.expected {
+				t.Errorf("expected %v, got %v", tt.expected, boolVal.Inner)
+			}
+		})
+	}
+}
+
+func TestLessThanEqualsIntegerBuiltin(t *testing.T) {
+	tests := []struct {
+		name     string
+		arg1     int64
+		arg2     int64
+		expected bool
+	}{
+		{"less than true", 5, 10, true},
+		{"less than false", 10, 5, false},
+		{"equal", 5, 5, true},
+		{"negative numbers", -10, -5, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.LessThanEqualsInteger)
+
+			v1 := &Constant{&syn.Integer{Inner: big.NewInt(tt.arg1)}}
+			v2 := &Constant{&syn.Integer{Inner: big.NewInt(tt.arg2)}}
+
+			b = b.ApplyArg(v1)
+			b = b.ApplyArg(v2)
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			boolVal := expectBool(t, constVal)
+
+			if boolVal.Inner != tt.expected {
+				t.Errorf("expected %v, got %v", tt.expected, boolVal.Inner)
+			}
+		})
+	}
+}
+
+func TestConsByteStringBuiltin(t *testing.T) {
+	tests := []struct {
+		name     string
+		byte     uint8
+		bs       []byte
+		expected []byte
+	}{
+		{"prepend to empty", 0x42, []byte{}, []byte{0x42}},
+		{"prepend to non-empty", 0x01, []byte{0x02, 0x03}, []byte{0x01, 0x02, 0x03}},
+		{"prepend zero", 0x00, []byte{0x01}, []byte{0x00, 0x01}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.ConsByteString)
+
+			v1 := &Constant{&syn.Integer{Inner: big.NewInt(int64(tt.byte))}}
+			v2 := &Constant{&syn.ByteString{Inner: tt.bs}}
+
+			b = b.ApplyArg(v1)
+			b = b.ApplyArg(v2)
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			bsVal := expectByteString(t, constVal)
+
+			if !bytes.Equal(bsVal.Inner, tt.expected) {
+				t.Errorf("expected %v, got %v", tt.expected, bsVal.Inner)
+			}
+		})
+	}
+}
+
+func TestSliceByteStringBuiltin(t *testing.T) {
+	tests := []struct {
+		name     string
+		skip     int64
+		take     int64
+		bs       []byte
+		expected []byte
+	}{
+		{"full slice", 0, 3, []byte{0x01, 0x02, 0x03}, []byte{0x01, 0x02, 0x03}},
+		{"skip 1 take 1", 1, 1, []byte{0x01, 0x02, 0x03}, []byte{0x02}},
+		{"take 0", 1, 0, []byte{0x01, 0x02, 0x03}, []byte{}},
+		{"out of bounds", 0, 10, []byte{0x01, 0x02}, []byte{0x01, 0x02}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.SliceByteString)
+
+			v1 := &Constant{&syn.Integer{Inner: big.NewInt(tt.skip)}}
+			v2 := &Constant{&syn.Integer{Inner: big.NewInt(tt.take)}}
+			v3 := &Constant{&syn.ByteString{Inner: tt.bs}}
+
+			b = b.ApplyArg(v1)
+			b = b.ApplyArg(v2)
+			b = b.ApplyArg(v3)
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			bsVal := expectByteString(t, constVal)
+
+			if !bytes.Equal(bsVal.Inner, tt.expected) {
+				t.Errorf("expected %v, got %v", tt.expected, bsVal.Inner)
+			}
+		})
+	}
+}
+
+func TestIndexByteStringBuiltin(t *testing.T) {
+	tests := []struct {
+		name     string
+		bs       []byte
+		index    int64
+		expected uint8
+	}{
+		{"first byte", []byte{0x01, 0x02, 0x03}, 0, 0x01},
+		{"middle byte", []byte{0x01, 0x02, 0x03}, 1, 0x02},
+		{"last byte", []byte{0x01, 0x02, 0x03}, 2, 0x03},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.IndexByteString)
+
+			v1 := &Constant{&syn.ByteString{Inner: tt.bs}}
+			v2 := &Constant{&syn.Integer{Inner: big.NewInt(tt.index)}}
+
+			b = b.ApplyArg(v1)
+			b = b.ApplyArg(v2)
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			intVal := expectInteger(t, constVal)
+
+			if intVal.Inner.Uint64() != uint64(tt.expected) {
+				t.Errorf("expected %v, got %v", tt.expected, intVal.Inner.Uint64())
+			}
+		})
+	}
+}
+
+func TestLessThanEqualsByteStringBuiltin(t *testing.T) {
+	tests := []struct {
+		name     string
+		arg1     []byte
+		arg2     []byte
+		expected bool
+	}{
+		{"less than true", []byte{1, 2}, []byte{1, 3}, true},
+		{"less than false", []byte{1, 3}, []byte{1, 2}, false},
+		{"equal", []byte{1, 2}, []byte{1, 2}, true},
+		{"different lengths", []byte{1}, []byte{1, 2}, true},
+		{"empty vs non-empty", []byte{}, []byte{1}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.LessThanEqualsByteString)
+
+			v1 := &Constant{&syn.ByteString{Inner: tt.arg1}}
+			v2 := &Constant{&syn.ByteString{Inner: tt.arg2}}
+
+			b = b.ApplyArg(v1)
+			b = b.ApplyArg(v2)
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			boolVal := expectBool(t, constVal)
+
+			if boolVal.Inner != tt.expected {
+				t.Errorf("expected %v, got %v", tt.expected, boolVal.Inner)
+			}
+		})
+	}
+}
+
+func TestVerifyEd25519SignatureBuiltin(t *testing.T) {
+	// Generate a key pair
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("failed to generate ed25519 key: %v", err)
+	}
+
+	message := []byte("test message")
+	signature := ed25519.Sign(privateKey, message)
+
+	// Test valid signature
+	t.Run("valid signature", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.VerifyEd25519Signature)
+
+		v1 := &Constant{&syn.ByteString{Inner: publicKey}}
+		v2 := &Constant{&syn.ByteString{Inner: message}}
+		v3 := &Constant{&syn.ByteString{Inner: signature}}
+
+		b = b.ApplyArg(v1)
+		b = b.ApplyArg(v2)
+		b = b.ApplyArg(v3)
+
+		val := evalBuiltin(t, m, b)
+		constVal := expectConstant(t, val)
+		boolVal := expectBool(t, constVal)
+
+		if !boolVal.Inner {
+			t.Errorf("expected true for valid signature, got false")
+		}
+	})
+
+	// Test invalid signature
+	t.Run("invalid signature", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.VerifyEd25519Signature)
+
+		invalidSig := make([]byte, ed25519.SignatureSize)
+		copy(invalidSig, signature)
+		invalidSig[0] ^= 1 // Flip a bit
+
+		v1 := &Constant{&syn.ByteString{Inner: publicKey}}
+		v2 := &Constant{&syn.ByteString{Inner: message}}
+		v3 := &Constant{&syn.ByteString{Inner: invalidSig}}
+
+		b = b.ApplyArg(v1)
+		b = b.ApplyArg(v2)
+		b = b.ApplyArg(v3)
+
+		val := evalBuiltin(t, m, b)
+		constVal := expectConstant(t, val)
+		boolVal := expectBool(t, constVal)
+
+		if boolVal.Inner {
+			t.Errorf("expected false for invalid signature, got true")
+		}
+	})
+
+	// Test wrong public key
+	t.Run("wrong public key", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.VerifyEd25519Signature)
+
+		wrongPubKey := make([]byte, ed25519.PublicKeySize)
+		copy(wrongPubKey, publicKey)
+		wrongPubKey[0] ^= 1
+
+		v1 := &Constant{&syn.ByteString{Inner: wrongPubKey}}
+		v2 := &Constant{&syn.ByteString{Inner: message}}
+		v3 := &Constant{&syn.ByteString{Inner: signature}}
+
+		b = b.ApplyArg(v1)
+		b = b.ApplyArg(v2)
+		b = b.ApplyArg(v3)
+
+		val := evalBuiltin(t, m, b)
+		constVal := expectConstant(t, val)
+		boolVal := expectBool(t, constVal)
+
+		if boolVal.Inner {
+			t.Errorf("expected false for wrong public key, got true")
+		}
+	})
+}
+
+func TestBlake2B224Builtin(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       []byte
+		expectedLen int
+	}{
+		{"empty", []byte{}, 28},
+		{"hello", []byte("hello"), 28},
+		{"long input", []byte("this is a longer input for hashing"), 28},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.Blake2b_224)
+
+			v1 := &Constant{&syn.ByteString{Inner: tt.input}}
+
+			b = b.ApplyArg(v1)
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			bs := expectByteString(t, constVal)
+
+			if len(bs.Inner) != tt.expectedLen {
+				t.Errorf("expected hash length %d, got %d", tt.expectedLen, len(bs.Inner))
+			}
+		})
+	}
+}
+
+func TestEncodeUtf8Builtin(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []byte
+	}{
+		{"empty", "", []byte{}},
+		{"ascii", "hello", []byte("hello")},
+		{"unicode", "héllo", []byte("héllo")},
+		{"emoji", "🚀", []byte("🚀")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.EncodeUtf8)
+
+			v1 := &Constant{&syn.String{Inner: tt.input}}
+
+			b = b.ApplyArg(v1)
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			bs := expectByteString(t, constVal)
+
+			if !bytes.Equal(bs.Inner, tt.expected) {
+				t.Errorf("expected %v, got %v", tt.expected, bs.Inner)
+			}
+		})
+	}
+}
+
+func TestDecodeUtf8Builtin(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      []byte
+		expected   string
+		shouldFail bool
+	}{
+		{"empty", []byte{}, "", false},
+		{"ascii", []byte("hello"), "hello", false},
+		{"unicode", []byte("héllo"), "héllo", false},
+		{"emoji", []byte("🚀"), "🚀", false},
+		{"invalid utf8", []byte{0xff, 0xfe, 0xfd}, "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.DecodeUtf8)
+
+			v1 := &Constant{&syn.ByteString{Inner: tt.input}}
+
+			b = b.ApplyArg(v1)
+
+			val, err := m.evalBuiltinApp(b)
+			if tt.shouldFail {
+				if err == nil {
+					t.Errorf("expected error for invalid UTF-8, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("evalBuiltinApp returned error: %v", err)
+			}
+
+			constVal := expectConstant(t, val)
+			str := expectString(t, constVal)
+
+			if str.Inner != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, str.Inner)
+			}
+		})
+	}
+}
+
+func TestTraceBuiltin(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.Trace)
+
+	message := "debug message"
+	returnValue := &Constant{&syn.Integer{Inner: big.NewInt(42)}}
+
+	v1 := &Constant{&syn.String{Inner: message}}
+	v2 := returnValue
+
+	b = b.ApplyArg(v1)
+	b = b.ApplyArg(v2)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	i := expectInteger(t, constVal)
+
+	if i.Inner.Cmp(big.NewInt(42)) != 0 {
+		t.Errorf("expected 42, got %v", i.Inner)
+	}
+
+	if len(m.Logs) != 1 || m.Logs[0] != message {
+		t.Errorf("expected log %q, got %v", message, m.Logs)
+	}
+}
+
+func TestChooseListBuiltin(t *testing.T) {
+	emptyBranch := &Constant{&syn.String{Inner: "empty"}}
+	otherwiseBranch := &Constant{&syn.String{Inner: "not empty"}}
+
+	t.Run("empty list", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.ChooseList)
+
+		emptyList := &Constant{&syn.ProtoList{List: []syn.IConstant{}}}
+		v1 := emptyList
+		v2 := emptyBranch
+		v3 := otherwiseBranch
+
+		b = b.ApplyArg(v1)
+		b = b.ApplyArg(v2)
+		b = b.ApplyArg(v3)
+
+		val := evalBuiltin(t, m, b)
+		if val != emptyBranch {
+			t.Errorf("expected empty branch, got %v", val)
+		}
+	})
+
+	t.Run("non-empty list", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.ChooseList)
+
+		nonEmptyList := &Constant{&syn.ProtoList{List: []syn.IConstant{&syn.Integer{Inner: big.NewInt(1)}}}}
+		v1 := nonEmptyList
+		v2 := emptyBranch
+		v3 := otherwiseBranch
+
+		b = b.ApplyArg(v1)
+		b = b.ApplyArg(v2)
+		b = b.ApplyArg(v3)
+
+		val := evalBuiltin(t, m, b)
+		if val != otherwiseBranch {
+			t.Errorf("expected otherwise branch, got %v", val)
+		}
+	})
+}
+
+func TestRipemd160Builtin(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       []byte
+		expectedLen int
+	}{
+		{"empty", []byte{}, 20},
+		{"hello", []byte("hello"), 20},
+		{"long input", []byte("this is a longer input for hashing"), 20},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.Ripemd_160)
+
+			v1 := &Constant{&syn.ByteString{Inner: tt.input}}
+
+			b = b.ApplyArg(v1)
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			bs := expectByteString(t, constVal)
+
+			if len(bs.Inner) != tt.expectedLen {
+				t.Errorf("expected hash length %d, got %d", tt.expectedLen, len(bs.Inner))
+			}
+		})
+	}
+}
+
+func TestLessThanByteStringBuiltin(t *testing.T) {
+	tests := []struct {
+		name     string
+		arg1     []byte
+		arg2     []byte
+		expected bool
+	}{
+		{"less than true", []byte{1, 2}, []byte{1, 3}, true},
+		{"less than false", []byte{1, 3}, []byte{1, 2}, false},
+		{"equal", []byte{1, 2}, []byte{1, 2}, false},
+		{"different lengths", []byte{1}, []byte{1, 2}, true},
+		{"empty vs non-empty", []byte{}, []byte{1}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.LessThanByteString)
+
+			v1 := &Constant{&syn.ByteString{Inner: tt.arg1}}
+			v2 := &Constant{&syn.ByteString{Inner: tt.arg2}}
+
+			b = b.ApplyArg(v1)
+			b = b.ApplyArg(v2)
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			boolVal := expectBool(t, constVal)
+
+			if boolVal.Inner != tt.expected {
+				t.Errorf("expected %v, got %v", tt.expected, boolVal.Inner)
+			}
+		})
 	}
 }
