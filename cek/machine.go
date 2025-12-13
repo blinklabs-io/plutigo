@@ -19,17 +19,17 @@ const debug = false
 // is minimal compared to the evaluation performance benefits.
 var (
 	computePool = sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			return &Compute[syn.DeBruijn]{}
 		},
 	}
 	returnPool = sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			return &Return[syn.DeBruijn]{}
 		},
 	}
 	donePool = sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			return &Done[syn.DeBruijn]{}
 		},
 	}
@@ -688,7 +688,7 @@ func (m *Machine[T]) stepAndMaybeSpend(step StepKind) error {
 }
 
 func (m *Machine[T]) spendUnbudgetedSteps() error {
-	for i := uint8(0); i < uint8(len(m.unbudgetedSteps)-1); i++ {
+	for i := range uint8(len(m.unbudgetedSteps) - 1) {
 		unspent_step_budget := m.costs.machineCosts.get(StepKind(i))
 
 		unspent_step_budget.occurrences(m.unbudgetedSteps[i])

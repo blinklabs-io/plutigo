@@ -40,6 +40,15 @@ func evalBuiltin(
 	return val
 }
 
+func evalBuiltinWithError(
+	t *testing.T,
+	m *Machine[syn.DeBruijn],
+	b *Builtin[syn.DeBruijn],
+) (Value[syn.DeBruijn], error) {
+	t.Helper()
+	return m.evalBuiltinApp(b)
+}
+
 func expectConstant(t *testing.T, val Value[syn.DeBruijn]) *Constant {
 	constVal, ok := val.(*Constant)
 	if !ok {
@@ -102,42 +111,6 @@ func expectProtoPair(t *testing.T, constVal *Constant) *syn.ProtoPair {
 		t.Fatalf("expected ProtoPair constant, got %T", constVal.Constant)
 	}
 	return pair
-}
-
-func expectBlsG1(t *testing.T, constVal *Constant) *syn.Bls12_381G1Element {
-	g1, ok := constVal.Constant.(*syn.Bls12_381G1Element)
-	if !ok {
-		t.Fatalf(
-			"expected Bls12_381G1Element constant, got %T",
-			constVal.Constant,
-		)
-	}
-	return g1
-}
-
-func expectBlsG2(t *testing.T, constVal *Constant) *syn.Bls12_381G2Element {
-	g2, ok := constVal.Constant.(*syn.Bls12_381G2Element)
-	if !ok {
-		t.Fatalf(
-			"expected Bls12_381G2Element constant, got %T",
-			constVal.Constant,
-		)
-	}
-	return g2
-}
-
-func expectBlsMlResult(
-	t *testing.T,
-	constVal *Constant,
-) *syn.Bls12_381MlResult {
-	ml, ok := constVal.Constant.(*syn.Bls12_381MlResult)
-	if !ok {
-		t.Fatalf(
-			"expected Bls12_381MlResult constant, got %T",
-			constVal.Constant,
-		)
-	}
-	return ml
 }
 
 func TestAddIntegerBuiltin(t *testing.T) {
@@ -1831,8 +1804,16 @@ func TestBls12_381_MulMlResultBuiltin(t *testing.T) {
 	}
 
 	// First create two Miller loop results
-	// Create first Miller loop result
-	ml1, err := bls.MillerLoop([]bls.G1Affine{{}}, []bls.G2Affine{{}})
+	// Create first Miller loop result using generators
+	g1Gen, g2Gen, _, _ := bls.Generators()
+	var g1Affine bls.G1Affine
+	g1Affine.FromJacobian(&g1Gen)
+	var g2Affine bls.G2Affine
+	g2Affine.FromJacobian(&g2Gen)
+	ml1, err := bls.MillerLoop(
+		[]bls.G1Affine{g1Affine},
+		[]bls.G2Affine{g2Affine},
+	)
 	if err != nil {
 		t.Fatalf("failed to create Miller loop result: %v", err)
 	}
@@ -1994,7 +1975,12 @@ func TestConsByteStringBuiltin(t *testing.T) {
 		expected []byte
 	}{
 		{"prepend to empty", 0x42, []byte{}, []byte{0x42}},
-		{"prepend to non-empty", 0x01, []byte{0x02, 0x03}, []byte{0x01, 0x02, 0x03}},
+		{
+			"prepend to non-empty",
+			0x01,
+			[]byte{0x02, 0x03},
+			[]byte{0x01, 0x02, 0x03},
+		},
 		{"prepend zero", 0x00, []byte{0x01}, []byte{0x00, 0x01}},
 	}
 
@@ -2028,7 +2014,13 @@ func TestSliceByteStringBuiltin(t *testing.T) {
 		bs       []byte
 		expected []byte
 	}{
-		{"full slice", 0, 3, []byte{0x01, 0x02, 0x03}, []byte{0x01, 0x02, 0x03}},
+		{
+			"full slice",
+			0,
+			3,
+			[]byte{0x01, 0x02, 0x03},
+			[]byte{0x01, 0x02, 0x03},
+		},
 		{"skip 1 take 1", 1, 1, []byte{0x01, 0x02, 0x03}, []byte{0x02}},
 		{"take 0", 1, 0, []byte{0x01, 0x02, 0x03}, []byte{}},
 		{"out of bounds", 0, 10, []byte{0x01, 0x02}, []byte{0x01, 0x02}},
@@ -2086,7 +2078,11 @@ func TestIndexByteStringBuiltin(t *testing.T) {
 			intVal := expectInteger(t, constVal)
 
 			if intVal.Inner.Uint64() != uint64(tt.expected) {
-				t.Errorf("expected %v, got %v", tt.expected, intVal.Inner.Uint64())
+				t.Errorf(
+					"expected %v, got %v",
+					tt.expected,
+					intVal.Inner.Uint64(),
+				)
 			}
 		})
 	}
@@ -2238,7 +2234,11 @@ func TestBlake2B224Builtin(t *testing.T) {
 			bs := expectByteString(t, constVal)
 
 			if len(bs.Inner) != tt.expectedLen {
-				t.Errorf("expected hash length %d, got %d", tt.expectedLen, len(bs.Inner))
+				t.Errorf(
+					"expected hash length %d, got %d",
+					tt.expectedLen,
+					len(bs.Inner),
+				)
 			}
 		})
 	}
@@ -2374,7 +2374,11 @@ func TestChooseListBuiltin(t *testing.T) {
 		m := newTestMachine()
 		b := newTestBuiltin(builtin.ChooseList)
 
-		nonEmptyList := &Constant{&syn.ProtoList{List: []syn.IConstant{&syn.Integer{Inner: big.NewInt(1)}}}}
+		nonEmptyList := &Constant{
+			&syn.ProtoList{
+				List: []syn.IConstant{&syn.Integer{Inner: big.NewInt(1)}},
+			},
+		}
 		v1 := nonEmptyList
 		v2 := emptyBranch
 		v3 := otherwiseBranch
@@ -2415,7 +2419,980 @@ func TestRipemd160Builtin(t *testing.T) {
 			bs := expectByteString(t, constVal)
 
 			if len(bs.Inner) != tt.expectedLen {
-				t.Errorf("expected hash length %d, got %d", tt.expectedLen, len(bs.Inner))
+				t.Errorf(
+					"expected hash length %d, got %d",
+					tt.expectedLen,
+					len(bs.Inner),
+				)
+			}
+		})
+	}
+}
+
+func TestMkNilDataBuiltin(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.MkNilData)
+
+	unit := &Constant{&syn.Unit{}}
+
+	b = b.ApplyArg(unit)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	list := expectProtoList(t, constVal)
+
+	if len(list.List) != 0 {
+		t.Errorf("expected empty list, got %d elements", len(list.List))
+	}
+
+	// Check that it's a data list
+	if _, ok := list.LTyp.(*syn.TData); !ok {
+		t.Errorf("expected data type, got %T", list.LTyp)
+	}
+}
+
+func TestMkNilPairDataBuiltin(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.MkNilPairData)
+
+	unit := &Constant{&syn.Unit{}}
+
+	b = b.ApplyArg(unit)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	list := expectProtoList(t, constVal)
+
+	if len(list.List) != 0 {
+		t.Errorf("expected empty list, got %d elements", len(list.List))
+	}
+
+	// Check that it's a pair[data,data] list
+	if pairType, ok := list.LTyp.(*syn.TPair); ok {
+		if _, ok1 := pairType.First.(*syn.TData); !ok1 {
+			t.Errorf("expected first type data, got %T", pairType.First)
+		}
+		if _, ok2 := pairType.Second.(*syn.TData); !ok2 {
+			t.Errorf("expected second type data, got %T", pairType.Second)
+		}
+	} else {
+		t.Errorf("expected pair type, got %T", list.LTyp)
+	}
+}
+
+func TestMkPairDataBuiltin(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.MkPairData)
+
+	// Create two data values
+	data1 := &syn.Data{Inner: &data.Integer{Inner: big.NewInt(42)}}
+	data2 := &syn.Data{Inner: &data.ByteString{Inner: []byte("hello")}}
+
+	v1 := &Constant{data1}
+	v2 := &Constant{data2}
+
+	b = b.ApplyArg(v1)
+	b = b.ApplyArg(v2)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	pair := expectProtoPair(t, constVal)
+
+	// Check the values
+	fstData, ok := pair.First.(*syn.Data)
+	if !ok {
+		t.Fatalf("expected *syn.Data for first, got %T", pair.First)
+	}
+	sndData, ok := pair.Second.(*syn.Data)
+	if !ok {
+		t.Fatalf("expected *syn.Data for second, got %T", pair.Second)
+	}
+
+	fstInt, ok := fstData.Inner.(*data.Integer)
+	if !ok {
+		t.Fatalf(
+			"expected *data.Integer for first inner, got %T",
+			fstData.Inner,
+		)
+	}
+	if fstInt.Inner.Cmp(big.NewInt(42)) != 0 {
+		t.Errorf("expected first value 42, got %v", fstInt.Inner)
+	}
+
+	sndBS, ok := sndData.Inner.(*data.ByteString)
+	if !ok {
+		t.Fatalf(
+			"expected *data.ByteString for second inner, got %T",
+			sndData.Inner,
+		)
+	}
+	if string(sndBS.Inner) != "hello" {
+		t.Errorf("expected second value 'hello', got %s", string(sndBS.Inner))
+	}
+}
+
+func TestSerialiseDataBuiltin(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.SerialiseData)
+
+	// Create a data value
+	dataVal := &syn.Data{Inner: &data.Integer{Inner: big.NewInt(42)}}
+
+	v1 := &Constant{dataVal}
+
+	b = b.ApplyArg(v1)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	bs := expectByteString(t, constVal)
+
+	// The result should be valid CBOR encoding
+	if len(bs.Inner) == 0 {
+		t.Errorf("expected non-empty byte string")
+	}
+
+	// We can verify by decoding it back
+	decoded, err := data.Decode(bs.Inner)
+	if err != nil {
+		t.Errorf("failed to decode serialized data: %v", err)
+	}
+
+	if intData, ok := decoded.(*data.Integer); ok {
+		if intData.Inner.Cmp(big.NewInt(42)) != 0 {
+			t.Errorf("expected 42, got %v", intData.Inner)
+		}
+	} else {
+		t.Errorf("expected Integer, got %T", decoded)
+	}
+}
+
+func TestUnIDataBuiltin(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.UnIData)
+
+	// Create a data value containing an integer
+	dataVal := &syn.Data{Inner: &data.Integer{Inner: big.NewInt(123)}}
+
+	v1 := &Constant{dataVal}
+
+	b = b.ApplyArg(v1)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	integer := expectInteger(t, constVal)
+
+	if integer.Inner.Cmp(big.NewInt(123)) != 0 {
+		t.Errorf("expected 123, got %v", integer.Inner)
+	}
+}
+
+func TestUnBDataBuiltin(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.UnBData)
+
+	// Create a data value containing a byte string
+	dataVal := &syn.Data{Inner: &data.ByteString{Inner: []byte("hello")}}
+
+	v1 := &Constant{dataVal}
+
+	b = b.ApplyArg(v1)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	bs := expectByteString(t, constVal)
+
+	if string(bs.Inner) != "hello" {
+		t.Errorf("expected 'hello', got %s", string(bs.Inner))
+	}
+}
+
+func TestUnListDataBuiltin(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.UnListData)
+
+	// Create a data value containing a list
+	list := &data.List{
+		Items: []data.PlutusData{
+			&data.Integer{Inner: big.NewInt(1)},
+			&data.Integer{Inner: big.NewInt(2)},
+			&data.Integer{Inner: big.NewInt(3)},
+		},
+	}
+	dataVal := &syn.Data{Inner: list}
+
+	v1 := &Constant{dataVal}
+
+	b = b.ApplyArg(v1)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	protoList := expectProtoList(t, constVal)
+
+	if len(protoList.List) != 3 {
+		t.Errorf("expected list of length 3, got %d", len(protoList.List))
+	}
+
+	// Check first element
+	if data1, ok := protoList.List[0].(*syn.Data); ok {
+		if intData, ok := data1.Inner.(*data.Integer); ok {
+			if intData.Inner.Cmp(big.NewInt(1)) != 0 {
+				t.Errorf("expected first element 1, got %v", intData.Inner)
+			}
+		} else {
+			t.Errorf("expected first element to be Integer, got %T", data1.Inner)
+		}
+	} else {
+		t.Errorf("expected first element to be Data, got %T", protoList.List[0])
+	}
+}
+
+func TestUnMapDataBuiltin(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.UnMapData)
+
+	// Create a data value containing a map
+	dataMap := &data.Map{
+		Pairs: [][2]data.PlutusData{
+			{
+				&data.Integer{Inner: big.NewInt(1)},
+				&data.ByteString{Inner: []byte("one")},
+			},
+			{
+				&data.Integer{Inner: big.NewInt(2)},
+				&data.ByteString{Inner: []byte("two")},
+			},
+		},
+	}
+	dataVal := &syn.Data{Inner: dataMap}
+
+	v1 := &Constant{dataVal}
+
+	b = b.ApplyArg(v1)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	protoList := expectProtoList(t, constVal)
+
+	if len(protoList.List) != 2 {
+		t.Errorf("expected list of length 2, got %d", len(protoList.List))
+	}
+
+	// Check first pair
+	if pair, ok := protoList.List[0].(*syn.ProtoPair); ok {
+		if keyData, ok := pair.First.(*syn.Data); ok {
+			if keyInt, ok := keyData.Inner.(*data.Integer); ok {
+				if keyInt.Inner.Cmp(big.NewInt(1)) != 0 {
+					t.Errorf("expected key 1, got %v", keyInt.Inner)
+				}
+			} else {
+				t.Errorf("expected key to be Integer, got %T", keyData.Inner)
+			}
+		} else {
+			t.Errorf("expected first to be Data, got %T", pair.First)
+		}
+
+		if valData, ok := pair.Second.(*syn.Data); ok {
+			if valBS, ok := valData.Inner.(*data.ByteString); ok {
+				if string(valBS.Inner) != "one" {
+					t.Errorf(
+						"expected value 'one', got %s",
+						string(valBS.Inner),
+					)
+				}
+			} else {
+				t.Errorf("expected value to be ByteString, got %T", valData.Inner)
+			}
+		} else {
+			t.Errorf("expected second to be Data, got %T", pair.Second)
+		}
+	} else {
+		t.Errorf("expected first element to be ProtoPair, got %T", protoList.List[0])
+	}
+}
+
+func TestMapDataBuiltin(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.MapData)
+
+	// Create a list of pairs (each pair contains two Data values)
+	pair1 := &syn.ProtoPair{
+		FstType: &syn.TData{},
+		SndType: &syn.TData{},
+		First:   &syn.Data{Inner: &data.Integer{Inner: big.NewInt(1)}},
+		Second:  &syn.Data{Inner: &data.ByteString{Inner: []byte("one")}},
+	}
+	pair2 := &syn.ProtoPair{
+		FstType: &syn.TData{},
+		SndType: &syn.TData{},
+		First:   &syn.Data{Inner: &data.Integer{Inner: big.NewInt(2)}},
+		Second:  &syn.Data{Inner: &data.ByteString{Inner: []byte("two")}},
+	}
+
+	protoList := &syn.ProtoList{
+		LTyp: &syn.TPair{
+			First:  &syn.TData{},
+			Second: &syn.TData{},
+		},
+		List: []syn.IConstant{pair1, pair2},
+	}
+
+	v1 := &Constant{protoList}
+
+	b = b.ApplyArg(v1)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	resultData := expectData(t, constVal)
+	resultMap, ok := resultData.Inner.(*data.Map)
+	if !ok {
+		t.Fatalf("expected Map, got %T", resultData.Inner)
+	}
+
+	if len(resultMap.Pairs) != 2 {
+		t.Errorf("expected map with 2 pairs, got %d", len(resultMap.Pairs))
+	}
+
+	// Check first pair
+	keyInt, ok := resultMap.Pairs[0][0].(*data.Integer)
+	if !ok {
+		t.Fatalf(
+			"expected *data.Integer for key, got %T",
+			resultMap.Pairs[0][0],
+		)
+	}
+	if keyInt.Inner.Cmp(big.NewInt(1)) != 0 {
+		t.Errorf(
+			"expected key 1, got %v",
+			keyInt.Inner,
+		)
+	}
+	valBS, ok := resultMap.Pairs[0][1].(*data.ByteString)
+	if !ok {
+		t.Fatalf(
+			"expected *data.ByteString for value, got %T",
+			resultMap.Pairs[0][1],
+		)
+	}
+	if string(valBS.Inner) != "one" {
+		t.Errorf(
+			"expected value 'one', got %s",
+			string(valBS.Inner),
+		)
+	}
+}
+
+func TestAndByteStringBuiltin(t *testing.T) {
+	tests := []struct {
+		name     string
+		pad      bool
+		arg1     []byte
+		arg2     []byte
+		expected []byte
+	}{
+		{
+			name:     "no padding, equal length",
+			pad:      false,
+			arg1:     []byte{0xFF, 0x0F},
+			arg2:     []byte{0xF0, 0xFF},
+			expected: []byte{0xF0, 0x0F},
+		},
+		{
+			name:     "no padding, different length",
+			pad:      false,
+			arg1:     []byte{0xFF, 0x0F, 0xAA},
+			arg2:     []byte{0xF0, 0xFF},
+			expected: []byte{0xF0, 0x0F},
+		},
+		{
+			name:     "with padding, equal length",
+			pad:      true,
+			arg1:     []byte{0xFF, 0x0F},
+			arg2:     []byte{0xF0, 0xFF},
+			expected: []byte{0xF0, 0x0F},
+		},
+		{
+			name:     "with padding, arg1 longer",
+			pad:      true,
+			arg1:     []byte{0xFF, 0x0F, 0xAA},
+			arg2:     []byte{0xF0, 0xFF},
+			expected: []byte{0xF0, 0x0F, 0xAA},
+		},
+		{
+			name:     "with padding, arg2 longer",
+			pad:      true,
+			arg1:     []byte{0xFF, 0x0F},
+			arg2:     []byte{0xF0, 0xFF, 0xBB},
+			expected: []byte{0xF0, 0x0F, 0xBB},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.AndByteString)
+
+			v1 := &Constant{&syn.Bool{Inner: tt.pad}}
+			v2 := &Constant{&syn.ByteString{Inner: tt.arg1}}
+			v3 := &Constant{&syn.ByteString{Inner: tt.arg2}}
+
+			b = b.ApplyArg(v1)
+			b = b.ApplyArg(v2)
+			b = b.ApplyArg(v3)
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			result := expectByteString(t, constVal)
+
+			if !bytes.Equal(result.Inner, tt.expected) {
+				t.Errorf("expected %x, got %x", tt.expected, result.Inner)
+			}
+		})
+	}
+}
+
+func TestOrByteStringBuiltin(t *testing.T) {
+	tests := []struct {
+		name     string
+		pad      bool
+		arg1     []byte
+		arg2     []byte
+		expected []byte
+	}{
+		{
+			name:     "no padding, equal length",
+			pad:      false,
+			arg1:     []byte{0xF0, 0x0F},
+			arg2:     []byte{0x0F, 0xF0},
+			expected: []byte{0xFF, 0xFF},
+		},
+		{
+			name:     "with padding, arg1 longer",
+			pad:      true,
+			arg1:     []byte{0xF0, 0x0F, 0xAA},
+			arg2:     []byte{0x0F, 0xF0},
+			expected: []byte{0xFF, 0xFF, 0xAA},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.OrByteString)
+
+			v1 := &Constant{&syn.Bool{Inner: tt.pad}}
+			v2 := &Constant{&syn.ByteString{Inner: tt.arg1}}
+			v3 := &Constant{&syn.ByteString{Inner: tt.arg2}}
+
+			b = b.ApplyArg(v1)
+			b = b.ApplyArg(v2)
+			b = b.ApplyArg(v3)
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			result := expectByteString(t, constVal)
+
+			if !bytes.Equal(result.Inner, tt.expected) {
+				t.Errorf("expected %x, got %x", tt.expected, result.Inner)
+			}
+		})
+	}
+}
+
+func TestXorByteStringBuiltin(t *testing.T) {
+	tests := []struct {
+		name     string
+		pad      bool
+		arg1     []byte
+		arg2     []byte
+		expected []byte
+	}{
+		{
+			name:     "no padding, equal length",
+			pad:      false,
+			arg1:     []byte{0xFF, 0x0F},
+			arg2:     []byte{0xF0, 0xFF},
+			expected: []byte{0x0F, 0xF0},
+		},
+		{
+			name:     "with padding, arg1 longer",
+			pad:      true,
+			arg1:     []byte{0xFF, 0x0F, 0xAA},
+			arg2:     []byte{0xF0, 0xFF},
+			expected: []byte{0x0F, 0xF0, 0xAA},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.XorByteString)
+
+			v1 := &Constant{&syn.Bool{Inner: tt.pad}}
+			v2 := &Constant{&syn.ByteString{Inner: tt.arg1}}
+			v3 := &Constant{&syn.ByteString{Inner: tt.arg2}}
+
+			b = b.ApplyArg(v1)
+			b = b.ApplyArg(v2)
+			b = b.ApplyArg(v3)
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			result := expectByteString(t, constVal)
+
+			if !bytes.Equal(result.Inner, tt.expected) {
+				t.Errorf("expected %x, got %x", tt.expected, result.Inner)
+			}
+		})
+	}
+}
+
+func TestIntegerToByteStringBuiltin(t *testing.T) {
+	tests := []struct {
+		name      string
+		endian    bool
+		size      int64
+		input     int64
+		expected  []byte
+		shouldErr bool
+	}{
+		{
+			name:      "big-endian, exact size",
+			endian:    true,
+			size:      2,
+			input:     0xABCD,
+			expected:  []byte{0xAB, 0xCD},
+			shouldErr: false,
+		},
+		{
+			name:      "little-endian, exact size",
+			endian:    false,
+			size:      2,
+			input:     0xABCD,
+			expected:  []byte{0xCD, 0xAB},
+			shouldErr: false,
+		},
+		{
+			name:      "big-endian, padding",
+			endian:    true,
+			size:      4,
+			input:     0xABCD,
+			expected:  []byte{0x00, 0x00, 0xAB, 0xCD},
+			shouldErr: false,
+		},
+		{
+			name:      "zero input",
+			endian:    true,
+			size:      2,
+			input:     0,
+			expected:  []byte{0x00, 0x00},
+			shouldErr: false,
+		},
+		{
+			name:      "negative size",
+			endian:    true,
+			size:      -1,
+			input:     0xABCD,
+			expected:  nil,
+			shouldErr: true,
+		},
+		{
+			name:      "negative input",
+			endian:    true,
+			size:      2,
+			input:     -1,
+			expected:  nil,
+			shouldErr: true,
+		},
+		{
+			name:      "input too large for size",
+			endian:    true,
+			size:      1,
+			input:     0xABCD,
+			expected:  nil,
+			shouldErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.IntegerToByteString)
+
+			v1 := &Constant{&syn.Bool{Inner: tt.endian}}
+			v2 := &Constant{&syn.Integer{Inner: big.NewInt(tt.size)}}
+			v3 := &Constant{&syn.Integer{Inner: big.NewInt(tt.input)}}
+
+			b = b.ApplyArg(v1)
+			b = b.ApplyArg(v2)
+			b = b.ApplyArg(v3)
+
+			val, err := evalBuiltinWithError(t, m, b)
+			if tt.shouldErr {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			constVal := expectConstant(t, val)
+			result := expectByteString(t, constVal)
+
+			if !bytes.Equal(result.Inner, tt.expected) {
+				t.Errorf("expected %x, got %x", tt.expected, result.Inner)
+			}
+		})
+	}
+}
+
+func TestByteStringToIntegerBuiltin(t *testing.T) {
+	tests := []struct {
+		name     string
+		endian   bool
+		input    []byte
+		expected int64
+	}{
+		{
+			name:     "big-endian",
+			endian:   true,
+			input:    []byte{0xAB, 0xCD},
+			expected: 0xABCD,
+		},
+		{
+			name:     "little-endian",
+			endian:   false,
+			input:    []byte{0xCD, 0xAB},
+			expected: 0xABCD,
+		},
+		{
+			name:     "zero bytes",
+			endian:   true,
+			input:    []byte{},
+			expected: 0,
+		},
+		{
+			name:     "single byte",
+			endian:   true,
+			input:    []byte{0x42},
+			expected: 0x42,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.ByteStringToInteger)
+
+			v1 := &Constant{&syn.Bool{Inner: tt.endian}}
+			v2 := &Constant{&syn.ByteString{Inner: tt.input}}
+
+			b = b.ApplyArg(v1)
+			b = b.ApplyArg(v2)
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			result := expectInteger(t, constVal)
+
+			if result.Inner.Cmp(big.NewInt(tt.expected)) != 0 {
+				t.Errorf("expected %d, got %v", tt.expected, result.Inner)
+			}
+		})
+	}
+}
+
+func TestCountSetBitsBuiltin(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []byte
+		expected int64
+	}{
+		{
+			name:     "empty bytes",
+			input:    []byte{},
+			expected: 0,
+		},
+		{
+			name:     "single byte with 4 bits set",
+			input:    []byte{0b10101010}, // 170 = 0xAA
+			expected: 4,
+		},
+		{
+			name:     "multiple bytes",
+			input:    []byte{0xFF, 0x00, 0x0F}, // 8 + 0 + 4 = 12
+			expected: 12,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.CountSetBits)
+
+			v1 := &Constant{&syn.ByteString{Inner: tt.input}}
+
+			b = b.ApplyArg(v1)
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			result := expectInteger(t, constVal)
+
+			if result.Inner.Cmp(big.NewInt(tt.expected)) != 0 {
+				t.Errorf("expected %d, got %v", tt.expected, result.Inner)
+			}
+		})
+	}
+}
+
+func TestFindFirstSetBitBuiltin(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []byte
+		expected int64
+	}{
+		{
+			name:     "empty bytes",
+			input:    []byte{},
+			expected: -1,
+		},
+		{
+			name:     "first bit set in first byte",
+			input:    []byte{0b00000001}, // bit 0 set
+			expected: 0,
+		},
+		{
+			name:     "bit 6 set in first byte",
+			input:    []byte{0b01000000}, // bit 6 set
+			expected: 6,
+		},
+		{
+			name: "last bit set in first byte",
+			input: []byte{
+				0b10000000,
+			}, // bit 7 set
+			expected: 7,
+		},
+		{
+			name:     "bit set in second byte",
+			input:    []byte{0x00, 0b00000001}, // bit 0 in second byte = bit 0
+			expected: 0,
+		},
+		{
+			name:     "all zeros",
+			input:    []byte{0x00, 0x00},
+			expected: -1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.FindFirstSetBit)
+
+			v1 := &Constant{&syn.ByteString{Inner: tt.input}}
+
+			b = b.ApplyArg(v1)
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			result := expectInteger(t, constVal)
+
+			if result.Inner.Cmp(big.NewInt(tt.expected)) != 0 {
+				t.Errorf("expected %d, got %v", tt.expected, result.Inner)
+			}
+		})
+	}
+}
+
+func TestComplementByteStringBuiltin(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []byte
+		expected []byte
+	}{
+		{
+			name:     "empty bytes",
+			input:    []byte{},
+			expected: []byte{},
+		},
+		{
+			name:     "single byte",
+			input:    []byte{0xAA}, // 10101010
+			expected: []byte{0x55}, // 01010101
+		},
+		{
+			name:     "multiple bytes",
+			input:    []byte{0x00, 0xFF, 0x0F},
+			expected: []byte{0xFF, 0x00, 0xF0},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.ComplementByteString)
+
+			v1 := &Constant{&syn.ByteString{Inner: tt.input}}
+
+			b = b.ApplyArg(v1)
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			result := expectByteString(t, constVal)
+
+			if !bytes.Equal(result.Inner, tt.expected) {
+				t.Errorf("expected %x, got %x", tt.expected, result.Inner)
+			}
+		})
+	}
+}
+
+func TestReadBitBuiltin(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     []byte
+		bitIndex  int64
+		expected  bool
+		shouldErr bool
+	}{
+		{
+			name:      "read bit 0 from single byte",
+			input:     []byte{0b00000001}, // bit 0 set
+			bitIndex:  0,
+			expected:  true,
+			shouldErr: false,
+		},
+		{
+			name:      "read bit 7 from single byte",
+			input:     []byte{0b10000000}, // bit 7 set
+			bitIndex:  7,
+			expected:  true,
+			shouldErr: false,
+		},
+		{
+			name: "read bit 0 from second byte",
+			input: []byte{
+				0b00000001,
+				0x00,
+			}, // bit 8 set (bit 0 of first byte in little-endian)
+			bitIndex:  8,
+			expected:  true,
+			shouldErr: false,
+		},
+		{
+			name:      "read unset bit",
+			input:     []byte{0b11111110}, // all bits except 0 set
+			bitIndex:  0,
+			expected:  false,
+			shouldErr: false,
+		},
+		{
+			name:      "bit index out of bounds",
+			input:     []byte{0xFF},
+			bitIndex:  8,
+			expected:  false,
+			shouldErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.ReadBit)
+
+			v1 := &Constant{&syn.ByteString{Inner: tt.input}}
+			v2 := &Constant{&syn.Integer{Inner: big.NewInt(tt.bitIndex)}}
+
+			b = b.ApplyArg(v1)
+			b = b.ApplyArg(v2)
+
+			val, err := evalBuiltinWithError(t, m, b)
+			if tt.shouldErr {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			constVal := expectConstant(t, val)
+			result := expectBool(t, constVal)
+
+			if result.Inner != tt.expected {
+				t.Errorf("expected %v, got %v", tt.expected, result.Inner)
+			}
+		})
+	}
+}
+
+func TestReplicateByteBuiltin(t *testing.T) {
+	tests := []struct {
+		name      string
+		size      int64
+		byteVal   int64
+		expected  []byte
+		shouldErr bool
+	}{
+		{
+			name:      "replicate 0xFF three times",
+			size:      3,
+			byteVal:   0xFF,
+			expected:  []byte{0xFF, 0xFF, 0xFF},
+			shouldErr: false,
+		},
+		{
+			name:      "replicate 0x00 five times",
+			size:      5,
+			byteVal:   0x00,
+			expected:  []byte{0x00, 0x00, 0x00, 0x00, 0x00},
+			shouldErr: false,
+		},
+		{
+			name:      "size zero",
+			size:      0,
+			byteVal:   0x42,
+			expected:  []byte{},
+			shouldErr: false,
+		},
+		{
+			name:      "byte value out of bounds",
+			size:      2,
+			byteVal:   256,
+			expected:  nil,
+			shouldErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.ReplicateByte)
+
+			v1 := &Constant{&syn.Integer{Inner: big.NewInt(tt.size)}}
+			v2 := &Constant{&syn.Integer{Inner: big.NewInt(tt.byteVal)}}
+
+			b = b.ApplyArg(v1)
+			b = b.ApplyArg(v2)
+
+			val, err := evalBuiltinWithError(t, m, b)
+			if tt.shouldErr {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			constVal := expectConstant(t, val)
+			result := expectByteString(t, constVal)
+
+			if !bytes.Equal(result.Inner, tt.expected) {
+				t.Errorf("expected %x, got %x", tt.expected, result.Inner)
 			}
 		})
 	}
