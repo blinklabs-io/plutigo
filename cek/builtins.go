@@ -3376,14 +3376,14 @@ func findFirstSetBit[T syn.Eval](
 
 	bitIndex := -1
 
-	// Find first set bit - iterate bytes in reverse order (like Rust .rev())
+	// Find first set bit - iterate bytes in reverse order (little-endian)
 	for byteIndex := len(bytes) - 1; byteIndex >= 0; byteIndex-- {
 		value := bytes[byteIndex]
 		if value == 0 {
 			continue
 		}
 
-		for pos := range 7 {
+		for pos := 0; pos < 8; pos++ {
 			if value&(1<<pos) != 0 {
 				bitIndex = pos + (len(bytes)-byteIndex-1)*8
 
