@@ -122,7 +122,22 @@ func NewMachineWithVersionCosts[T syn.Eval](
 	return NewMachine[T](version, slippage, costModel)
 }
 
+// Run executes a Plutus term using the CEK (Control, Environment, Kontinuation) abstract machine.
+// The CEK machine is a small-step operational semantics for evaluating functional programs.
+// It maintains three components:
+// - Control (C): the current term being evaluated
+// - Environment (E): mapping from variables to values
+// - Kontinuation (K): represents the evaluation context/stack
+//
+// The algorithm proceeds by repeatedly transitioning between three states:
+// - Compute: evaluate the current term in the current environment and context
+// - Return: handle a computed value in the current context
+// - Done: evaluation complete, return the final result
+//
+// This implementation uses object pooling for performance optimization, reusing
+// Compute/Return/Done state objects to minimize garbage collection pressure.
 func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
+	// Spend initial startup budget for machine initialization
 	startupBudget := m.costs.machineCosts.startup
 	if err := m.spendBudget(startupBudget); err != nil {
 		return nil, err
@@ -130,41 +145,47 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 
 	var state MachineState[T]
 
+	// Initialize with a Compute state: evaluate the input term with empty environment
+	// and no continuation context (NoFrame)
 	comp := getCompute[T]()
 	comp.Ctx = &NoFrame{}
 	comp.Env = nil
 	comp.Term = term
 	state = comp
 
+	// Main CEK evaluation loop: continue until we reach Done state
 	for {
 		switch v := state.(type) {
 		case *Compute[T]:
+			// Compute state: evaluate the current term
 			newState, err := m.compute(v.Ctx, v.Env, v.Term)
 			if err != nil {
-				putCompute(v)
+				putCompute(v) // Return object to pool
 				return nil, err
 			}
 			if newState == nil {
-				putCompute(v)
+				putCompute(v) // Return object to pool
 				return nil, errors.New("compute returned nil state")
 			}
-			putCompute(v)
+			putCompute(v) // Return object to pool
 			state = newState
 		case *Return[T]:
+			// Return state: handle a computed value in current context
 			newState, err := m.returnCompute(v.Ctx, v.Value)
 			if err != nil {
-				putReturn(v)
+				putReturn(v) // Return object to pool
 				return nil, err
 			}
 			if newState == nil {
-				putReturn(v)
+				putReturn(v) // Return object to pool
 				return nil, errors.New("returnCompute returned nil state")
 			}
-			putReturn(v)
+			putReturn(v) // Return object to pool
 			state = newState
 		case *Done[T]:
+			// Done state: evaluation complete, extract final result
 			term := v.term
-			putDone(v)
+			putDone(v) // Return object to pool
 			return term, nil
 		default:
 			panic(fmt.Sprintf("unknown machine state: %T", state))
@@ -172,6 +193,20 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 	}
 }
 
+// compute handles the Compute state of the CEK machine.
+// It takes the current evaluation context, environment, and term,
+// and returns the next machine state after processing the term.
+//
+// The method implements the core evaluation rules for each Plutus term type:
+// - Variables: look up in environment
+// - Constants: wrap in Constant value
+// - Lambdas: create closure with current environment
+// - Applications: evaluate function first, then argument
+// - Delays: create suspended computation
+// - Forces: trigger evaluation of delayed terms
+// - Builtins: create builtin function applications
+// - Constructors: evaluate fields sequentially
+// - Case expressions: evaluate scrutinee then match branches
 func (m *Machine[T]) compute(
 	context MachineContext[T],
 	env *Env[T],
@@ -181,6 +216,7 @@ func (m *Machine[T]) compute(
 
 	switch t := term.(type) {
 	case *syn.Var[T]:
+		// Variable lookup: spend budget and retrieve value from environment
 		if err := m.stepAndMaybeSpend(ExVar); err != nil {
 			return nil, err
 		}
@@ -191,18 +227,20 @@ func (m *Machine[T]) compute(
 			return nil, errors.New("open term evaluated")
 		}
 
+		// Transition to Return state with the looked-up value
 		ret := getReturn[T]()
 		ret.Ctx = context
 		ret.Value = value
 		state = ret
 	case *syn.Delay[T]:
+		// Delay creates a suspended computation that can be forced later
 		if err := m.stepAndMaybeSpend(ExDelay); err != nil {
 			return nil, err
 		}
 
 		value := &Delay[T]{
 			Body: t.Term,
-			Env:  env,
+			Env:  env, // Capture current environment for later evaluation
 		}
 
 		ret := getReturn[T]()
@@ -210,6 +248,7 @@ func (m *Machine[T]) compute(
 		ret.Value = value
 		state = ret
 	case *syn.Lambda[T]:
+		// Lambda creates a closure capturing the current environment
 		if err := m.stepAndMaybeSpend(ExLambda); err != nil {
 			return nil, err
 		}
@@ -217,7 +256,7 @@ func (m *Machine[T]) compute(
 		value := &Lambda[T]{
 			ParameterName: t.ParameterName,
 			Body:          t.Body,
-			Env:           env,
+			Env:           env, // Capture environment for closure
 		}
 
 		ret := getReturn[T]()
@@ -225,22 +264,25 @@ func (m *Machine[T]) compute(
 		ret.Value = value
 		state = ret
 	case *syn.Apply[T]:
+		// Application: evaluate function term first, then argument
+		// Uses FrameAwaitFunTerm to remember argument for later evaluation
 		if err := m.stepAndMaybeSpend(ExApply); err != nil {
 			return nil, err
 		}
 
 		frame := &FrameAwaitFunTerm[T]{
 			Env:  env,
-			Term: t.Argument,
+			Term: t.Argument, // Remember argument to evaluate later
 			Ctx:  context,
 		}
 
 		comp := getCompute[T]()
 		comp.Ctx = frame
 		comp.Env = env
-		comp.Term = t.Function
+		comp.Term = t.Function // Evaluate function first
 		state = comp
 	case *syn.Constant:
+		// Constants are already evaluated values
 		if err := m.stepAndMaybeSpend(ExConstant); err != nil {
 			return nil, err
 		}
@@ -252,6 +294,8 @@ func (m *Machine[T]) compute(
 		}
 		state = ret
 	case *syn.Force[T]:
+		// Force triggers evaluation of a delayed computation
+		// Uses FrameForce to handle the result
 		if err := m.stepAndMaybeSpend(ExForce); err != nil {
 			return nil, err
 		}
@@ -266,9 +310,11 @@ func (m *Machine[T]) compute(
 		comp.Term = t.Term
 		state = comp
 	case *syn.Error:
+		// Explicit error term - evaluation fails
 		return nil, errors.New("error explicitly called")
 
 	case *syn.Builtin:
+		// Builtin functions are treated as values
 		if err := m.stepAndMaybeSpend(ExBuiltin); err != nil {
 			return nil, err
 		}
@@ -282,6 +328,9 @@ func (m *Machine[T]) compute(
 		}
 		state = ret
 	case *syn.Constr[T]:
+		// Constructor: evaluate all fields sequentially
+		// If no fields, create constructor value immediately
+		// Otherwise, use FrameConstr to evaluate fields one by one
 		if err := m.stepAndMaybeSpend(ExConstr); err != nil {
 			return nil, err
 		}
@@ -289,6 +338,7 @@ func (m *Machine[T]) compute(
 		fields := t.Fields
 
 		if len(fields) == 0 {
+			// No fields to evaluate
 			ret := getReturn[T]()
 			ret.Ctx = context
 			ret.Value = &Constr[T]{
@@ -297,6 +347,7 @@ func (m *Machine[T]) compute(
 			}
 			state = ret
 		} else {
+			// Evaluate fields sequentially using FrameConstr
 			first_field := fields[0]
 
 			rest := fields[1:]
@@ -304,18 +355,20 @@ func (m *Machine[T]) compute(
 			frame := &FrameConstr[T]{
 				Ctx:            context,
 				Tag:            t.Tag,
-				Fields:         rest,
-				ResolvedFields: []Value[T]{},
+				Fields:         rest,         // Remaining fields to evaluate
+				ResolvedFields: []Value[T]{}, // Accumulate evaluated fields
 				Env:            env,
 			}
 
 			comp := getCompute[T]()
 			comp.Ctx = frame
 			comp.Env = env
-			comp.Term = first_field
+			comp.Term = first_field // Evaluate first field
 			state = comp
 		}
 	case *syn.Case[T]:
+		// Case expression: evaluate scrutinee, then match against branches
+		// Uses FrameCases to handle branching logic
 		if err := m.stepAndMaybeSpend(ExCase); err != nil {
 			return nil, err
 		}
@@ -329,7 +382,7 @@ func (m *Machine[T]) compute(
 		comp := getCompute[T]()
 		comp.Ctx = frame
 		comp.Env = env
-		comp.Term = t.Constr
+		comp.Term = t.Constr // Evaluate scrutinee
 		state = comp
 	default:
 		panic(fmt.Sprintf("unknown term: %T: %v", term, term))
@@ -342,6 +395,18 @@ func (m *Machine[T]) compute(
 	return state, nil
 }
 
+// returnCompute handles the Return state of the CEK machine.
+// It takes the current evaluation context and a computed value,
+// and determines the next state based on the continuation frame.
+//
+// This method implements the "return" rules of the CEK machine:
+// - FrameAwaitArg: apply function to argument (after both are evaluated)
+// - FrameAwaitFunTerm: evaluate argument term for function application
+// - FrameAwaitFunValue: apply function value to argument value
+// - FrameForce: handle forcing of delayed computations
+// - FrameConstr: accumulate evaluated constructor fields
+// - FrameCases: pattern match on constructor values
+// - NoFrame: evaluation complete, discharge value to final term
 func (m *Machine[T]) returnCompute(
 	context MachineContext[T],
 	value Value[T],
@@ -351,35 +416,41 @@ func (m *Machine[T]) returnCompute(
 
 	switch c := context.(type) {
 	case *FrameAwaitArg[T]:
+		// Function term evaluated, now apply to argument value
 		state, err = m.applyEvaluate(c.Ctx, c.Value, value)
 		if err != nil {
 			return nil, err
 		}
 	case *FrameAwaitFunTerm[T]:
+		// Function evaluated to a value, now evaluate argument term
 		comp := getCompute[T]()
 		comp.Ctx = &FrameAwaitArg[T]{
 			Ctx:   c.Ctx,
-			Value: value,
+			Value: value, // Function value
 		}
 		comp.Env = c.Env
-		comp.Term = c.Term
+		comp.Term = c.Term // Argument term to evaluate
 		state = comp
 	case *FrameAwaitFunValue[T]:
+		// Argument evaluated to a value, now apply to function value
 		state, err = m.applyEvaluate(c.Ctx, value, c.Value)
 		if err != nil {
 			return nil, err
 		}
 	case *FrameForce[T]:
+		// Handle forcing of delayed computations or builtin applications
 		state, err = m.forceEvaluate(c.Ctx, value)
 		if err != nil {
 			return nil, err
 		}
 	case *FrameConstr[T]:
+		// Accumulate evaluated constructor fields
 		resolvedFields := append(c.ResolvedFields, value)
 
 		fields := c.Fields
 
 		if len(fields) == 0 {
+			// All fields evaluated, create constructor value
 			ret := getReturn[T]()
 			ret.Ctx = c.Ctx
 			ret.Value = &Constr[T]{
@@ -388,6 +459,7 @@ func (m *Machine[T]) returnCompute(
 			}
 			state = ret
 		} else {
+			// More fields to evaluate
 			first_field := fields[0]
 			rest := fields[1:]
 
@@ -406,12 +478,14 @@ func (m *Machine[T]) returnCompute(
 			state = comp
 		}
 	case *FrameCases[T]:
+		// Pattern match on constructor value
 		switch v := value.(type) {
 		case *Constr[T]:
 			if v.Tag > math.MaxInt {
 				return nil, errors.New("MaxIntExceeded")
 			}
 			if indexExists(c.Branches, int(v.Tag)) {
+				// Matching branch found, evaluate it with arguments on stack
 				comp := getCompute[T]()
 				comp.Ctx = transferArgStack(v.Fields, c.Ctx)
 				comp.Env = c.Env
@@ -424,6 +498,8 @@ func (m *Machine[T]) returnCompute(
 			return nil, errors.New("NonConstrScrutinized")
 		}
 	case *NoFrame:
+		// No more continuations - evaluation complete
+		// Spend any remaining unbudgeted steps before finishing
 		if m.unbudgetedSteps[9] > 0 {
 			if err := m.spendUnbudgetedSteps(); err != nil {
 				return nil, err
@@ -444,6 +520,11 @@ func (m *Machine[T]) returnCompute(
 	return state, nil
 }
 
+// forceEvaluate handles forcing of delayed computations and builtin applications.
+// Force is used to trigger evaluation of suspended computations created by Delay.
+//
+// For Delay values: resumes evaluation in the captured environment
+// For Builtin values: applies forces to builtin functions (for polymorphism)
 func (m *Machine[T]) forceEvaluate(
 	context MachineContext[T],
 	value Value[T],
@@ -452,18 +533,21 @@ func (m *Machine[T]) forceEvaluate(
 
 	switch v := value.(type) {
 	case *Delay[T]:
+		// Force a delayed computation: evaluate body in captured environment
 		comp := getCompute[T]()
 		comp.Ctx = context
-		comp.Env = v.Env
+		comp.Env = v.Env // Use environment captured at delay creation
 		comp.Term = v.Body
 		state = comp
 	case *Builtin[T]:
+		// Force a builtin function application
 		if v.NeedsForce() {
 			var resolved Value[T]
 
-			b := v.ConsumeForce()
+			b := v.ConsumeForce() // Consume one force
 
 			if b.IsReady() {
+				// Builtin has all arguments, evaluate it
 				var err error
 
 				resolved, err = m.evalBuiltinApp(b)
@@ -471,6 +555,7 @@ func (m *Machine[T]) forceEvaluate(
 					return nil, err
 				}
 			} else {
+				// Still needs more arguments/forces
 				resolved = b
 			}
 
@@ -488,6 +573,11 @@ func (m *Machine[T]) forceEvaluate(
 	return state, nil
 }
 
+// applyEvaluate handles function application in the CEK machine.
+// It takes a function value and an argument value, and applies the function.
+//
+// For Lambda values: extends the captured environment with the argument
+// For Builtin values: applies the argument to the builtin function
 func (m *Machine[T]) applyEvaluate(
 	context MachineContext[T],
 	function Value[T],
@@ -497,20 +587,23 @@ func (m *Machine[T]) applyEvaluate(
 
 	switch f := function.(type) {
 	case *Lambda[T]:
+		// Apply lambda: extend environment and evaluate body
 		env := f.Env.Extend(arg)
 
 		comp := getCompute[T]()
 		comp.Ctx = context
-		comp.Env = env
+		comp.Env = env // Extended environment with argument bound
 		comp.Term = f.Body
 		state = comp
 	case *Builtin[T]:
+		// Apply builtin function
 		if !f.NeedsForce() && f.IsArrow() {
 			var resolved Value[T]
 
-			b := f.ApplyArg(arg)
+			b := f.ApplyArg(arg) // Apply argument to builtin
 
 			if b.IsReady() {
+				// Builtin has all arguments, evaluate it
 				var err error
 
 				resolved, err = m.evalBuiltinApp(b)
@@ -518,6 +611,7 @@ func (m *Machine[T]) applyEvaluate(
 					return nil, err
 				}
 			} else {
+				// Still needs more arguments
 				resolved = b
 			}
 
@@ -551,6 +645,19 @@ func transferArgStack[T syn.Eval](
 	return c
 }
 
+// dischargeValue converts a runtime Value back to a syntax Term.
+// This is the inverse operation of evaluation - it takes computed values
+// and reconstructs the equivalent Plutus terms that would produce them.
+//
+// The process handles different value types:
+// - Constants: directly wrap in Constant term
+// - Builtins: reconstruct force/apply chains for partial applications
+// - Delays: create Delay term with environment-discharged body
+// - Lambdas: create Lambda term with environment-discharged body
+// - Constructors: recursively discharge all fields
+//
+// This function is crucial for producing the final result when evaluation
+// reaches the Done state, ensuring the output is a valid Plutus term.
 func dischargeValue[T syn.Eval](value Value[T]) syn.Term[T] {
 	var dischargedTerm syn.Term[T]
 
@@ -560,18 +667,21 @@ func dischargeValue[T syn.Eval](value Value[T]) syn.Term[T] {
 			Con: v.Constant,
 		}
 	case *Builtin[T]:
+		// Reconstruct the term that represents this builtin application
 		var forcedTerm syn.Term[T]
 
 		forcedTerm = &syn.Builtin{
 			DefaultFunction: v.Func,
 		}
 
+		// Add forces for polymorphic instantiation
 		for range uint(v.Forces) {
 			forcedTerm = &syn.Force[T]{
 				Term: forcedTerm,
 			}
 		}
 
+		// Add applications for each argument
 		for arg := range v.Args.Iter() {
 			forcedTerm = &syn.Apply[T]{
 				Function: forcedTerm,
@@ -581,17 +691,20 @@ func dischargeValue[T syn.Eval](value Value[T]) syn.Term[T] {
 
 		dischargedTerm = forcedTerm
 	case *Delay[T]:
+		// Discharge delayed computation with environment
 		dischargedTerm = &syn.Delay[T]{
 			Term: withEnv(0, v.Env, v.Body),
 		}
 
 	case *Lambda[T]:
+		// Discharge lambda with environment (lamCnt=1 to account for parameter)
 		dischargedTerm = &syn.Lambda[T]{
 			ParameterName: v.ParameterName,
 			Body:          withEnv(1, v.Env, v.Body),
 		}
 
 	case *Constr[T]:
+		// Recursively discharge all constructor fields
 		fields := []syn.Term[T]{}
 
 		for _, f := range v.Fields {
@@ -607,6 +720,17 @@ func dischargeValue[T syn.Eval](value Value[T]) syn.Term[T] {
 	return dischargedTerm
 }
 
+// withEnv discharges a term while substituting values from an environment.
+// This implements lexical scoping by replacing free variables with their
+// bound values from the evaluation environment.
+//
+// Parameters:
+// - lamCnt: number of lambda binders we've traversed (for de Bruijn indexing)
+// - env: environment containing variable bindings
+// - term: the term to discharge
+//
+// The function handles variable lookup with proper de Bruijn index adjustment,
+// recursively processing complex terms while maintaining environment bindings.
 func withEnv[T syn.Eval](
 	lamCnt int,
 	env *Env[T],
@@ -616,36 +740,45 @@ func withEnv[T syn.Eval](
 
 	switch t := term.(type) {
 	case *syn.Var[T]:
+		// Variable resolution with de Bruijn index adjustment
 		if lamCnt >= t.Name.LookupIndex() {
+			// Variable is bound by a lambda we haven't discharged yet
 			dischargedTerm = t
 		} else if val, exists := env.Lookup(t.Name.LookupIndex() - lamCnt); exists {
+			// Variable found in environment, discharge its value
 			dischargedTerm = dischargeValue[T](val)
 		} else {
+			// Free variable (shouldn't happen in well-formed terms)
 			dischargedTerm = t
 		}
 
 	case *syn.Lambda[T]:
+		// Lambda: increase lambda count for body processing
 		dischargedTerm = &syn.Lambda[T]{
 			ParameterName: t.ParameterName,
 			Body:          withEnv(lamCnt+1, env, t.Body),
 		}
 
 	case *syn.Apply[T]:
+		// Application: process both function and argument
 		dischargedTerm = &syn.Apply[T]{
 			Function: withEnv(lamCnt, env, t.Function),
 			Argument: withEnv(lamCnt, env, t.Argument),
 		}
 	case *syn.Delay[T]:
+		// Delay: process delayed term
 		dischargedTerm = &syn.Delay[T]{
 			Term: withEnv(lamCnt, env, t.Term),
 		}
 
 	case *syn.Force[T]:
+		// Force: process term to be forced
 		dischargedTerm = &syn.Force[T]{
 			Term: withEnv(lamCnt, env, t.Term),
 		}
 
 	case *syn.Constr[T]:
+		// Constructor: recursively process all fields
 		fields := []syn.Term[T]{}
 
 		for _, f := range t.Fields {
@@ -657,6 +790,7 @@ func withEnv[T syn.Eval](
 			Fields: fields,
 		}
 	case *syn.Case[T]:
+		// Case expression: process scrutinee and all branches
 		branches := []syn.Term[T]{}
 
 		for _, b := range t.Branches {
@@ -668,6 +802,7 @@ func withEnv[T syn.Eval](
 			Branches: branches,
 		}
 	default:
+		// Constants, builtins, errors: no environment processing needed
 		dischargedTerm = t
 	}
 
