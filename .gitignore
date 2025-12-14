@@ -22,3 +22,10 @@ go.work
 
 # sample code binary
 play
+
+# Benchmark files
+bench-*.txt
+
+# Coverage files
+coverage.out
+coverage.html

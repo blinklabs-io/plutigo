@@ -16,7 +16,7 @@ jobs:
     name: benchmark
     strategy:
       matrix:
-        go-version: [1.24.x]
+        go-version: [1.25.x]
         platform: [ubuntu-latest]
     runs-on: ${{ matrix.platform }}
     steps:
@@ -28,3 +28,17 @@ jobs:
           go-version: ${{ matrix.go-version }}
       - name: benchmark
         run: make bench
+      - name: Install benchstat
+        if: github.event_name == 'pull_request'
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+      - name: Compare benchmarks
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "Comparing benchmarks against main branch..."
+          set -e
+          git fetch origin main
+          git checkout origin/main
+          make bench > bench-main.txt
+          git checkout -
+          make bench > bench-pr.txt
+          benchstat bench-main.txt bench-pr.txt
