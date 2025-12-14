@@ -214,8 +214,6 @@ func (c *converter) getIndex(name *Name) (DeBruijn, error) {
 }
 
 // getUnique finds the Unique identifier for a given DeBruijn index
-//
-//nolint:unused
 func (c *converter) getUnique(index DeBruijn) (Unique, error) {
 	if index < 0 {
 		return 0, errors.New("negative DeBruijn index")

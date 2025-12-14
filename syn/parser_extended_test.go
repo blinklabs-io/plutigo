@@ -105,7 +105,11 @@ func TestParseConstr(t *testing.T) {
 			p := NewParser(tt.input)
 			_, err := p.ParseProgram()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ParseProgram() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf(
+					"ParseProgram() error = %v, wantErr %v",
+					err,
+					tt.wantErr,
+				)
 			}
 		})
 	}
@@ -144,7 +148,11 @@ func TestParseCase(t *testing.T) {
 			p := NewParser(tt.input)
 			_, err := p.ParseProgram()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ParseProgram() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf(
+					"ParseProgram() error = %v, wantErr %v",
+					err,
+					tt.wantErr,
+				)
 			}
 		})
 	}
@@ -207,7 +215,11 @@ func TestParseComplexTerms(t *testing.T) {
 			p := NewParser(tt.input)
 			_, err := p.ParseProgram()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ParseProgram() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf(
+					"ParseProgram() error = %v, wantErr %v",
+					err,
+					tt.wantErr,
+				)
 			}
 		})
 	}

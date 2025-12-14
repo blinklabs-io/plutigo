@@ -3383,7 +3383,7 @@ func findFirstSetBit[T syn.Eval](
 			continue
 		}
 
-		for pos := 0; pos < 8; pos++ {
+		for pos := range 8 {
 			if value&(1<<pos) != 0 {
 				bitIndex = pos + (len(bytes)-byteIndex-1)*8
 
@@ -3391,7 +3391,7 @@ func findFirstSetBit[T syn.Eval](
 			}
 		}
 
-		if byteIndex != -1 {
+		if bitIndex != -1 {
 			break
 		}
 	}

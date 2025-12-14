@@ -334,10 +334,16 @@ func TestNameToNamedDeBruijn(t *testing.T) {
 	// Check that the lambda parameter has index 0
 	lambda := converted.Term.(*Lambda[NamedDeBruijn])
 	if lambda.ParameterName.Index != 0 {
-		t.Errorf("Expected parameter index 0, got %d", lambda.ParameterName.Index)
+		t.Errorf(
+			"Expected parameter index 0, got %d",
+			lambda.ParameterName.Index,
+		)
 	}
 	if lambda.ParameterName.Text != "x" {
-		t.Errorf("Expected parameter text 'x', got %s", lambda.ParameterName.Text)
+		t.Errorf(
+			"Expected parameter text 'x', got %s",
+			lambda.ParameterName.Text,
+		)
 	}
 
 	// Check that the body variable has index 1
@@ -393,7 +399,10 @@ func TestNameToDeBruijnComplex(t *testing.T) {
 	// Check the structure
 	lambda := converted.Term.(*Lambda[DeBruijn])
 	if lambda.ParameterName != 0 {
-		t.Errorf("Expected lambda parameter index 0, got %d", lambda.ParameterName)
+		t.Errorf(
+			"Expected lambda parameter index 0, got %d",
+			lambda.ParameterName,
+		)
 	}
 
 	delayTerm := lambda.Body.(*Delay[DeBruijn])
