@@ -2557,6 +2557,26 @@ func bls12381FinalVerify[T syn.Eval](
 	return value, nil
 }
 
+// integerToByteString converts an integer to its byte representation.
+// This builtin implements the Plutus integer-to-bytestring conversion with
+// configurable endianness and size constraints.
+//
+// Parameters:
+// - endianness: true for big-endian, false for little-endian
+// - size: desired output byte length (0 = automatic sizing)
+// - input: the integer to convert (must be non-negative)
+//
+// The function handles:
+// - Negative input validation
+// - Size limit enforcement (max 8192 bytes)
+// - Automatic sizing when size=0
+// - Endianness conversion (big-endian default, little-endian requires reversal)
+// - Padding to match requested size (errors if size too small)
+//
+// Edge cases:
+// - Zero input produces zero-padded output of requested size
+// - Size too small for input triggers error
+// - Size=0 with large input (>8192 bytes) triggers error
 func integerToByteString[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
