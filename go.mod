@@ -11,7 +11,7 @@ require (
 	github.com/ethereum/go-ethereum v1.16.7
 	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/minio/sha256-simd v1.0.1
-	golang.org/x/crypto v0.45.0
+	golang.org/x/crypto v0.46.0
 )
 
 require (
@@ -24,5 +24,5 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
 )
