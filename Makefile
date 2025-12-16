@@ -20,13 +20,33 @@ test: ## Run tests
 	@echo "Running tests..."
 	@go test -v -race ./...
 
+test-cover: ## Run tests with coverage
+	@echo "Running tests with coverage..."
+	@go test -race -coverprofile=coverage.out -covermode=atomic ./...
+	@go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
+
 test-match: ## Run specific tests (usage: make test-one TEST=TestName)
 	@echo "Running test: $(TEST)..."
 	@go test -run $(TEST) -v ./...
 
-bench: ## Run tests
+bench: ## Run benchmarks
 	@echo "Running benchmarks..."
-	@go test -v -bench=. -run='^$$' ./...
+	@go test -bench=. -benchtime=5s -run='^$$' ./...
+
+bench-baseline: ## Run benchmarks and save as baseline
+	@echo "Running benchmarks and saving baseline..."
+	@go test -bench=. -benchtime=5s -run='^$$' ./... > bench-baseline.txt
+
+bench-compare: ## Run benchmarks and compare against baseline
+	@echo "Running benchmarks and comparing against baseline..."
+	@if [ ! -f bench-baseline.txt ]; then \
+		echo "No baseline found. Run 'make bench-baseline' first."; \
+		exit 1; \
+	fi
+	@go test -bench=. -benchtime=5s -run='^$$' ./... > bench-current.txt
+	@echo "Benchmark comparison:"
+	@benchstat bench-baseline.txt bench-current.txt || echo "Install benchstat: go install golang.org/x/perf/cmd/benchstat@latest"
 
 fuzz: ## Run fuzz tests
 	@echo "Running fuzz tests..."

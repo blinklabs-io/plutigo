@@ -28,3 +28,9 @@ jobs:
           go-version: ${{ matrix.go-version }}
       - name: go-test
         run: make test
+      - name: Generate coverage report
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.out
