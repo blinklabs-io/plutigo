@@ -3,8 +3,28 @@ package lex
 import (
 	"math/big"
 	"reflect"
+	"strings"
 	"testing"
 )
+
+func TestUnknownNamedEscapeMessageContainsFullName(t *testing.T) {
+	// Input is a quoted string containing an unknown named escape \INVALID
+	input := `"\INVALID"`
+	lexer := NewLexer(input)
+	tok := lexer.NextToken()
+	switch tok.Type {
+	case TokenError:
+		if !strings.Contains(tok.Literal, "\\INVALID") {
+			t.Fatalf("token literal %q does not contain full escape sequence \\INVALID", tok.Literal)
+		}
+	case TokenString:
+		if tok.Literal != "\\INVALID" {
+			t.Fatalf("TokenString literal %q not equal to \\INVALID", tok.Literal)
+		}
+	default:
+		t.Fatalf("unexpected token type %v (literal %q)", tok.Type, tok.Literal)
+	}
+}
 
 func TestLexerNextToken(t *testing.T) {
 	input := `(program 1.0.0 (con integer 42))`

@@ -82,8 +82,7 @@ func (l *Lexer) skipWhitespace() {
 
 func (l *Lexer) readIdentifier() string {
 	start := l.pos
-
-	for unicode.IsLetter(l.ch) || unicode.IsDigit(l.ch) || l.ch == '_' || l.ch == '\'' {
+	for unicode.IsLetter(l.ch) || unicode.IsDigit(l.ch) || l.ch == '_' || l.ch == '\'' || l.ch == '-' {
 		l.readChar()
 	}
 
@@ -124,7 +123,7 @@ func (l *Lexer) readString() (string, error) {
 		if l.ch == '\\' {
 			// Read next character to determine escape sequence type
 			l.readChar()
-			// Check for "simple" escape
+			// Check for simple one-char escapes (like \" and \\\)
 			tmpEscape := `\` + string(l.ch)
 			if val, ok := escapeMap[tmpEscape]; ok {
 				tmpString += val
@@ -225,6 +224,32 @@ func (l *Lexer) readString() (string, error) {
 				}
 				tmpString += string(rune(tmpOctal))
 				continue
+			}
+			// Handle named escapes (e.g., \DEL) after specific sequences
+			if unicode.IsLetter(l.ch) {
+				// Read consecutive letters to form the full name (e.g., DEL)
+				name := string(l.ch)
+				var nameSb232 strings.Builder
+				for {
+					l.readChar()
+					if !unicode.IsLetter(l.ch) {
+						// we've read one character too far; mark leftover and stop
+						leftoverChar = true
+						break
+					}
+					nameSb232.WriteString(string(l.ch))
+				}
+				name += nameSb232.String()
+
+				key := `\` + name
+				if val, ok := escapeMap[key]; ok {
+					tmpString += val
+					continue
+				}
+
+				// no valid named escape found; return an error that includes the
+				// full name (e.g., \INVALID) so error messages are clear.
+				return "", fmt.Errorf("unknown escape sequence: %s", key)
 			}
 			// Check for unknown non-numeric escape
 			if l.ch > unicode.MaxASCII || !unicode.IsDigit(l.ch) {
@@ -494,6 +519,8 @@ func (l *Lexer) NextToken() Token {
 				tok.Type = TokenB
 			case "list":
 				tok.Type = TokenList
+			case "array":
+				tok.Type = TokenArray
 			case "List":
 				tok.Type = TokenPlutusList
 			case "Map":

@@ -314,6 +314,10 @@ func decodeConstr(tag uint64, content cbor.RawMessage) (PlutusData, error) {
 
 	fields := tmpList.Items
 
+	if tag > uint64(^uint(0)) {
+		return nil, fmt.Errorf("Constr tag %d out of range", tag)
+	}
+
 	ret := NewConstrDefIndef(*(tmpList.useIndef), uint(tag), fields...)
 	return ret, nil
 }
