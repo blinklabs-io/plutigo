@@ -12,7 +12,7 @@ func TestFromByte(t *testing.T) {
 	}{
 		{0, AddInteger, false},
 		{1, SubtractInteger, false},
-		{MaxDefaultFunction, IndexArray, false},
+		{MaxDefaultFunction, DefaultFunction(MaxDefaultFunction), false},
 		{MaxDefaultFunction + 1, 0, true},
 		{255, 0, true},
 	}

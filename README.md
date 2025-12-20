@@ -8,8 +8,8 @@ for a full node. The other stuff like Typed Plutus Core and Plutus IR is for Pli
 ## Features
 
 - Complete Plutus Support: Implements Untyped Plutus Core (UPLC) evaluation
-- Multi-Version Support: Compatible with Plutus V1, V2, and V3
-- Cost Model Integration: Automatic cost model selection based on Plutus version
+- Multi-Version Support: Compatible with Plutus V1, V2, V3, and initial Plutus V4 support
+- Cost Model Integration: Automatic cost model selection based on Plutus version (Plutus V4 cost models are placeholders)
 - High Performance: Optimized CEK machine implementation in pure Go
 - Cryptographic Operations: Full BLS12-381 support using gnark-crypto
 - Comprehensive Testing: 52%+ test coverage with fuzz testing and property-based testing
@@ -100,6 +100,7 @@ plutigo supports all major Plutus protocol versions:
 - Plutus V1 (1.0.0): Alonzo era - Basic builtin functions
 - Plutus V2 (1.1.0): Vasil era - Additional crypto builtins
 - Plutus V3 (1.2.0+): Chang+ era - Latest features and optimizations
+- Plutus V4 (1.3.0+): Initial support with placeholder cost models
 
 The library automatically selects appropriate cost models and builtin behavior based on the program version.
 

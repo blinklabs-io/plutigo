@@ -33,6 +33,10 @@ func (n Name) VarEncode(e *encoder) error {
 		return err
 	}
 
+	if n.Unique > math.MaxUint {
+		return fmt.Errorf("unique value out of range: %d", n.Unique)
+	}
+
 	e.word(uint(n.Unique))
 
 	return nil
