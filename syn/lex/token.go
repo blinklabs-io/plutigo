@@ -29,6 +29,7 @@ const (
 	TokenErrorTerm    // error
 	TokenProgram      // program
 	TokenList         // list
+	TokenArray        // array
 	TokenPair         // pair
 	TokenI            // I
 	TokenB            // B

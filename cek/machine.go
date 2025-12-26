@@ -478,7 +478,7 @@ func (m *Machine[T]) returnCompute(
 			state = comp
 		}
 	case *FrameCases[T]:
-		// Pattern match on constructor value
+		// Pattern match on constructor or constant values
 		switch v := value.(type) {
 		case *Constr[T]:
 			if v.Tag > math.MaxInt {
@@ -490,6 +490,95 @@ func (m *Machine[T]) returnCompute(
 				comp.Ctx = transferArgStack(v.Fields, c.Ctx)
 				comp.Env = c.Env
 				comp.Term = c.Branches[v.Tag]
+				state = comp
+			} else {
+				return nil, errors.New("MissingCaseBranch")
+			}
+		case *Constant:
+			// Handle case on constants: Bool, Unit, Integer, List, Pair
+			var tag int
+			args := make([]Value[T], 0)
+			// branchRule semantics:
+			// 0: allow any number of branches (Integer)
+			// 1: require exactly 1 branch (Unit/Pair)
+			// 2: allow up to 2 branches (1 or 2) but disallow >2 (Bool/List)
+			branchRule := 0
+
+			switch cval := v.Constant.(type) {
+			case *syn.Bool:
+				// Bool: allow 1 or 2 branches; >2 invalid
+				branchRule = 2
+				// False=0, True=1
+				if cval.Inner {
+					tag = 1
+				} else {
+					tag = 0
+				}
+			case *syn.Unit:
+				// Unit constants must have exactly 1 branch
+				branchRule = 1
+				// ()=0
+				tag = 0
+			case *syn.Integer:
+				// Integer: use value as branch index
+				if cval.Inner.Sign() < 0 {
+					return nil, errors.New("case on negative integer")
+				}
+				if !cval.Inner.IsInt64() {
+					return nil, errors.New("case on integer out of range")
+				}
+				ival := cval.Inner.Int64()
+				if ival > int64(math.MaxInt) {
+					return nil, errors.New("case on integer out of range")
+				}
+				tag = int(ival)
+			case *syn.ByteString:
+				// ByteString constant not valid in case according to conformance
+				return nil, errors.New("case on bytestring constant not allowed")
+			case *syn.ProtoList:
+				// List: allow 1 or 2 branches; >2 invalid
+				branchRule = 2
+				// cons=0 (with [head, tail] args), nil=1 (no args)
+				if len(cval.List) == 0 {
+					tag = 1
+				} else {
+					tag = 0
+					// head
+					args = append(args, &Constant{cval.List[0]})
+					// tail
+					tail := &syn.ProtoList{LTyp: cval.LTyp, List: cval.List[1:]}
+					args = append(args, &Constant{tail})
+				}
+			case *syn.ProtoPair:
+				// Pair constants must have exactly 1 branch
+				branchRule = 1
+				// Pass both fields as args
+				tag = 0
+				args = append(args, &Constant{cval.First})
+				args = append(args, &Constant{cval.Second})
+			default:
+				return nil, errors.New("NonConstrScrutinized")
+			}
+
+			// Enforce branch count rules for constant cases
+			switch branchRule {
+			case 1:
+				// exact 1
+				if len(c.Branches) != 1 {
+					return nil, errors.New("InvalidCaseBranchCount")
+				}
+			case 2:
+				// 1 or 2
+				if len(c.Branches) < 1 || len(c.Branches) > 2 {
+					return nil, errors.New("InvalidCaseBranchCount")
+				}
+			}
+
+			if indexExists(c.Branches, tag) {
+				comp := getCompute[T]()
+				comp.Ctx = transferArgStack(args, c.Ctx)
+				comp.Env = c.Env
+				comp.Term = c.Branches[tag]
 				state = comp
 			} else {
 				return nil, errors.New("MissingCaseBranch")

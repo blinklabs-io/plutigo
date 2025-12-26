@@ -2,6 +2,7 @@ package tests
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -221,10 +222,16 @@ func TestConformance(t *testing.T) {
 
 					// Evaluate program
 
+					// Tests need a higher budget than the production default; override explicitly
+					initialBudget := cek.ExBudget{
+						Mem: math.MaxInt64,
+						Cpu: math.MaxInt64,
+					}
 					machine := cek.NewMachine[syn.DeBruijn](
 						dProgram.Version,
 						200,
 					)
+					machine.ExBudget = initialBudget
 
 					result, err := machine.Run(dProgram.Term)
 					if err != nil {
@@ -273,7 +280,7 @@ func TestConformance(t *testing.T) {
 
 					// Compare budgets if budget file was found
 					if expectedBudget != "" {
-						consumedBudget := cek.DefaultExBudget.Sub(
+						consumedBudget := initialBudget.Sub(
 							&machine.ExBudget,
 						)
 						fmtBudget := fmt.Sprintf(
