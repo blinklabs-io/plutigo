@@ -6,6 +6,7 @@ type ExBudget struct {
 }
 
 var DefaultExBudget = ExBudget{
+	// Use mainnet-like limits by default; tests needing more should override explicitly
 	Mem: 14_000_000,
 	Cpu: 10_000_000_000,
 }

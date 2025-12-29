@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"reflect"
+	"sort"
 	"strconv"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -304,7 +305,7 @@ func (p *Parser) parseConstr() (Term[Name], error) {
 		)
 	}
 
-	n, err := strconv.Atoi(p.curToken.Literal)
+	n, err := strconv.ParseUint(p.curToken.Literal, 10, strconv.IntSize)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"invalid constr tag %s at position %d: %w",
@@ -314,11 +315,7 @@ func (p *Parser) parseConstr() (Term[Name], error) {
 		)
 	}
 
-	if n < 0 {
-		return nil, fmt.Errorf("constr tag must be non-negative: %d", n)
-	}
-
-	tag := n
+	tag := uint(n)
 
 	p.nextToken()
 
@@ -615,6 +612,232 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 		jac := new(bls.G2Jac).FromAffine(uncompressed)
 
 		return &Constant{Con: &Bls12_381G2Element{Inner: jac}}, nil
+	case *TValue:
+		if err := p.expect(lex.TokenLBracket); err != nil {
+			return nil, err
+		}
+
+		var items []IConstant
+
+		for p.curToken.Type != lex.TokenRBracket {
+			if err := p.expect(lex.TokenLParen); err != nil {
+				return nil, err
+			}
+
+			// Key bytestring
+			if p.curToken.Type != lex.TokenByteString {
+				return nil, fmt.Errorf("expected bytestring key for value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+			}
+
+			kb, ok := p.curToken.Value.([]byte)
+			if !ok {
+				return nil, fmt.Errorf("invalid bytestring key %s at position %d", p.curToken.Literal, p.curToken.Position)
+			}
+
+			// policy key length must be <= 32 bytes
+			if len(kb) > 32 {
+				return nil, fmt.Errorf("policy key too long (%d bytes) at position %d", len(kb), p.curToken.Position)
+			}
+
+			p.nextToken()
+
+			if err := p.expect(lex.TokenComma); err != nil {
+				return nil, err
+			}
+
+			// Inner list of pairs
+			if err := p.expect(lex.TokenLBracket); err != nil {
+				return nil, err
+			}
+
+			var innerItems []IConstant
+
+			for p.curToken.Type != lex.TokenRBracket {
+				if err := p.expect(lex.TokenLParen); err != nil {
+					return nil, err
+				}
+
+				if p.curToken.Type != lex.TokenByteString {
+					return nil, fmt.Errorf("expected bytestring in inner pair, got %v at position %d", p.curToken.Type, p.curToken.Position)
+				}
+
+				ib, ok := p.curToken.Value.([]byte)
+				if !ok {
+					return nil, fmt.Errorf("invalid bytestring value %s at position %d", p.curToken.Literal, p.curToken.Position)
+				}
+
+				// token key length must be <= 32 bytes
+				if len(ib) > 32 {
+					return nil, fmt.Errorf("token key too long (%d bytes) at position %d", len(ib), p.curToken.Position)
+				}
+
+				p.nextToken()
+
+				if err := p.expect(lex.TokenComma); err != nil {
+					return nil, err
+				}
+
+				if p.curToken.Type != lex.TokenNumber {
+					return nil, fmt.Errorf("expected integer in inner pair, got %v at position %d", p.curToken.Type, p.curToken.Position)
+				}
+
+				n, ok := p.curToken.Value.(*big.Int)
+				if !ok {
+					return nil, fmt.Errorf("invalid integer value %s at position %d", p.curToken.Literal, p.curToken.Position)
+				}
+				// Token amounts must fit in the allowed range:
+				// minimum: -(2^127), maximum: (2^127 - 1)
+				limit := new(big.Int).Lsh(big.NewInt(1), 127)           // 2^127
+				limitMinusOne := new(big.Int).Sub(limit, big.NewInt(1)) // 2^127 - 1
+				negLimit := new(big.Int).Neg(limit)                     // -2^127
+				if n.Sign() >= 0 {
+					if n.Cmp(limitMinusOne) > 0 {
+						return nil, fmt.Errorf("integer in value token out of range %s at position %d", p.curToken.Literal, p.curToken.Position)
+					}
+				} else {
+					if n.Cmp(negLimit) < 0 {
+						return nil, fmt.Errorf("integer in value token out of range %s at position %d", p.curToken.Literal, p.curToken.Position)
+					}
+				}
+
+				p.nextToken()
+
+				if err := p.expect(lex.TokenRParen); err != nil {
+					return nil, err
+				}
+
+				innerItems = append(innerItems, &ProtoPair{FstType: &TByteString{}, SndType: &TInteger{}, First: &ByteString{Inner: ib}, Second: &Integer{Inner: n}})
+
+				if p.curToken.Type != lex.TokenRBracket {
+					if err := p.expect(lex.TokenComma); err != nil {
+						return nil, err
+					}
+				}
+			}
+
+			if err := p.expect(lex.TokenRBracket); err != nil {
+				return nil, err
+			}
+
+			if err := p.expect(lex.TokenRParen); err != nil {
+				return nil, err
+			}
+
+			outerPair := &ProtoPair{
+				FstType: &TByteString{},
+				SndType: &TList{Typ: &TPair{First: &TByteString{}, Second: &TInteger{}}},
+				First:   &ByteString{Inner: kb},
+				Second:  &ProtoList{LTyp: &TPair{First: &TByteString{}, Second: &TInteger{}}, List: innerItems},
+			}
+
+			items = append(items, outerPair)
+
+			if p.curToken.Type != lex.TokenRBracket {
+				if err := p.expect(lex.TokenComma); err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		if err := p.expect(lex.TokenRBracket); err != nil {
+			return nil, err
+		}
+
+		if err := p.expect(lex.TokenRParen); err != nil {
+			return nil, err
+		}
+
+		// Canonicalize the value constant: merge duplicate token keys by summing,
+		// remove zero amounts and empty policy entries, and sort deterministically.
+		vm := make(map[string]map[string]*big.Int)
+
+		for _, it := range items {
+			pp, ok := it.(*ProtoPair)
+			if !ok {
+				continue
+			}
+			polBs, ok := pp.First.(*ByteString)
+			pol := ""
+			if ok {
+				pol = string(polBs.Inner)
+			}
+			if _, exists := vm[pol]; !exists {
+				vm[pol] = make(map[string]*big.Int)
+			}
+			if lst, ok := pp.Second.(*ProtoList); ok {
+				for _, tk := range lst.List {
+					tkp, ok := tk.(*ProtoPair)
+					if !ok {
+						continue
+					}
+					tkBs, ok1 := tkp.First.(*ByteString)
+					amt, ok2 := tkp.Second.(*Integer)
+					if ok1 && ok2 {
+						key := string(tkBs.Inner)
+						val := new(big.Int).Set(amt.Inner)
+						if cur, ex := vm[pol][key]; ex {
+							vm[pol][key] = new(big.Int).Add(cur, val)
+						} else {
+							vm[pol][key] = val
+						}
+					}
+				}
+			}
+		}
+
+		// Validate summed token amounts fit in the allowed range
+		limit := new(big.Int).Lsh(big.NewInt(1), 127)           // 2^127
+		limitMinusOne := new(big.Int).Sub(limit, big.NewInt(1)) // 2^127 - 1
+		negLimit := new(big.Int).Neg(limit)                     // -2^127
+		for pol, tokens := range vm {
+			for key, amt := range tokens {
+				if amt.Sign() >= 0 {
+					if amt.Cmp(limitMinusOne) > 0 {
+						return nil, fmt.Errorf("summed token amount for policy %q key %q out of range %s", pol, key, amt.String())
+					}
+				} else {
+					if amt.Cmp(negLimit) < 0 {
+						return nil, fmt.Errorf("summed token amount for policy %q key %q out of range %s", pol, key, amt.String())
+					}
+				}
+			}
+		}
+
+		// Build canonical list
+		policies := make([]string, 0, len(vm))
+		for policy := range vm {
+			policies = append(policies, policy)
+		}
+		sort.Strings(policies)
+
+		res := make([]IConstant, 0)
+		for _, pol := range policies {
+			tokens := vm[pol]
+			// collect non-zero tokens
+			if len(tokens) == 0 {
+				continue
+			}
+			keys := make([]string, 0, len(tokens))
+			for k := range tokens {
+				if tokens[k] == nil || tokens[k].Sign() == 0 {
+					continue
+				}
+				keys = append(keys, k)
+			}
+			if len(keys) == 0 {
+				continue
+			}
+			sort.Strings(keys)
+			inner := make([]IConstant, 0, len(keys))
+			for _, k := range keys {
+				inner = append(inner, &ProtoPair{FstType: &TByteString{}, SndType: &TInteger{}, First: &ByteString{Inner: []byte(k)}, Second: &Integer{Inner: tokens[k]}})
+			}
+			res = append(res, &ProtoPair{FstType: &TByteString{}, SndType: &TList{Typ: &TPair{First: &TByteString{}, Second: &TInteger{}}}, First: &ByteString{Inner: []byte(pol)}, Second: &ProtoList{LTyp: &TPair{First: &TByteString{}, Second: &TInteger{}}, List: inner}})
+		}
+
+		valType := &TPair{First: &TByteString{}, Second: &TList{Typ: &TPair{First: &TByteString{}, Second: &TInteger{}}}}
+
+		return &Constant{Con: &ProtoList{LTyp: valType, List: res}}, nil
 	default:
 		return nil, fmt.Errorf("unexpected type spec %v at position %d", typeSpec, p.curToken.Position)
 	}
@@ -684,6 +907,58 @@ func (p *Parser) parseConstantValue(typ Typ) (IConstant, error) {
 		p.nextToken()
 
 		return &Unit{}, nil
+	case *TBls12_381G1Element:
+		if p.curToken.Type != lex.TokenPoint {
+			return nil, fmt.Errorf("expected point value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		}
+
+		b, ok := p.curToken.Value.([]byte)
+		if !ok {
+			return nil, fmt.Errorf("invalid bytestring value %s at position %d", p.curToken.Literal, p.curToken.Position)
+		}
+
+		p.nextToken()
+
+		if len(b) != 48 {
+			return nil, fmt.Errorf("bls12_381_g1_element must be 48 bytes, got %d", len(b))
+		}
+
+		uncompressed := new(bls.G1Affine)
+
+		_, err := uncompressed.SetBytes(b)
+		if err != nil {
+			return nil, err
+		}
+
+		jac := new(bls.G1Jac).FromAffine(uncompressed)
+
+		return &Bls12_381G1Element{Inner: jac}, nil
+	case *TBls12_381G2Element:
+		if p.curToken.Type != lex.TokenPoint {
+			return nil, fmt.Errorf("expected point value, got %v at position %d", p.curToken.Type, p.curToken.Position)
+		}
+
+		b, ok := p.curToken.Value.([]byte)
+		if !ok {
+			return nil, fmt.Errorf("invalid bytestring value %s at position %d", p.curToken.Literal, p.curToken.Position)
+		}
+
+		p.nextToken()
+
+		if len(b) != 96 {
+			return nil, fmt.Errorf("bls12_381_g2_element must be 96 bytes, got %d", len(b))
+		}
+
+		uncompressed := new(bls.G2Affine)
+
+		_, err := uncompressed.SetBytes(b)
+		if err != nil {
+			return nil, err
+		}
+
+		jac := new(bls.G2Jac).FromAffine(uncompressed)
+
+		return &Bls12_381G2Element{Inner: jac}, nil
 	case *TData:
 		dataVal, err := p.parsePlutusData()
 		if err != nil {
@@ -893,7 +1168,7 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 			)
 		}
 
-		n, err := strconv.Atoi(p.curToken.Literal)
+		nu, err := strconv.ParseUint(p.curToken.Literal, 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"invalid constr tag %s at position %d: %w",
@@ -903,11 +1178,14 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 			)
 		}
 
-		if n < 0 {
-			return nil, fmt.Errorf("constr tag must be non-negative: %d", n)
+		if nu > uint64(^uint(0)) {
+			return nil, fmt.Errorf(
+				"constr tag %d out of range at position %d",
+				nu,
+				p.curToken.Position,
+			)
 		}
-
-		tag := uint(n)
+		tag := uint(nu)
 
 		p.nextToken()
 
@@ -1009,6 +1287,8 @@ func (p *Parser) parseInnerTypeSpec() (Typ, error) {
 			return &TBls12_381G1Element{}, nil
 		case "bls12_381_G2_element":
 			return &TBls12_381G2Element{}, nil
+		case "value":
+			return &TValue{}, nil
 		default:
 			return nil, fmt.Errorf(
 				"unknown type %s at position %d",
@@ -1016,7 +1296,7 @@ func (p *Parser) parseInnerTypeSpec() (Typ, error) {
 				p.curToken.Position,
 			)
 		}
-	case lex.TokenList:
+	case lex.TokenList, lex.TokenArray:
 		p.nextToken()
 
 		// Parse element type, which may be parenthesized (e.g., (list data)) or simple (e.g., data)

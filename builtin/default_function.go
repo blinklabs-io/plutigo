@@ -130,6 +130,17 @@ const (
 	LengthOfArray DefaultFunction = 91
 	ListToArray   DefaultFunction = 92
 	IndexArray    DefaultFunction = 93
+
+	// Multi-scalar multiplication (G1/G2)
+	Bls12_381_G1_MultiScalarMul DefaultFunction = 94
+	Bls12_381_G2_MultiScalarMul DefaultFunction = 95
+
+	// Value/coin builtins
+	InsertCoin    DefaultFunction = 96
+	LookupCoin    DefaultFunction = 97
+	ScaleValue    DefaultFunction = 98
+	UnionValue    DefaultFunction = 99
+	ValueContains DefaultFunction = 100
 )
 
 var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
@@ -251,6 +262,16 @@ var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
 	"lengthOfArray": LengthOfArray,
 	"listToArray":   ListToArray,
 	"indexArray":    IndexArray,
+	// Multi-scalar
+	"bls12_381_G1_multiScalarMul": Bls12_381_G1_MultiScalarMul,
+	"bls12_381_G2_multiScalarMul": Bls12_381_G2_MultiScalarMul,
+
+	// Value/coin builtins
+	"insertCoin":    InsertCoin,
+	"lookupCoin":    LookupCoin,
+	"scaleValue":    ScaleValue,
+	"unionValue":    UnionValue,
+	"valueContains": ValueContains,
 }
 
 var defaultFunctionForceCount = [TotalBuiltinCount]uint{
@@ -364,9 +385,16 @@ var defaultFunctionForceCount = [TotalBuiltinCount]uint{
 	CaseData:      1,
 	DropList:      1,
 	// Arrays
-	LengthOfArray: 1,
-	ListToArray:   1,
-	IndexArray:    1,
+	LengthOfArray:               1,
+	ListToArray:                 1,
+	IndexArray:                  1,
+	Bls12_381_G1_MultiScalarMul: 0,
+	Bls12_381_G2_MultiScalarMul: 0,
+	InsertCoin:                  0,
+	LookupCoin:                  0,
+	ScaleValue:                  0,
+	UnionValue:                  0,
+	ValueContains:               0,
 }
 
 func (f DefaultFunction) ForceCount() uint {
@@ -484,9 +512,16 @@ var defaultFunctionArity = [TotalBuiltinCount]uint{
 	CaseData:      6,
 	DropList:      2,
 	// Arrays
-	LengthOfArray: 1,
-	ListToArray:   1,
-	IndexArray:    2,
+	LengthOfArray:               1,
+	ListToArray:                 1,
+	IndexArray:                  2,
+	Bls12_381_G1_MultiScalarMul: 2,
+	Bls12_381_G2_MultiScalarMul: 2,
+	InsertCoin:                  4,
+	LookupCoin:                  3,
+	ScaleValue:                  2,
+	UnionValue:                  2,
+	ValueContains:               2,
 }
 
 func (f DefaultFunction) Arity() uint {
@@ -604,9 +639,16 @@ var defaultFunctionToString = [TotalBuiltinCount]string{
 	CaseData:      "caseData",
 	DropList:      "dropList",
 	// Arrays
-	LengthOfArray: "lengthOfArray",
-	ListToArray:   "listToArray",
-	IndexArray:    "indexArray",
+	LengthOfArray:               "lengthOfArray",
+	ListToArray:                 "listToArray",
+	IndexArray:                  "indexArray",
+	Bls12_381_G1_MultiScalarMul: "bls12_381_G1_multiScalarMul",
+	Bls12_381_G2_MultiScalarMul: "bls12_381_G2_multiScalarMul",
+	InsertCoin:                  "insertCoin",
+	LookupCoin:                  "lookupCoin",
+	ScaleValue:                  "scaleValue",
+	UnionValue:                  "unionValue",
+	ValueContains:               "valueContains",
 }
 
 func (f DefaultFunction) String() string {
@@ -617,7 +659,7 @@ func (f DefaultFunction) String() string {
 const MinDefaultFunction byte = 0
 
 // Smallest DefaultFunction
-const MaxDefaultFunction byte = 93
+const MaxDefaultFunction byte = 100
 
 // Total Builtin Count
 const TotalBuiltinCount byte = MaxDefaultFunction + 1

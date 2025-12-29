@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math/big"
 	"reflect"
+	"strconv"
+	"strings"
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
@@ -79,23 +81,25 @@ func newBuiltins[T syn.Eval]() Builtins[T] {
 		builtin.MkNilData:     mkNilData[T],
 		builtin.MkNilPairData: mkNilPairData[T],
 
-		builtin.Bls12_381_G1_Add:         bls12381G1Add[T],
-		builtin.Bls12_381_G1_Neg:         bls12381G1Neg[T],
-		builtin.Bls12_381_G1_ScalarMul:   bls12381G1ScalarMul[T],
-		builtin.Bls12_381_G1_Equal:       bls12381G1Equal[T],
-		builtin.Bls12_381_G1_Compress:    bls12381G1Compress[T],
-		builtin.Bls12_381_G1_Uncompress:  bls12381G1Uncompress[T],
-		builtin.Bls12_381_G1_HashToGroup: bls12381G1HashToGroup[T],
-		builtin.Bls12_381_G2_Add:         bls12381G2Add[T],
-		builtin.Bls12_381_G2_Neg:         bls12381G2Neg[T],
-		builtin.Bls12_381_G2_ScalarMul:   bls12381G2ScalarMul[T],
-		builtin.Bls12_381_G2_Equal:       bls12381G2Equal[T],
-		builtin.Bls12_381_G2_Compress:    bls12381G2Compress[T],
-		builtin.Bls12_381_G2_Uncompress:  bls12381G2Uncompress[T],
-		builtin.Bls12_381_G2_HashToGroup: bls12381G2HashToGroup[T],
-		builtin.Bls12_381_MillerLoop:     bls12381MillerLoop[T],
-		builtin.Bls12_381_MulMlResult:    bls12381MulMlResult[T],
-		builtin.Bls12_381_FinalVerify:    bls12381FinalVerify[T],
+		builtin.Bls12_381_G1_Add:            bls12381G1Add[T],
+		builtin.Bls12_381_G1_Neg:            bls12381G1Neg[T],
+		builtin.Bls12_381_G1_ScalarMul:      bls12381G1ScalarMul[T],
+		builtin.Bls12_381_G1_Equal:          bls12381G1Equal[T],
+		builtin.Bls12_381_G1_Compress:       bls12381G1Compress[T],
+		builtin.Bls12_381_G1_Uncompress:     bls12381G1Uncompress[T],
+		builtin.Bls12_381_G1_HashToGroup:    bls12381G1HashToGroup[T],
+		builtin.Bls12_381_G2_Add:            bls12381G2Add[T],
+		builtin.Bls12_381_G2_Neg:            bls12381G2Neg[T],
+		builtin.Bls12_381_G2_ScalarMul:      bls12381G2ScalarMul[T],
+		builtin.Bls12_381_G1_MultiScalarMul: bls12381G1MultiScalarMul[T],
+		builtin.Bls12_381_G2_MultiScalarMul: bls12381G2MultiScalarMul[T],
+		builtin.Bls12_381_G2_Equal:          bls12381G2Equal[T],
+		builtin.Bls12_381_G2_Compress:       bls12381G2Compress[T],
+		builtin.Bls12_381_G2_Uncompress:     bls12381G2Uncompress[T],
+		builtin.Bls12_381_G2_HashToGroup:    bls12381G2HashToGroup[T],
+		builtin.Bls12_381_MillerLoop:        bls12381MillerLoop[T],
+		builtin.Bls12_381_MulMlResult:       bls12381MulMlResult[T],
+		builtin.Bls12_381_FinalVerify:       bls12381FinalVerify[T],
 
 		builtin.IntegerToByteString:  integerToByteString[T],
 		builtin.ByteStringToInteger:  byteStringToInteger[T],
@@ -120,6 +124,12 @@ func newBuiltins[T syn.Eval]() Builtins[T] {
 		builtin.LengthOfArray: lengthOfArray[T],
 		builtin.ListToArray:   listToArray[T],
 		builtin.IndexArray:    indexArray[T],
+		// Value/coin builtins
+		builtin.InsertCoin:    insertCoin[T],
+		builtin.LookupCoin:    lookupCoin[T],
+		builtin.ScaleValue:    scaleValue[T],
+		builtin.UnionValue:    unionValue[T],
+		builtin.ValueContains: valueContains[T],
 	}
 }
 
@@ -258,6 +268,12 @@ func unwrapString[T syn.Eval](value Value[T]) (string, error) {
 		switch c := v.Constant.(type) {
 		case *syn.String:
 			i = c.Inner
+			// Process escape sequences and normalize Unicode
+			processed, err := processEscapeSequences(i)
+			if err != nil {
+				return "", fmt.Errorf("failed to process escape sequences: %w", err)
+			}
+			i = processed
 		default:
 			return "", errors.New("Value not a String")
 		}
@@ -266,6 +282,98 @@ func unwrapString[T syn.Eval](value Value[T]) (string, error) {
 	}
 
 	return i, nil
+}
+
+// Enhanced processEscapeSequences to handle additional cases
+func processEscapeSequences(input string) (string, error) {
+	var sb strings.Builder
+	for i := 0; i < len(input); i++ {
+		ch := input[i]
+		if ch != '\\' {
+			sb.WriteByte(ch)
+			continue
+		}
+
+		// at a backslash
+		i++
+		if i >= len(input) {
+			// trailing backslash, keep it
+			sb.WriteByte('\\')
+			break
+		}
+
+		next := input[i]
+		switch next {
+		case 'n':
+			sb.WriteByte('\n')
+		case 'r':
+			sb.WriteByte('\r')
+		case 't':
+			sb.WriteByte('\t')
+		case 'b':
+			sb.WriteByte('\b')
+		case 'a':
+			sb.WriteByte('\a')
+		case '\\':
+			sb.WriteByte('\\')
+		case '"':
+			sb.WriteByte('"')
+		case 'D':
+			// possible \DEL sequence
+			// check remaining substring
+			if strings.HasPrefix(input[i:], "DEL") {
+				sb.WriteRune(rune(127))
+				i += 2 // consumed 'D' then 'E' and 'L' in loop increment; adjust by 2 to move past 'EL'
+			} else {
+				// unknown, keep as-is
+				sb.WriteByte('\\')
+				sb.WriteByte(next)
+			}
+		case 'u':
+			// expect 4 hex digits after \u
+			if i+4 < len(input) {
+				hex := input[i+1 : i+5]
+				if v, err := strconv.ParseInt(hex, 16, 32); err == nil {
+					sb.WriteRune(rune(v))
+					i += 4
+				} else {
+					// fallback: write original sequence
+					sb.WriteString("\\u")
+				}
+			} else {
+				sb.WriteString("\\u")
+			}
+		default:
+			// numeric escape like \8712 (4 digits) or other
+			// try to read up to 4 digits
+			if next >= '0' && next <= '9' {
+				j := i
+				// we've already got one digit at position j
+				for k := 0; k < 4 && j < len(input) && input[j] >= '0' && input[j] <= '9'; k++ {
+					j++
+				}
+				digits := input[i:j]
+				if len(digits) > 0 {
+					if v, err := strconv.ParseInt(digits, 10, 32); err == nil {
+						sb.WriteRune(rune(v))
+						i = j - 1
+						break
+					}
+				}
+
+				// fallback: write original
+				sb.WriteByte('\\')
+				sb.WriteString(digits)
+				i = j - 1
+			} else {
+				// unknown escape, preserve backslash and char
+				sb.WriteByte('\\')
+				sb.WriteByte(next)
+			}
+		}
+	}
+
+	return sb.String(), nil
 }
 
 func unwrapBool[T syn.Eval](value Value[T]) (bool, error) {
