@@ -14,6 +14,30 @@ for a full node. The other stuff like Typed Plutus Core and Plutus IR is for Pli
 - Cryptographic Operations: Full BLS12-381 support using gnark-crypto
 - Comprehensive Testing: 52%+ test coverage with fuzz testing and property-based testing
 
+## Supported CIPs
+
+plutigo implements the following Cardano Improvement Proposals (CIPs) related to Plutus Core:
+
+- [CIP-0042](https://cips.cardano.org/cips/cip42/): `serialiseData` builtin for CBOR serialization of Plutus Data
+- [CIP-0049](https://cips.cardano.org/cips/cip49/): ECDSA and Schnorr signature verification builtins
+- [CIP-0058](https://cips.cardano.org/cips/cip58/): Bitwise primitives for integers
+- [CIP-0085](https://cips.cardano.org/cips/cip85/): Sums-of-products (constructor and case expressions)
+- [CIP-0091](https://cips.cardano.org/cips/cip91/): Optimized builtin evaluation (no forced evaluation for saturated calls)
+- [CIP-0101](https://cips.cardano.org/cips/cip101/): `keccak_256` hash function
+- [CIP-0109](https://cips.cardano.org/cips/cip109/): `expModInteger` for modular exponentiation
+- [CIP-0121](https://cips.cardano.org/cips/cip121/): Integer to ByteString conversions
+- [CIP-0122](https://cips.cardano.org/cips/cip122/): Logical operations on ByteString
+- [CIP-0123](https://cips.cardano.org/cips/cip123/): Bitwise operations on ByteString
+- [CIP-0127](https://cips.cardano.org/cips/cip127/): `ripemd_160` hash function
+- [CIP-0132](https://cips.cardano.org/cips/cip132/): `dropList` builtin
+- [CIP-0133](https://cips.cardano.org/cips/cip133/): BLS12-381 multi-scalar multiplication
+- [CIP-0138](https://cips.cardano.org/cips/cip138/): Array type and operations (`lengthOfArray`, `listToArray`, `indexArray`)
+- [CIP-0153](https://cips.cardano.org/cips/cip153/): Mary-era Value builtins (`insertCoin`, `lookupCoin`, `scaleValue`, `unionValue`, `valueContains`)
+- [CIP-0381](https://cips.cardano.org/cips/cip381/): BLS12-381 pairing operations
+
+### Testing and Conformance
+All implemented CIPs include comprehensive conformance tests ensuring correct behavior and cost modeling.
+
 ## Performance
 
 plutigo is optimized for high-performance Plutus script evaluation:
