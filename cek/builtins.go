@@ -3834,6 +3834,63 @@ func indexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return &Constant{lst.List[i]}, nil
 }
 
+func multiIndexArray[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+	// Args: (con (list integer) indices) (con (array t) arr)
+
+	indicesList, err := unwrapList[T](&syn.TInteger{}, m.argHolder[0])
+	if err != nil {
+		return nil, err
+	}
+
+	arr, err := unwrapList[T](nil, m.argHolder[1])
+	if err != nil {
+		return nil, err
+	}
+
+	// Spend budget: linear in the length of the index list
+	indexListLen := len(indicesList.List)
+	err = m.CostTwo(
+		&b.Func,
+		func() ExMem { return ExMem(indexListLen) },
+		func() ExMem { return listExMem(arr.List)() },
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]syn.IConstant, 0, indexListLen)
+
+	for _, idxVal := range indicesList.List {
+		idxInt := idxVal.(*syn.Integer)
+		idx := idxInt.Inner
+
+		if idx.Sign() < 0 {
+			return nil, errors.New("negative index")
+		}
+
+		if !idx.IsInt64() {
+			return nil, errors.New("index too large")
+		}
+
+		idx64 := idx.Int64()
+		if idx64 > int64(math.MaxInt) {
+			return nil, errors.New("index out of range")
+		}
+		i := int(idx64)
+		if i >= len(arr.List) {
+			return nil, fmt.Errorf("index out of bounds %d", i)
+		}
+
+		result = append(result, arr.List[i])
+	}
+
+	return &Constant{&syn.ProtoList{LTyp: arr.LTyp, List: result}}, nil
+}
+
 // Helper: converts a ProtoList representation of Value to map[string]map[string]*big.Int
 func valueToMap[T syn.Eval](c *syn.ProtoList) map[string]map[string]*big.Int {
 	out := make(map[string]map[string]*big.Int)

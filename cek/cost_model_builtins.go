@@ -697,6 +697,11 @@ var DefaultBuiltinCosts = BuiltinCosts{
 		mem: &ConstantCost{1},
 		cpu: &ConstantCost{1163000},
 	},
+	// V4 model: placeholder for multiIndexArray
+	builtin.MultiIndexArray: &CostingFunc[Arguments]{
+		mem: &ConstantCost{1},
+		cpu: &ConstantCost{1000000},
+	},
 }
 
 type CostingFunc[T Arguments] struct {

@@ -33,6 +33,7 @@ plutigo implements the following Cardano Improvement Proposals (CIPs) related to
 - [CIP-0133](https://cips.cardano.org/cips/cip133/): BLS12-381 multi-scalar multiplication
 - [CIP-0138](https://cips.cardano.org/cips/cip138/): Array type and operations (`lengthOfArray`, `listToArray`, `indexArray`)
 - [CIP-0153](https://cips.cardano.org/cips/cip153/): Mary-era Value builtins (`insertCoin`, `lookupCoin`, `scaleValue`, `unionValue`, `valueContains`)
+- [CIP-0156](https://cips.cardano.org/cips/cip156/): `multiIndexArray` builtin for batch array indexing
 - [CIP-0381](https://cips.cardano.org/cips/cip381/): BLS12-381 pairing operations
 
 ### Testing and Conformance

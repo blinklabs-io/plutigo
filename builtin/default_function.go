@@ -141,6 +141,9 @@ const (
 	ScaleValue    DefaultFunction = 98
 	UnionValue    DefaultFunction = 99
 	ValueContains DefaultFunction = 100
+
+	// Multi-index array
+	MultiIndexArray DefaultFunction = 101
 )
 
 var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
@@ -272,6 +275,9 @@ var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
 	"scaleValue":    ScaleValue,
 	"unionValue":    UnionValue,
 	"valueContains": ValueContains,
+
+	// Multi-index array
+	"multiIndexArray": MultiIndexArray,
 }
 
 var defaultFunctionForceCount = [TotalBuiltinCount]uint{
@@ -395,6 +401,7 @@ var defaultFunctionForceCount = [TotalBuiltinCount]uint{
 	ScaleValue:                  0,
 	UnionValue:                  0,
 	ValueContains:               0,
+	MultiIndexArray:             1,
 }
 
 func (f DefaultFunction) ForceCount() uint {
@@ -522,6 +529,7 @@ var defaultFunctionArity = [TotalBuiltinCount]uint{
 	ScaleValue:                  2,
 	UnionValue:                  2,
 	ValueContains:               2,
+	MultiIndexArray:             2,
 }
 
 func (f DefaultFunction) Arity() uint {
@@ -649,6 +657,7 @@ var defaultFunctionToString = [TotalBuiltinCount]string{
 	ScaleValue:                  "scaleValue",
 	UnionValue:                  "unionValue",
 	ValueContains:               "valueContains",
+	MultiIndexArray:             "multiIndexArray",
 }
 
 func (f DefaultFunction) String() string {
@@ -659,7 +668,7 @@ func (f DefaultFunction) String() string {
 const MinDefaultFunction byte = 0
 
 // Smallest DefaultFunction
-const MaxDefaultFunction byte = 100
+const MaxDefaultFunction byte = 101
 
 // Total Builtin Count
 const TotalBuiltinCount byte = MaxDefaultFunction + 1
