@@ -15,11 +15,17 @@ func TestUnknownNamedEscapeMessageContainsFullName(t *testing.T) {
 	switch tok.Type {
 	case TokenError:
 		if !strings.Contains(tok.Literal, "\\INVALID") {
-			t.Fatalf("token literal %q does not contain full escape sequence \\INVALID", tok.Literal)
+			t.Fatalf(
+				"token literal %q does not contain full escape sequence \\INVALID",
+				tok.Literal,
+			)
 		}
 	case TokenString:
 		if tok.Literal != "\\INVALID" {
-			t.Fatalf("TokenString literal %q not equal to \\INVALID", tok.Literal)
+			t.Fatalf(
+				"TokenString literal %q not equal to \\INVALID",
+				tok.Literal,
+			)
 		}
 	default:
 		t.Fatalf("unexpected token type %v (literal %q)", tok.Type, tok.Literal)

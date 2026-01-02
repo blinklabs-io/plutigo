@@ -125,11 +125,12 @@ func newBuiltins[T syn.Eval]() Builtins[T] {
 		builtin.ListToArray:   listToArray[T],
 		builtin.IndexArray:    indexArray[T],
 		// Value/coin builtins
-		builtin.InsertCoin:    insertCoin[T],
-		builtin.LookupCoin:    lookupCoin[T],
-		builtin.ScaleValue:    scaleValue[T],
-		builtin.UnionValue:    unionValue[T],
-		builtin.ValueContains: valueContains[T],
+		builtin.InsertCoin:      insertCoin[T],
+		builtin.LookupCoin:      lookupCoin[T],
+		builtin.ScaleValue:      scaleValue[T],
+		builtin.UnionValue:      unionValue[T],
+		builtin.ValueContains:   valueContains[T],
+		builtin.MultiIndexArray: multiIndexArray[T],
 	}
 }
 

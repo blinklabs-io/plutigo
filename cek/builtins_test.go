@@ -3433,3 +3433,168 @@ func TestLessThanByteStringBuiltin(t *testing.T) {
 		})
 	}
 }
+
+func TestMultiIndexArrayBuiltin(t *testing.T) {
+	tests := []struct {
+		name     string
+		indices  []int64
+		array    []syn.IConstant
+		expected []syn.IConstant
+		hasError bool
+	}{
+		{
+			name:    "empty indices",
+			indices: []int64{},
+			array: []syn.IConstant{
+				&syn.Integer{Inner: big.NewInt(1)},
+				&syn.Integer{Inner: big.NewInt(2)},
+			},
+			expected: []syn.IConstant{},
+			hasError: false,
+		},
+		{
+			name:    "single index",
+			indices: []int64{1},
+			array: []syn.IConstant{
+				&syn.Integer{Inner: big.NewInt(10)},
+				&syn.Integer{Inner: big.NewInt(20)},
+				&syn.Integer{Inner: big.NewInt(30)},
+			},
+			expected: []syn.IConstant{&syn.Integer{Inner: big.NewInt(20)}},
+			hasError: false,
+		},
+		{
+			name:    "multiple indices",
+			indices: []int64{0, 2, 1},
+			array: []syn.IConstant{
+				&syn.Integer{Inner: big.NewInt(100)},
+				&syn.Integer{Inner: big.NewInt(200)},
+				&syn.Integer{Inner: big.NewInt(300)},
+			},
+			expected: []syn.IConstant{
+				&syn.Integer{Inner: big.NewInt(100)},
+				&syn.Integer{Inner: big.NewInt(300)},
+				&syn.Integer{Inner: big.NewInt(200)},
+			},
+			hasError: false,
+		},
+		{
+			name:    "duplicate indices",
+			indices: []int64{1, 1, 0},
+			array: []syn.IConstant{
+				&syn.Integer{Inner: big.NewInt(5)},
+				&syn.Integer{Inner: big.NewInt(15)},
+			},
+			expected: []syn.IConstant{
+				&syn.Integer{Inner: big.NewInt(15)},
+				&syn.Integer{Inner: big.NewInt(15)},
+				&syn.Integer{Inner: big.NewInt(5)},
+			},
+			hasError: false,
+		},
+		{
+			name:     "out of bounds negative",
+			indices:  []int64{-1},
+			array:    []syn.IConstant{&syn.Integer{Inner: big.NewInt(1)}},
+			expected: nil,
+			hasError: true,
+		},
+		{
+			name:    "out of bounds too large",
+			indices: []int64{5},
+			array: []syn.IConstant{
+				&syn.Integer{Inner: big.NewInt(1)},
+				&syn.Integer{Inner: big.NewInt(2)},
+			},
+			expected: nil,
+			hasError: true,
+		},
+		{
+			name:    "non-integer index element",
+			indices: []int64{},
+			array: []syn.IConstant{
+				&syn.Integer{Inner: big.NewInt(1)},
+				&syn.Integer{Inner: big.NewInt(2)},
+			},
+			expected: nil,
+			hasError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.MultiIndexArray)
+
+			// Create indices list
+			var indicesList *Constant
+			if tt.name == "non-integer index element" {
+				// Create a list that contains a non-integer element (ByteString) to hit the error branch
+				indices := []syn.IConstant{&syn.ByteString{Inner: []byte{0x01}}}
+				indicesList = &Constant{
+					&syn.ProtoList{LTyp: &syn.TByteString{}, List: indices},
+				}
+			} else {
+				indices := make([]syn.IConstant, len(tt.indices))
+				for i, idx := range tt.indices {
+					indices[i] = &syn.Integer{Inner: big.NewInt(idx)}
+				}
+				indicesList = &Constant{&syn.ProtoList{LTyp: &syn.TInteger{}, List: indices}}
+			}
+
+			// Create array
+			array := &Constant{&syn.ProtoList{List: tt.array}}
+
+			b = b.ApplyArg(indicesList)
+			b = b.ApplyArg(array)
+
+			val, err := evalBuiltinWithError(t, m, b)
+			if tt.hasError {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			constVal := expectConstant(t, val)
+			resultList := expectProtoList(t, constVal)
+
+			if len(resultList.List) != len(tt.expected) {
+				t.Errorf(
+					"expected list length %d, got %d",
+					len(tt.expected),
+					len(resultList.List),
+				)
+			}
+
+			for i, expected := range tt.expected {
+				if i >= len(resultList.List) {
+					t.Errorf("result list too short")
+					break
+				}
+				actual := resultList.List[i]
+				expectedInt, ok := expected.(*syn.Integer)
+				if !ok {
+					t.Errorf("expected element %d is not an integer", i)
+					continue
+				}
+				actualInt, ok := actual.(*syn.Integer)
+				if !ok {
+					t.Errorf("actual element %d is not an integer", i)
+					continue
+				}
+				if expectedInt.Inner.Cmp(actualInt.Inner) != 0 {
+					t.Errorf(
+						"at index %d, expected %v, got %v",
+						i,
+						expectedInt.Inner,
+						actualInt.Inner,
+					)
+				}
+			}
+		})
+	}
+}
