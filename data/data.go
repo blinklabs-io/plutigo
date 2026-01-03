@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"math/big"
+	"slices"
+
+	"github.com/fxamacker/cbor/v2"
 )
 
 type PlutusDataWrapper struct {
@@ -43,6 +46,118 @@ type Constr struct {
 }
 
 func (Constr) isPlutusData() {}
+
+func (c *Constr) UnmarshalCBOR(data []byte) error {
+	var tmpTag cbor.RawTag
+	if err := cborUnmarshal(data, &tmpTag); err != nil {
+		return err
+	}
+	switch {
+	// Constr with tag 0..6.
+	case tmpTag.Number >= 121 && tmpTag.Number <= 127:
+		c.Tag = uint(tmpTag.Number) - 121
+		var tmpList List
+		if err := cborUnmarshal(tmpTag.Content, &tmpList); err != nil {
+			return err
+		}
+		c.Fields = tmpList.Items
+		c.useIndef = tmpList.useIndef
+	case tmpTag.Number >= 1280 && tmpTag.Number <= 1400:
+		c.Tag = uint(tmpTag.Number) - 1280 + 7
+		var tmpList List
+		if err := cborUnmarshal(tmpTag.Content, &tmpList); err != nil {
+			return err
+		}
+		c.Fields = tmpList.Items
+		c.useIndef = tmpList.useIndef
+	case tmpTag.Number == 102:
+		var tmpData struct {
+			_           struct{} `cbor:",toarray"`
+			Alternative uint64
+			FieldsRaw   cbor.RawMessage
+		}
+		if err := cborUnmarshal(tmpTag.Content, &tmpData); err != nil {
+			return err
+		}
+		c.Tag = uint(tmpData.Alternative)
+		var tmpList List
+		if err := cborUnmarshal(tmpData.FieldsRaw, &tmpList); err != nil {
+			return err
+		}
+		c.Fields = tmpList.Items
+		c.useIndef = tmpList.useIndef
+	default:
+		return fmt.Errorf(
+			"unknown CBOR tag for PlutusData constructor: %d",
+			tmpTag.Number,
+		)
+	}
+	return nil
+}
+
+func (c Constr) MarshalCBOR() ([]byte, error) {
+	useIndef := len(c.Fields) > 0
+	if c.useIndef != nil {
+		useIndef = *c.useIndef
+	}
+	// Encode fields first
+	var fields any
+	if !useIndef {
+		// Encode empty fields as simple array
+		tmpFields := make([]any, len(c.Fields))
+		for i, item := range c.Fields {
+			encoded, err := cborMarshal(item)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"failed to encode Constr field %d: %w",
+					i,
+					err,
+				)
+			}
+			tmpFields[i] = cbor.RawMessage(encoded)
+		}
+		fields = tmpFields
+	} else {
+		// Encode as indefinite-length array
+		tmpData := []byte{
+			// Start an indefinite-length list
+			0x9F,
+		}
+		for i, item := range c.Fields {
+			encoded, err := cborMarshal(item)
+			if err != nil {
+				return nil, fmt.Errorf("failed to encode Constr field %d: %w", i, err)
+			}
+			tmpData = slices.Concat(tmpData, encoded)
+		}
+		tmpData = append(
+			tmpData,
+			// End indefinite-length list
+			0xff,
+		)
+		fields = cbor.RawMessage(tmpData)
+	}
+
+	// Determine CBOR tag based on Constr tag value
+	var cborTag uint64
+	switch {
+	case c.Tag <= 6:
+		// Tags 0-6 map to CBOR tags 121-127
+		cborTag = 121 + uint64(c.Tag)
+	case c.Tag >= 7 && c.Tag <= 127:
+		// Tags 7-127 map to CBOR tags 1280-1400
+		cborTag = 1280 + uint64(c.Tag-7)
+	default:
+		cborTag = 102
+		fields = []any{c.Tag, fields}
+	}
+
+	tmpTag := cbor.Tag{
+		Number:  cborTag,
+		Content: fields,
+	}
+	return cborMarshal(tmpTag)
+}
 
 func (c Constr) Clone() PlutusData {
 	tmpFields := make([]PlutusData, len(c.Fields))
@@ -107,6 +222,121 @@ type Map struct {
 
 func (Map) isPlutusData() {}
 
+func (m *Map) UnmarshalCBOR(data []byte) error {
+	// The below is a hack to work around our CBOR library not supporting preserving key
+	// order when decoding a map. We decode our map to determine its length, create a dummy
+	// list the same length as our map to determine the header size, and then decode each
+	// key/value pair individually. We use a pointer for the key to keep duplicates to get
+	// an accurate count for decoding
+	useIndef := (data[0] & CborIndefFlag) == CborIndefFlag
+	var tmpData map[*cbor.RawMessage]cbor.RawMessage
+	if err := cborUnmarshal(data, &tmpData); err != nil {
+		return err
+	}
+	if useIndef {
+		// Strip off indef-length map header byte
+		data = data[1:]
+	} else {
+		// Create dummy list of same length to determine map header length
+		tmpList := make([]bool, len(tmpData))
+		tmpListRaw, err := cborMarshal(tmpList)
+		if err != nil {
+			return err
+		}
+		tmpListHeader := tmpListRaw[0 : len(tmpListRaw)-len(tmpData)]
+		// Strip off map header bytes
+		data = data[len(tmpListHeader):]
+	}
+	pairs := make([][2]PlutusData, 0, len(tmpData))
+	var rawKey, rawVal cbor.RawMessage
+	// Read key/value pairs until we have no data left
+	var err error
+	for len(data) > 0 {
+		// Check for "break" at end of indefinite-length map
+		if data[0] == 0xFF {
+			break
+		}
+		// Read raw key/value bytes
+		data, err = cbor.UnmarshalFirst(data, &rawKey)
+		if err != nil {
+			return err
+		}
+		data, err = cbor.UnmarshalFirst(data, &rawVal)
+		if err != nil {
+			return err
+		}
+		// Decode key/value
+		tmpKey, err := decode(rawKey)
+		if err != nil {
+			return err
+		}
+		tmpVal, err := decode(rawVal)
+		if err != nil {
+			return err
+		}
+		pairs = append(
+			pairs,
+			[2]PlutusData{
+				tmpKey,
+				tmpVal,
+			},
+		)
+	}
+	m.Pairs = pairs
+	m.useIndef = &useIndef
+	return nil
+}
+
+func (m Map) MarshalCBOR() ([]byte, error) {
+	// The below is a hack to work around our CBOR library not supporting encoding a map
+	// with a specific key order. We pre-encode each key/value pair, build a dummy list to
+	// steal and modify its header, and build our own output from pieces. This avoids
+	// needing to support 6 different possible encodings of a map's header byte depending
+	// on length
+	useIndef := false
+	if m.useIndef != nil {
+		useIndef = *m.useIndef
+	}
+	// Build encoded pairs
+	tmpPairs := make([][]byte, 0, len(m.Pairs))
+	for _, pair := range m.Pairs {
+		keyRaw, err := cborMarshal(pair[0])
+		if err != nil {
+			return nil, fmt.Errorf("encode map key: %w", err)
+		}
+		valueRaw, err := cborMarshal(pair[1])
+		if err != nil {
+			return nil, fmt.Errorf("encode map value: %w", err)
+		}
+		tmpPairs = append(
+			tmpPairs,
+			slices.Concat(keyRaw, valueRaw),
+		)
+	}
+	// Build return value
+	ret := bytes.NewBuffer(nil)
+	if useIndef {
+		ret.WriteByte(CborTypeMap | CborIndefFlag)
+	} else {
+		// Create dummy list with simple (one-byte) values so we can easily extract the header
+		tmpList := make([]bool, len(tmpPairs))
+		tmpListRaw, err := cborMarshal(tmpList)
+		if err != nil {
+			return nil, err
+		}
+		tmpListHeader := tmpListRaw[0 : len(tmpListRaw)-len(tmpPairs)]
+		// Modify header byte to switch type from array to map
+		tmpListHeader[0] |= 0x20
+		_, _ = ret.Write(tmpListHeader)
+	}
+	_, _ = ret.Write(slices.Concat(tmpPairs...))
+	if useIndef {
+		// Indef-length "break" byte
+		ret.WriteByte(0xff)
+	}
+	return ret.Bytes(), nil
+}
+
 func (m Map) Clone() PlutusData {
 	tmpPairs := make([][2]PlutusData, len(m.Pairs))
 	for i, pair := range m.Pairs {
@@ -168,6 +398,14 @@ type Integer struct {
 
 func (Integer) isPlutusData() {}
 
+func (i *Integer) UnmarshalCBOR(data []byte) error {
+	return cborUnmarshal(data, &i.Inner)
+}
+
+func (i Integer) MarshalCBOR() ([]byte, error) {
+	return cborMarshal(i.Inner)
+}
+
 func (i Integer) Clone() PlutusData {
 	tmpVal := new(big.Int).Set(i.Inner)
 	return &Integer{tmpVal}
@@ -201,6 +439,20 @@ type ByteString struct {
 }
 
 func (ByteString) isPlutusData() {}
+
+func (b *ByteString) UnmarshalCBOR(data []byte) error {
+	if err := cborUnmarshal(data, &b.Inner); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (b ByteString) MarshalCBOR() ([]byte, error) {
+	// The Rust code shows special handling for byte strings longer than 64 bytes
+	// using indefinite-length encoding, but the Go CBOR library handles this automatically
+	// when using cbor.Marshal, so we can just return the bytes directly
+	return cborMarshal(b.Inner)
+}
 
 func (b ByteString) Clone() PlutusData {
 	tmpVal := make([]byte, len(b.Inner))
@@ -238,6 +490,60 @@ type List struct {
 }
 
 func (List) isPlutusData() {}
+
+func (l *List) UnmarshalCBOR(data []byte) error {
+	useIndef := (data[0] & CborIndefFlag) == CborIndefFlag
+	var tmpData []cbor.RawMessage
+	if err := cborUnmarshal(data, &tmpData); err != nil {
+		return err
+	}
+	tmpItems := make([]PlutusData, len(tmpData))
+	for i, item := range tmpData {
+		tmp, err := decode(item)
+		if err != nil {
+			return err
+		}
+		tmpItems[i] = tmp
+	}
+	l.Items = tmpItems
+	l.useIndef = &useIndef
+	return nil
+}
+
+func (l List) MarshalCBOR() ([]byte, error) {
+	useIndef := len(l.Items) > 0
+	if l.useIndef != nil {
+		useIndef = *l.useIndef
+	}
+	if !useIndef {
+		ret := make([]any, len(l.Items))
+		for i, item := range l.Items {
+			ret[i] = item
+		}
+		return cborMarshal(ret)
+	}
+	tmpData := []byte{
+		// Start an indefinite-length list
+		0x9F,
+	}
+	for i, item := range l.Items {
+		encoded, err := cborMarshal(item)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed to encode indef-length list item %d: %w",
+				i,
+				err,
+			)
+		}
+		tmpData = slices.Concat(tmpData, encoded)
+	}
+	tmpData = append(
+		tmpData,
+		// End indefinite-length list
+		0xff,
+	)
+	return tmpData, nil
+}
 
 func (l List) Clone() PlutusData {
 	tmpItems := make([]PlutusData, len(l.Items))

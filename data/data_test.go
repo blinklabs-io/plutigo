@@ -20,6 +20,18 @@ var testDefs = []struct {
 		CborHex: "1903e7",
 	},
 	{
+		Data:    NewInteger(big.NewInt(-123)),
+		CborHex: "387a",
+	},
+	{
+		Data:    NewInteger(big.NewInt(9223372036854775807)),
+		CborHex: "1b7fffffffffffffff",
+	},
+	{
+		Data:    NewInteger(big.NewInt(-9223372036854775808)),
+		CborHex: "3b7fffffffffffffff",
+	},
+	{
 		Data: NewListDefIndef(
 			true,
 			NewInteger(big.NewInt(123)),
