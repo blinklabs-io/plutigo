@@ -20,9 +20,6 @@
 # Go workspace file
 go.work
 
-# sample code binary
-play
-
 # Benchmark files
 bench-*.txt
 
