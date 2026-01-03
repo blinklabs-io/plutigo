@@ -10,7 +10,7 @@ BINARIES=$(shell cd $(ROOT_DIR)/cmd && ls -1 | grep -v ^common)
 # Common flags for fuzz tests
 FUZZ_FLAGS ?= -run=^$ -fuzztime=10s
 
-.PHONY: mod-tidy test test-match bench fuzz format clean download-plutus-tests
+.PHONY: mod-tidy test test-match test-cover bench bench-baseline bench-compare fuzz format golines clean download-plutus-tests
 
 mod-tidy:
 	# Needed to fetch new dependencies and add them to go.mod
