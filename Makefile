@@ -10,7 +10,7 @@ BINARIES=$(shell cd $(ROOT_DIR)/cmd && ls -1 | grep -v ^common)
 # Common flags for fuzz tests
 FUZZ_FLAGS ?= -run=^$ -fuzztime=10s
 
-.PHONY: mod-tidy test test-match bench fuzz format clean play play-fmt play-flat build download-plutus-tests
+.PHONY: mod-tidy test test-match bench fuzz format clean download-plutus-tests
 
 mod-tidy:
 	# Needed to fetch new dependencies and add them to go.mod
@@ -67,18 +67,6 @@ golines:
 clean: ## Remove test cache
 	@go clean -testcache
 	@rm -f $(BINARIES)
-
-build: ## Build play
-	@go build -o play ./cmd/play/
-
-play: ## Run some uplc sample code
-	@go run ./cmd/play/ cmd/play/sample.uplc
-
-play-flat: ## Run some uplc from flat
-	@go run ./cmd/play/ cmd/play/auction_1-1.flat
-
-play-fmt: ## Format the uplc sample code
-	@go run ./cmd/play/ -f cmd/play/sample.uplc
 
 download-plutus-tests:
 	@echo "Downloading latest plutus tests..."
