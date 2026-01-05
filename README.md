@@ -12,7 +12,7 @@ for a full node. The other stuff like Typed Plutus Core and Plutus IR is for Pli
 - Cost Model Integration: Automatic cost model selection based on Plutus version (Plutus V4 cost models are placeholders)
 - High Performance: Optimized CEK machine implementation in pure Go
 - Cryptographic Operations: Full BLS12-381 support using gnark-crypto
-- Comprehensive Testing: 52%+ test coverage with fuzz testing and property-based testing
+- Comprehensive Testing: 49.9% test coverage with fuzz testing and property-based testing
 
 ## Supported CIPs
 
@@ -44,12 +44,12 @@ All implemented CIPs include comprehensive conformance tests ensuring correct be
 plutigo is optimized for high-performance Plutus script evaluation:
 
 ### Cryptographic Operations (Go 1.24, ARM64)
-- SHA256: 93 ns/op (~10.75M ops/sec)
-- Blake2b-256: 326 ns/op (3M ops/sec)
-- Ed25519 Verify: 242 μs/op (4K ops/sec)
-- ECDSA Verify: 405 μs/op (2.5K ops/sec)
-- BLS12-381 G1 Add: 3.4 μs/op (294K ops/sec)
-- BLS12-381 Pairing: 3.4 ms/op (294 ops/sec)
+- SHA256: 96 ns/op
+- Blake2b-256: 331 ns/op
+- Ed25519 Verify: 251 μs/op
+- ECDSA Verify: 379 μs/op
+- BLS12-381 G1 Add: 3.5 μs/op
+- BLS12-381 Pairing: 3.3 ms/op
 
 ### Plutus Script Evaluation
 Evaluates complex smart contracts (Uniswap, vesting, etc.) in milliseconds with accurate cost modeling.
@@ -163,7 +163,7 @@ The project maintains high code quality standards:
 
 - Linting: Passes golangci-lint with zero issues
 - Nil Safety: Passes nilaway static analysis
-- Test Coverage: 52%+ coverage across all packages
+- Test Coverage: 49.9% coverage across all packages
 - Fuzz Testing: Continuous fuzzing for parsing and evaluation
 
 ## Contributing

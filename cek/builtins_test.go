@@ -198,6 +198,178 @@ func TestMultiplyIntegerBuiltin(t *testing.T) {
 	}
 }
 
+func TestDivideIntegerBuiltin(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.DivideInteger)
+
+	v1 := &Constant{&syn.Integer{Inner: big.NewInt(10)}}
+	v2 := &Constant{&syn.Integer{Inner: big.NewInt(2)}}
+
+	b = b.ApplyArg(v1)
+	b = b.ApplyArg(v2)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	i := expectInteger(t, constVal)
+
+	if i.Inner.Cmp(big.NewInt(5)) != 0 {
+		t.Fatalf("expected 5, got %v", i.Inner)
+	}
+}
+
+func TestDivideIntegerByZero(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.DivideInteger)
+
+	v1 := &Constant{&syn.Integer{Inner: big.NewInt(10)}}
+	v2 := &Constant{&syn.Integer{Inner: big.NewInt(0)}}
+
+	b = b.ApplyArg(v1)
+	b = b.ApplyArg(v2)
+
+	_, err := evalBuiltinWithError(t, m, b)
+	if err == nil {
+		t.Fatalf("expected division by zero error, got nil")
+	}
+	if err.Error() != "division by zero" {
+		t.Fatalf("expected 'division by zero', got %v", err)
+	}
+}
+
+func TestQuotientIntegerBuiltin(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.QuotientInteger)
+
+	v1 := &Constant{&syn.Integer{Inner: big.NewInt(10)}}
+	v2 := &Constant{&syn.Integer{Inner: big.NewInt(3)}}
+
+	b = b.ApplyArg(v1)
+	b = b.ApplyArg(v2)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	i := expectInteger(t, constVal)
+
+	if i.Inner.Cmp(big.NewInt(3)) != 0 {
+		t.Fatalf("expected 3, got %v", i.Inner)
+	}
+}
+
+func TestRemainderIntegerBuiltin(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.RemainderInteger)
+
+	v1 := &Constant{&syn.Integer{Inner: big.NewInt(10)}}
+	v2 := &Constant{&syn.Integer{Inner: big.NewInt(3)}}
+
+	b = b.ApplyArg(v1)
+	b = b.ApplyArg(v2)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	i := expectInteger(t, constVal)
+
+	if i.Inner.Cmp(big.NewInt(1)) != 0 {
+		t.Fatalf("expected 1, got %v", i.Inner)
+	}
+}
+
+func TestModIntegerBuiltin(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.ModInteger)
+
+	v1 := &Constant{&syn.Integer{Inner: big.NewInt(10)}}
+	v2 := &Constant{&syn.Integer{Inner: big.NewInt(3)}}
+
+	b = b.ApplyArg(v1)
+	b = b.ApplyArg(v2)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	i := expectInteger(t, constVal)
+
+	if i.Inner.Cmp(big.NewInt(1)) != 0 {
+		t.Fatalf("expected 1, got %v", i.Inner)
+	}
+}
+
+func TestChooseDataBuiltin(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.ChooseData)
+
+	// Create a Constr data
+	constrData := data.NewConstr(1, data.NewInteger(big.NewInt(42)))
+	dataVal := &Constant{&syn.Data{Inner: constrData}}
+
+	// Create 6 branch values
+	constrBranch := &Constant{&syn.String{Inner: "constr"}}
+	mapBranch := &Constant{&syn.String{Inner: "map"}}
+	listBranch := &Constant{&syn.String{Inner: "list"}}
+	integerBranch := &Constant{&syn.String{Inner: "integer"}}
+	bytesBranch := &Constant{&syn.String{Inner: "bytes"}}
+
+	b = b.ApplyArg(dataVal)
+	b = b.ApplyArg(constrBranch)
+	b = b.ApplyArg(mapBranch)
+	b = b.ApplyArg(listBranch)
+	b = b.ApplyArg(integerBranch)
+	b = b.ApplyArg(bytesBranch)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	str := expectString(t, constVal)
+
+	if str.Inner != "constr" {
+		t.Fatalf("expected 'constr', got %v", str.Inner)
+	}
+}
+
+func TestLengthOfArrayBuiltin(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.LengthOfArray)
+
+	// Create a ProtoList with 3 elements
+	list := []syn.IConstant{
+		&syn.Integer{Inner: big.NewInt(1)},
+		&syn.Integer{Inner: big.NewInt(2)},
+		&syn.Integer{Inner: big.NewInt(3)},
+	}
+	protoList := &syn.ProtoList{List: list}
+	arrayVal := &Constant{protoList}
+
+	b = b.ApplyArg(arrayVal)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	i := expectInteger(t, constVal)
+
+	if i.Inner.Cmp(big.NewInt(3)) != 0 {
+		t.Fatalf("expected 3, got %v", i.Inner)
+	}
+}
+
+func TestExpModIntegerBuiltin(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.ExpModInteger)
+
+	// Test case: 2^3 mod 5 = 8 mod 5 = 3
+	base := &Constant{&syn.Integer{Inner: big.NewInt(2)}}
+	exponent := &Constant{&syn.Integer{Inner: big.NewInt(3)}}
+	modulus := &Constant{&syn.Integer{Inner: big.NewInt(5)}}
+
+	b = b.ApplyArg(base)
+	b = b.ApplyArg(exponent)
+	b = b.ApplyArg(modulus)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	i := expectInteger(t, constVal)
+
+	if i.Inner.Cmp(big.NewInt(3)) != 0 {
+		t.Fatalf("expected 3, got %v", i.Inner)
+	}
+}
+
 func TestEqualsIntegerBuiltin(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -3596,5 +3768,41 @@ func TestMultiIndexArrayBuiltin(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBuiltinArgsIter(t *testing.T) {
+	// Create some test values
+	val1 := Constant{Constant: &syn.Integer{Inner: big.NewInt(1)}}
+	val2 := Constant{Constant: &syn.Integer{Inner: big.NewInt(2)}}
+	val3 := Constant{Constant: &syn.Integer{Inner: big.NewInt(3)}}
+
+	// Create a chain: val3 -> val2 -> val1
+	args := &BuiltinArgs[syn.DeBruijn]{data: val1, next: nil}
+	args = &BuiltinArgs[syn.DeBruijn]{data: val2, next: args}
+	args = &BuiltinArgs[syn.DeBruijn]{data: val3, next: args}
+
+	// Collect values using Iter
+	var collected []Value[syn.DeBruijn]
+	for v := range args.Iter() {
+		collected = append(collected, v)
+	}
+
+	// Iter reverses the order, so should be val1, val2, val3
+	expected := []Value[syn.DeBruijn]{val1, val2, val3}
+	if len(collected) != len(expected) {
+		t.Fatalf("expected %d values, got %d", len(expected), len(collected))
+	}
+	for i, v := range collected {
+		collectedInt := v.(Constant).Constant.(*syn.Integer)
+		expectedInt := expected[i].(Constant).Constant.(*syn.Integer)
+		if collectedInt.Inner.Cmp(expectedInt.Inner) != 0 {
+			t.Errorf(
+				"at index %d, expected %v, got %v",
+				i,
+				expectedInt.Inner,
+				collectedInt.Inner,
+			)
+		}
 	}
 }

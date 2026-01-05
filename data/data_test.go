@@ -338,3 +338,50 @@ func FuzzDecodeCBOR(f *testing.F) {
 		_ = wrapper.UnmarshalCBOR(data) // Ignore errors, just check no panic
 	})
 }
+
+func TestPlutusDataClone(t *testing.T) {
+	original := NewInteger(big.NewInt(42))
+	cloned := original.Clone()
+	if !original.Equal(cloned) {
+		t.Error("Cloned data should be equal to original")
+	}
+	// Check they are different instances
+	if reflect.ValueOf(original).
+		Pointer() ==
+		reflect.ValueOf(cloned).
+			Pointer() {
+		t.Error("Cloned data should be a different instance")
+	}
+}
+
+func TestPlutusDataEqual(t *testing.T) {
+	a := NewInteger(big.NewInt(100))
+	b := NewInteger(big.NewInt(100))
+	c := NewInteger(big.NewInt(200))
+	if !a.Equal(b) {
+		t.Error("Equal integers should be equal")
+	}
+	if a.Equal(c) {
+		t.Error("Different integers should not be equal")
+	}
+}
+
+func TestPlutusDataString(t *testing.T) {
+	data := NewInteger(big.NewInt(123))
+	str := data.String()
+	if str == "" {
+		t.Error("String should not be empty")
+	}
+	if !contains(str, "123") {
+		t.Errorf("String should contain the value: %s", str)
+	}
+}
+
+func contains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
