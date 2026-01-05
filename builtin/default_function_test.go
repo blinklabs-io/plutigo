@@ -62,6 +62,60 @@ func TestDefaultFunctionString(t *testing.T) {
 	}
 }
 
+func TestDefaultFunctionForceCount(t *testing.T) {
+	tests := []struct {
+		df       DefaultFunction
+		expected uint
+	}{
+		{AddInteger, 0},
+		{IfThenElse, 1},
+		{ChooseUnit, 1},
+		{Trace, 1},
+		{MultiIndexArray, 1},
+		{FstPair, 2},
+		{SndPair, 2},
+	}
+
+	for _, test := range tests {
+		result := test.df.ForceCount()
+		if result != test.expected {
+			t.Errorf(
+				"For %v, expected %d, got %d",
+				test.df,
+				test.expected,
+				result,
+			)
+		}
+	}
+}
+
+func TestDefaultFunctionArity(t *testing.T) {
+	tests := []struct {
+		df       DefaultFunction
+		expected uint
+	}{
+		{AddInteger, 2},
+		{Sha2_256, 1},
+		{IfThenElse, 3},
+		{ChooseUnit, 2},
+		{MultiIndexArray, 2},
+		{FstPair, 1},
+		{VerifyEd25519Signature, 3},
+	}
+
+	for _, test := range tests {
+		result := test.df.Arity()
+		if result != test.expected {
+			t.Errorf(
+				"For %v, expected %d, got %d",
+				test.df,
+				test.expected,
+				result,
+			)
+		}
+	}
+}
+
 func TestBuiltinsMap(t *testing.T) {
 	// Test a few key mappings
 	expectedMappings := map[string]DefaultFunction{
