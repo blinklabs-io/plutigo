@@ -319,7 +319,7 @@ func (p *Parser) parseConstr() (Term[Name], error) {
 
 	p.nextToken()
 
-	var fields []Term[Name]
+	fields := make([]Term[Name], 0, 8)
 
 	for p.curToken.Type != lex.TokenRParen {
 		term, err := p.ParseTerm()
@@ -351,7 +351,7 @@ func (p *Parser) parseCase() (Term[Name], error) {
 		return nil, err
 	}
 
-	var branches []Term[Name]
+	branches := make([]Term[Name], 0, 4)
 
 	for p.curToken.Type != lex.TokenRParen {
 		branch, err := p.ParseTerm()
@@ -617,7 +617,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			return nil, err
 		}
 
-		var items []IConstant
+		items := make([]IConstant, 0, 8)
 
 		for p.curToken.Type != lex.TokenRBracket {
 			if err := p.expect(lex.TokenLParen); err != nil {
@@ -650,7 +650,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				return nil, err
 			}
 
-			var innerItems []IConstant
+			innerItems := make([]IConstant, 0, 8)
 
 			for p.curToken.Type != lex.TokenRBracket {
 				if err := p.expect(lex.TokenLParen); err != nil {

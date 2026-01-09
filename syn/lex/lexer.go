@@ -108,7 +108,7 @@ func (l *Lexer) readNumber() (string, error) {
 }
 
 func (l *Lexer) readString() (string, error) {
-	var tmpString string
+	var sb strings.Builder
 	leftoverChar := false
 	for {
 		if !leftoverChar {
@@ -126,7 +126,7 @@ func (l *Lexer) readString() (string, error) {
 			// Check for simple one-char escapes (like \" and \\\)
 			tmpEscape := `\` + string(l.ch)
 			if val, ok := escapeMap[tmpEscape]; ok {
-				tmpString += val
+				sb.WriteString(val)
 				continue
 			}
 			// Unicode escape
@@ -161,7 +161,7 @@ func (l *Lexer) readString() (string, error) {
 						unicodeHex,
 					)
 				}
-				tmpString += string(r)
+				sb.Write(r)
 				continue
 			}
 			// Hex escape
@@ -198,7 +198,7 @@ func (l *Lexer) readString() (string, error) {
 						hexStr,
 					)
 				}
-				tmpString += string(r)
+				sb.Write(r)
 				continue
 			}
 			// Octal escape
@@ -222,7 +222,7 @@ func (l *Lexer) readString() (string, error) {
 						octalStr,
 					)
 				}
-				tmpString += string(rune(tmpOctal))
+				sb.WriteRune(rune(tmpOctal))
 				continue
 			}
 			// Handle named escapes (e.g., \DEL) after specific sequences
@@ -243,7 +243,7 @@ func (l *Lexer) readString() (string, error) {
 
 				key := `\` + name
 				if val, ok := escapeMap[key]; ok {
-					tmpString += val
+					sb.WriteString(val)
 					continue
 				}
 
@@ -275,17 +275,17 @@ func (l *Lexer) readString() (string, error) {
 					decStr,
 				)
 			}
-			tmpString += string(rune(tmpDec))
+			sb.WriteRune(rune(tmpDec))
 			continue
 		}
 
 		if l.ch == '"' {
 			l.readChar() // Consume closing quote
 
-			return tmpString, nil
+			return sb.String(), nil
 		}
 
-		tmpString += string(l.ch)
+		sb.WriteRune(l.ch)
 	}
 }
 
