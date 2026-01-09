@@ -4,6 +4,7 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
@@ -178,4 +179,66 @@ func TestMachineStateInterface(t *testing.T) {
 	// Test Done implements MachineState
 	var done MachineState[syn.DeBruijn] = Done[syn.DeBruijn]{term: term}
 	_ = done
+}
+
+func TestDataExMemWithNilValues(t *testing.T) {
+	// Test that dataExMem does not panic when encountering nil values in nested structures
+	// This was a bug fix for a customer-reported panic in v0.0.18
+
+	// Create a Constr with nil values in Fields
+	constrWithNil := &data.Constr{
+		Tag:    0,
+		Fields: []data.PlutusData{nil, &data.Integer{Inner: big.NewInt(42)}, nil},
+	}
+
+	// Should not panic
+	cost := dataExMem(constrWithNil)()
+	if cost == 0 {
+		t.Error("Expected non-zero cost")
+	}
+
+	// Create a List with nil values in Items
+	listWithNil := &data.List{
+		Items: []data.PlutusData{nil, &data.ByteString{Inner: []byte("test")}, nil},
+	}
+
+	// Should not panic
+	cost = dataExMem(listWithNil)()
+	if cost == 0 {
+		t.Error("Expected non-zero cost")
+	}
+
+	// Create a Map with nil values in Pairs
+	mapWithNil := &data.Map{
+		Pairs: [][2]data.PlutusData{
+			{nil, &data.Integer{Inner: big.NewInt(1)}},
+			{&data.Integer{Inner: big.NewInt(2)}, nil},
+		},
+	}
+
+	// Should not panic
+	cost = dataExMem(mapWithNil)()
+	if cost == 0 {
+		t.Error("Expected non-zero cost")
+	}
+}
+
+func TestEqualsDataExMemWithNilValues(t *testing.T) {
+	// Test that equalsDataExMem does not panic when encountering nil values
+
+	constrWithNil := &data.Constr{
+		Tag:    0,
+		Fields: []data.PlutusData{nil, &data.Integer{Inner: big.NewInt(42)}},
+	}
+
+	normalConstr := &data.Constr{
+		Tag:    0,
+		Fields: []data.PlutusData{&data.Integer{Inner: big.NewInt(42)}},
+	}
+
+	// Should not panic
+	costX, costY := equalsDataExMem(constrWithNil, normalConstr)
+	if costX() == 0 || costY() == 0 {
+		t.Error("Expected non-zero costs")
+	}
 }

@@ -794,7 +794,7 @@ func dischargeValue[T syn.Eval](value Value[T]) syn.Term[T] {
 
 	case *Constr[T]:
 		// Recursively discharge all constructor fields
-		fields := []syn.Term[T]{}
+		fields := make([]syn.Term[T], 0, len(v.Fields))
 
 		for _, f := range v.Fields {
 			fields = append(fields, dischargeValue[T](f))
@@ -868,7 +868,7 @@ func withEnv[T syn.Eval](
 
 	case *syn.Constr[T]:
 		// Constructor: recursively process all fields
-		fields := []syn.Term[T]{}
+		fields := make([]syn.Term[T], 0, len(t.Fields))
 
 		for _, f := range t.Fields {
 			fields = append(fields, withEnv(lamCnt, env, f))
@@ -880,7 +880,7 @@ func withEnv[T syn.Eval](
 		}
 	case *syn.Case[T]:
 		// Case expression: process scrutinee and all branches
-		branches := []syn.Term[T]{}
+		branches := make([]syn.Term[T], 0, len(t.Branches))
 
 		for _, b := range t.Branches {
 			branches = append(branches, withEnv(lamCnt, env, b))
