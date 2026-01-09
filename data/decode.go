@@ -21,6 +21,21 @@ const (
 	CborIndefFlag uint8 = 0x1f
 )
 
+// decMode is cached at package level to avoid recreation on every decode call
+var decMode cbor.DecMode
+
+func init() {
+	decOptions := cbor.DecOptions{
+		// This defaults to 32, but there are blocks in the wild using >64 nested levels
+		MaxNestedLevels: 256,
+	}
+	var err error
+	decMode, err = decOptions.DecMode()
+	if err != nil {
+		panic("failed to initialize CBOR decoder: " + err.Error())
+	}
+}
+
 // Decode decodes a CBOR-encoded byte slice into a PlutusData value.
 // It returns an error if the input is invalid or not a valid PlutusData encoding.
 func Decode(b []byte) (PlutusData, error) {
@@ -33,14 +48,6 @@ func Decode(b []byte) (PlutusData, error) {
 
 // cborUnmarshal acts like cbor.Unmarshal but allows us to set our own decoder options
 func cborUnmarshal(dataBytes []byte, dest any) error {
-	decOptions := cbor.DecOptions{
-		// This defaults to 32, but there are blocks in the wild using >64 nested levels
-		MaxNestedLevels: 256,
-	}
-	decMode, err := decOptions.DecMode()
-	if err != nil {
-		return err
-	}
 	return decMode.Unmarshal(dataBytes, dest)
 }
 

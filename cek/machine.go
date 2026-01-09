@@ -17,6 +17,15 @@ const debug = false
 // Note: sync.Pool can grow unbounded, but this is acceptable for the CEK machine's
 // performance goals. The pools reduce allocations by 25-40% and the memory overhead
 // is minimal compared to the evaluation performance benefits.
+//
+// SAFETY: These pools store *Compute[syn.DeBruijn] (and similar) but are accessed
+// via generic functions that use unsafe.Pointer to cast between type instantiations.
+// This works because:
+// 1. Machine[T] is only ever instantiated with syn.DeBruijn in practice
+// 2. All syn.Eval types have structurally equivalent generic instantiations
+// If Machine is ever used with a different type parameter, the unsafe casts could
+// produce undefined behavior. Any changes to the Compute/Return/Done structs or
+// syn.Eval implementations should be tested carefully.
 var (
 	computePool = sync.Pool{
 		New: func() any {
@@ -47,7 +56,7 @@ func putCompute[T syn.Eval](c *Compute[T]) {
 	c.Ctx = nil
 	c.Env = nil
 	c.Term = nil
-	computePool.Put(c)
+	computePool.Put((*Compute[syn.DeBruijn])(unsafe.Pointer(c)))
 }
 
 // getReturn returns a Return state from the pool
@@ -343,7 +352,7 @@ func (m *Machine[T]) compute(
 			ret.Ctx = context
 			ret.Value = &Constr[T]{
 				Tag:    t.Tag,
-				Fields: []Value[T]{},
+				Fields: nil,
 			}
 			state = ret
 		} else {
@@ -355,8 +364,8 @@ func (m *Machine[T]) compute(
 			frame := &FrameConstr[T]{
 				Ctx:            context,
 				Tag:            t.Tag,
-				Fields:         rest,         // Remaining fields to evaluate
-				ResolvedFields: []Value[T]{}, // Accumulate evaluated fields
+				Fields:         rest,                               // Remaining fields to evaluate
+				ResolvedFields: make([]Value[T], 0, len(t.Fields)), // Pre-allocate for all fields
 				Env:            env,
 			}
 
@@ -497,7 +506,7 @@ func (m *Machine[T]) returnCompute(
 		case *Constant:
 			// Handle case on constants: Bool, Unit, Integer, List, Pair
 			var tag int
-			args := make([]Value[T], 0)
+			var args []Value[T] // Only allocate when needed (ProtoList, ProtoPair)
 			// branchRule semantics:
 			// 0: allow any number of branches (Integer)
 			// 1: require exactly 1 branch (Unit/Pair)
@@ -543,19 +552,20 @@ func (m *Machine[T]) returnCompute(
 					tag = 1
 				} else {
 					tag = 0
-					// head
-					args = append(args, &Constant{cval.List[0]})
-					// tail
+					// head and tail
+					args = make([]Value[T], 2)
+					args[0] = &Constant{cval.List[0]}
 					tail := &syn.ProtoList{LTyp: cval.LTyp, List: cval.List[1:]}
-					args = append(args, &Constant{tail})
+					args[1] = &Constant{tail}
 				}
 			case *syn.ProtoPair:
 				// Pair constants must have exactly 1 branch
 				branchRule = 1
 				// Pass both fields as args
 				tag = 0
-				args = append(args, &Constant{cval.First})
-				args = append(args, &Constant{cval.Second})
+				args = make([]Value[T], 2)
+				args[0] = &Constant{cval.First}
+				args[1] = &Constant{cval.Second}
 			default:
 				return nil, errors.New("NonConstrScrutinized")
 			}
@@ -794,10 +804,10 @@ func dischargeValue[T syn.Eval](value Value[T]) syn.Term[T] {
 
 	case *Constr[T]:
 		// Recursively discharge all constructor fields
-		fields := []syn.Term[T]{}
+		fields := make([]syn.Term[T], len(v.Fields))
 
-		for _, f := range v.Fields {
-			fields = append(fields, dischargeValue[T](f))
+		for i, f := range v.Fields {
+			fields[i] = dischargeValue[T](f)
 		}
 
 		dischargedTerm = &syn.Constr[T]{
@@ -868,10 +878,10 @@ func withEnv[T syn.Eval](
 
 	case *syn.Constr[T]:
 		// Constructor: recursively process all fields
-		fields := []syn.Term[T]{}
+		fields := make([]syn.Term[T], len(t.Fields))
 
-		for _, f := range t.Fields {
-			fields = append(fields, withEnv(lamCnt, env, f))
+		for i, f := range t.Fields {
+			fields[i] = withEnv(lamCnt, env, f)
 		}
 
 		dischargedTerm = &syn.Constr[T]{
@@ -880,10 +890,10 @@ func withEnv[T syn.Eval](
 		}
 	case *syn.Case[T]:
 		// Case expression: process scrutinee and all branches
-		branches := []syn.Term[T]{}
+		branches := make([]syn.Term[T], len(t.Branches))
 
-		for _, b := range t.Branches {
-			branches = append(branches, withEnv(lamCnt, env, b))
+		for i, b := range t.Branches {
+			branches[i] = withEnv(lamCnt, env, b)
 		}
 
 		dischargedTerm = &syn.Case[T]{

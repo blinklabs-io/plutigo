@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"math/big"
-	"slices"
 
 	"github.com/fxamacker/cbor/v2"
 )
@@ -118,24 +117,18 @@ func (c Constr) MarshalCBOR() ([]byte, error) {
 		}
 		fields = tmpFields
 	} else {
-		// Encode as indefinite-length array
-		tmpData := []byte{
-			// Start an indefinite-length list
-			0x9F,
-		}
+		// Encode as indefinite-length array using buffer to avoid repeated allocations
+		var buf bytes.Buffer
+		buf.WriteByte(0x9F) // Start indefinite-length list
 		for i, item := range c.Fields {
 			encoded, err := cborMarshal(item)
 			if err != nil {
 				return nil, fmt.Errorf("failed to encode Constr field %d: %w", i, err)
 			}
-			tmpData = slices.Concat(tmpData, encoded)
+			buf.Write(encoded)
 		}
-		tmpData = append(
-			tmpData,
-			// End indefinite-length list
-			0xff,
-		)
-		fields = cbor.RawMessage(tmpData)
+		buf.WriteByte(0xff) // End indefinite-length list
+		fields = cbor.RawMessage(buf.Bytes())
 	}
 
 	// Determine CBOR tag based on Constr tag value
@@ -297,8 +290,8 @@ func (m Map) MarshalCBOR() ([]byte, error) {
 	if m.useIndef != nil {
 		useIndef = *m.useIndef
 	}
-	// Build encoded pairs
-	tmpPairs := make([][]byte, 0, len(m.Pairs))
+	// Build encoded pairs into buffer directly to avoid allocations
+	var pairsBuf bytes.Buffer
 	for _, pair := range m.Pairs {
 		keyRaw, err := cborMarshal(pair[0])
 		if err != nil {
@@ -308,28 +301,26 @@ func (m Map) MarshalCBOR() ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("encode map value: %w", err)
 		}
-		tmpPairs = append(
-			tmpPairs,
-			slices.Concat(keyRaw, valueRaw),
-		)
+		pairsBuf.Write(keyRaw)
+		pairsBuf.Write(valueRaw)
 	}
 	// Build return value
-	ret := bytes.NewBuffer(nil)
+	var ret bytes.Buffer
 	if useIndef {
 		ret.WriteByte(CborTypeMap | CborIndefFlag)
 	} else {
 		// Create dummy list with simple (one-byte) values so we can easily extract the header
-		tmpList := make([]bool, len(tmpPairs))
+		tmpList := make([]bool, len(m.Pairs))
 		tmpListRaw, err := cborMarshal(tmpList)
 		if err != nil {
 			return nil, err
 		}
-		tmpListHeader := tmpListRaw[0 : len(tmpListRaw)-len(tmpPairs)]
+		tmpListHeader := tmpListRaw[0 : len(tmpListRaw)-len(m.Pairs)]
 		// Modify header byte to switch type from array to map
 		tmpListHeader[0] |= 0x20
-		_, _ = ret.Write(tmpListHeader)
+		ret.Write(tmpListHeader)
 	}
-	_, _ = ret.Write(slices.Concat(tmpPairs...))
+	ret.Write(pairsBuf.Bytes())
 	if useIndef {
 		// Indef-length "break" byte
 		ret.WriteByte(0xff)
@@ -522,10 +513,9 @@ func (l List) MarshalCBOR() ([]byte, error) {
 		}
 		return cborMarshal(ret)
 	}
-	tmpData := []byte{
-		// Start an indefinite-length list
-		0x9F,
-	}
+	// Use buffer to avoid repeated allocations from slices.Concat
+	var buf bytes.Buffer
+	buf.WriteByte(0x9F) // Start indefinite-length list
 	for i, item := range l.Items {
 		encoded, err := cborMarshal(item)
 		if err != nil {
@@ -535,14 +525,10 @@ func (l List) MarshalCBOR() ([]byte, error) {
 				err,
 			)
 		}
-		tmpData = slices.Concat(tmpData, encoded)
+		buf.Write(encoded)
 	}
-	tmpData = append(
-		tmpData,
-		// End indefinite-length list
-		0xff,
-	)
-	return tmpData, nil
+	buf.WriteByte(0xff) // End indefinite-length list
+	return buf.Bytes(), nil
 }
 
 func (l List) Clone() PlutusData {
