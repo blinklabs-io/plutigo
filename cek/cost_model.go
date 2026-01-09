@@ -212,6 +212,8 @@ func dataExMem(x data.PlutusData) func() ExMem {
 				acc += bigIntExMem(dat.Inner)()
 			case *data.ByteString:
 				acc += byteArrayExMem(dat.Inner)()
+			case nil:
+				// Skip nil values that may be in nested data structures
 			default:
 				panic("Unreachable")
 			}
@@ -262,6 +264,8 @@ func equalsDataExMem(
 				xAcc += bigIntExMem(dat.Inner)()
 			case *data.ByteString:
 				xAcc += byteArrayExMem(dat.Inner)()
+			case nil:
+				// Skip nil values that may be in nested data structures
 			default:
 				panic("Unreachable")
 			}
@@ -285,6 +289,8 @@ func equalsDataExMem(
 				yAcc += bigIntExMem(dat.Inner)()
 			case *data.ByteString:
 				yAcc += byteArrayExMem(dat.Inner)()
+			case nil:
+				// Skip nil values that may be in nested data structures
 			default:
 				panic("Unreachable")
 			}
