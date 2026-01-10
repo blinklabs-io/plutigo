@@ -229,7 +229,7 @@ func (l *Lexer) readString() (string, error) {
 			if unicode.IsLetter(l.ch) {
 				// Read consecutive letters to form the full name (e.g., DEL)
 				name := string(l.ch)
-				var nameSb232 strings.Builder
+				var nameSb strings.Builder
 				for {
 					l.readChar()
 					if !unicode.IsLetter(l.ch) {
@@ -237,9 +237,9 @@ func (l *Lexer) readString() (string, error) {
 						leftoverChar = true
 						break
 					}
-					nameSb232.WriteString(string(l.ch))
+					nameSb.WriteRune(l.ch)
 				}
-				name += nameSb232.String()
+				name += nameSb.String()
 
 				key := `\` + name
 				if val, ok := escapeMap[key]; ok {
