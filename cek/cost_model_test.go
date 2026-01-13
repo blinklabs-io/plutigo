@@ -8,7 +8,7 @@ import (
 )
 
 func TestMachineVersion(t *testing.T) {
-	version := [3]uint32{1, 1, 0}
+	version := LanguageVersionV2
 	machine := NewMachine[syn.DeBruijn](version, 100)
 
 	if machine.version != version {
@@ -17,9 +17,9 @@ func TestMachineVersion(t *testing.T) {
 }
 
 func TestGetCostModel(t *testing.T) {
-	v1 := GetCostModel([3]uint32{1, 0, 0})
-	v2 := GetCostModel([3]uint32{1, 1, 0})
-	defaultCM := GetCostModel([3]uint32{1, 2, 0})
+	v1 := GetCostModel(LanguageVersionV1)
+	v2 := GetCostModel(LanguageVersionV2)
+	defaultCM := GetCostModel(LanguageVersionV3)
 
 	// Just verify we get different cost models (they should have different builtin costs)
 	if v1.builtinCosts == v2.builtinCosts {

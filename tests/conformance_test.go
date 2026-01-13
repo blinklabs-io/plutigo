@@ -228,7 +228,8 @@ func TestConformance(t *testing.T) {
 						Cpu: math.MaxInt64,
 					}
 					machine := cek.NewMachine[syn.DeBruijn](
-						dProgram.Version,
+						// NOTE: we force V3 here, since the conformance test programs specify V1 despite being designed for V3
+						cek.LanguageVersionV3,
 						200,
 					)
 					machine.ExBudget = initialBudget

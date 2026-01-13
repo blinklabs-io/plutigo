@@ -11,7 +11,7 @@ import (
 // Helper functions for machine flow tests
 
 func newTestMachineFlow() *Machine[syn.DeBruijn] {
-	return NewMachineWithVersionCosts[syn.DeBruijn]([3]uint32{1, 2, 0}, 0)
+	return NewMachineWithVersionCosts[syn.DeBruijn](LanguageVersionV3, 0)
 }
 
 // Helper to run a term and assert no error
@@ -79,7 +79,7 @@ func TestBuiltinAddInteger(t *testing.T) {
 }
 
 func TestConstrCase(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn]([3]uint32{1, 2, 0}, 0)
+	m := NewMachineWithVersionCosts[syn.DeBruijn](LanguageVersionV3, 0)
 
 	// Build a simple constructor and a case that matches it
 	constr := &syn.Constr[syn.DeBruijn]{
@@ -107,7 +107,7 @@ func TestConstrCase(t *testing.T) {
 
 func TestBudgetExhaustion(t *testing.T) {
 	// Use a machine with very small budget to provoke exhaustion
-	m := NewMachineWithVersionCosts[syn.DeBruijn]([3]uint32{1, 2, 0}, 0)
+	m := NewMachineWithVersionCosts[syn.DeBruijn](LanguageVersionV3, 0)
 	m.ExBudget = ExBudget{Mem: 0, Cpu: 0}
 
 	term := &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(1)}}
@@ -118,7 +118,7 @@ func TestBudgetExhaustion(t *testing.T) {
 }
 
 func TestNestedLambdasEnv(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn]([3]uint32{1, 2, 0}, 0)
+	m := NewMachineWithVersionCosts[syn.DeBruijn](LanguageVersionV3, 0)
 
 	// ( (lam x (lam y x)) (con integer 5) ) => (lam y 5)
 	inner := &syn.Lambda[syn.DeBruijn]{
@@ -146,7 +146,7 @@ func TestNestedLambdasEnv(t *testing.T) {
 }
 
 func TestMissingCaseBranch(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn]([3]uint32{1, 2, 0}, 0)
+	m := NewMachineWithVersionCosts[syn.DeBruijn](LanguageVersionV3, 0)
 
 	// constructor tag 1 but case has only branch 0
 	constr := &syn.Constr[syn.DeBruijn]{
@@ -171,7 +171,7 @@ func TestMissingCaseBranch(t *testing.T) {
 }
 
 func TestDivisionByZeroBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn]([3]uint32{1, 2, 0}, 0)
+	m := NewMachineWithVersionCosts[syn.DeBruijn](LanguageVersionV3, 0)
 
 	b := &syn.Builtin{DefaultFunction: builtin.DivideInteger}
 	v1 := &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(10)}}
@@ -187,7 +187,7 @@ func TestDivisionByZeroBuiltin(t *testing.T) {
 }
 
 func TestNonFunctionalApplication(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn]([3]uint32{1, 2, 0}, 0)
+	m := NewMachineWithVersionCosts[syn.DeBruijn](LanguageVersionV3, 0)
 
 	// Attempt to apply a constant (non-function) to another constant
 	fun := &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(1)}}
@@ -202,7 +202,7 @@ func TestNonFunctionalApplication(t *testing.T) {
 
 func TestForceHeavyBuiltin(t *testing.T) {
 	// IfThenElse needs forces (it expects a boolean condition forced)
-	m := NewMachineWithVersionCosts[syn.DeBruijn]([3]uint32{1, 2, 0}, 0)
+	m := NewMachineWithVersionCosts[syn.DeBruijn](LanguageVersionV3, 0)
 
 	b := &syn.Builtin{DefaultFunction: builtin.IfThenElse}
 	// Apply non-boolean constants to provoke errors when forcing
