@@ -27,8 +27,8 @@ func Encode(pd PlutusData) ([]byte, error) {
 
 // cborMarshal acts like cbor.Marshal but allows us to set our own encoder options
 func cborMarshal(data any) ([]byte, error) {
-	buf := bytes.NewBuffer(nil)
-	enc := encMode.NewEncoder(buf)
+	var buf bytes.Buffer
+	enc := encMode.NewEncoder(&buf)
 	err := enc.Encode(data)
 	return buf.Bytes(), err
 }
