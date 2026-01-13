@@ -87,19 +87,20 @@ func putDone[T syn.Eval](d *Done[T]) {
 }
 
 type Machine[T syn.Eval] struct {
-	costs    CostModel
-	builtins Builtins[T]
-	slippage uint32
-	version  [3]uint32
-	ExBudget ExBudget
-	Logs     []string
+	costs     CostModel
+	builtins  Builtins[T]
+	slippage  uint32
+	version   LanguageVersion
+	semantics SemanticsVariant
+	ExBudget  ExBudget
+	Logs      []string
 
 	argHolder       argHolder[T]
 	unbudgetedSteps [10]uint32
 }
 
 func NewMachine[T syn.Eval](
-	version [3]uint32,
+	version LanguageVersion,
 	slippage uint32,
 	costs ...CostModel,
 ) *Machine[T] {
@@ -110,12 +111,13 @@ func NewMachine[T syn.Eval](
 		costModel = DefaultCostModel
 	}
 	return &Machine[T]{
-		costs:    costModel,
-		builtins: newBuiltins[T](),
-		slippage: slippage,
-		version:  version,
-		ExBudget: DefaultExBudget,
-		Logs:     make([]string, 0),
+		costs:     costModel,
+		builtins:  newBuiltins[T](),
+		slippage:  slippage,
+		version:   version,
+		semantics: GetSemantics(version),
+		ExBudget:  DefaultExBudget,
+		Logs:      make([]string, 0),
 
 		argHolder:       newArgHolder[T](),
 		unbudgetedSteps: [10]uint32{0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -124,7 +126,7 @@ func NewMachine[T syn.Eval](
 
 // NewMachineWithVersionCosts creates a machine with version-appropriate cost models
 func NewMachineWithVersionCosts[T syn.Eval](
-	version [3]uint32,
+	version LanguageVersion,
 	slippage uint32,
 ) *Machine[T] {
 	costModel := GetCostModel(version)

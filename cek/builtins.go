@@ -438,9 +438,18 @@ func consByteString[T syn.Eval](
 
 	int_val := arg1.Int64()
 
-	// consByteString requires the integer to be in the range 0-255
-	if int_val < 0 || int_val > 255 {
-		return nil, errors.New("int does not fit into a byte")
+	switch m.semantics {
+	case SemanticsVariantA, SemanticsVariantB:
+		// Reduce first argument to single byte positive value using floored modulo
+		int_val = int_val % 256
+		if int_val < 0 {
+			int_val += 256
+		}
+	default:
+		// consByteString requires the integer to be in the range 0-255 in V3+
+		if int_val < 0 || int_val > 255 {
+			return nil, errors.New("int does not fit into a byte")
+		}
 	}
 
 	res := append([]byte{byte(int_val)}, arg2...)

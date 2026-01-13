@@ -29,14 +29,13 @@ var V1CostModel = CostModel{
 	builtinCosts: V1BuiltinCosts,
 }
 
-func GetCostModel(version [3]uint32) CostModel {
-	if version[0] == 1 && version[1] == 0 && version[2] == 0 {
-		// V1
+func GetCostModel(version LanguageVersion) CostModel {
+	switch version {
+	case LanguageVersionV1:
 		return V1CostModel
-	} else if version[0] == 1 && version[1] == 1 && version[2] == 0 {
-		// V2
+	case LanguageVersionV2:
 		return V2CostModel
-	} else {
+	default:
 		// V3 or later
 		return DefaultCostModel
 	}
