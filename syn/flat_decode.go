@@ -10,6 +10,7 @@ import (
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
+	"github.com/blinklabs-io/plutigo/lang"
 )
 
 func Decode[T Binder](bytes []byte) (*Program[T], error) {
@@ -40,7 +41,7 @@ func Decode[T Binder](bytes []byte) (*Program[T], error) {
 		return nil, errors.New("version numbers too large")
 	}
 
-	version := [3]uint32{uint32(major), uint32(minor), uint32(patch)}
+	version := lang.LanguageVersion{uint32(major), uint32(minor), uint32(patch)}
 
 	program := &Program[T]{
 		Version: version,

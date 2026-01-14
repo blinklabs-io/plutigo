@@ -1,10 +1,352 @@
 package cek
 
 import (
+	"errors"
+	"fmt"
+	"strings"
+
 	"github.com/blinklabs-io/plutigo/builtin"
+	"github.com/jinzhu/copier"
 )
 
 type BuiltinCosts [builtin.TotalBuiltinCount]*CostingFunc[Arguments]
+
+func (b *BuiltinCosts) Clone() BuiltinCosts {
+	var ret BuiltinCosts
+	if err := copier.CopyWithOption(&ret, b, copier.Option{DeepCopy: true}); err != nil {
+		panic(fmt.Sprintf("failure cloning BuiltinCosts: %s", err))
+	}
+	return ret
+}
+
+func (b *BuiltinCosts) update(param string, val int) error {
+	paramParts := strings.Split(param, "-")
+	if len(paramParts) < 3 {
+		return errors.New("invalid param format: " + param)
+	}
+	builtinName := paramParts[0]
+	// Remap some builtin names that changed over time
+	switch builtinName {
+	case "verifySignature":
+		builtinName = "verifyEd25519Signature"
+	}
+	builtinIdx, ok := builtin.Builtins[builtinName]
+	if !ok {
+		return errors.New("unknown builtin: " + builtinName)
+	}
+	builtinCost := b[builtinIdx]
+	if builtinCost == nil {
+		return errors.New("no existing cost info for builtin: " + builtinName)
+	}
+	var args Arguments
+	switch paramParts[1] {
+	case "cpu":
+		args = builtinCost.cpu
+	case "mem", "memory":
+		args = builtinCost.mem
+	default:
+		return fmt.Errorf("unknown cost subkey for builtin %s: %s", builtinName, paramParts[1])
+	}
+	if args == nil {
+		return fmt.Errorf("no existing cost info for builtin %s with arg: %s", builtinName, paramParts[1])
+	}
+
+	// Determine the parameter name index based on pattern
+	// Format can be:
+	//   builtin-cpu/memory-arguments (3 parts)
+	//   builtin-cpu/memory-arguments-param (4 parts)
+	//   builtin-cpu/memory-arguments-model-arguments-param (6 parts)
+	paramIdx := 3
+	if len(paramParts) > 5 && paramParts[3] == "model" && paramParts[4] == "arguments" {
+		paramIdx = 5
+	}
+
+	// For 3-part parameter names (builtin-cpu/memory-arguments), only ConstantCost is valid
+	if len(paramParts) == 3 {
+		if constCost, ok := args.(*ConstantCost); ok {
+			constCost.c = val
+			return nil
+		} else {
+			// For non-ConstantCost types with 3-part names, throw an error
+			// This can happen when genesis file format differs from code expectations
+			return errors.New("cannot map parameter name to costing info: " + param)
+		}
+	}
+
+	switch a := args.(type) {
+	case *AddedSizesModel:
+		switch paramParts[paramIdx] {
+		case "intercept":
+			a.intercept = val
+		case "slope":
+			a.slope = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *ConstAboveDiagonalIntoQuadraticXAndYModel:
+		switch paramParts[paramIdx] {
+		case "constant":
+			a.constant = val
+		case "minimum":
+			a.minimum = val
+		case "coeff00", "c00":
+			a.coeff00 = val
+		case "coeff10", "c10":
+			a.coeff10 = val
+		case "coeff01", "c01":
+			a.coeff01 = val
+		case "coeff20", "c20":
+			a.coeff20 = val
+		case "coeff11", "c11":
+			a.coeff11 = val
+		case "coeff02", "c02":
+			a.coeff02 = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *ConstAboveDiagonalModel:
+		if len(paramParts) > 5 && paramParts[3] == "model" && paramParts[4] == "arguments" {
+			// Accessing the nested model (e.g., divideInteger-cpu-arguments-model-arguments-intercept)
+			if model, ok := a.model.(*MultipliedSizesModel); ok {
+				switch paramParts[5] {
+				case "intercept":
+					model.intercept = val
+				case "slope":
+					model.slope = val
+				default:
+					return fmt.Errorf("unknown model param for builtin %s: %s", builtinName, paramParts[5])
+				}
+			} else {
+				return errors.New("unexpected model type for builtin " + builtinName)
+			}
+		} else {
+			switch paramParts[paramIdx] {
+			case "constant":
+				a.constant = val
+			default:
+				return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+			}
+		}
+	case *ConstBelowDiagonalModel:
+		if len(paramParts) > 5 && paramParts[3] == "model" && paramParts[4] == "arguments" {
+			// Accessing the nested model (e.g., modInteger-cpu-arguments-model-arguments-intercept)
+			if model, ok := a.model.(*MultipliedSizesModel); ok {
+				switch paramParts[5] {
+				case "intercept":
+					model.intercept = val
+				case "slope":
+					model.slope = val
+				default:
+					return fmt.Errorf("unknown model param for builtin %s: %s", builtinName, paramParts[5])
+				}
+			} else {
+				return errors.New("unexpected model type for builtin " + builtinName)
+			}
+		} else {
+			switch paramParts[paramIdx] {
+			case "constant":
+				a.constant = val
+			default:
+				return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+			}
+		}
+	case *ConstantCost:
+		switch paramParts[paramIdx] {
+		case "c":
+			a.c = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *ExpMod:
+		switch paramParts[paramIdx] {
+		case "coeff00":
+			a.coeff00 = val
+		case "coeff11":
+			a.coeff11 = val
+		case "coeff12":
+			a.coeff12 = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *LinearCost:
+		switch paramParts[paramIdx] {
+		case "intercept":
+			a.intercept = val
+		case "slope":
+			a.slope = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *LinearInXAndY:
+		switch paramParts[paramIdx] {
+		case "intercept":
+			a.intercept = val
+		case "slope1":
+			a.slope1 = val
+		case "slope2":
+			a.slope2 = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *LinearInX:
+		switch paramParts[paramIdx] {
+		case "intercept":
+			a.intercept = val
+		case "slope":
+			a.slope = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *LinearInY:
+		switch paramParts[paramIdx] {
+		case "intercept":
+			a.intercept = val
+		case "slope":
+			a.slope = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *LinearOnDiagonalModel:
+		switch paramParts[paramIdx] {
+		case "constant":
+			a.constant = val
+		case "intercept":
+			a.intercept = val
+		case "slope":
+			a.slope = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *MaxSizeModel:
+		switch paramParts[paramIdx] {
+		case "intercept":
+			a.intercept = val
+		case "slope":
+			a.slope = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *MinSizeModel:
+		switch paramParts[paramIdx] {
+		case "intercept":
+			a.intercept = val
+		case "slope":
+			a.slope = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *MultipliedSizesModel:
+		switch paramParts[paramIdx] {
+		case "intercept":
+			a.intercept = val
+		case "slope":
+			a.slope = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *QuadraticInYModel:
+		switch paramParts[paramIdx] {
+		case "coeff0", "c0":
+			a.coeff0 = val
+		case "coeff1", "c1":
+			a.coeff1 = val
+		case "coeff2", "c2":
+			a.coeff2 = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *SubtractedSizesModel:
+		switch paramParts[paramIdx] {
+		case "intercept":
+			a.intercept = val
+		case "slope":
+			a.slope = val
+		case "minimum":
+			a.minimum = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *ThreeAddedSizesModel:
+		switch paramParts[paramIdx] {
+		case "intercept":
+			a.intercept = val
+		case "slope":
+			a.slope = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *ThreeLinearInMaxYZ:
+		switch paramParts[paramIdx] {
+		case "intercept":
+			a.intercept = val
+		case "slope":
+			a.slope = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *ThreeLinearInX:
+		switch paramParts[paramIdx] {
+		case "intercept":
+			a.intercept = val
+		case "slope":
+			a.slope = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *ThreeLinearInYandZ:
+		switch paramParts[paramIdx] {
+		case "intercept":
+			a.intercept = val
+		case "slope1":
+			a.slope1 = val
+		case "slope2":
+			a.slope2 = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *ThreeLinearInY:
+		switch paramParts[paramIdx] {
+		case "intercept":
+			a.intercept = val
+		case "slope":
+			a.slope = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *ThreeLinearInZ:
+		switch paramParts[paramIdx] {
+		case "intercept":
+			a.intercept = val
+		case "slope":
+			a.slope = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *ThreeLiteralInYorLinearInZ:
+		switch paramParts[paramIdx] {
+		case "intercept":
+			a.intercept = val
+		case "slope":
+			a.slope = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *ThreeQuadraticInZ:
+		switch paramParts[paramIdx] {
+		case "coeff0", "c0":
+			a.coeff0 = val
+		case "coeff1", "c1":
+			a.coeff1 = val
+		case "coeff2", "c2":
+			a.coeff2 = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	default:
+		return fmt.Errorf("unknown cost type for builtin %s: %T", builtinName, args)
+	}
+	return nil
+}
 
 var DefaultBuiltinCosts = BuiltinCosts{
 	builtin.AddInteger: &CostingFunc[Arguments]{

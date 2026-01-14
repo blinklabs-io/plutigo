@@ -1,5 +1,9 @@
 package cek
 
+import (
+	"github.com/blinklabs-io/plutigo/lang"
+)
+
 type SemanticsVariant int
 
 const (
@@ -8,11 +12,11 @@ const (
 	SemanticsVariantC SemanticsVariant = 3
 )
 
-func GetSemantics(version LanguageVersion) SemanticsVariant {
+func GetSemantics(version lang.LanguageVersion) SemanticsVariant {
 	switch version {
-	case LanguageVersionV1:
+	case lang.LanguageVersionV1:
 		return SemanticsVariantA
-	case LanguageVersionV2:
+	case lang.LanguageVersionV2:
 		return SemanticsVariantB
 	default:
 		// V3 or later
