@@ -29,15 +29,24 @@ var V1CostModel = CostModel{
 	builtinCosts: V1BuiltinCosts,
 }
 
+// V4CostModel uses the same costs as V3 (DefaultCostModel) for now.
+// V4-specific builtin costs (InsertCoin, ScaleValue, UnionValue, MultiIndexArray)
+// currently use placeholder values and will be calibrated in a future update.
+var V4CostModel = CostModel{
+	machineCosts: DefaultMachineCosts,
+	builtinCosts: DefaultBuiltinCosts, // TODO: Plan 002 - calibrate V4-specific costs
+}
+
 func GetCostModel(version LanguageVersion) CostModel {
-	switch version {
-	case LanguageVersionV1:
+	switch {
+	case version == LanguageVersionV1:
 		return V1CostModel
-	case LanguageVersionV2:
+	case version == LanguageVersionV2:
 		return V2CostModel
+	case VersionLessThan(version, LanguageVersionV4):
+		return DefaultCostModel // V3 costs
 	default:
-		// V3 or later
-		return DefaultCostModel
+		return V4CostModel // V4 and later
 	}
 }
 
