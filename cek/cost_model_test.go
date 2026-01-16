@@ -19,14 +19,72 @@ func TestMachineVersion(t *testing.T) {
 func TestGetCostModel(t *testing.T) {
 	v1 := GetCostModel(LanguageVersionV1)
 	v2 := GetCostModel(LanguageVersionV2)
-	defaultCM := GetCostModel(LanguageVersionV3)
+	v3 := GetCostModel(LanguageVersionV3)
+	v4 := GetCostModel(LanguageVersionV4)
 
 	// Just verify we get different cost models (they should have different builtin costs)
 	if v1.builtinCosts == v2.builtinCosts {
 		t.Error("V1 and V2 cost models should be different")
 	}
-	if v2.builtinCosts == defaultCM.builtinCosts {
-		t.Error("V2 and Default cost models should be different")
+	if v2.builtinCosts == v3.builtinCosts {
+		t.Error("V2 and V3 cost models should be different")
+	}
+	// V4 currently uses the same builtin costs as V3 (pending calibration)
+	// This is expected behavior until Plan 002 is implemented
+	if v4.builtinCosts != v3.builtinCosts {
+		t.Error("V4 should currently use same builtin costs as V3 (pending calibration)")
+	}
+}
+
+func TestVersionLessThan(t *testing.T) {
+	// V1 < V2 < V3 < V4
+	if !VersionLessThan(LanguageVersionV1, LanguageVersionV2) {
+		t.Error("V1 should be less than V2")
+	}
+	if !VersionLessThan(LanguageVersionV2, LanguageVersionV3) {
+		t.Error("V2 should be less than V3")
+	}
+	if !VersionLessThan(LanguageVersionV3, LanguageVersionV4) {
+		t.Error("V3 should be less than V4")
+	}
+
+	// Not less than self
+	if VersionLessThan(LanguageVersionV3, LanguageVersionV3) {
+		t.Error("V3 should not be less than V3")
+	}
+
+	// Greater than is not less than
+	if VersionLessThan(LanguageVersionV4, LanguageVersionV3) {
+		t.Error("V4 should not be less than V3")
+	}
+}
+
+func TestLanguageVersionV4(t *testing.T) {
+	// V4 should be 1.3.0
+	expected := LanguageVersion{1, 3, 0}
+	if LanguageVersionV4 != expected {
+		t.Errorf("Expected V4 to be %v, got %v", expected, LanguageVersionV4)
+	}
+
+	// V4 should get V4CostModel
+	cm := GetCostModel(LanguageVersionV4)
+	if cm.machineCosts != V4CostModel.machineCosts {
+		t.Error("V4 should get V4CostModel")
+	}
+
+	// V4 should use SemanticsVariantC (same as V3)
+	sem := GetSemantics(LanguageVersionV4)
+	if sem != SemanticsVariantC {
+		t.Errorf("V4 should use SemanticsVariantC, got %v", sem)
+	}
+}
+
+func TestMachineVersionV4(t *testing.T) {
+	version := LanguageVersionV4
+	machine := NewMachine[syn.DeBruijn](version, 100)
+
+	if machine.version != version {
+		t.Errorf("Expected version %v, got %v", version, machine.version)
 	}
 }
 
