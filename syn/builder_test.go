@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/builtin"
+	"github.com/blinklabs-io/plutigo/lang"
 )
 
 func TestIntern(t *testing.T) {
@@ -64,7 +65,7 @@ func TestIntern(t *testing.T) {
 }
 
 func TestNewProgram(t *testing.T) {
-	version := [3]uint32{1, 0, 0}
+	version := lang.LanguageVersionV1
 	term := &Var[Name]{Name: NewRawName("test")}
 
 	program := NewProgram(version, term)
@@ -322,7 +323,7 @@ func TestSubtractInteger(t *testing.T) {
 func TestNameToNamedDeBruijn(t *testing.T) {
 	// Create a simple program: (lam x x)
 	program := NewProgram(
-		[3]uint32{1, 0, 0},
+		lang.LanguageVersionV1,
 		NewLambda(NewName("x", 0), NewVar("x", 0)),
 	)
 
@@ -359,7 +360,7 @@ func TestNameToNamedDeBruijn(t *testing.T) {
 func TestNameToDeBruijn(t *testing.T) {
 	// Create a simple program: (lam x x)
 	program := NewProgram(
-		[3]uint32{1, 0, 0},
+		lang.LanguageVersionV1,
 		NewLambda(NewName("x", 0), NewVar("x", 0)),
 	)
 
@@ -387,7 +388,7 @@ func TestNameToDeBruijnComplex(t *testing.T) {
 	delay := NewDelay(force)
 
 	program := NewProgram(
-		[3]uint32{1, 0, 0},
+		lang.LanguageVersionV1,
 		NewLambda(NewName("x", 0), delay),
 	)
 
@@ -422,7 +423,7 @@ func TestNameToDeBruijnWithConstants(t *testing.T) {
 	apply2 := NewApply(apply, NewVar("x", 0))
 
 	program := NewProgram(
-		[3]uint32{1, 0, 0},
+		lang.LanguageVersionV1,
 		NewLambda(NewName("x", 0), apply2),
 	)
 
@@ -459,7 +460,7 @@ func TestNameToDeBruijnWithConstants(t *testing.T) {
 func TestNameToDeBruijnWithError(t *testing.T) {
 	// Create a program with an error term: (lam x error)
 	program := NewProgram(
-		[3]uint32{1, 0, 0},
+		lang.LanguageVersionV1,
 		NewLambda(NewName("x", 0), &Error{}),
 	)
 

@@ -10,6 +10,7 @@ require (
 	github.com/consensys/gnark-crypto v0.19.2
 	github.com/ethereum/go-ethereum v1.16.8
 	github.com/fxamacker/cbor/v2 v2.9.0
+	github.com/jinzhu/copier v0.4.0
 	github.com/minio/sha256-simd v1.0.1
 	golang.org/x/crypto v0.46.0
 )

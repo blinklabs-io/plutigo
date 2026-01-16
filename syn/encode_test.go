@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/builtin"
+	"github.com/blinklabs-io/plutigo/lang"
 )
 
 func TestEncodeDecodeConstant(t *testing.T) {
@@ -14,7 +15,7 @@ func TestEncodeDecodeConstant(t *testing.T) {
 
 	// Encode the term
 	encoded, err := Encode(&Program[DeBruijn]{
-		Version: [3]uint32{1, 0, 0},
+		Version: lang.LanguageVersionV1,
 		Term:    term,
 	})
 	if err != nil {
@@ -64,7 +65,7 @@ func TestEncodeDecodeBuiltin(t *testing.T) {
 
 			// Encode the builtin term
 			encoded, err := Encode(&Program[DeBruijn]{
-				Version: [3]uint32{1, 0, 0},
+				Version: lang.LanguageVersionV1,
 				Term:    original,
 			})
 			if err != nil {
@@ -132,7 +133,7 @@ func TestEncodeDecodeConstantTerm(t *testing.T) {
 
 			// Encode the constant term
 			encoded, err := Encode[DeBruijn](&Program[DeBruijn]{
-				Version: [3]uint32{1, 0, 0},
+				Version: lang.LanguageVersionV1,
 				Term:    original,
 			})
 			if err != nil {

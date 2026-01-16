@@ -10,6 +10,7 @@ import (
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
+	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn/lex"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
@@ -20,7 +21,7 @@ type Parser struct {
 	peekToken     lex.Token
 	interned      map[string]Unique
 	uniqueCounter Unique
-	version       [3]uint32
+	version       lang.LanguageVersion
 }
 
 func NewParser(input string) *Parser {
@@ -86,7 +87,7 @@ func (p *Parser) ParseProgram() (*Program[Name], error) {
 		return nil, err
 	}
 
-	var version [3]uint32
+	var version lang.LanguageVersion
 
 	for i := range 3 {
 		if p.curToken.Type != lex.TokenNumber {

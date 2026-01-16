@@ -3,8 +3,10 @@ package cek
 import (
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/blinklabs-io/plutigo/data"
+	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
@@ -12,6 +14,13 @@ import (
 type CostModel struct {
 	machineCosts MachineCosts
 	builtinCosts BuiltinCosts
+}
+
+func (cm CostModel) Clone() CostModel {
+	return CostModel{
+		machineCosts: cm.machineCosts,
+		builtinCosts: cm.builtinCosts.Clone(),
+	}
 }
 
 var DefaultCostModel = CostModel{
@@ -48,6 +57,46 @@ func GetCostModel(version LanguageVersion) CostModel {
 	default:
 		return V4CostModel // V4 and later
 	}
+}
+
+func CostModelFromList(version lang.LanguageVersion, data []int) (CostModel, error) {
+	cm := GetCostModel(version).Clone()
+	for i, param := range lang.GetParamNamesForVersion(version) {
+		// Stop processing when we reach the end of our input data
+		if i >= len(data) {
+			break
+		}
+		if strings.HasPrefix(param, "cek") {
+			// Update machine cost
+			if err := cm.machineCosts.update(param, data[i]); err != nil {
+				return cm, err
+			}
+		} else {
+			// Update builtin cost
+			if err := cm.builtinCosts.update(param, data[i]); err != nil {
+				return cm, err
+			}
+		}
+	}
+	return cm, nil
+}
+
+func CostModelFromMap(version lang.LanguageVersion, data map[string]int) (CostModel, error) {
+	cm := GetCostModel(version).Clone()
+	for param, val := range data {
+		if strings.HasPrefix(param, "cek") {
+			// Update machine cost
+			if err := cm.machineCosts.update(param, val); err != nil {
+				return cm, err
+			}
+		} else {
+			// Update builtin cost
+			if err := cm.builtinCosts.update(param, val); err != nil {
+				return cm, err
+			}
+		}
+	}
+	return cm, nil
 }
 
 const (

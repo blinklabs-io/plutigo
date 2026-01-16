@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/cek"
+	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
@@ -229,7 +230,7 @@ func TestConformance(t *testing.T) {
 					}
 					machine := cek.NewMachine[syn.DeBruijn](
 						// NOTE: we force V3 here, since the conformance test programs specify V1 despite being designed for V3
-						cek.LanguageVersionV3,
+						lang.LanguageVersionV3,
 						200,
 					)
 					machine.ExBudget = initialBudget

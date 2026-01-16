@@ -7,6 +7,7 @@ import (
 	"sync"
 	"unsafe"
 
+	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
@@ -90,7 +91,7 @@ type Machine[T syn.Eval] struct {
 	costs     CostModel
 	builtins  Builtins[T]
 	slippage  uint32
-	version   LanguageVersion
+	version   lang.LanguageVersion
 	semantics SemanticsVariant
 	ExBudget  ExBudget
 	Logs      []string
@@ -100,7 +101,7 @@ type Machine[T syn.Eval] struct {
 }
 
 func NewMachine[T syn.Eval](
-	version LanguageVersion,
+	version lang.LanguageVersion,
 	slippage uint32,
 	costs ...CostModel,
 ) *Machine[T] {
@@ -126,7 +127,7 @@ func NewMachine[T syn.Eval](
 
 // NewMachineWithVersionCosts creates a machine with version-appropriate cost models
 func NewMachineWithVersionCosts[T syn.Eval](
-	version LanguageVersion,
+	version lang.LanguageVersion,
 	slippage uint32,
 ) *Machine[T] {
 	costModel := GetCostModel(version)

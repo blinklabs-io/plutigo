@@ -5,6 +5,7 @@ import (
 	"math/big"
 
 	"github.com/blinklabs-io/plutigo/builtin"
+	"github.com/blinklabs-io/plutigo/lang"
 )
 
 type termInterner struct {
@@ -73,7 +74,7 @@ func Intern(term Term[Name]) Term[Name] {
 	return term
 }
 
-func NewProgram(version [3]uint32, term Term[Name]) *Program[Name] {
+func NewProgram(version lang.LanguageVersion, term Term[Name]) *Program[Name] {
 	return &Program[Name]{
 		Version: version,
 		Term:    term,
