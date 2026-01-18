@@ -59,7 +59,7 @@ func GetCostModel(version LanguageVersion) CostModel {
 	}
 }
 
-func CostModelFromList(version lang.LanguageVersion, data []int) (CostModel, error) {
+func CostModelFromList(version lang.LanguageVersion, data []int64) (CostModel, error) {
 	cm := GetCostModel(version).Clone()
 	for i, param := range lang.GetParamNamesForVersion(version) {
 		// Stop processing when we reach the end of our input data
@@ -81,7 +81,7 @@ func CostModelFromList(version lang.LanguageVersion, data []int) (CostModel, err
 	return cm, nil
 }
 
-func CostModelFromMap(version lang.LanguageVersion, data map[string]int) (CostModel, error) {
+func CostModelFromMap(version lang.LanguageVersion, data map[string]int64) (CostModel, error) {
 	cm := GetCostModel(version).Clone()
 	for param, val := range data {
 		if strings.HasPrefix(param, "cek") {

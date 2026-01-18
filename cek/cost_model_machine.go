@@ -20,7 +20,7 @@ type MachineCosts struct {
 	builtin ExBudget
 }
 
-func (mc *MachineCosts) update(param string, val int) error {
+func (mc *MachineCosts) update(param string, val int64) error {
 	paramParts := strings.Split(param, "-")
 	if len(paramParts) != 2 {
 		return errors.New("malformed machine cost update param: " + param)
