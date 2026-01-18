@@ -150,7 +150,7 @@ func TestExBudgetSub(t *testing.T) {
 func TestUpdateV3CostModel(t *testing.T) {
 	// plutusV3CostModel from preview network conway-genesis.json
 	// Source: https://github.com/blinklabs-io/docker-cardano-configs/blob/main/config/preview/conway-genesis.json
-	previewV3CostModel := []int{
+	previewV3CostModel := []int64{
 		100788, 420, 1, 1, 1000, 173, 0, 1, 1000, 59957, 4, 1, 11183, 32, 201305, 8356,
 		4, 16000, 100, 16000, 100, 16000, 100, 16000, 100, 16000, 100, 16000, 100, 100,
 		100, 16000, 100, 94375, 32, 132994, 32, 61462, 4, 72010, 178, 0, 1, 22151, 32,
@@ -285,7 +285,7 @@ func TestUpdateV3CostModel(t *testing.T) {
 func TestUpdateV1CostModelFromMap(t *testing.T) {
 	// PlutusV1 cost model from preview network alonzo-genesis.json
 	// Source: https://github.com/blinklabs-io/docker-cardano-configs/blob/main/config/preview/alonzo-genesis.json
-	previewV1CostModelMap := map[string]int{
+	previewV1CostModelMap := map[string]int64{
 		"addInteger-cpu-arguments-intercept":                       197209,
 		"addInteger-cpu-arguments-slope":                           0,
 		"addInteger-memory-arguments-intercept":                    1,

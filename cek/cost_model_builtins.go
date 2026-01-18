@@ -19,7 +19,7 @@ func (b *BuiltinCosts) Clone() BuiltinCosts {
 	return ret
 }
 
-func (b *BuiltinCosts) update(param string, val int) error {
+func (b *BuiltinCosts) update(param string, val int64) error {
 	paramParts := strings.Split(param, "-")
 	if len(paramParts) < 3 {
 		return errors.New("invalid param format: " + param)
@@ -1193,12 +1193,12 @@ type Arguments interface {
 }
 
 type OneArgument interface {
-	Cost(x ExMem) int
+	Cost(x ExMem) int64
 	Arguments
 }
 
 type ConstantCost struct {
-	c int
+	c int64
 }
 
 func (ConstantCost) isArguments() {}
@@ -1207,13 +1207,13 @@ func (ConstantCost) HasConstants() []bool {
 	return []bool{true, true, true, true, true, true}
 }
 
-func (c ConstantCost) Cost(x ExMem) int {
+func (c ConstantCost) Cost(x ExMem) int64 {
 	return c.c
 }
 
 type LinearCost struct {
-	slope     int
-	intercept int
+	slope     int64
+	intercept int64
 }
 
 func (LinearCost) isArguments() {}
@@ -1222,78 +1222,78 @@ func (LinearCost) HasConstants() []bool {
 	return []bool{false}
 }
 
-func (l LinearCost) Cost(x ExMem) int {
-	return l.slope*int(x) + l.intercept
+func (l LinearCost) Cost(x ExMem) int64 {
+	return l.slope*int64(x) + l.intercept
 }
 
 // TwoArgument interface for costing functions with two arguments
 type TwoArgument interface {
-	CostTwo(x, y ExMem) int
+	CostTwo(x, y ExMem) int64
 	Arguments
 }
 
 type TwoVariableLinearSize struct {
-	intercept int
-	slope1    int
-	slope2    int
+	intercept int64
+	slope1    int64
+	slope2    int64
 }
 
 type AddedSizes struct {
-	intercept int
-	slope     int
+	intercept int64
+	slope     int64
 }
 
 type SubtractedSizes struct {
-	intercept int
-	slope     int
-	minimum   int
+	intercept int64
+	slope     int64
+	minimum   int64
 }
 
 type MultipliedSizes struct {
-	intercept int
-	slope     int
+	intercept int64
+	slope     int64
 }
 
 type MinSize struct {
-	intercept int
-	slope     int
+	intercept int64
+	slope     int64
 }
 
 type MaxSize struct {
-	intercept int
-	slope     int
+	intercept int64
+	slope     int64
 }
 
 type ConstantOrLinear struct {
-	constant  int
-	intercept int
-	slope     int
+	constant  int64
+	intercept int64
+	slope     int64
 }
 
 type ConstantOrTwoArguments struct {
-	constant int
+	constant int64
 	model    TwoArgument
 }
 
 type QuadraticFunction struct {
-	coeff0 int
-	coeff1 int
-	coeff2 int
+	coeff0 int64
+	coeff1 int64
+	coeff2 int64
 }
 
 type TwoArgumentsQuadraticFunction struct {
-	minimum int
-	coeff00 int
-	coeff10 int
-	coeff01 int
-	coeff20 int
-	coeff11 int
-	coeff02 int
+	minimum int64
+	coeff00 int64
+	coeff10 int64
+	coeff01 int64
+	coeff20 int64
+	coeff11 int64
+	coeff02 int64
 }
 
 // Implementations for TwoArguments variants
 // Using existing ConstantCost for two arguments
-func (c ConstantCost) CostTwo(x, y ExMem) int {
+func (c ConstantCost) CostTwo(x, y ExMem) int64 {
 	return c.c
 }
 
@@ -1302,7 +1302,7 @@ type LinearInX struct {
 	LinearCost
 }
 
-func (l LinearInX) CostTwo(x, y ExMem) int {
+func (l LinearInX) CostTwo(x, y ExMem) int64 {
 	return l.Cost(x)
 }
 
@@ -1318,7 +1318,7 @@ type LinearInY struct {
 	LinearCost
 }
 
-func (l LinearInY) CostTwo(x, y ExMem) int {
+func (l LinearInY) CostTwo(x, y ExMem) int64 {
 	return l.Cost(y)
 }
 
@@ -1334,8 +1334,8 @@ type LinearInXAndY struct {
 	TwoVariableLinearSize
 }
 
-func (l LinearInXAndY) CostTwo(x, y ExMem) int {
-	return l.slope1*int(x) + l.slope2*int(y) + l.intercept
+func (l LinearInXAndY) CostTwo(x, y ExMem) int64 {
+	return l.slope1*int64(x) + l.slope2*int64(y) + l.intercept
 }
 
 func (LinearInXAndY) HasConstants() []bool {
@@ -1349,8 +1349,8 @@ type AddedSizesModel struct {
 	AddedSizes
 }
 
-func (a AddedSizesModel) CostTwo(x, y ExMem) int {
-	return a.slope*(int(x)+int(y)) + a.intercept
+func (a AddedSizesModel) CostTwo(x, y ExMem) int64 {
+	return a.slope*(int64(x)+int64(y)) + a.intercept
 }
 
 func (AddedSizesModel) HasConstants() []bool {
@@ -1364,8 +1364,8 @@ type SubtractedSizesModel struct {
 	SubtractedSizes
 }
 
-func (s SubtractedSizesModel) CostTwo(x, y ExMem) int {
-	diff := max(int(x)-int(y), s.minimum)
+func (s SubtractedSizesModel) CostTwo(x, y ExMem) int64 {
+	diff := max(int64(x)-int64(y), s.minimum)
 
 	return s.slope*diff + s.intercept
 }
@@ -1381,8 +1381,8 @@ type MultipliedSizesModel struct {
 	MultipliedSizes
 }
 
-func (m MultipliedSizesModel) CostTwo(x, y ExMem) int {
-	return m.slope*(int(x)*int(y)) + m.intercept
+func (m MultipliedSizesModel) CostTwo(x, y ExMem) int64 {
+	return m.slope*(int64(x)*int64(y)) + m.intercept
 }
 
 func (MultipliedSizesModel) HasConstants() []bool {
@@ -1396,10 +1396,10 @@ type MinSizeModel struct {
 	MinSize
 }
 
-func (m MinSizeModel) CostTwo(x, y ExMem) int {
-	min := int(x)
-	if int(y) < min {
-		min = int(y)
+func (m MinSizeModel) CostTwo(x, y ExMem) int64 {
+	min := int64(x)
+	if int64(y) < min {
+		min = int64(y)
 	}
 
 	return m.slope*min + m.intercept
@@ -1416,10 +1416,10 @@ type MaxSizeModel struct {
 	MaxSize
 }
 
-func (m MaxSizeModel) CostTwo(x, y ExMem) int {
-	max := int(x)
-	if int(y) > max {
-		max = int(y)
+func (m MaxSizeModel) CostTwo(x, y ExMem) int64 {
+	max := int64(x)
+	if int64(y) > max {
+		max = int64(y)
 	}
 
 	return m.slope*max + m.intercept
@@ -1436,9 +1436,9 @@ type LinearOnDiagonalModel struct {
 	ConstantOrLinear
 }
 
-func (l LinearOnDiagonalModel) CostTwo(x, y ExMem) int {
-	if int(x) == int(y) {
-		return l.slope*int(x) + l.intercept
+func (l LinearOnDiagonalModel) CostTwo(x, y ExMem) int64 {
+	if int64(x) == int64(y) {
+		return l.slope*int64(x) + l.intercept
 	}
 
 	return l.constant
@@ -1455,8 +1455,8 @@ type ConstAboveDiagonalModel struct {
 	ConstantOrTwoArguments
 }
 
-func (c ConstAboveDiagonalModel) CostTwo(x, y ExMem) int {
-	if int(x) < int(y) {
+func (c ConstAboveDiagonalModel) CostTwo(x, y ExMem) int64 {
+	if int64(x) < int64(y) {
 		return c.constant
 	}
 
@@ -1474,8 +1474,8 @@ type ConstBelowDiagonalModel struct {
 	ConstantOrTwoArguments
 }
 
-func (c ConstBelowDiagonalModel) CostTwo(x, y ExMem) int {
-	if int(x) > int(y) {
+func (c ConstBelowDiagonalModel) CostTwo(x, y ExMem) int64 {
+	if int64(x) > int64(y) {
 		return c.constant
 	}
 
@@ -1493,8 +1493,8 @@ type QuadraticInYModel struct {
 	QuadraticFunction
 }
 
-func (q QuadraticInYModel) CostTwo(x, y ExMem) int {
-	yVal := int(y)
+func (q QuadraticInYModel) CostTwo(x, y ExMem) int64 {
+	yVal := int64(y)
 
 	return q.coeff0 + (q.coeff1 * yVal) + (q.coeff2 * yVal * yVal)
 }
@@ -1508,16 +1508,16 @@ func (QuadraticInYModel) isArguments() {}
 
 // ConstAboveDiagonalIntoQuadraticXAndYModel costs constant when x < y, uses a quadratic function otherwise
 type ConstAboveDiagonalIntoQuadraticXAndYModel struct {
-	constant int
+	constant int64
 	TwoArgumentsQuadraticFunction
 }
 
-func (c ConstAboveDiagonalIntoQuadraticXAndYModel) CostTwo(x, y ExMem) int {
-	if int(x) < int(y) {
+func (c ConstAboveDiagonalIntoQuadraticXAndYModel) CostTwo(x, y ExMem) int64 {
+	if int64(x) < int64(y) {
 		return c.constant
 	}
 
-	xVal, yVal := int(x), int(y)
+	xVal, yVal := int64(x), int64(y)
 	result := c.coeff00 +
 		c.coeff10*xVal +
 		c.coeff01*yVal +
@@ -1540,14 +1540,14 @@ func (ConstAboveDiagonalIntoQuadraticXAndYModel) isArguments() {}
 
 // ThreeArgument interface for costing functions with three arguments
 type ThreeArgument interface {
-	CostThree(x, y, z ExMem) int
+	CostThree(x, y, z ExMem) int64
 	Arguments
 }
 
 // Implementations for ThreeArguments variants
 
 // Using existing ConstantCost for three arguments
-func (c ConstantCost) CostThree(x, y, z ExMem) int {
+func (c ConstantCost) CostThree(x, y, z ExMem) int64 {
 	return c.c
 }
 
@@ -1556,8 +1556,8 @@ type ThreeAddedSizesModel struct {
 	AddedSizes
 }
 
-func (a ThreeAddedSizesModel) CostThree(x, y, z ExMem) int {
-	return a.slope*(int(x)+int(y)+int(z)) + a.intercept
+func (a ThreeAddedSizesModel) CostThree(x, y, z ExMem) int64 {
+	return a.slope*(int64(x)+int64(y)+int64(z)) + a.intercept
 }
 
 func (ThreeAddedSizesModel) HasConstants() []bool {
@@ -1571,7 +1571,7 @@ type ThreeLinearInX struct {
 	LinearCost
 }
 
-func (l ThreeLinearInX) CostThree(x, y, z ExMem) int {
+func (l ThreeLinearInX) CostThree(x, y, z ExMem) int64 {
 	return l.Cost(x)
 }
 
@@ -1587,7 +1587,7 @@ type ThreeLinearInY struct {
 	LinearCost
 }
 
-func (l ThreeLinearInY) CostThree(x, y, z ExMem) int {
+func (l ThreeLinearInY) CostThree(x, y, z ExMem) int64 {
 	return l.Cost(y)
 }
 
@@ -1603,7 +1603,7 @@ type ThreeLinearInZ struct {
 	LinearCost
 }
 
-func (l ThreeLinearInZ) CostThree(x, y, z ExMem) int {
+func (l ThreeLinearInZ) CostThree(x, y, z ExMem) int64 {
 	return l.Cost(z)
 }
 
@@ -1620,8 +1620,8 @@ type ThreeQuadraticInZ struct {
 }
 
 // X,Y are not used so constant
-func (q ThreeQuadraticInZ) CostThree(x, y, z ExMem) int {
-	zVal := int(z)
+func (q ThreeQuadraticInZ) CostThree(x, y, z ExMem) int64 {
+	zVal := int64(z)
 
 	return q.coeff0 + (q.coeff1 * zVal) + (q.coeff2 * zVal * zVal)
 }
@@ -1637,12 +1637,12 @@ type ThreeLiteralInYorLinearInZ struct {
 	LinearCost
 }
 
-func (l ThreeLiteralInYorLinearInZ) CostThree(x, y, z ExMem) int {
-	if int(y) == 0 {
-		return l.slope*int(z) + l.intercept
+func (l ThreeLiteralInYorLinearInZ) CostThree(x, y, z ExMem) int64 {
+	if int64(y) == 0 {
+		return l.slope*int64(z) + l.intercept
 	}
 
-	return int(y)
+	return int64(y)
 }
 
 // X is not used so constant
@@ -1657,10 +1657,10 @@ type ThreeLinearInMaxYZ struct {
 	LinearCost
 }
 
-func (l ThreeLinearInMaxYZ) CostThree(x, y, z ExMem) int {
-	max := int(y)
-	if int(z) > max {
-		max = int(z)
+func (l ThreeLinearInMaxYZ) CostThree(x, y, z ExMem) int64 {
+	max := int64(y)
+	if int64(z) > max {
+		max = int64(z)
 	}
 
 	return l.slope*max + l.intercept
@@ -1678,8 +1678,8 @@ type ThreeLinearInYandZ struct {
 	TwoVariableLinearSize
 }
 
-func (l ThreeLinearInYandZ) CostThree(x, y, z ExMem) int {
-	return l.slope1*int(y) + l.slope2*int(z) + l.intercept
+func (l ThreeLinearInYandZ) CostThree(x, y, z ExMem) int64 {
+	return l.slope1*int64(y) + l.slope2*int64(z) + l.intercept
 }
 
 // X is not used so constant
@@ -1691,39 +1691,39 @@ func (ThreeLinearInYandZ) isArguments() {}
 
 // SixArgument interface for costing functions with six arguments
 type SixArgument interface {
-	CostSix(a, b, c, d, e, f ExMem) int
+	CostSix(a, b, c, d, e, f ExMem) int64
 	Arguments
 }
 
 // Implementations for SixArguments variants
 
 // Using existing ConstantCost for six arguments
-func (c ConstantCost) CostSix(a, b, c2, d, e, f ExMem) int {
+func (c ConstantCost) CostSix(a, b, c2, d, e, f ExMem) int64 {
 	return c.c
 }
 
 type ExpMod struct {
-	coeff00 int
-	coeff11 int
-	coeff12 int
+	coeff00 int64
+	coeff11 int64
+	coeff12 int64
 }
 
 func (ExpMod) isArguments() {}
 
-func (l ExpMod) CostThree(aa, ee, mm ExMem) int {
-	cost0 := l.coeff00 + l.coeff11*int(
+func (l ExpMod) CostThree(aa, ee, mm ExMem) int64 {
+	cost0 := l.coeff00 + l.coeff11*int64(
 		ee,
-	)*int(
+	)*int64(
 		mm,
-	) + l.coeff12*int(
+	) + l.coeff12*int64(
 		ee,
-	)*int(
+	)*int64(
 		mm,
-	)*int(
+	)*int64(
 		mm,
 	)
 
-	if int(aa) <= int(mm) {
+	if int64(aa) <= int64(mm) {
 		return cost0
 	} else {
 		return cost0 + (cost0 / 2)
