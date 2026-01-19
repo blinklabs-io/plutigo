@@ -29,6 +29,8 @@ func (b *BuiltinCosts) update(param string, val int64) error {
 	switch builtinName {
 	case "verifySignature":
 		builtinName = "verifyEd25519Signature"
+	case "blake2b":
+		builtinName = "blake2b_256"
 	}
 	builtinIdx, ok := builtin.Builtins[builtinName]
 	if !ok {
