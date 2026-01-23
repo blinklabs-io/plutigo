@@ -10,14 +10,14 @@ import (
 
 func TestSmokeBuild(t *testing.T) {
 	// Ensure the package builds and a CEK machine can be allocated.
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 	if m == nil {
-		t.Fatal("NewMachineWithVersionCosts returned nil")
+		t.Fatal("NewMachine returned nil")
 	}
 }
 
-func TestNewMachineWithVersionCosts(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+func TestNewMachine(t *testing.T) {
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 	if m == nil {
 		t.Fatal("expected machine, got nil")
 	}
@@ -28,7 +28,7 @@ func TestNewMachineWithVersionCosts(t *testing.T) {
 }
 
 func TestRunConstant(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	// construct a simple constant term (integer)
 	term := &syn.Constant{

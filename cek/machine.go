@@ -103,35 +103,27 @@ type Machine[T syn.Eval] struct {
 func NewMachine[T syn.Eval](
 	version lang.LanguageVersion,
 	slippage uint32,
-	costs ...CostModel,
+	evalContext *EvalContext,
 ) *Machine[T] {
-	var costModel CostModel
-	if len(costs) > 0 {
-		costModel = costs[0]
-	} else {
-		costModel = DefaultCostModel
+	if evalContext == nil {
+		// Use the default V3 cost models and semantics variant if no eval context is provided
+		evalContext = &EvalContext{
+			CostModel:        DefaultCostModel,
+			SemanticsVariant: SemanticsVariantC,
+		}
 	}
 	return &Machine[T]{
-		costs:     costModel,
+		costs:     evalContext.CostModel,
 		builtins:  newBuiltins[T](),
 		slippage:  slippage,
 		version:   version,
-		semantics: GetSemantics(version),
+		semantics: evalContext.SemanticsVariant,
 		ExBudget:  DefaultExBudget,
 		Logs:      make([]string, 0),
 
 		argHolder:       newArgHolder[T](),
 		unbudgetedSteps: [10]uint32{0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	}
-}
-
-// NewMachineWithVersionCosts creates a machine with version-appropriate cost models
-func NewMachineWithVersionCosts[T syn.Eval](
-	version lang.LanguageVersion,
-	slippage uint32,
-) *Machine[T] {
-	costModel := GetCostModel(version)
-	return NewMachine[T](version, slippage, costModel)
 }
 
 // Run executes a Plutus term using the CEK (Control, Environment, Kontinuation) abstract machine.

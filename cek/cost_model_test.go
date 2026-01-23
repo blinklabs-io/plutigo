@@ -11,7 +11,7 @@ import (
 
 func TestMachineVersion(t *testing.T) {
 	version := lang.LanguageVersionV2
-	machine := NewMachine[syn.DeBruijn](version, 100)
+	machine := NewMachine[syn.DeBruijn](version, 100, nil)
 
 	if machine.version != version {
 		t.Errorf("Expected version %v, got %v", version, machine.version)
@@ -75,7 +75,7 @@ func TestLanguageVersionV4(t *testing.T) {
 	}
 
 	// V4 should use SemanticsVariantC (same as V3)
-	sem := GetSemantics(LanguageVersionV4)
+	sem := GetSemantics(LanguageVersionV4, ProtoVersion{})
 	if sem != SemanticsVariantC {
 		t.Errorf("V4 should use SemanticsVariantC, got %v", sem)
 	}
@@ -83,7 +83,7 @@ func TestLanguageVersionV4(t *testing.T) {
 
 func TestMachineVersionV4(t *testing.T) {
 	version := LanguageVersionV4
-	machine := NewMachine[syn.DeBruijn](version, 100)
+	machine := NewMachine[syn.DeBruijn](version, 100, nil)
 
 	if machine.version != version {
 		t.Errorf("Expected version %v, got %v", version, machine.version)

@@ -12,14 +12,22 @@ const (
 	SemanticsVariantC SemanticsVariant = 3
 )
 
-func GetSemantics(version lang.LanguageVersion) SemanticsVariant {
+const changProtoMajorVersion = 9
+
+type ProtoVersion struct {
+	Major uint
+	Minor uint
+}
+
+func GetSemantics(version lang.LanguageVersion, protoVersion ProtoVersion) SemanticsVariant {
 	switch version {
-	case lang.LanguageVersionV1:
-		return SemanticsVariantA
-	case lang.LanguageVersionV2:
-		return SemanticsVariantB
+	case lang.LanguageVersionV1, lang.LanguageVersionV2:
+		if protoVersion.Major < changProtoMajorVersion {
+			return SemanticsVariantA
+		} else {
+			return SemanticsVariantB
+		}
 	default:
-		// V3 or later
 		return SemanticsVariantC
 	}
 }
