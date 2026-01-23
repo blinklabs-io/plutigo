@@ -18,26 +18,6 @@ func TestMachineVersion(t *testing.T) {
 	}
 }
 
-func TestGetCostModel(t *testing.T) {
-	v1 := GetCostModel(LanguageVersionV1)
-	v2 := GetCostModel(LanguageVersionV2)
-	v3 := GetCostModel(LanguageVersionV3)
-	v4 := GetCostModel(LanguageVersionV4)
-
-	// Just verify we get different cost models (they should have different builtin costs)
-	if v1.builtinCosts == v2.builtinCosts {
-		t.Error("V1 and V2 cost models should be different")
-	}
-	if v2.builtinCosts == v3.builtinCosts {
-		t.Error("V2 and V3 cost models should be different")
-	}
-	// V4 currently uses the same builtin costs as V3 (pending calibration)
-	// This is expected behavior until Plan 002 is implemented
-	if v4.builtinCosts != v3.builtinCosts {
-		t.Error("V4 should currently use same builtin costs as V3 (pending calibration)")
-	}
-}
-
 func TestVersionLessThan(t *testing.T) {
 	// V1 < V2 < V3 < V4
 	if !VersionLessThan(LanguageVersionV1, LanguageVersionV2) {
@@ -58,26 +38,6 @@ func TestVersionLessThan(t *testing.T) {
 	// Greater than is not less than
 	if VersionLessThan(LanguageVersionV4, LanguageVersionV3) {
 		t.Error("V4 should not be less than V3")
-	}
-}
-
-func TestLanguageVersionV4(t *testing.T) {
-	// V4 should be 1.3.0
-	expected := LanguageVersion{1, 3, 0}
-	if LanguageVersionV4 != expected {
-		t.Errorf("Expected V4 to be %v, got %v", expected, LanguageVersionV4)
-	}
-
-	// V4 should get V4CostModel
-	cm := GetCostModel(LanguageVersionV4)
-	if cm.machineCosts != V4CostModel.machineCosts {
-		t.Error("V4 should get V4CostModel")
-	}
-
-	// V4 should use SemanticsVariantC (same as V3)
-	sem := GetSemantics(LanguageVersionV4, ProtoVersion{})
-	if sem != SemanticsVariantC {
-		t.Errorf("V4 should use SemanticsVariantC, got %v", sem)
 	}
 }
 
@@ -172,10 +132,10 @@ func TestUpdateV3CostModel(t *testing.T) {
 	}
 
 	// Get the default V3 cost model
-	defaultCM := GetCostModel(lang.LanguageVersionV3)
+	defaultCM := DefaultCostModel
 
 	// Update with preview network cost model
-	updatedCM, err := CostModelFromList(lang.LanguageVersionV3, previewV3CostModel)
+	updatedCM, err := costModelFromList(lang.LanguageVersionV3, SemanticsVariantC, previewV3CostModel)
 	if err != nil {
 		t.Fatalf("unexpected error building cost model from list: %s", err)
 	}
@@ -228,9 +188,9 @@ func TestUpdateV3CostModel(t *testing.T) {
 		t.Errorf("Expected AppendByteString CPU slope to be 173, got %d", appendBSCPU.slope)
 	}
 
-	// Verify Blake2b_256 costs (LinearCost)
+	// Verify Blake2b_256 costs (LinearInX)
 	// blake2b_256-cpu-arguments-intercept: 201305, blake2b_256-cpu-arguments-slope: 8356
-	blake2bCPU := updatedCM.builtinCosts[builtin.Blake2b_256].cpu.(*LinearCost)
+	blake2bCPU := updatedCM.builtinCosts[builtin.Blake2b_256].cpu.(*LinearInX)
 	if blake2bCPU.intercept != 201305 {
 		t.Errorf("Expected Blake2b_256 CPU intercept to be 201305, got %d", blake2bCPU.intercept)
 	}
@@ -276,7 +236,7 @@ func TestUpdateV3CostModel(t *testing.T) {
 	// - Both "c0", "c1", "c2" and "coeff0", "coeff1", "coeff2" naming conventions
 
 	// Verify that creating a new default cost model doesn't affect the updated one
-	defaultCM2 := GetCostModel(lang.LanguageVersionV3)
+	defaultCM2 := DefaultCostModel
 	if defaultCM.machineCosts.apply.Cpu != defaultCM2.machineCosts.apply.Cpu {
 		t.Error("Creating a new cost model should not affect the default values")
 	}
@@ -455,7 +415,7 @@ func TestUpdateV1CostModelFromMap(t *testing.T) {
 	}
 
 	// Update with preview network cost model
-	updatedCM, err := CostModelFromMap(lang.LanguageVersionV1, previewV1CostModelMap)
+	updatedCM, err := costModelFromMap(lang.LanguageVersionV1, SemanticsVariantA, previewV1CostModelMap)
 	if err != nil {
 		t.Fatalf("unexpected error building cost model from map: %s", err)
 	}
@@ -482,8 +442,8 @@ func TestUpdateV1CostModelFromMap(t *testing.T) {
 		t.Errorf("Expected builtin CPU cost to be 29773, got %d", updatedCM.machineCosts.builtin.Cpu)
 	}
 
-	// Verify verifyEd25519Signature costs were updated (ThreeLinearInZ)
-	verifySigCPU := updatedCM.builtinCosts[builtin.VerifyEd25519Signature].cpu.(*ThreeLinearInZ)
+	// Verify verifyEd25519Signature costs were updated (ThreeLinearInY)
+	verifySigCPU := updatedCM.builtinCosts[builtin.VerifyEd25519Signature].cpu.(*ThreeLinearInY)
 	if verifySigCPU.intercept != 3345831 {
 		t.Errorf("Expected VerifyEd25519Signature CPU intercept to be 3345831, got %d", verifySigCPU.intercept)
 	}
