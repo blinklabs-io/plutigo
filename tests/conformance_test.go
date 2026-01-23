@@ -232,6 +232,7 @@ func TestConformance(t *testing.T) {
 						// NOTE: we force V3 here, since the conformance test programs specify V1 despite being designed for V3
 						lang.LanguageVersionV3,
 						200,
+						nil,
 					)
 					machine.ExBudget = initialBudget
 

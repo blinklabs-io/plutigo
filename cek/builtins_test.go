@@ -17,7 +17,7 @@ import (
 // Helper functions to reduce test code duplication
 
 func newTestMachine() *Machine[syn.DeBruijn] {
-	return NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	return NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 }
 
 func newTestBuiltin(fn builtin.DefaultFunction) *Builtin[syn.DeBruijn] {
@@ -483,7 +483,7 @@ func TestLengthOfByteStringBuiltin(t *testing.T) {
 }
 
 func TestEqualsDataBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.EqualsData,
@@ -523,7 +523,7 @@ func TestEqualsDataBuiltin(t *testing.T) {
 }
 
 func TestUnConstrDataBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.UnConstrData,
@@ -565,7 +565,7 @@ func TestUnConstrDataBuiltin(t *testing.T) {
 }
 
 func TestAppendStringBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.AppendString,
@@ -636,7 +636,7 @@ func TestEqualsStringBuiltin(t *testing.T) {
 }
 
 func TestSha2_256Builtin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Sha2_256,
@@ -702,7 +702,7 @@ func TestSha2_256Builtin(t *testing.T) {
 }
 
 func TestSha3_256Builtin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Sha3_256,
@@ -738,7 +738,7 @@ func TestSha3_256Builtin(t *testing.T) {
 }
 
 func TestHeadListBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.HeadList,
@@ -780,7 +780,7 @@ func TestHeadListBuiltin(t *testing.T) {
 }
 
 func TestTailListBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.TailList,
@@ -839,7 +839,7 @@ func TestTailListBuiltin(t *testing.T) {
 }
 
 func TestNullListBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	// Test with non-empty list
 	b := &Builtin[syn.DeBruijn]{
@@ -915,7 +915,7 @@ func TestNullListBuiltin(t *testing.T) {
 }
 
 func TestBlake2b_256Builtin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Blake2b_256,
@@ -951,7 +951,7 @@ func TestBlake2b_256Builtin(t *testing.T) {
 }
 
 func TestIfThenElseBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	// Test with true condition - should return "then" branch
 	b := &Builtin[syn.DeBruijn]{
@@ -1025,7 +1025,7 @@ func TestIfThenElseBuiltin(t *testing.T) {
 }
 
 func TestChooseUnitBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.ChooseUnit,
@@ -1062,7 +1062,7 @@ func TestChooseUnitBuiltin(t *testing.T) {
 }
 
 func TestFstPairBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.FstPair,
@@ -1101,7 +1101,7 @@ func TestFstPairBuiltin(t *testing.T) {
 }
 
 func TestSndPairBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.SndPair,
@@ -1140,7 +1140,7 @@ func TestSndPairBuiltin(t *testing.T) {
 }
 
 func TestConstrDataBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.ConstrData,
@@ -1189,7 +1189,7 @@ func TestConstrDataBuiltin(t *testing.T) {
 }
 
 func TestIDataBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.IData,
@@ -1228,7 +1228,7 @@ func TestIDataBuiltin(t *testing.T) {
 }
 
 func TestBDataBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.BData,
@@ -1267,7 +1267,7 @@ func TestBDataBuiltin(t *testing.T) {
 }
 
 func TestListDataBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.ListData,
@@ -1315,7 +1315,7 @@ func TestListDataBuiltin(t *testing.T) {
 }
 
 func TestKeccak_256Builtin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Keccak_256,
@@ -1351,7 +1351,7 @@ func TestKeccak_256Builtin(t *testing.T) {
 }
 
 func TestMkConsBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.MkCons,
@@ -1404,7 +1404,7 @@ func TestMkConsBuiltin(t *testing.T) {
 }
 
 func TestDivideIntegerByZeroBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.DivideInteger,
@@ -1426,7 +1426,7 @@ func TestDivideIntegerByZeroBuiltin(t *testing.T) {
 }
 
 func TestQuotientIntegerByZeroBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.QuotientInteger,
@@ -1448,7 +1448,7 @@ func TestQuotientIntegerByZeroBuiltin(t *testing.T) {
 }
 
 func TestRemainderIntegerByZeroBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.RemainderInteger,
@@ -1470,7 +1470,7 @@ func TestRemainderIntegerByZeroBuiltin(t *testing.T) {
 }
 
 func TestModIntegerByZeroBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.ModInteger,
@@ -1492,7 +1492,7 @@ func TestModIntegerByZeroBuiltin(t *testing.T) {
 }
 
 func TestBls12_381_G1_AddBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_G1_Add,
@@ -1542,7 +1542,7 @@ func TestBls12_381_G1_AddBuiltin(t *testing.T) {
 }
 
 func TestBls12_381_G1_EqualBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_G1_Equal,
@@ -1621,7 +1621,7 @@ func TestBls12_381_G1_EqualBuiltin(t *testing.T) {
 }
 
 func TestBls12_381_G1_CompressBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_G1_Compress,
@@ -1663,7 +1663,7 @@ func TestBls12_381_G1_CompressBuiltin(t *testing.T) {
 }
 
 func TestBls12_381_G1_NegBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_G1_Neg,
@@ -1708,7 +1708,7 @@ func TestBls12_381_G1_NegBuiltin(t *testing.T) {
 }
 
 func TestBls12_381_G2_AddBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_G2_Add,
@@ -1758,7 +1758,7 @@ func TestBls12_381_G2_AddBuiltin(t *testing.T) {
 }
 
 func TestBls12_381_G2_EqualBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_G2_Equal,
@@ -1837,7 +1837,7 @@ func TestBls12_381_G2_EqualBuiltin(t *testing.T) {
 }
 
 func TestBls12_381_G2_CompressBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_G2_Compress,
@@ -1879,7 +1879,7 @@ func TestBls12_381_G2_CompressBuiltin(t *testing.T) {
 }
 
 func TestBls12_381_G2_NegBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_G2_Neg,
@@ -1924,7 +1924,7 @@ func TestBls12_381_G2_NegBuiltin(t *testing.T) {
 }
 
 func TestBls12_381_MillerLoopBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_MillerLoop,
@@ -1967,7 +1967,7 @@ func TestBls12_381_MillerLoopBuiltin(t *testing.T) {
 }
 
 func TestBls12_381_MulMlResultBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_MulMlResult,
@@ -2025,7 +2025,7 @@ func TestBls12_381_MulMlResultBuiltin(t *testing.T) {
 }
 
 func TestBls12_381_FinalVerifyBuiltin(t *testing.T) {
-	m := NewMachineWithVersionCosts[syn.DeBruijn](lang.LanguageVersionV3, 0)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_FinalVerify,
