@@ -28,39 +28,13 @@ var DefaultCostModel = CostModel{
 	builtinCosts: DefaultBuiltinCosts,
 }
 
-var V2CostModel = CostModel{
-	machineCosts: DefaultMachineCosts, // Assuming machine costs are the same
-	builtinCosts: V2BuiltinCosts,
-}
-
-var V1CostModel = CostModel{
-	machineCosts: DefaultMachineCosts, // Assuming machine costs are the same
-	builtinCosts: V1BuiltinCosts,
-}
-
-// V4CostModel uses the same costs as V3 (DefaultCostModel) for now.
-// V4-specific builtin costs (InsertCoin, ScaleValue, UnionValue, MultiIndexArray)
-// currently use placeholder values and will be calibrated in a future update.
-var V4CostModel = CostModel{
-	machineCosts: DefaultMachineCosts,
-	builtinCosts: DefaultBuiltinCosts, // TODO: Plan 002 - calibrate V4-specific costs
-}
-
-func GetCostModel(version LanguageVersion) CostModel {
-	switch {
-	case version == LanguageVersionV1:
-		return V1CostModel
-	case version == LanguageVersionV2:
-		return V2CostModel
-	case VersionLessThan(version, LanguageVersionV4):
-		return DefaultCostModel // V3 costs
-	default:
-		return V4CostModel // V4 and later
+func costModelFromList(version lang.LanguageVersion, semantics SemanticsVariant, data []int64) (CostModel, error) {
+	cm := DefaultCostModel.Clone()
+	builtinCosts, err := buildBuiltinCosts(version, semantics)
+	if err != nil {
+		return CostModel{}, fmt.Errorf("build builtin costs: %w", err)
 	}
-}
-
-func CostModelFromList(version lang.LanguageVersion, data []int64) (CostModel, error) {
-	cm := GetCostModel(version).Clone()
+	cm.builtinCosts = builtinCosts
 	for i, param := range lang.GetParamNamesForVersion(version) {
 		// Stop processing when we reach the end of our input data
 		if i >= len(data) {
@@ -81,8 +55,13 @@ func CostModelFromList(version lang.LanguageVersion, data []int64) (CostModel, e
 	return cm, nil
 }
 
-func CostModelFromMap(version lang.LanguageVersion, data map[string]int64) (CostModel, error) {
-	cm := GetCostModel(version).Clone()
+func costModelFromMap(version lang.LanguageVersion, semantics SemanticsVariant, data map[string]int64) (CostModel, error) {
+	cm := DefaultCostModel.Clone()
+	builtinCosts, err := buildBuiltinCosts(version, semantics)
+	if err != nil {
+		return CostModel{}, fmt.Errorf("build builtin costs: %w", err)
+	}
+	cm.builtinCosts = builtinCosts
 	for param, val := range data {
 		if strings.HasPrefix(param, "cek") {
 			// Update machine cost

@@ -20,7 +20,7 @@ func NewEvalContext(
 	ret := &EvalContext{
 		SemanticsVariant: GetSemantics(version, protoVersion),
 	}
-	costModel, err := CostModelFromList(version, costModelParams)
+	costModel, err := costModelFromList(version, ret.SemanticsVariant, costModelParams)
 	if err != nil {
 		return nil, fmt.Errorf("build cost model: %w", err)
 	}
