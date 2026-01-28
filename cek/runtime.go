@@ -175,9 +175,8 @@ func (m *Machine[T]) CostOne(b *builtin.DefaultFunction, x func() ExMem) error {
 		cpu: cpu,
 	}
 
-	err := m.spendBudget(CostSingle(cf, x))
-
-	return err
+	cost := CostSingle(cf, x)
+	return m.spendBudget(cost)
 }
 
 func (m *Machine[T]) CostTwo(
@@ -194,9 +193,8 @@ func (m *Machine[T]) CostTwo(
 		cpu: cpu,
 	}
 
-	err := m.spendBudget(CostPair(cf, x, y))
-
-	return err
+	cost := CostPair(cf, x, y)
+	return m.spendBudget(cost)
 }
 
 func (m *Machine[T]) CostThree(
@@ -213,9 +211,8 @@ func (m *Machine[T]) CostThree(
 		cpu: cpu,
 	}
 
-	err := m.spendBudget(CostTriple(cf, x, y, z))
-
-	return err
+	cost := CostTriple(cf, x, y, z)
+	return m.spendBudget(cost)
 }
 
 func (m *Machine[T]) CostFour(
@@ -232,9 +229,8 @@ func (m *Machine[T]) CostFour(
 		cpu: cpu,
 	}
 
-	err := m.spendBudget(CostQuadtuple(cf, x, y, z, u))
-
-	return err
+	cost := CostQuadtuple(cf, x, y, z, u)
+	return m.spendBudget(cost)
 }
 
 func (m *Machine[T]) CostSix(
@@ -251,9 +247,8 @@ func (m *Machine[T]) CostSix(
 		cpu: cpu,
 	}
 
-	err := m.spendBudget(CostSextuple(cf, x, y, z, xx, yy, zz))
-
-	return err
+	cost := CostSextuple(cf, x, y, z, xx, yy, zz)
+	return m.spendBudget(cost)
 }
 
 func unwrapConstant[T syn.Eval](value Value[T]) (*Constant, error) {
