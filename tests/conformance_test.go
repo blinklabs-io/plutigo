@@ -15,6 +15,47 @@ import (
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
+// ==================== Helper Functions ====================
+
+// isV4BuiltinTest returns true if the test path contains a V4 builtin name
+func isV4BuiltinTest(path string) bool {
+	v4Builtins := []string{
+		"insertCoin",
+		"lookupCoin",
+		"scaleValue",
+		"unionValue",
+		"valueContains",
+		"valueData",
+		"unValueData",
+		"lengthOfArray",
+		"listToArray",
+		"indexArray",
+		"multiIndexArray",
+		"bls12_381_G1_multiScalarMul",
+		"bls12_381_G2_multiScalarMul",
+	}
+	for _, b := range v4Builtins {
+		if strings.Contains(path, b) {
+			return true
+		}
+	}
+	return false
+}
+
+// isUnreleasedBuiltinTest returns true if the test path contains an unreleased builtin name
+// These builtins are defined but not yet available on mainnet
+func isUnreleasedBuiltinTest(path string) bool {
+	unreleasedBuiltins := []string{
+		"dropList",
+	}
+	for _, b := range unreleasedBuiltins {
+		if strings.Contains(path, b) {
+			return true
+		}
+	}
+	return false
+}
+
 // ==================== Test Cases ====================
 
 func TestParse(t *testing.T) {
@@ -167,6 +208,11 @@ func TestConformance(t *testing.T) {
 				testName := strings.TrimSuffix(relPath, ".uplc")
 
 				t.Run(testName, func(t *testing.T) {
+					// Skip tests for unreleased builtins (never made it to mainnet)
+					if isUnreleasedBuiltinTest(path) {
+						t.Skip("Skipping unreleased builtin test")
+					}
+
 					// Read program file
 					programText, err := os.ReadFile(path)
 					if err != nil {
@@ -228,9 +274,16 @@ func TestConformance(t *testing.T) {
 						Mem: math.MaxInt64,
 						Cpu: math.MaxInt64,
 					}
+
+					// Determine appropriate Plutus version based on test path
+					// V4 builtins require V4; otherwise use V3
+					plutusVersion := lang.LanguageVersionV3
+					if isV4BuiltinTest(path) {
+						plutusVersion = lang.LanguageVersionV4
+					}
+
 					machine := cek.NewMachine[syn.DeBruijn](
-						// NOTE: we force V3 here, since the conformance test programs specify V1 despite being designed for V3
-						lang.LanguageVersionV3,
+						plutusVersion,
 						200,
 						nil,
 					)

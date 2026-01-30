@@ -992,8 +992,6 @@ var DefaultBuiltinCosts = BuiltinCosts{
 			coeff12: 53144,
 		},
 	},
-	builtin.CaseList: &CostingFunc[Arguments]{},
-	builtin.CaseData: &CostingFunc[Arguments]{},
 	builtin.DropList: &CostingFunc[Arguments]{
 		mem: &ConstantCost{4},
 		// Raise baseline CPU so n=0 matches expected total budget better
@@ -1018,34 +1016,84 @@ var DefaultBuiltinCosts = BuiltinCosts{
 		cpu: &ConstantCost{232010},
 	},
 	// Value/coin builtins
-	// TODO: InsertCoin, ScaleValue, and UnionValue currently use placeholder costs
-	// (100 billion units). These should be properly calibrated based on actual execution
-	// time measurements.
 	builtin.InsertCoin: &CostingFunc[Arguments]{
-		mem: &ConstantCost{100000000000},
-		cpu: &ConstantCost{100000000000},
+		mem: &FourLinearInU{LinearCost{
+			intercept: 45,
+			slope:     21,
+		}},
+		cpu: &FourLinearInU{LinearCost{
+			intercept: 356924,
+			slope:     18413,
+		}},
 	},
 	builtin.LookupCoin: &CostingFunc[Arguments]{
 		mem: &ConstantCost{1},
-		cpu: &ConstantCost{248283},
+		cpu: &ThreeLinearInZ{LinearCost{
+			intercept: 219951,
+			slope:     9444,
+		}},
 	},
 	builtin.ScaleValue: &CostingFunc[Arguments]{
-		mem: &ConstantCost{100000000000},
-		cpu: &ConstantCost{100000000000},
+		mem: &LinearInY{LinearCost{
+			intercept: 12,
+			slope:     21,
+		}},
+		cpu: &LinearInY{LinearCost{
+			intercept: 1000,
+			slope:     277577,
+		}},
 	},
 	builtin.UnionValue: &CostingFunc[Arguments]{
-		mem: &ConstantCost{100000000000},
-		cpu: &ConstantCost{100000000000},
+		mem: &AddedSizesModel{AddedSizes{
+			intercept: 24,
+			slope:     21,
+		}},
+		cpu: &WithInteractionInXAndY{
+			c00: 1000,
+			c01: 183150,
+			c10: 172116,
+			c11: 6,
+		},
 	},
-	// V4 model: align with conformance (~1.25M CPU, mem ~601 total)
 	builtin.ValueContains: &CostingFunc[Arguments]{
 		mem: &ConstantCost{1},
-		cpu: &ConstantCost{1163000},
+		cpu: &ConstAboveDiagonalModel{
+			ConstantOrTwoArguments{
+				constant: 213283,
+				model: &LinearInXAndY{TwoVariableLinearSize{
+					intercept: 618401,
+					slope1:    1998,
+					slope2:    28258,
+				}},
+			},
+		},
 	},
 	// V4 model: placeholder for multiIndexArray
 	builtin.MultiIndexArray: &CostingFunc[Arguments]{
 		mem: &ConstantCost{1},
 		cpu: &ConstantCost{1000000},
+	},
+	// Value/Data conversion builtins
+	builtin.ValueData: &CostingFunc[Arguments]{
+		mem: &LinearCost{
+			intercept: 2,
+			slope:     22,
+		},
+		cpu: &LinearCost{
+			intercept: 199604,
+			slope:     39211,
+		},
+	},
+	builtin.UnValueData: &CostingFunc[Arguments]{
+		mem: &LinearCost{
+			intercept: 11,
+			slope:     1,
+		},
+		cpu: &QuadraticInXModel{QuadraticFunction{
+			coeff0: 1000,
+			coeff1: 204904,
+			coeff2: 1,
+		}},
 	},
 }
 
@@ -1134,6 +1182,46 @@ func CostTriple[T ThreeArgument](
 	return ExBudget{
 		Mem: int64(cf.mem.CostThree(xMem, yMem, zMem)),
 		Cpu: int64(cf.cpu.CostThree(xMem, yMem, zMem)),
+	}
+}
+
+// Function to cost FourArguments
+func CostQuadtuple[T FourArgument](
+	cf CostingFunc[T],
+	x, y, z, u func() ExMem,
+) ExBudget {
+	memConstants := cf.mem.HasConstants()
+	cpuConstants := cf.cpu.HasConstants()
+
+	var xMem, yMem, zMem, uMem ExMem
+
+	if memConstants[0] && cpuConstants[0] {
+		xMem = ExMem(0)
+	} else {
+		xMem = x()
+	}
+
+	if memConstants[1] && cpuConstants[1] {
+		yMem = ExMem(0)
+	} else {
+		yMem = y()
+	}
+
+	if memConstants[2] && cpuConstants[2] {
+		zMem = ExMem(0)
+	} else {
+		zMem = z()
+	}
+
+	if len(memConstants) > 3 && memConstants[3] && len(cpuConstants) > 3 && cpuConstants[3] {
+		uMem = ExMem(0)
+	} else {
+		uMem = u()
+	}
+
+	return ExBudget{
+		Mem: int64(cf.mem.CostFour(xMem, yMem, zMem, uMem)),
+		Cpu: int64(cf.cpu.CostFour(xMem, yMem, zMem, uMem)),
 	}
 }
 
@@ -1509,6 +1597,43 @@ func (QuadraticInYModel) HasConstants() []bool {
 
 func (QuadraticInYModel) isArguments() {}
 
+// QuadraticInXModel costs based on a quadratic function of x
+type QuadraticInXModel struct {
+	QuadraticFunction
+}
+
+func (q QuadraticInXModel) Cost(x ExMem) int64 {
+	xVal := int64(x)
+	return q.coeff0 + (q.coeff1 * xVal) + (q.coeff2 * xVal * xVal)
+}
+
+// X is used for computation
+func (QuadraticInXModel) HasConstants() []bool {
+	return []bool{false}
+}
+
+func (QuadraticInXModel) isArguments() {}
+
+// WithInteractionInXAndY costs based on both x and y with an interaction term
+// Formula: c00 + c01*y + c10*x + c11*x*y
+type WithInteractionInXAndY struct {
+	c00 int64
+	c01 int64
+	c10 int64
+	c11 int64
+}
+
+func (w WithInteractionInXAndY) CostTwo(x, y ExMem) int64 {
+	xVal, yVal := int64(x), int64(y)
+	return w.c00 + w.c01*yVal + w.c10*xVal + w.c11*xVal*yVal
+}
+
+func (WithInteractionInXAndY) HasConstants() []bool {
+	return []bool{false, false}
+}
+
+func (WithInteractionInXAndY) isArguments() {}
+
 // ConstAboveDiagonalIntoQuadraticXAndYModel costs constant when x < y, uses a quadratic function otherwise
 type ConstAboveDiagonalIntoQuadraticXAndYModel struct {
 	constant int64
@@ -1692,6 +1817,35 @@ func (ThreeLinearInYandZ) HasConstants() []bool {
 
 func (ThreeLinearInYandZ) isArguments() {}
 
+// FourArgument interface for costing functions with four arguments
+type FourArgument interface {
+	CostFour(x, y, z, u ExMem) int64
+	Arguments
+}
+
+// Implementations for FourArguments variants
+
+// Using existing ConstantCost for four arguments
+func (c ConstantCost) CostFour(x, y, z, u ExMem) int64 {
+	return c.c
+}
+
+// FourLinearInU costs based only on the fourth argument
+type FourLinearInU struct {
+	LinearCost
+}
+
+func (l FourLinearInU) CostFour(x, y, z, u ExMem) int64 {
+	return l.Cost(u)
+}
+
+// X,Y,Z are not used so constant
+func (FourLinearInU) HasConstants() []bool {
+	return []bool{true, true, true, false}
+}
+
+func (FourLinearInU) isArguments() {}
+
 // SixArgument interface for costing functions with six arguments
 type SixArgument interface {
 	CostSix(a, b, c, d, e, f ExMem) int64
@@ -1816,6 +1970,16 @@ func buildBuiltinCosts(version lang.LanguageVersion, semantics SemanticsVariant)
 					}},
 				},
 			},
+		}
+		// V1/V2 use linear_in_z (signature size) instead of linear_in_y (message size) for verifyEd25519Signature
+		// This is a critical difference: V2 costs based on constant signature size (64 bytes),
+		// while V3 costs based on variable message size
+		costs[builtin.VerifyEd25519Signature] = &CostingFunc[Arguments]{
+			mem: &ConstantCost{10},
+			cpu: &ThreeLinearInZ{LinearCost{
+				intercept: 57996947,
+				slope:     18975,
+			}},
 		}
 	}
 	return costs, nil

@@ -122,9 +122,9 @@ const (
 
 	// Batch 6
 	ExpModInteger DefaultFunction = 87
-	CaseList      DefaultFunction = 88
-	CaseData      DefaultFunction = 89
-	DropList      DefaultFunction = 90
+	// Note: IDs 88 and 89 were previously used by caseList and caseData
+	// which were removed from Plutus. These IDs are reserved.
+	DropList DefaultFunction = 90
 
 	// Arrays
 	LengthOfArray DefaultFunction = 91
@@ -144,6 +144,10 @@ const (
 
 	// Multi-index array
 	MultiIndexArray DefaultFunction = 101
+
+	// Value/Data conversion builtins
+	ValueData   DefaultFunction = 102
+	UnValueData DefaultFunction = 103
 )
 
 var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
@@ -258,8 +262,6 @@ var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
 	"ripemd_160": Ripemd_160,
 	// Batch 6
 	"expModInteger": ExpModInteger,
-	"caseList":      CaseList,
-	"caseData":      CaseData,
 	"dropList":      DropList,
 	// Arrays
 	"lengthOfArray": LengthOfArray,
@@ -278,6 +280,10 @@ var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
 
 	// Multi-index array
 	"multiIndexArray": MultiIndexArray,
+
+	// Value/Data conversion builtins
+	"valueData":   ValueData,
+	"unValueData": UnValueData,
 }
 
 var defaultFunctionForceCount = [TotalBuiltinCount]uint{
@@ -387,8 +393,6 @@ var defaultFunctionForceCount = [TotalBuiltinCount]uint{
 	Ripemd_160:               0,
 	// Batch 6
 	ExpModInteger: 0,
-	CaseList:      2,
-	CaseData:      1,
 	DropList:      1,
 	// Arrays
 	LengthOfArray:               1,
@@ -402,6 +406,9 @@ var defaultFunctionForceCount = [TotalBuiltinCount]uint{
 	UnionValue:                  0,
 	ValueContains:               0,
 	MultiIndexArray:             1,
+	// Value/Data conversion
+	ValueData:   0,
+	UnValueData: 0,
 }
 
 func (f DefaultFunction) ForceCount() uint {
@@ -515,8 +522,6 @@ var defaultFunctionArity = [TotalBuiltinCount]uint{
 	Ripemd_160:               1,
 	// Batch 6
 	ExpModInteger: 3,
-	CaseList:      3,
-	CaseData:      6,
 	DropList:      2,
 	// Arrays
 	LengthOfArray:               1,
@@ -530,6 +535,9 @@ var defaultFunctionArity = [TotalBuiltinCount]uint{
 	UnionValue:                  2,
 	ValueContains:               2,
 	MultiIndexArray:             2,
+	// Value/Data conversion
+	ValueData:   1,
+	UnValueData: 1,
 }
 
 func (f DefaultFunction) Arity() uint {
@@ -643,8 +651,6 @@ var defaultFunctionToString = [TotalBuiltinCount]string{
 	Ripemd_160:               "ripemd_160",
 	// Batch 6
 	ExpModInteger: "expModInteger",
-	CaseList:      "caseList",
-	CaseData:      "caseData",
 	DropList:      "dropList",
 	// Arrays
 	LengthOfArray:               "lengthOfArray",
@@ -658,6 +664,9 @@ var defaultFunctionToString = [TotalBuiltinCount]string{
 	UnionValue:                  "unionValue",
 	ValueContains:               "valueContains",
 	MultiIndexArray:             "multiIndexArray",
+	// Value/Data conversion
+	ValueData:   "valueData",
+	UnValueData: "unValueData",
 }
 
 func (f DefaultFunction) String() string {
@@ -668,7 +677,7 @@ func (f DefaultFunction) String() string {
 const MinDefaultFunction byte = 0
 
 // Smallest DefaultFunction
-const MaxDefaultFunction byte = 101
+const MaxDefaultFunction byte = 103
 
 // Total Builtin Count
 const TotalBuiltinCount byte = MaxDefaultFunction + 1
