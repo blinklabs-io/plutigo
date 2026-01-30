@@ -442,8 +442,10 @@ func TestUpdateV1CostModelFromMap(t *testing.T) {
 		t.Errorf("Expected builtin CPU cost to be 29773, got %d", updatedCM.machineCosts.builtin.Cpu)
 	}
 
-	// Verify verifyEd25519Signature costs were updated (ThreeLinearInY)
-	verifySigCPU := updatedCM.builtinCosts[builtin.VerifyEd25519Signature].cpu.(*ThreeLinearInY)
+	// Verify verifyEd25519Signature costs were updated (ThreeLinearInZ for V1/V2)
+	// V1/V2 use linear_in_z (signature size) instead of linear_in_y (message size)
+	// The values come from the cost model map (verifySignature-cpu-arguments-intercept/slope)
+	verifySigCPU := updatedCM.builtinCosts[builtin.VerifyEd25519Signature].cpu.(*ThreeLinearInZ)
 	if verifySigCPU.intercept != 3345831 {
 		t.Errorf("Expected VerifyEd25519Signature CPU intercept to be 3345831, got %d", verifySigCPU.intercept)
 	}

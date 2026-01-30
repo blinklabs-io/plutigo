@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/lang"
@@ -112,6 +113,14 @@ func iconstantExMem(c syn.IConstant) func() ExMem {
 			ex = listExMem(x.List)
 		case *syn.ProtoPair:
 			ex = pairExMem(x.First, x.Second)
+		case *syn.Data:
+			ex = dataExMem(x.Inner)
+		case *syn.Bls12_381G1Element:
+			ex = blsG1ExMem()
+		case *syn.Bls12_381G2Element:
+			ex = blsG2ExMem()
+		case *syn.Bls12_381MlResult:
+			ex = blsMlResultExMem()
 		default:
 			panic(fmt.Sprintf("invalid constant type: %T", c))
 		}
@@ -159,11 +168,12 @@ func byteArrayExMem(b []byte) func() ExMem {
 	}
 }
 
-// According to the Haskell code they are charging 8 bytes of value per byte contained in the string
-// So returning just the string length as ExMem matches the Haskell behavior
+// Haskell uses T.length which returns the number of Unicode codepoints (characters),
+// not the number of bytes. In Go, we use utf8.RuneCountInString to match this behavior.
+// See: plutus-core/src/PlutusCore/Evaluation/Machine/ExMemoryUsage.hs
 func stringExMem(s string) func() ExMem {
 	return func() ExMem {
-		x := len(s)
+		x := utf8.RuneCountInString(s)
 
 		return ExMem(x)
 	}
@@ -184,6 +194,69 @@ func unitExMem() func() ExMem {
 func listLengthExMem(l []syn.IConstant) func() ExMem {
 	return func() ExMem {
 		return ExMem(len(l))
+	}
+}
+
+// valueListSizeExMem calculates the "size" of a Value for V4 builtin costing.
+// The size is: outer_count + inner_count when sum <= 2, else sum - 1.
+// Used by insertCoin which needs the full count for small values.
+func valueListSizeExMem(l []syn.IConstant) func() ExMem {
+	return func() ExMem {
+		if len(l) == 0 {
+			return ExMem(0)
+		}
+		// Count outer entries (currency symbols)
+		outerCount := len(l)
+		// Count total inner entries (tokens)
+		innerCount := 0
+		for _, item := range l {
+			pair, ok := item.(*syn.ProtoPair)
+			if !ok {
+				continue
+			}
+			innerList, ok := pair.Second.(*syn.ProtoList)
+			if !ok {
+				continue
+			}
+			innerCount += len(innerList.List)
+		}
+		sum := outerCount + innerCount
+		// For insertCoin: sum when sum <= 2, else sum - 1
+		if sum > 2 {
+			return ExMem(sum - 1)
+		}
+		return ExMem(sum)
+	}
+}
+
+// valueListSizeMinusOneExMem calculates the "size" as max(0, sum - 1).
+// Used by scaleValue, valueContains, valueData which use this simpler formula.
+func valueListSizeMinusOneExMem(l []syn.IConstant) func() ExMem {
+	return func() ExMem {
+		if len(l) == 0 {
+			return ExMem(0)
+		}
+		// Count outer entries (currency symbols)
+		outerCount := len(l)
+		// Count total inner entries (tokens)
+		innerCount := 0
+		for _, item := range l {
+			pair, ok := item.(*syn.ProtoPair)
+			if !ok {
+				continue
+			}
+			innerList, ok := pair.Second.(*syn.ProtoList)
+			if !ok {
+				continue
+			}
+			innerCount += len(innerList.List)
+		}
+		sum := outerCount + innerCount
+		// For scaleValue, unionValue, valueContains: max(0, sum - 1)
+		if sum > 1 {
+			return ExMem(sum - 1)
+		}
+		return ExMem(0)
 	}
 }
 
@@ -220,6 +293,84 @@ func blsG2ExMem() func() ExMem {
 func blsMlResultExMem() func() ExMem {
 	return func() ExMem {
 		return ExMem(bls.SizeOfGT / 8)
+	}
+}
+
+// valueOuterCountExMem returns just the outer list length (number of policies).
+// Used by unionValue which costs based on policy count only.
+func valueOuterCountExMem(l []syn.IConstant) func() ExMem {
+	return func() ExMem {
+		return ExMem(len(l))
+	}
+}
+
+// valueInnerCountExMem returns the total number of tokens across all policies.
+// Used by valueContains which costs based on token count.
+func valueInnerCountExMem(l []syn.IConstant) func() ExMem {
+	return func() ExMem {
+		innerCount := 0
+		for _, item := range l {
+			pair, ok := item.(*syn.ProtoPair)
+			if !ok {
+				continue
+			}
+			innerList, ok := pair.Second.(*syn.ProtoList)
+			if !ok {
+				continue
+			}
+			innerCount += len(innerList.List)
+		}
+		return ExMem(innerCount)
+	}
+}
+
+// valueMaxCountExMem returns max(outer, inner) for value size calculation.
+// Used by valueData which costs based on the larger of policy or token count.
+func valueMaxCountExMem(l []syn.IConstant) func() ExMem {
+	return func() ExMem {
+		outerCount := len(l)
+		innerCount := 0
+		for _, item := range l {
+			pair, ok := item.(*syn.ProtoPair)
+			if !ok {
+				continue
+			}
+			innerList, ok := pair.Second.(*syn.ProtoList)
+			if !ok {
+				continue
+			}
+			innerCount += len(innerList.List)
+		}
+		if outerCount > innerCount {
+			return ExMem(outerCount)
+		}
+		return ExMem(innerCount)
+	}
+}
+
+// dataNodeCountExMem counts the number of nodes in a Data structure.
+// Used by unValueData which costs based on node count.
+func dataNodeCountExMem(d data.PlutusData) func() ExMem {
+	return func() ExMem {
+		count := 0
+		stack := []data.PlutusData{d}
+		for len(stack) > 0 {
+			node := stack[0]
+			stack = stack[1:]
+			count++
+			switch n := node.(type) {
+			case *data.Constr:
+				stack = append(stack, n.Fields...)
+			case *data.List:
+				stack = append(stack, n.Items...)
+			case *data.Map:
+				for _, pair := range n.Pairs {
+					stack = append(stack, pair[0], pair[1])
+				}
+				// Integer and ByteString are leaf nodes, just counted
+			}
+		}
+		return ExMem(count)
 	}
 }
 

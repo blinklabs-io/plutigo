@@ -117,8 +117,6 @@ func newBuiltins[T syn.Eval]() Builtins[T] {
 		builtin.Ripemd_160:           ripemd160[T],
 		// Batch 6
 		builtin.ExpModInteger: expModInteger[T],
-		builtin.CaseList:      caseList[T],
-		builtin.CaseData:      caseData[T],
 		builtin.DropList:      dropList[T],
 		// Arrays
 		builtin.LengthOfArray: lengthOfArray[T],
@@ -131,11 +129,40 @@ func newBuiltins[T syn.Eval]() Builtins[T] {
 		builtin.UnionValue:      unionValue[T],
 		builtin.ValueContains:   valueContains[T],
 		builtin.MultiIndexArray: multiIndexArray[T],
+		// Value/Data conversion
+		builtin.ValueData:   valueData[T],
+		builtin.UnValueData: unValueData[T],
 	}
 }
 
 func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
+	// Check if the builtin is available in the current Plutus version
+	plutusVersion := builtin.LanguageVersionToPlutusVersion(m.version)
+	if !b.Func.IsAvailableIn(plutusVersion) {
+		return nil, fmt.Errorf("builtin %s is not available in Plutus %s (introduced in %s)",
+			b.Func.String(),
+			plutusVersionName(plutusVersion),
+			plutusVersionName(b.Func.IntroducedIn()))
+	}
 	return m.builtins[b.Func](m, b)
+}
+
+// plutusVersionName returns a human-readable name for the Plutus version
+func plutusVersionName(v builtin.PlutusVersion) string {
+	switch v {
+	case builtin.PlutusV1:
+		return "V1"
+	case builtin.PlutusV2:
+		return "V2"
+	case builtin.PlutusV3:
+		return "V3"
+	case builtin.PlutusV4:
+		return "V4"
+	case builtin.PlutusVUnreleased:
+		return "unreleased"
+	default:
+		return fmt.Sprintf("V%d", v)
+	}
 }
 
 func (m *Machine[T]) CostOne(b *builtin.DefaultFunction, x func() ExMem) error {
@@ -188,6 +215,25 @@ func (m *Machine[T]) CostThree(
 	}
 
 	err := m.spendBudget(CostTriple(cf, x, y, z))
+
+	return err
+}
+
+func (m *Machine[T]) CostFour(
+	b *builtin.DefaultFunction,
+	x, y, z, u func() ExMem,
+) error {
+	model := m.costs.builtinCosts[*b]
+
+	mem := model.mem.(FourArgument)
+	cpu := model.cpu.(FourArgument)
+
+	cf := CostingFunc[FourArgument]{
+		mem: mem,
+		cpu: cpu,
+	}
+
+	err := m.spendBudget(CostQuadtuple(cf, x, y, z, u))
 
 	return err
 }

@@ -3680,18 +3680,6 @@ func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 }
 
-func caseList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	return nil, errors.New("unimplemented: caseList")
-}
-
-func caseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	return nil, errors.New("unimplemented: caseData")
-}
-
 func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 	// Args: (con integer n) (con (list t) xs)
@@ -4039,8 +4027,14 @@ func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	if !ok {
 		return nil, errors.New("insertCoin: expected value proto list")
 	}
-	// Spend budget for insertCoin
-	if err := m.CostOne(&b.Func, func() ExMem { return listExMem(plist.List)() }); err != nil {
+	// Spend budget for insertCoin (4 args: policy, token, amount, value)
+	// The cost model uses linear_in_u where u is the value size
+	if err := m.CostFour(&b.Func,
+		byteArrayExMem(policyBs),
+		byteArrayExMem(tokenBs),
+		bigIntExMem(amt),
+		valueListSizeExMem(plist.List),
+	); err != nil {
 		return nil, err
 	}
 
@@ -4104,8 +4098,13 @@ func lookupCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	if !ok {
 		return nil, errors.New("lookupCoin: expected value proto list")
 	}
-	// Spend budget for lookupCoin
-	if err := m.CostOne(&b.Func, func() ExMem { return listExMem(plist.List)() }); err != nil {
+	// Spend budget for lookupCoin (3 args: policy, token, value)
+	// Cost model uses linear_in_z (the value size)
+	if err := m.CostThree(&b.Func,
+		byteArrayExMem(policyBs),
+		byteArrayExMem(tokenBs),
+		valueListSizeExMem(plist.List),
+	); err != nil {
 		return nil, err
 	}
 	vm := valueToMap[T](plist)
@@ -4133,8 +4132,12 @@ func scaleValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	if !ok {
 		return nil, errors.New("scaleValue: expected value proto list")
 	}
-	// Spend budget for scaleValue
-	if err := m.CostOne(&b.Func, func() ExMem { return listExMem(plist.List)() }); err != nil {
+	// Spend budget for scaleValue (2 args: factor, value)
+	// Cost model uses linear_in_y (the value size with minus-one formula)
+	if err := m.CostTwo(&b.Func,
+		bigIntExMem(factor),
+		valueListSizeMinusOneExMem(plist.List),
+	); err != nil {
 		return nil, err
 	}
 	vm := valueToMap[T](plist)
@@ -4185,11 +4188,11 @@ func unionValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	if !ok {
 		return nil, errors.New("unionValue: expected proto list for b")
 	}
-	// Spend budget for unionValue
-	if err := m.CostTwo(
-		&b.Func,
-		func() ExMem { return listExMem(aList.List)() },
-		func() ExMem { return listExMem(bList.List)() },
+	// Spend budget for unionValue (2 args: value a, value b)
+	// Cost model uses with_interaction_in_x_and_y (outer count only - number of policies)
+	if err := m.CostTwo(&b.Func,
+		valueOuterCountExMem(aList.List),
+		valueOuterCountExMem(bList.List),
 	); err != nil {
 		return nil, err
 	}
@@ -4248,11 +4251,11 @@ func valueContains[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			"valueContains: expected proto list for required value",
 		)
 	}
-	// Spend budget for valueContains before performing valueToMap
-	if err := m.CostTwo(
-		&b.Func,
-		func() ExMem { return listExMem(valList.List)() },
-		func() ExMem { return listExMem(reqList.List)() },
+	// Spend budget for valueContains (2 args: value, required value)
+	// Cost model uses const_above_diagonal with linear_in_x_and_y (token count)
+	if err := m.CostTwo(&b.Func,
+		valueInnerCountExMem(valList.List),
+		valueInnerCountExMem(reqList.List),
 	); err != nil {
 		return nil, err
 	}
@@ -4278,34 +4281,7 @@ func valueContains[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			}
 		}
 	}
-	// Add calibrated CPU spend based on required and value token counts
-	reqTokens := 0
-	for _, tokens := range rm {
-		reqTokens += len(tokens)
-	}
-	valTokens := 0
-	for _, tokens := range vm {
-		valTokens += len(tokens)
-	}
-	extra := 0
-	switch {
-	case reqTokens == 0:
-		extra = 50
-	case reqTokens == 1:
-		extra = 4460
-	case reqTokens >= 2:
-		per := 4435
-		if valTokens > reqTokens {
-			per = 5905
-		}
-		extra = per * reqTokens
-	}
-	if extra > 0 {
-		if err := m.spendBudget(ExBudget{Cpu: int64(extra), Mem: 0}); err != nil {
-			return nil, err
-		}
-	}
-	// check
+	// Check
 	for pol, tokens := range rm {
 		for t, amt := range tokens {
 			if vmPol, ok := vm[pol]; ok {
@@ -4322,4 +4298,218 @@ func valueContains[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 	return &Constant{&syn.Bool{Inner: true}}, nil
+}
+
+// valueData converts a Value (ProtoList) to a Data (Map)
+// The Value format is: [(policy_bs, [(token_bs, amount_int), ...]), ...]
+// The Data format is: Map [(B policy, Map [(B token, I amount), ...]), ...]
+func valueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	valConst, ok := m.argHolder[0].(*Constant)
+	if !ok {
+		return nil, errors.New("valueData: expected value constant")
+	}
+
+	plist, ok := valConst.Constant.(*syn.ProtoList)
+	if !ok {
+		return nil, errors.New("valueData: expected value proto list")
+	}
+
+	// Spend budget for valueData (1 arg: value)
+	// Cost model uses linear_in_x with max(outer, inner) size
+	if err := m.CostOne(&b.Func, valueMaxCountExMem(plist.List)); err != nil {
+		return nil, err
+	}
+
+	// Convert value to data map
+	entries := make([][2]data.PlutusData, 0, len(plist.List))
+	for _, entry := range plist.List {
+		pair, ok := entry.(*syn.ProtoPair)
+		if !ok {
+			continue
+		}
+		policyBs, ok := pair.First.(*syn.ByteString)
+		if !ok {
+			continue
+		}
+
+		tokenList, ok := pair.Second.(*syn.ProtoList)
+		if !ok {
+			continue
+		}
+
+		// Build inner map for tokens
+		tokenEntries := make([][2]data.PlutusData, 0, len(tokenList.List))
+		for _, tk := range tokenList.List {
+			tkp, ok := tk.(*syn.ProtoPair)
+			if !ok {
+				continue
+			}
+			tbs, ok1 := tkp.First.(*syn.ByteString)
+			amt, ok2 := tkp.Second.(*syn.Integer)
+			if ok1 && ok2 {
+				tokenEntries = append(tokenEntries, [2]data.PlutusData{
+					&data.ByteString{Inner: tbs.Inner},
+					&data.Integer{Inner: new(big.Int).Set(amt.Inner)},
+				})
+			}
+		}
+
+		entries = append(entries, [2]data.PlutusData{
+			&data.ByteString{Inner: policyBs.Inner},
+			&data.Map{Pairs: tokenEntries},
+		})
+	}
+
+	return &Constant{&syn.Data{Inner: &data.Map{Pairs: entries}}}, nil
+}
+
+// unValueData converts a Data (Map) to a Value (ProtoList)
+// The Data format is: Map [(B policy, Map [(B token, I amount), ...]), ...]
+// The Value format is: [(policy_bs, [(token_bs, amount_int), ...]), ...]
+// The input must be well-formed: keys in ascending order, no duplicates,
+// quantities within [-2^127, 2^127-1], no zero quantities.
+func unValueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	d, err := unwrapData[T](m.argHolder[0])
+	if err != nil {
+		return nil, err
+	}
+
+	// Spend budget for unValueData (1 arg: data)
+	// Cost model uses quadratic_in_x with node count
+	if err := m.CostOne(&b.Func, dataNodeCountExMem(d)); err != nil {
+		return nil, err
+	}
+
+	// Must be a Map
+	dmap, ok := d.(*data.Map)
+	if !ok {
+		return nil, errors.New("unValueData: expected data map")
+	}
+
+	// Bounds for quantity: [-2^127, 2^127-1]
+	limit := new(big.Int).Lsh(big.NewInt(1), 127)           // 2^127
+	limitMinusOne := new(big.Int).Sub(limit, big.NewInt(1)) // 2^127 - 1
+	negLimit := new(big.Int).Neg(limit)                     // -2^127
+
+	// Build result list while validating
+	result := make([]syn.IConstant, 0, len(dmap.Pairs))
+	var prevPolicy []byte
+
+	for _, pair := range dmap.Pairs {
+		// Key must be ByteString (policy)
+		policyData, ok := pair[0].(*data.ByteString)
+		if !ok {
+			return nil, errors.New("unValueData: expected bytestring for currency key")
+		}
+
+		// Enforce max key length for policy (32 bytes)
+		if len(policyData.Inner) > 32 {
+			return nil, errors.New("unValueData: currency key too long")
+		}
+
+		// Check ordering: currencies must be in ascending order
+		if prevPolicy != nil {
+			cmp := bytes.Compare(prevPolicy, policyData.Inner)
+			if cmp == 0 {
+				return nil, errors.New("unValueData: duplicate currency key")
+			}
+			if cmp > 0 {
+				return nil, errors.New("unValueData: currency keys not in ascending order")
+			}
+		}
+		prevPolicy = policyData.Inner
+
+		// Value must be a Map of tokens
+		tokensData, ok := pair[1].(*data.Map) //nolint:gosec // pair is [2]PlutusData, always has 2 elements
+		if !ok {
+			return nil, errors.New("unValueData: expected map for tokens")
+		}
+
+		// Check for empty tokens (not allowed)
+		if len(tokensData.Pairs) == 0 {
+			return nil, errors.New("unValueData: empty token map")
+		}
+
+		tokenPairs := make([]syn.IConstant, 0, len(tokensData.Pairs))
+		var prevToken []byte
+
+		for _, tkPair := range tokensData.Pairs {
+			// Token key must be ByteString
+			tokenData, ok := tkPair[0].(*data.ByteString)
+			if !ok {
+				return nil, errors.New("unValueData: expected bytestring for token key")
+			}
+
+			// Enforce max key length for token (32 bytes)
+			if len(tokenData.Inner) > 32 {
+				return nil, errors.New("unValueData: token key too long")
+			}
+
+			// Check ordering: tokens must be in ascending order
+			if prevToken != nil {
+				cmp := bytes.Compare(prevToken, tokenData.Inner)
+				if cmp == 0 {
+					return nil, errors.New("unValueData: duplicate token key")
+				}
+				if cmp > 0 {
+					return nil, errors.New("unValueData: token keys not in ascending order")
+				}
+			}
+			prevToken = tokenData.Inner
+
+			// Amount must be Integer
+			amtData, ok := tkPair[1].(*data.Integer) //nolint:gosec // tkPair is [2]PlutusData, always has 2 elements
+			if !ok {
+				return nil, errors.New("unValueData: expected integer for amount")
+			}
+
+			// Check for zero amounts (not allowed)
+			if amtData.Inner.Sign() == 0 {
+				return nil, errors.New("unValueData: zero quantity not allowed")
+			}
+
+			// Check quantity bounds: [-2^127, 2^127-1]
+			if amtData.Inner.Sign() >= 0 {
+				if amtData.Inner.Cmp(limitMinusOne) > 0 {
+					return nil, errors.New("unValueData: quantity out of range")
+				}
+			} else {
+				if amtData.Inner.Cmp(negLimit) < 0 {
+					return nil, errors.New("unValueData: quantity out of range")
+				}
+			}
+
+			tokenPairs = append(tokenPairs, &syn.ProtoPair{
+				FstType: &syn.TByteString{},
+				SndType: &syn.TInteger{},
+				First:   &syn.ByteString{Inner: tokenData.Inner},
+				Second:  &syn.Integer{Inner: new(big.Int).Set(amtData.Inner)},
+			})
+		}
+
+		result = append(result, &syn.ProtoPair{
+			FstType: &syn.TByteString{},
+			SndType: &syn.TList{
+				Typ: &syn.TPair{First: &syn.TByteString{}, Second: &syn.TInteger{}},
+			},
+			First: &syn.ByteString{Inner: policyData.Inner},
+			Second: &syn.ProtoList{
+				LTyp: &syn.TPair{First: &syn.TByteString{}, Second: &syn.TInteger{}},
+				List: tokenPairs,
+			},
+		})
+	}
+
+	// Type for Value: list (pair bytestring (list (pair bytestring integer)))
+	valType := &syn.TPair{
+		First: &syn.TByteString{},
+		Second: &syn.TList{
+			Typ: &syn.TPair{First: &syn.TByteString{}, Second: &syn.TInteger{}},
+		},
+	}
+	return &Constant{&syn.ProtoList{LTyp: valType, List: result}}, nil
 }

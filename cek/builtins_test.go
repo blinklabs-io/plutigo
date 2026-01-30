@@ -20,6 +20,10 @@ func newTestMachine() *Machine[syn.DeBruijn] {
 	return NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 }
 
+func newTestMachineV4() *Machine[syn.DeBruijn] {
+	return NewMachine[syn.DeBruijn](lang.LanguageVersionV4, 0, nil)
+}
+
 func newTestBuiltin(fn builtin.DefaultFunction) *Builtin[syn.DeBruijn] {
 	return &Builtin[syn.DeBruijn]{
 		Func:     fn,
@@ -326,7 +330,7 @@ func TestChooseDataBuiltin(t *testing.T) {
 }
 
 func TestLengthOfArrayBuiltin(t *testing.T) {
-	m := newTestMachine()
+	m := newTestMachineV4() // V4 builtin
 	b := newTestBuiltin(builtin.LengthOfArray)
 
 	// Create a ProtoList with 3 elements
@@ -3696,7 +3700,7 @@ func TestMultiIndexArrayBuiltin(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := newTestMachine()
+			m := newTestMachineV4() // V4 builtin
 			b := newTestBuiltin(builtin.MultiIndexArray)
 
 			// Create indices list
