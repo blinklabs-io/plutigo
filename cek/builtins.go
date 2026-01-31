@@ -25,6 +25,13 @@ import (
 	legacyripemd160 "golang.org/x/crypto/ripemd160" //nolint:staticcheck,gosec
 )
 
+// ============================================================================
+// INTEGER OPERATIONS
+// Functions: addInteger, subtractInteger, multiplyInteger, divideInteger,
+//            quotientInteger, remainderInteger, modInteger, equalsInteger,
+//            lessThanInteger, lessThanEqualsInteger
+// ============================================================================
+
 func addInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
@@ -378,6 +385,13 @@ func lessThanEqualsInteger[T syn.Eval](
 	return value, nil
 }
 
+// ============================================================================
+// BYTESTRING OPERATIONS
+// Functions: appendByteString, consByteString, sliceByteString,
+//            lengthOfByteString, indexByteString, equalsByteString,
+//            lessThanByteString, lessThanEqualsByteString
+// ============================================================================
+
 func appendByteString[T syn.Eval](
 	m *Machine[T],
 	b *Builtin[T],
@@ -698,6 +712,11 @@ func lessThanEqualsByteString[T syn.Eval](
 	return value, nil
 }
 
+// ============================================================================
+// CRYPTOGRAPHIC OPERATIONS - HASHING
+// Functions: sha2256, sha3256, blake2B256, blake2B224, keccak256
+// ============================================================================
+
 func sha2256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
@@ -769,6 +788,12 @@ func blake2B256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	return value, nil
 }
+
+// ============================================================================
+// CRYPTOGRAPHIC OPERATIONS - SIGNATURE VERIFICATION
+// Functions: verifyEd25519Signature, verifyEcdsaSecp256K1Signature,
+//            verifySchnorrSecp256K1Signature
+// ============================================================================
 
 func verifyEd25519Signature[T syn.Eval](
 	m *Machine[T],
@@ -1152,6 +1177,11 @@ func verify(
 	return schnorrVerify(r, s, msg, pubKey) == nil
 }
 
+// ============================================================================
+// STRING OPERATIONS
+// Functions: appendString, equalsString, encodeUtf8, decodeUtf8
+// ============================================================================
+
 func appendString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
@@ -1263,6 +1293,11 @@ func decodeUtf8[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return value, nil
 }
 
+// ============================================================================
+// CONTROL FLOW
+// Functions: ifThenElse, chooseUnit, trace
+// ============================================================================
+
 func ifThenElse[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
@@ -1331,6 +1366,11 @@ func trace[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	return value, nil
 }
+
+// ============================================================================
+// PAIR AND LIST OPERATIONS
+// Functions: fstPair, sndPair, chooseList, mkCons, headList, tailList, nullList
+// ============================================================================
 
 func fstPair[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
@@ -1495,6 +1535,13 @@ func nullList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	return value, nil
 }
+
+// ============================================================================
+// DATA OPERATIONS
+// Functions: chooseData, constrData, mapData, listData, iData, bData,
+//            unConstrData, unMapData, unListData, unIData, unBData,
+//            equalsData, serialiseData, mkPairData, mkNilData, mkNilPairData
+// ============================================================================
 
 func chooseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
@@ -2034,6 +2081,16 @@ func mkNilPairData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	return value, nil
 }
+
+// ============================================================================
+// BLS12-381 CRYPTOGRAPHIC OPERATIONS
+// Functions: bls12381G1Add, bls12381G1Neg, bls12381G1ScalarMul, bls12381G1Equal,
+//            bls12381G1Compress, bls12381G1Uncompress, bls12381G1HashToGroup,
+//            bls12381G2Add, bls12381G2Neg, bls12381G2ScalarMul, bls12381G2Equal,
+//            bls12381G2Compress, bls12381G2Uncompress, bls12381G2HashToGroup,
+//            bls12381G1MultiScalarMul, bls12381G2MultiScalarMul,
+//            bls12381MillerLoop, bls12381MulMlResult, bls12381FinalVerify
+// ============================================================================
 
 func bls12381G1Add[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
@@ -2682,6 +2739,11 @@ func bls12381FinalVerify[T syn.Eval](
 	return value, nil
 }
 
+// ============================================================================
+// INTEGER/BYTESTRING CONVERSIONS
+// Functions: integerToByteString, byteStringToInteger
+// ============================================================================
+
 // integerToByteString converts an integer to its byte representation.
 // This builtin implements the Plutus integer-to-bytestring conversion with
 // configurable endianness and size constraints.
@@ -2874,6 +2936,13 @@ func byteStringToInteger[T syn.Eval](
 
 	return value, nil
 }
+
+// ============================================================================
+// BITWISE OPERATIONS
+// Functions: andByteString, orByteString, xorByteString, complementByteString,
+//            readBit, writeBits, replicateByte, shiftByteString,
+//            rotateByteString, countSetBits, findFirstSetBit
+// ============================================================================
 
 func andByteString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
@@ -3564,6 +3633,11 @@ func findFirstSetBit[T syn.Eval](
 	return value, nil
 }
 
+// ============================================================================
+// ADDITIONAL CRYPTOGRAPHIC OPERATIONS
+// Functions: ripemd160, expModInteger
+// ============================================================================
+
 func ripemd160[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
@@ -3680,6 +3754,23 @@ func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 }
 
+// ============================================================================
+// CASE AND LIST EXTENSION OPERATIONS
+// Functions: caseList, caseData, dropList
+// ============================================================================
+
+func caseList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	return nil, errors.New("unimplemented: caseList")
+}
+
+func caseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	return nil, errors.New("unimplemented: caseData")
+}
+
 func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 	// Args: (con integer n) (con (list t) xs)
@@ -3752,6 +3843,11 @@ func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	return &Constant{&syn.ProtoList{LTyp: lst.LTyp, List: newList}}, nil
 }
+
+// ============================================================================
+// ARRAY OPERATIONS (V4)
+// Functions: lengthOfArray, listToArray, indexArray, multiIndexArray
+// ============================================================================
 
 func lengthOfArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
@@ -3887,6 +3983,12 @@ func multiIndexArray[T syn.Eval](
 
 	return &Constant{&syn.ProtoList{LTyp: arr.LTyp, List: result}}, nil
 }
+
+// ============================================================================
+// VALUE OPERATIONS (V4)
+// Functions: insertCoin, lookupCoin, scaleValue, unionValue, valueContains
+// Helpers: valueToMap, mapToValue
+// ============================================================================
 
 // Helper: converts a ProtoList representation of Value to map[string]map[string]*big.Int
 func valueToMap[T syn.Eval](c *syn.ProtoList) map[string]map[string]*big.Int {
