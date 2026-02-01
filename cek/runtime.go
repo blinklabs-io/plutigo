@@ -1,7 +1,6 @@
 package cek
 
 import (
-	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -265,7 +264,7 @@ func unwrapConstant[T syn.Eval](value Value[T]) (*Constant, error) {
 		i = v
 
 	default:
-		return nil, errors.New("Value not a Constant")
+		return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
 	}
 
 	return i, nil
@@ -280,10 +279,10 @@ func unwrapInteger[T syn.Eval](value Value[T]) (*big.Int, error) {
 		case *syn.Integer:
 			i = c.Inner
 		default:
-			return nil, errors.New("Value not an Integer")
+			return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Integer", Got: fmt.Sprintf("%T", v.Constant), Message: "type mismatch"}
 		}
 	default:
-		return nil, errors.New("Value not a Constant Integer")
+		return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant Integer", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
 	}
 
 	return i, nil
@@ -298,10 +297,10 @@ func unwrapByteString[T syn.Eval](value Value[T]) ([]byte, error) {
 		case *syn.ByteString:
 			i = c.Inner
 		default:
-			return nil, errors.New("Value not a ByteString")
+			return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "ByteString", Got: fmt.Sprintf("%T", v.Constant), Message: "type mismatch"}
 		}
 	default:
-		return nil, errors.New("Value not a Constant ByteString")
+		return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant ByteString", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
 	}
 
 	return i, nil
@@ -322,10 +321,10 @@ func unwrapString[T syn.Eval](value Value[T]) (string, error) {
 			}
 			i = processed
 		default:
-			return "", errors.New("Value not a String")
+			return "", &TypeError{Code: ErrCodeTypeMismatch, Expected: "String", Got: fmt.Sprintf("%T", v.Constant), Message: "type mismatch"}
 		}
 	default:
-		return "", errors.New("Value not a Constant String")
+		return "", &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant String", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
 	}
 
 	return i, nil
@@ -432,10 +431,10 @@ func unwrapBool[T syn.Eval](value Value[T]) (bool, error) {
 		case *syn.Bool:
 			i = c.Inner
 		default:
-			return false, errors.New("Value not a Bool")
+			return false, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Bool", Got: fmt.Sprintf("%T", v.Constant), Message: "type mismatch"}
 		}
 	default:
-		return false, errors.New("Value not a Constant Bool")
+		return false, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant Bool", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
 	}
 
 	return i, nil
@@ -448,10 +447,10 @@ func unwrapUnit[T syn.Eval](value Value[T]) error {
 		case *syn.Unit:
 			return nil
 		default:
-			return errors.New("Value not a Unit")
+			return &TypeError{Code: ErrCodeTypeMismatch, Expected: "Unit", Got: fmt.Sprintf("%T", v.Constant), Message: "type mismatch"}
 		}
 	default:
-		return errors.New("Value not a Constant Unit")
+		return &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant Unit", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
 	}
 }
 
@@ -471,10 +470,10 @@ func unwrapList[T syn.Eval](
 
 			i = c
 		default:
-			return nil, errors.New("Value not a List")
+			return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "List", Got: fmt.Sprintf("%T", v.Constant), Message: "type mismatch"}
 		}
 	default:
-		return nil, errors.New("Value not a Constant List")
+		return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant List", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
 	}
 
 	return i, nil
@@ -493,10 +492,10 @@ func unwrapPair[T syn.Eval](
 			i = c.First
 			j = c.Second
 		default:
-			return nil, nil, errors.New("Value not a Pair")
+			return nil, nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Pair", Got: fmt.Sprintf("%T", v.Constant), Message: "type mismatch"}
 		}
 	default:
-		return nil, nil, errors.New("Value not a Constant Pair")
+		return nil, nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant Pair", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
 	}
 
 	return i, j, nil
@@ -511,10 +510,10 @@ func unwrapData[T syn.Eval](value Value[T]) (data.PlutusData, error) {
 		case *syn.Data:
 			i = c.Inner
 		default:
-			return nil, errors.New("Value not a Data")
+			return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Data", Got: fmt.Sprintf("%T", v.Constant), Message: "type mismatch"}
 		}
 	default:
-		return nil, errors.New("Value not a Constant Data")
+		return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant Data", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
 	}
 
 	return i, nil
@@ -529,10 +528,10 @@ func unwrapBls12_381G1Element[T syn.Eval](value Value[T]) (*bls.G1Jac, error) {
 		case *syn.Bls12_381G1Element:
 			i = c.Inner
 		default:
-			return nil, errors.New("Value not a G1Element")
+			return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "G1Element", Got: fmt.Sprintf("%T", v.Constant), Message: "type mismatch"}
 		}
 	default:
-		return nil, errors.New("Value not a Constant G1Element")
+		return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant G1Element", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
 	}
 
 	return i, nil
@@ -547,10 +546,10 @@ func unwrapBls12_381G2Element[T syn.Eval](value Value[T]) (*bls.G2Jac, error) {
 		case *syn.Bls12_381G2Element:
 			i = c.Inner
 		default:
-			return nil, errors.New("Value not a G2Element")
+			return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "G2Element", Got: fmt.Sprintf("%T", v.Constant), Message: "type mismatch"}
 		}
 	default:
-		return nil, errors.New("Value not a Constant G2Element")
+		return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant G2Element", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
 	}
 
 	return i, nil
@@ -565,10 +564,10 @@ func unwrapBls12_381MlResult[T syn.Eval](value Value[T]) (*bls.GT, error) {
 		case *syn.Bls12_381MlResult:
 			i = c.Inner
 		default:
-			return nil, errors.New("Value not an MlResult")
+			return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "MlResult", Got: fmt.Sprintf("%T", v.Constant), Message: "type mismatch"}
 		}
 	default:
-		return nil, errors.New("Value not a Constant MlResult")
+		return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant MlResult", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
 	}
 
 	return i, nil
