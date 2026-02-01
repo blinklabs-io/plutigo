@@ -236,8 +236,12 @@ func TestDivideIntegerByZero(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected division by zero error, got nil")
 	}
-	if err.Error() != "division by zero" {
-		t.Fatalf("expected 'division by zero', got %v", err)
+	if !IsBuiltinError(err) {
+		t.Fatalf("expected BuiltinError, got %T: %v", err, err)
+	}
+	code, ok := GetErrorCode(err)
+	if !ok || code != ErrCodeDivisionByZero {
+		t.Fatalf("expected ErrCodeDivisionByZero, got %v", code)
 	}
 }
 

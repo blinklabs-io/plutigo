@@ -1,7 +1,6 @@
 package cek
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -169,7 +168,7 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 			}
 			if newState == nil {
 				putCompute(v) // Return object to pool
-				return nil, errors.New("compute returned nil state")
+				return nil, &InternalError{Code: ErrCodeInternalError, Message: "compute returned nil state"}
 			}
 			putCompute(v) // Return object to pool
 			state = newState
@@ -182,7 +181,7 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 			}
 			if newState == nil {
 				putReturn(v) // Return object to pool
-				return nil, errors.New("returnCompute returned nil state")
+				return nil, &InternalError{Code: ErrCodeInternalError, Message: "returnCompute returned nil state"}
 			}
 			putReturn(v) // Return object to pool
 			state = newState
@@ -228,7 +227,7 @@ func (m *Machine[T]) compute(
 		value, exists := env.Lookup(t.Name.LookupIndex())
 
 		if !exists {
-			return nil, errors.New("open term evaluated")
+			return nil, &TypeError{Code: ErrCodeOpenTerm, Message: "open term evaluated"}
 		}
 
 		// Transition to Return state with the looked-up value
@@ -315,7 +314,7 @@ func (m *Machine[T]) compute(
 		state = comp
 	case *syn.Error:
 		// Explicit error term - evaluation fails
-		return nil, errors.New("error explicitly called")
+		return nil, &ScriptError{Code: ErrCodeExplicitError, Message: "error explicitly called"}
 
 	case *syn.Builtin:
 		// Builtin functions are treated as values
@@ -393,7 +392,7 @@ func (m *Machine[T]) compute(
 	}
 
 	if state == nil {
-		return nil, errors.New("compute: state is nil")
+		return nil, &InternalError{Code: ErrCodeInternalError, Message: "compute: state is nil"}
 	}
 
 	return state, nil
@@ -486,7 +485,7 @@ func (m *Machine[T]) returnCompute(
 		switch v := value.(type) {
 		case *Constr[T]:
 			if v.Tag > math.MaxInt {
-				return nil, errors.New("MaxIntExceeded")
+				return nil, &ScriptError{Code: ErrCodeMaxIntExceeded, Message: "MaxIntExceeded"}
 			}
 			if indexExists(c.Branches, int(v.Tag)) {
 				// Matching branch found, evaluate it with arguments on stack
@@ -496,7 +495,7 @@ func (m *Machine[T]) returnCompute(
 				comp.Term = c.Branches[v.Tag]
 				state = comp
 			} else {
-				return nil, errors.New("MissingCaseBranch")
+				return nil, &ScriptError{Code: ErrCodeMissingCaseBranch, Message: "MissingCaseBranch"}
 			}
 		case *Constant:
 			// Handle case on constants: Bool, Unit, Integer, List, Pair
@@ -526,19 +525,19 @@ func (m *Machine[T]) returnCompute(
 			case *syn.Integer:
 				// Integer: use value as branch index
 				if cval.Inner.Sign() < 0 {
-					return nil, errors.New("case on negative integer")
+					return nil, &ScriptError{Code: ErrCodeCaseOnNegativeInt, Message: "case on negative integer"}
 				}
 				if !cval.Inner.IsInt64() {
-					return nil, errors.New("case on integer out of range")
+					return nil, &ScriptError{Code: ErrCodeCaseIntOutOfRange, Message: "case on integer out of range"}
 				}
 				ival := cval.Inner.Int64()
 				if ival > int64(math.MaxInt) {
-					return nil, errors.New("case on integer out of range")
+					return nil, &ScriptError{Code: ErrCodeCaseIntOutOfRange, Message: "case on integer out of range"}
 				}
 				tag = int(ival)
 			case *syn.ByteString:
 				// ByteString constant not valid in case according to conformance
-				return nil, errors.New("case on bytestring constant not allowed")
+				return nil, &ScriptError{Code: ErrCodeCaseOnByteString, Message: "case on bytestring constant not allowed"}
 			case *syn.ProtoList:
 				// List: allow 1 or 2 branches; >2 invalid
 				branchRule = 2
@@ -562,7 +561,7 @@ func (m *Machine[T]) returnCompute(
 				args[0] = &Constant{cval.First}
 				args[1] = &Constant{cval.Second}
 			default:
-				return nil, errors.New("NonConstrScrutinized")
+				return nil, &TypeError{Code: ErrCodeNonConstrScrutinized, Message: "NonConstrScrutinized"}
 			}
 
 			// Enforce branch count rules for constant cases
@@ -570,12 +569,12 @@ func (m *Machine[T]) returnCompute(
 			case 1:
 				// exact 1
 				if len(c.Branches) != 1 {
-					return nil, errors.New("InvalidCaseBranchCount")
+					return nil, &ScriptError{Code: ErrCodeInvalidBranchCount, Message: "InvalidCaseBranchCount"}
 				}
 			case 2:
 				// 1 or 2
 				if len(c.Branches) < 1 || len(c.Branches) > 2 {
-					return nil, errors.New("InvalidCaseBranchCount")
+					return nil, &ScriptError{Code: ErrCodeInvalidBranchCount, Message: "InvalidCaseBranchCount"}
 				}
 			}
 
@@ -586,10 +585,10 @@ func (m *Machine[T]) returnCompute(
 				comp.Term = c.Branches[tag]
 				state = comp
 			} else {
-				return nil, errors.New("MissingCaseBranch")
+				return nil, &ScriptError{Code: ErrCodeMissingCaseBranch, Message: "MissingCaseBranch"}
 			}
 		default:
-			return nil, errors.New("NonConstrScrutinized")
+			return nil, &TypeError{Code: ErrCodeNonConstrScrutinized, Message: "NonConstrScrutinized"}
 		}
 	case *NoFrame:
 		// No more continuations - evaluation complete
@@ -608,7 +607,7 @@ func (m *Machine[T]) returnCompute(
 	}
 
 	if state == nil {
-		return nil, errors.New("returnCompute: state is nil")
+		return nil, &InternalError{Code: ErrCodeInternalError, Message: "returnCompute: state is nil"}
 	}
 
 	return state, nil
@@ -658,10 +657,10 @@ func (m *Machine[T]) forceEvaluate(
 			ret.Value = resolved
 			state = ret
 		} else {
-			return nil, errors.New("BuiltinTermArgumentExpected")
+			return nil, &TypeError{Code: ErrCodeBuiltinForceExpected, Message: "BuiltinTermArgumentExpected"}
 		}
 	default:
-		return nil, errors.New("NonPolymorphicInstantiation")
+		return nil, &TypeError{Code: ErrCodeNonPolymorphic, Message: "NonPolymorphicInstantiation"}
 	}
 
 	return state, nil
@@ -714,10 +713,10 @@ func (m *Machine[T]) applyEvaluate(
 			ret.Value = resolved
 			state = ret
 		} else {
-			return nil, errors.New("UnexpectedBuiltinTermArgument")
+			return nil, &TypeError{Code: ErrCodeUnexpectedBuiltinArg, Message: "UnexpectedBuiltinTermArgument"}
 		}
 	default:
-		return nil, errors.New("NonFunctionalApplication")
+		return nil, &TypeError{Code: ErrCodeNonFunctionalApp, Message: "NonFunctionalApplication"}
 	}
 
 	return state, nil
@@ -939,7 +938,15 @@ func (m *Machine[T]) spendBudget(exBudget ExBudget) error {
 	m.ExBudget.Cpu -= exBudget.Cpu
 
 	if m.ExBudget.Mem < 0 || m.ExBudget.Cpu < 0 {
-		return errors.New("out of budget")
+		return &BudgetError{
+			Code:      ErrCodeBudgetExhausted,
+			Requested: exBudget,
+			Available: ExBudget{
+				Cpu: m.ExBudget.Cpu + exBudget.Cpu,
+				Mem: m.ExBudget.Mem + exBudget.Mem,
+			},
+			Message: "out of budget",
+		}
 	}
 
 	return nil
