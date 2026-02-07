@@ -108,7 +108,8 @@ func main() {
 	program, _ := syn.NameToDeBruijn(pprogram)
 
 	// Create machine with Plutus V3 support
-	machine := cek.NewMachine[syn.DeBruijn](program.Version, 200)
+	// Third parameter is EvalContext (nil uses default cost model)
+	machine := cek.NewMachine[syn.DeBruijn](program.Version, 200, nil)
 
 	term, _ := machine.Run(program.Term)
 
@@ -168,19 +169,6 @@ The project maintains high code quality standards:
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+We welcome contributions! Please see our [Development Guide](DEVELOPMENT.md) for setup, workflow, and contribution guidelines.
 
-### Development Workflow
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes with tests
-4. Run `make test` and `make bench`
-5. Submit a pull request
-
-### Code Style
-
-- Follow standard Go formatting (`go fmt`)
-- Add tests for new functionality
-- Update documentation as needed
-- Ensure benchmarks don't regress
+For organization-wide policies, see the [Blink Labs Contributing Guide](https://github.com/blinklabs-io/.github/blob/main/CONTRIBUTING.md).

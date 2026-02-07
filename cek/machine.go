@@ -2,6 +2,7 @@ package cek
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"sync"
 	"unsafe"
@@ -12,6 +13,9 @@ import (
 
 // Debug mode for additional runtime checks
 const debug = false
+
+// DebugBudget enables verbose budget logging for debugging cost calculation issues
+const DebugBudget = false
 
 // Object pools for frequently allocated CEK machine objects.
 // Note: sync.Pool can grow unbounded, but this is acceptable for the CEK machine's
@@ -187,6 +191,12 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 			state = newState
 		case *Done[T]:
 			// Done state: evaluation complete, extract final result
+			// Flush any remaining unbudgeted steps before returning
+			// This matches Haskell's spendAccumulatedBudget in returnCek NoFrame
+			if err := m.spendUnbudgetedSteps(); err != nil {
+				putDone(v)
+				return nil, err
+			}
 			term := v.term
 			putDone(v) // Return object to pool
 			return term, nil
@@ -934,6 +944,11 @@ func (m *Machine[T]) spendUnbudgetedSteps() error {
 }
 
 func (m *Machine[T]) spendBudget(exBudget ExBudget) error {
+	if DebugBudget {
+		log.Printf("[PLUTIGO-BUDGET] Spending mem=%d cpu=%d, before: mem=%d cpu=%d",
+			exBudget.Mem, exBudget.Cpu, m.ExBudget.Mem, m.ExBudget.Cpu)
+	}
+
 	m.ExBudget.Mem -= exBudget.Mem
 	m.ExBudget.Cpu -= exBudget.Cpu
 
