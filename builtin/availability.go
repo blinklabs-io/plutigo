@@ -153,6 +153,10 @@ var builtinIntroducedIn = [TotalBuiltinCount]PlutusVersion{
 	DropList: PlutusVUnreleased,
 }
 
+// VanRossemProtoVersion is the Cardano protocol major version at which
+// all builtins become available in all Plutus language versions.
+const VanRossemProtoVersion uint = 11
+
 // IntroducedIn returns the Plutus version in which the builtin was introduced.
 func (f DefaultFunction) IntroducedIn() PlutusVersion {
 	return builtinIntroducedIn[f]
@@ -160,6 +164,33 @@ func (f DefaultFunction) IntroducedIn() PlutusVersion {
 
 // IsAvailableIn returns true if the builtin is available in the given Plutus version.
 func (f DefaultFunction) IsAvailableIn(version PlutusVersion) bool {
+	return builtinIntroducedIn[f] <= version
+}
+
+// IsAvailableInWithProto returns true if the builtin is available given the
+// Plutus language version and Cardano protocol major version.
+//
+// At protocol version >= 11 (van Rossem hard fork), all builtins become
+// available in all language versions, with two exceptions:
+//   - MultiIndexArray remains V4-only (not part of PV11 cost model params)
+//   - Builtins marked PlutusVUnreleased that are NOT activated at PV11 remain unavailable
+//
+// For protocol versions < 11, the original version-based gating applies.
+func (f DefaultFunction) IsAvailableInWithProto(version PlutusVersion, protoMajor uint) bool {
+	if protoMajor >= VanRossemProtoVersion {
+		introduced := builtinIntroducedIn[f]
+		// MultiIndexArray is V4-only, not part of PV11
+		if f == MultiIndexArray {
+			return introduced <= version
+		}
+		// DropList becomes available at PV11 in all versions
+		if introduced == PlutusVUnreleased {
+			return f == DropList
+		}
+		// All other builtins are available in all versions at PV11
+		return true
+	}
+	// Pre-PV11: use language version gating
 	return builtinIntroducedIn[f] <= version
 }
 

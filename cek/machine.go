@@ -91,13 +91,14 @@ func putDone[T syn.Eval](d *Done[T]) {
 }
 
 type Machine[T syn.Eval] struct {
-	costs     CostModel
-	builtins  Builtins[T]
-	slippage  uint32
-	version   lang.LanguageVersion
-	semantics SemanticsVariant
-	ExBudget  ExBudget
-	Logs      []string
+	costs      CostModel
+	builtins   Builtins[T]
+	slippage   uint32
+	version    lang.LanguageVersion
+	semantics  SemanticsVariant
+	protoMajor uint
+	ExBudget   ExBudget
+	Logs       []string
 
 	argHolder       argHolder[T]
 	unbudgetedSteps [10]uint32
@@ -116,13 +117,14 @@ func NewMachine[T syn.Eval](
 		}
 	}
 	return &Machine[T]{
-		costs:     evalContext.CostModel,
-		builtins:  newBuiltins[T](),
-		slippage:  slippage,
-		version:   version,
-		semantics: evalContext.SemanticsVariant,
-		ExBudget:  DefaultExBudget,
-		Logs:      make([]string, 0),
+		costs:      evalContext.CostModel,
+		builtins:   newBuiltins[T](),
+		slippage:   slippage,
+		version:    version,
+		semantics:  evalContext.SemanticsVariant,
+		protoMajor: evalContext.ProtoMajor,
+		ExBudget:   DefaultExBudget,
+		Logs:       make([]string, 0),
 
 		argHolder:       newArgHolder[T](),
 		unbudgetedSteps: [10]uint32{0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -590,7 +592,11 @@ func (m *Machine[T]) returnCompute(
 
 			if indexExists(c.Branches, tag) {
 				comp := getCompute[T]()
-				comp.Ctx = transferArgStack(args, c.Ctx)
+				if args != nil {
+					comp.Ctx = transferArgStack(args, c.Ctx)
+				} else {
+					comp.Ctx = c.Ctx
+				}
 				comp.Env = c.Env
 				comp.Term = c.Branches[tag]
 				state = comp

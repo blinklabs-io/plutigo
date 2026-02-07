@@ -48,7 +48,11 @@ func Decode(b []byte) (PlutusData, error) {
 
 // cborUnmarshal acts like cbor.Unmarshal but allows us to set our own decoder options
 func cborUnmarshal(dataBytes []byte, dest any) error {
-	return decMode.Unmarshal(dataBytes, dest)
+	dm := decMode
+	if dm == nil {
+		panic("CBOR decoder not initialized")
+	}
+	return dm.Unmarshal(dataBytes, dest)
 }
 
 // decode is a low-level decode function that detects the CBOR type and uses the correct
