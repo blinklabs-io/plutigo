@@ -137,10 +137,11 @@ func newBuiltins[T syn.Eval]() Builtins[T] {
 func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 	// Check if the builtin is available in the current Plutus version
 	plutusVersion := builtin.LanguageVersionToPlutusVersion(m.version)
-	if !b.Func.IsAvailableIn(plutusVersion) {
-		return nil, fmt.Errorf("builtin %s is not available in Plutus %s (introduced in %s)",
+	if !b.Func.IsAvailableInWithProto(plutusVersion, m.protoMajor) {
+		return nil, fmt.Errorf("builtin %s is not available in Plutus %s at protocol version %d (introduced in %s)",
 			b.Func.String(),
 			plutusVersionName(plutusVersion),
+			m.protoMajor,
 			plutusVersionName(b.Func.IntroducedIn()))
 	}
 	return m.builtins[b.Func](m, b)

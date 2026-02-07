@@ -9,6 +9,7 @@ import (
 type EvalContext struct {
 	CostModel        CostModel
 	SemanticsVariant SemanticsVariant
+	ProtoMajor       uint
 }
 
 // NewEvalContext returns a new EvalContext based on the provided language version, protocol version, and
@@ -38,6 +39,7 @@ func NewEvalContext(
 	ret := &EvalContext{
 		SemanticsVariant: semantics,
 	}
+	ret.ProtoMajor = protoVersion.Major
 	costModel, err := costModelFromList(version, ret.SemanticsVariant, costModelParams)
 	if err != nil {
 		return nil, fmt.Errorf("build cost model: %w", err)
