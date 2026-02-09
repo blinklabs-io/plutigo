@@ -60,6 +60,65 @@ func TestBuiltinAvailability(t *testing.T) {
 	}
 }
 
+func TestBuiltinAvailabilityWithProto(t *testing.T) {
+	tests := []struct {
+		name       string
+		fn         DefaultFunction
+		version    PlutusVersion
+		protoMajor uint
+		available  bool
+	}{
+		// Pre-PV11: existing behavior preserved
+		{"V1 builtin in V1 at PV10", AddInteger, PlutusV1, 10, true},
+		{"V2 builtin in V1 at PV10", SerialiseData, PlutusV1, 10, false},
+		{"V3 builtin in V2 at PV10", Bls12_381_G1_Add, PlutusV2, 10, false},
+		{"V3 builtin in V3 at PV10", Bls12_381_G1_Add, PlutusV3, 10, true},
+		{"V4 builtin in V3 at PV10", LengthOfArray, PlutusV3, 10, false},
+		{"V4 builtin in V4 at PV10", LengthOfArray, PlutusV4, 10, true},
+		{"dropList in V4 at PV10", DropList, PlutusV4, 10, false},
+
+		// PV11: all builtins available across all versions
+		{"V1 builtin in V1 at PV11", AddInteger, PlutusV1, 11, true},
+		{"V2 builtin in V1 at PV11", SerialiseData, PlutusV1, 11, true},
+		{"V3 builtin in V1 at PV11", Bls12_381_G1_Add, PlutusV1, 11, true},
+		{"V3 builtin in V2 at PV11", Bls12_381_G1_Add, PlutusV2, 11, true},
+		{"V4 builtin in V1 at PV11", LengthOfArray, PlutusV1, 11, true},
+		{"V4 builtin in V2 at PV11", InsertCoin, PlutusV2, 11, true},
+		{"V4 builtin in V3 at PV11", ScaleValue, PlutusV3, 11, true},
+		{"expModInteger in V1 at PV11", ExpModInteger, PlutusV1, 11, true},
+		{"bitwise in V1 at PV11", AndByteString, PlutusV1, 11, true},
+		{"BLS MSM in V2 at PV11", Bls12_381_G1_MultiScalarMul, PlutusV2, 11, true},
+		{"valueData in V1 at PV11", ValueData, PlutusV1, 11, true},
+		{"unValueData in V2 at PV11", UnValueData, PlutusV2, 11, true},
+
+		// PV11: DropList becomes available
+		{"dropList in V1 at PV11", DropList, PlutusV1, 11, true},
+		{"dropList in V2 at PV11", DropList, PlutusV2, 11, true},
+		{"dropList in V3 at PV11", DropList, PlutusV3, 11, true},
+		{"dropList in V4 at PV11", DropList, PlutusV4, 11, true},
+
+		// PV11: MultiIndexArray remains V4-only
+		{"multiIndexArray in V1 at PV11", MultiIndexArray, PlutusV1, 11, false},
+		{"multiIndexArray in V2 at PV11", MultiIndexArray, PlutusV2, 11, false},
+		{"multiIndexArray in V3 at PV11", MultiIndexArray, PlutusV3, 11, false},
+		{"multiIndexArray in V4 at PV11", MultiIndexArray, PlutusV4, 11, true},
+
+		// PV12+: same as PV11
+		{"V3 builtin in V1 at PV12", Bls12_381_G1_Add, PlutusV1, 12, true},
+		{"dropList in V1 at PV12", DropList, PlutusV1, 12, true},
+		{"multiIndexArray in V1 at PV12", MultiIndexArray, PlutusV1, 12, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.fn.IsAvailableInWithProto(tt.version, tt.protoMajor)
+			if got != tt.available {
+				t.Errorf("IsAvailableInWithProto(%v, %d) = %v, want %v", tt.version, tt.protoMajor, got, tt.available)
+			}
+		})
+	}
+}
+
 func TestLanguageVersionToPlutusVersion(t *testing.T) {
 	tests := []struct {
 		name    string
