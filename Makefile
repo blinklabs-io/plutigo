@@ -10,7 +10,7 @@ BINARIES=$(shell cd $(ROOT_DIR)/cmd && ls -1 | grep -v ^common)
 # Common flags for fuzz tests
 FUZZ_FLAGS ?= -run=^$ -fuzztime=10s
 
-.PHONY: mod-tidy test test-match test-cover bench bench-baseline bench-compare fuzz format golines clean download-plutus-tests
+.PHONY: mod-tidy test test-match test-cover bench bench-baseline bench-compare fuzz format golines clean download-plutus-tests validate validate-quick validate-fix
 
 mod-tidy:
 	# Needed to fetch new dependencies and add them to go.mod
@@ -82,3 +82,12 @@ download-plutus-tests:
 	@rm -rf /tmp/plutus-master
 
 	@echo "Download complete. Test cases are now in tests/conformance/"
+
+validate: ## Run all pre-commit validation checks
+	@./scripts/validate.sh
+
+validate-quick: ## Run quick pre-commit validation (skip benchmarks)
+	@./scripts/validate.sh --quick
+
+validate-fix: ## Run validation and auto-fix formatting issues
+	@./scripts/validate.sh --fix

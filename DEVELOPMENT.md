@@ -12,6 +12,9 @@ For organization-wide contributing guidelines (conventional commits, DCO sign-of
 
 | I want to... | Command |
 |--------------|---------|
+| Validate before commit | `make validate` |
+| Quick validation | `make validate-quick` |
+| Fix formatting + validate | `make validate-fix` |
 | Run all tests | `make test` |
 | Run one test | `make test-match TEST=TestName` |
 | Check my code | `golangci-lint run ./... && nilaway ./...` |
@@ -245,7 +248,6 @@ Cost models are version-specific. When modifying:
 
 - Check [GitHub Issues](https://github.com/blinklabs-io/plutigo/issues) for open tasks
 - Look for `good first issue` labels for beginner-friendly tasks
-- Check `docs/plans/` for detailed implementation plans
 
 ### Creating a Branch
 
