@@ -69,9 +69,14 @@ type BudgetError struct {
 }
 
 func (e *BudgetError) Error() string {
-	return fmt.Sprintf("%s: requested (cpu=%d, mem=%d), available (cpu=%d, mem=%d)",
-		e.Message, e.Requested.Cpu, e.Requested.Mem,
-		e.Available.Cpu, e.Available.Mem)
+	return fmt.Sprintf(
+		"%s: requested (cpu=%d, mem=%d), available (cpu=%d, mem=%d)",
+		e.Message,
+		e.Requested.Cpu,
+		e.Requested.Mem,
+		e.Available.Cpu,
+		e.Available.Mem,
+	)
 }
 
 func (e *BudgetError) IsRecoverable() bool  { return true }
@@ -102,7 +107,12 @@ type TypeError struct {
 
 func (e *TypeError) Error() string {
 	if e.Expected != "" && e.Got != "" {
-		return fmt.Sprintf("%s: expected %s, got %s", e.Message, e.Expected, e.Got)
+		return fmt.Sprintf(
+			"%s: expected %s, got %s",
+			e.Message,
+			e.Expected,
+			e.Got,
+		)
 	}
 	return e.Message
 }

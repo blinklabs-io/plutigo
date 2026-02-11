@@ -56,7 +56,11 @@ func (mc *MachineCosts) update(param string, val int64) error {
 	case "exBudgetMemory":
 		exBudget.Mem = int64(val)
 	default:
-		return fmt.Errorf("unknown machine cost suffix for prefix %s: %s", paramParts[0], paramParts[1])
+		return fmt.Errorf(
+			"unknown machine cost suffix for prefix %s: %s",
+			paramParts[0],
+			paramParts[1],
+		)
 	}
 	return nil
 }

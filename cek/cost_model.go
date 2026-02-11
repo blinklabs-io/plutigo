@@ -29,7 +29,11 @@ var DefaultCostModel = CostModel{
 	builtinCosts: DefaultBuiltinCosts,
 }
 
-func costModelFromList(version lang.LanguageVersion, semantics SemanticsVariant, data []int64) (CostModel, error) {
+func costModelFromList(
+	version lang.LanguageVersion,
+	semantics SemanticsVariant,
+	data []int64,
+) (CostModel, error) {
 	cm := DefaultCostModel.Clone()
 	builtinCosts, err := buildBuiltinCosts(version, semantics)
 	if err != nil {
@@ -56,7 +60,11 @@ func costModelFromList(version lang.LanguageVersion, semantics SemanticsVariant,
 	return cm, nil
 }
 
-func costModelFromMap(version lang.LanguageVersion, semantics SemanticsVariant, data map[string]int64) (CostModel, error) {
+func costModelFromMap(
+	version lang.LanguageVersion,
+	semantics SemanticsVariant,
+	data map[string]int64,
+) (CostModel, error) {
 	cm := DefaultCostModel.Clone()
 	builtinCosts, err := buildBuiltinCosts(version, semantics)
 	if err != nil {

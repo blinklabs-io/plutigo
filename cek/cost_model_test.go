@@ -135,7 +135,11 @@ func TestUpdateV3CostModel(t *testing.T) {
 	defaultCM := DefaultCostModel
 
 	// Update with preview network cost model
-	updatedCM, err := costModelFromList(lang.LanguageVersionV3, SemanticsVariantC, previewV3CostModel)
+	updatedCM, err := costModelFromList(
+		lang.LanguageVersionV3,
+		SemanticsVariantC,
+		previewV3CostModel,
+	)
 	if err != nil {
 		t.Fatalf("unexpected error building cost model from list: %s", err)
 	}
@@ -144,58 +148,94 @@ func TestUpdateV3CostModel(t *testing.T) {
 	// From the cost model array, cekApplyCost-exBudgetCPU is at index 17 (value: 16000)
 	// and cekApplyCost-exBudgetMemory is at index 18 (value: 100)
 	if updatedCM.machineCosts.apply.Cpu != 16000 {
-		t.Errorf("Expected apply CPU cost to be 16000, got %d", updatedCM.machineCosts.apply.Cpu)
+		t.Errorf(
+			"Expected apply CPU cost to be 16000, got %d",
+			updatedCM.machineCosts.apply.Cpu,
+		)
 	}
 	if updatedCM.machineCosts.apply.Mem != 100 {
-		t.Errorf("Expected apply memory cost to be 100, got %d", updatedCM.machineCosts.apply.Mem)
+		t.Errorf(
+			"Expected apply memory cost to be 100, got %d",
+			updatedCM.machineCosts.apply.Mem,
+		)
 	}
 
 	// Verify startup costs (indices 29-30: 100, 100)
 	if updatedCM.machineCosts.startup.Cpu != 100 {
-		t.Errorf("Expected startup CPU cost to be 100, got %d", updatedCM.machineCosts.startup.Cpu)
+		t.Errorf(
+			"Expected startup CPU cost to be 100, got %d",
+			updatedCM.machineCosts.startup.Cpu,
+		)
 	}
 	if updatedCM.machineCosts.startup.Mem != 100 {
-		t.Errorf("Expected startup memory cost to be 100, got %d", updatedCM.machineCosts.startup.Mem)
+		t.Errorf(
+			"Expected startup memory cost to be 100, got %d",
+			updatedCM.machineCosts.startup.Mem,
+		)
 	}
 
 	// Verify builtin function costs - AddInteger (MaxSizeModel)
 	// addInteger-cpu-arguments-intercept: 100788, addInteger-cpu-arguments-slope: 420
 	addIntCPU := updatedCM.builtinCosts[builtin.AddInteger].cpu.(*MaxSizeModel)
 	if addIntCPU.intercept != 100788 {
-		t.Errorf("Expected AddInteger CPU intercept to be 100788, got %d", addIntCPU.intercept)
+		t.Errorf(
+			"Expected AddInteger CPU intercept to be 100788, got %d",
+			addIntCPU.intercept,
+		)
 	}
 	if addIntCPU.slope != 420 {
-		t.Errorf("Expected AddInteger CPU slope to be 420, got %d", addIntCPU.slope)
+		t.Errorf(
+			"Expected AddInteger CPU slope to be 420, got %d",
+			addIntCPU.slope,
+		)
 	}
 
 	// Verify AddInteger memory costs (MaxSizeModel)
 	// addInteger-memory-arguments-intercept: 1, addInteger-memory-arguments-slope: 1
 	addIntMem := updatedCM.builtinCosts[builtin.AddInteger].mem.(*MaxSizeModel)
 	if addIntMem.intercept != 1 {
-		t.Errorf("Expected AddInteger memory intercept to be 1, got %d", addIntMem.intercept)
+		t.Errorf(
+			"Expected AddInteger memory intercept to be 1, got %d",
+			addIntMem.intercept,
+		)
 	}
 	if addIntMem.slope != 1 {
-		t.Errorf("Expected AddInteger memory slope to be 1, got %d", addIntMem.slope)
+		t.Errorf(
+			"Expected AddInteger memory slope to be 1, got %d",
+			addIntMem.slope,
+		)
 	}
 
 	// Verify AppendByteString costs (AddedSizesModel)
 	// appendByteString-cpu-arguments-intercept: 1000, appendByteString-cpu-arguments-slope: 173
 	appendBSCPU := updatedCM.builtinCosts[builtin.AppendByteString].cpu.(*AddedSizesModel)
 	if appendBSCPU.intercept != 1000 {
-		t.Errorf("Expected AppendByteString CPU intercept to be 1000, got %d", appendBSCPU.intercept)
+		t.Errorf(
+			"Expected AppendByteString CPU intercept to be 1000, got %d",
+			appendBSCPU.intercept,
+		)
 	}
 	if appendBSCPU.slope != 173 {
-		t.Errorf("Expected AppendByteString CPU slope to be 173, got %d", appendBSCPU.slope)
+		t.Errorf(
+			"Expected AppendByteString CPU slope to be 173, got %d",
+			appendBSCPU.slope,
+		)
 	}
 
 	// Verify Blake2b_256 costs (LinearInX)
 	// blake2b_256-cpu-arguments-intercept: 201305, blake2b_256-cpu-arguments-slope: 8356
 	blake2bCPU := updatedCM.builtinCosts[builtin.Blake2b_256].cpu.(*LinearInX)
 	if blake2bCPU.intercept != 201305 {
-		t.Errorf("Expected Blake2b_256 CPU intercept to be 201305, got %d", blake2bCPU.intercept)
+		t.Errorf(
+			"Expected Blake2b_256 CPU intercept to be 201305, got %d",
+			blake2bCPU.intercept,
+		)
 	}
 	if blake2bCPU.slope != 8356 {
-		t.Errorf("Expected Blake2b_256 CPU slope to be 8356, got %d", blake2bCPU.slope)
+		t.Errorf(
+			"Expected Blake2b_256 CPU slope to be 8356, got %d",
+			blake2bCPU.slope,
+		)
 	}
 	blake2bMem := updatedCM.builtinCosts[builtin.Blake2b_256].mem.(*ConstantCost)
 	if blake2bMem.c != 4 {
@@ -206,10 +246,16 @@ func TestUpdateV3CostModel(t *testing.T) {
 	// multiplyInteger-cpu-arguments-intercept: 90434, multiplyInteger-cpu-arguments-slope: 519
 	mulIntCPU := updatedCM.builtinCosts[builtin.MultiplyInteger].cpu.(*MultipliedSizesModel)
 	if mulIntCPU.intercept != 90434 {
-		t.Errorf("Expected MultiplyInteger CPU intercept to be 90434, got %d", mulIntCPU.intercept)
+		t.Errorf(
+			"Expected MultiplyInteger CPU intercept to be 90434, got %d",
+			mulIntCPU.intercept,
+		)
 	}
 	if mulIntCPU.slope != 519 {
-		t.Errorf("Expected MultiplyInteger CPU slope to be 519, got %d", mulIntCPU.slope)
+		t.Errorf(
+			"Expected MultiplyInteger CPU slope to be 519, got %d",
+			mulIntCPU.slope,
+		)
 	}
 
 	// Verify DivideInteger costs (ConstAboveDiagonalIntoQuadraticXAndYModel)
@@ -218,13 +264,22 @@ func TestUpdateV3CostModel(t *testing.T) {
 	// divideInteger-cpu-arguments-model-arguments-c10: 1716 (index 53)
 	divIntCPU := updatedCM.builtinCosts[builtin.DivideInteger].cpu.(*ConstAboveDiagonalIntoQuadraticXAndYModel)
 	if divIntCPU.constant != 85848 {
-		t.Errorf("Expected DivideInteger CPU constant to be 85848, got %d", divIntCPU.constant)
+		t.Errorf(
+			"Expected DivideInteger CPU constant to be 85848, got %d",
+			divIntCPU.constant,
+		)
 	}
 	if divIntCPU.coeff00 != 123203 {
-		t.Errorf("Expected DivideInteger CPU coeff00 to be 123203, got %d", divIntCPU.coeff00)
+		t.Errorf(
+			"Expected DivideInteger CPU coeff00 to be 123203, got %d",
+			divIntCPU.coeff00,
+		)
 	}
 	if divIntCPU.coeff10 != 1716 {
-		t.Errorf("Expected DivideInteger CPU coeff10 to be 1716, got %d", divIntCPU.coeff10)
+		t.Errorf(
+			"Expected DivideInteger CPU coeff10 to be 1716, got %d",
+			divIntCPU.coeff10,
+		)
 	}
 
 	// Verify that the cost model was successfully loaded without panicking
@@ -238,7 +293,9 @@ func TestUpdateV3CostModel(t *testing.T) {
 	// Verify that creating a new default cost model doesn't affect the updated one
 	defaultCM2 := DefaultCostModel
 	if defaultCM.machineCosts.apply.Cpu != defaultCM2.machineCosts.apply.Cpu {
-		t.Error("Creating a new cost model should not affect the default values")
+		t.Error(
+			"Creating a new cost model should not affect the default values",
+		)
 	}
 }
 
@@ -415,7 +472,11 @@ func TestUpdateV1CostModelFromMap(t *testing.T) {
 	}
 
 	// Update with preview network cost model
-	updatedCM, err := costModelFromMap(lang.LanguageVersionV1, SemanticsVariantA, previewV1CostModelMap)
+	updatedCM, err := costModelFromMap(
+		lang.LanguageVersionV1,
+		SemanticsVariantA,
+		previewV1CostModelMap,
+	)
 	if err != nil {
 		t.Fatalf("unexpected error building cost model from map: %s", err)
 	}
@@ -423,23 +484,38 @@ func TestUpdateV1CostModelFromMap(t *testing.T) {
 	// Verify specific machine cost values were updated
 	// cekApplyCost-exBudgetCPU should be 29773
 	if updatedCM.machineCosts.apply.Cpu != 29773 {
-		t.Errorf("Expected apply CPU cost to be 29773, got %d", updatedCM.machineCosts.apply.Cpu)
+		t.Errorf(
+			"Expected apply CPU cost to be 29773, got %d",
+			updatedCM.machineCosts.apply.Cpu,
+		)
 	}
 	if updatedCM.machineCosts.apply.Mem != 100 {
-		t.Errorf("Expected apply memory cost to be 100, got %d", updatedCM.machineCosts.apply.Mem)
+		t.Errorf(
+			"Expected apply memory cost to be 100, got %d",
+			updatedCM.machineCosts.apply.Mem,
+		)
 	}
 
 	// Verify startup costs
 	if updatedCM.machineCosts.startup.Cpu != 100 {
-		t.Errorf("Expected startup CPU cost to be 100, got %d", updatedCM.machineCosts.startup.Cpu)
+		t.Errorf(
+			"Expected startup CPU cost to be 100, got %d",
+			updatedCM.machineCosts.startup.Cpu,
+		)
 	}
 	if updatedCM.machineCosts.startup.Mem != 100 {
-		t.Errorf("Expected startup memory cost to be 100, got %d", updatedCM.machineCosts.startup.Mem)
+		t.Errorf(
+			"Expected startup memory cost to be 100, got %d",
+			updatedCM.machineCosts.startup.Mem,
+		)
 	}
 
 	// Verify builtin costs were updated
 	if updatedCM.machineCosts.builtin.Cpu != 29773 {
-		t.Errorf("Expected builtin CPU cost to be 29773, got %d", updatedCM.machineCosts.builtin.Cpu)
+		t.Errorf(
+			"Expected builtin CPU cost to be 29773, got %d",
+			updatedCM.machineCosts.builtin.Cpu,
+		)
 	}
 
 	// Verify verifyEd25519Signature costs were updated (ThreeLinearInZ for V1/V2)
@@ -447,10 +523,16 @@ func TestUpdateV1CostModelFromMap(t *testing.T) {
 	// The values come from the cost model map (verifySignature-cpu-arguments-intercept/slope)
 	verifySigCPU := updatedCM.builtinCosts[builtin.VerifyEd25519Signature].cpu.(*ThreeLinearInZ)
 	if verifySigCPU.intercept != 3345831 {
-		t.Errorf("Expected VerifyEd25519Signature CPU intercept to be 3345831, got %d", verifySigCPU.intercept)
+		t.Errorf(
+			"Expected VerifyEd25519Signature CPU intercept to be 3345831, got %d",
+			verifySigCPU.intercept,
+		)
 	}
 	if verifySigCPU.slope != 1 {
-		t.Errorf("Expected VerifyEd25519Signature CPU slope to be 1, got %d", verifySigCPU.slope)
+		t.Errorf(
+			"Expected VerifyEd25519Signature CPU slope to be 1, got %d",
+			verifySigCPU.slope,
+		)
 	}
 
 	// Verify AddInteger costs (MaxSizeModel for V1)
@@ -458,30 +540,48 @@ func TestUpdateV1CostModelFromMap(t *testing.T) {
 	// Note: In V1, AddInteger uses MaxSizeModel which has intercept and slope fields
 	addIntCPU := updatedCM.builtinCosts[builtin.AddInteger].cpu.(*MaxSizeModel)
 	if addIntCPU.intercept != 197209 {
-		t.Errorf("Expected AddInteger CPU intercept to be 197209, got %d", addIntCPU.intercept)
+		t.Errorf(
+			"Expected AddInteger CPU intercept to be 197209, got %d",
+			addIntCPU.intercept,
+		)
 	}
 	if addIntCPU.slope != 0 {
-		t.Errorf("Expected AddInteger CPU slope to be 0, got %d", addIntCPU.slope)
+		t.Errorf(
+			"Expected AddInteger CPU slope to be 0, got %d",
+			addIntCPU.slope,
+		)
 	}
 
 	// Verify MultiplyInteger costs (AddedSizesModel for V1)
 	// multiplyInteger-cpu-arguments-intercept: 61516, multiplyInteger-cpu-arguments-slope: 11218
 	mulIntCPU := updatedCM.builtinCosts[builtin.MultiplyInteger].cpu.(*AddedSizesModel)
 	if mulIntCPU.intercept != 61516 {
-		t.Errorf("Expected MultiplyInteger CPU intercept to be 61516, got %d", mulIntCPU.intercept)
+		t.Errorf(
+			"Expected MultiplyInteger CPU intercept to be 61516, got %d",
+			mulIntCPU.intercept,
+		)
 	}
 	if mulIntCPU.slope != 11218 {
-		t.Errorf("Expected MultiplyInteger CPU slope to be 11218, got %d", mulIntCPU.slope)
+		t.Errorf(
+			"Expected MultiplyInteger CPU slope to be 11218, got %d",
+			mulIntCPU.slope,
+		)
 	}
 
 	// Verify Blake2b_256 costs (LinearInX for V1)
 	// blake2b_256-cpu-arguments-intercept: 2477736, blake2b_256-cpu-arguments-slope: 29175
 	blake2bCPU := updatedCM.builtinCosts[builtin.Blake2b_256].cpu.(*LinearInX)
 	if blake2bCPU.intercept != 2477736 {
-		t.Errorf("Expected Blake2b_256 CPU intercept to be 2477736, got %d", blake2bCPU.intercept)
+		t.Errorf(
+			"Expected Blake2b_256 CPU intercept to be 2477736, got %d",
+			blake2bCPU.intercept,
+		)
 	}
 	if blake2bCPU.slope != 29175 {
-		t.Errorf("Expected Blake2b_256 CPU slope to be 29175, got %d", blake2bCPU.slope)
+		t.Errorf(
+			"Expected Blake2b_256 CPU slope to be 29175, got %d",
+			blake2bCPU.slope,
+		)
 	}
 	blake2bMem := updatedCM.builtinCosts[builtin.Blake2b_256].mem.(*ConstantCost)
 	if blake2bMem.c != 4 {
@@ -492,10 +592,16 @@ func TestUpdateV1CostModelFromMap(t *testing.T) {
 	// appendByteString-cpu-arguments-intercept: 396231, appendByteString-cpu-arguments-slope: 621
 	appendBSCPU := updatedCM.builtinCosts[builtin.AppendByteString].cpu.(*AddedSizesModel)
 	if appendBSCPU.intercept != 396231 {
-		t.Errorf("Expected AppendByteString CPU intercept to be 396231, got %d", appendBSCPU.intercept)
+		t.Errorf(
+			"Expected AppendByteString CPU intercept to be 396231, got %d",
+			appendBSCPU.intercept,
+		)
 	}
 	if appendBSCPU.slope != 621 {
-		t.Errorf("Expected AppendByteString CPU slope to be 621, got %d", appendBSCPU.slope)
+		t.Errorf(
+			"Expected AppendByteString CPU slope to be 621, got %d",
+			appendBSCPU.slope,
+		)
 	}
 
 	// Verify DivideInteger costs (ConstAboveDiagonalModel with nested MultipliedSizesModel for V1)
@@ -504,24 +610,39 @@ func TestUpdateV1CostModelFromMap(t *testing.T) {
 	// divideInteger-cpu-arguments-model-arguments-slope: 118
 	divIntCPU := updatedCM.builtinCosts[builtin.DivideInteger].cpu.(*ConstAboveDiagonalModel)
 	if divIntCPU.constant != 148000 {
-		t.Errorf("Expected DivideInteger CPU constant to be 148000, got %d", divIntCPU.constant)
+		t.Errorf(
+			"Expected DivideInteger CPU constant to be 148000, got %d",
+			divIntCPU.constant,
+		)
 	}
 	divIntCPUModel := divIntCPU.model.(*MultipliedSizesModel)
 	if divIntCPUModel.intercept != 425507 {
-		t.Errorf("Expected DivideInteger CPU model intercept to be 425507, got %d", divIntCPUModel.intercept)
+		t.Errorf(
+			"Expected DivideInteger CPU model intercept to be 425507, got %d",
+			divIntCPUModel.intercept,
+		)
 	}
 	if divIntCPUModel.slope != 118 {
-		t.Errorf("Expected DivideInteger CPU model slope to be 118, got %d", divIntCPUModel.slope)
+		t.Errorf(
+			"Expected DivideInteger CPU model slope to be 118, got %d",
+			divIntCPUModel.slope,
+		)
 	}
 
 	// Verify SubtractInteger costs (MaxSizeModel for V1)
 	// subtractInteger-cpu-arguments-intercept: 197209, subtractInteger-cpu-arguments-slope: 0
 	subIntCPU := updatedCM.builtinCosts[builtin.SubtractInteger].cpu.(*MaxSizeModel)
 	if subIntCPU.intercept != 197209 {
-		t.Errorf("Expected SubtractInteger CPU intercept to be 197209, got %d", subIntCPU.intercept)
+		t.Errorf(
+			"Expected SubtractInteger CPU intercept to be 197209, got %d",
+			subIntCPU.intercept,
+		)
 	}
 	if subIntCPU.slope != 0 {
-		t.Errorf("Expected SubtractInteger CPU slope to be 0, got %d", subIntCPU.slope)
+		t.Errorf(
+			"Expected SubtractInteger CPU slope to be 0, got %d",
+			subIntCPU.slope,
+		)
 	}
 
 	// Verify that the test successfully loads V1 cost model from a map

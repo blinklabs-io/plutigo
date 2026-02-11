@@ -19,7 +19,10 @@ type ProtoVersion struct {
 	Minor uint
 }
 
-func GetSemantics(version lang.LanguageVersion, protoVersion ProtoVersion) SemanticsVariant {
+func GetSemantics(
+	version lang.LanguageVersion,
+	protoVersion ProtoVersion,
+) SemanticsVariant {
 	switch version {
 	case lang.LanguageVersionV1, lang.LanguageVersionV2:
 		if protoVersion.Major < changProtoMajorVersion {
