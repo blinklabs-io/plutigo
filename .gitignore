@@ -26,3 +26,6 @@ bench-*.txt
 # Coverage files
 coverage.out
 coverage.html
+
+# Git worktrees
+.worktrees/

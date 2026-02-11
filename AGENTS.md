@@ -96,7 +96,7 @@ CBOR encoding/decoding for Plutus data types.
 ### Before Starting Any Task
 
 1. **Pull latest:** `git pull origin main`
-2. **Read relevant plan:** Check `docs/plans/*_PLAN.md`
+2. **Understand the task:** Review related code and tests
 3. **Understand acceptance criteria:** Know what "done" means
 
 ### While Working
@@ -252,11 +252,13 @@ for _, log := range machine.Logs {
 
 ## Active Work
 
-See [ROADMAP.md](ROADMAP.md) for current plans. Priority order:
+Current priorities:
 
-1. **Plan 2:** Typed Error System - enables programmatic error classification
-2. **Plan 5:** Execution Metrics - enables script profiling
-3. **Plan 4:** Script Context Builders - simplifies consumer integration
+1. **PV11 Unified Builtins** - Protocol-version-aware builtin availability (CRITICAL)
+2. **Execution Metrics** - Enables script profiling
+3. **Script Context Builders** - Simplifies consumer integration
+
+**Completed:** Typed Error System (PR #209) - see Error Recovery Playbook below
 
 ---
 
@@ -306,4 +308,165 @@ func EvaluateScript(uplcHex string, budget cek.ExBudget) (cek.Value, error) {
 - [Plutus Core Specification](https://github.com/IntersectMBO/plutus)
 - [Cardano Improvement Proposals](https://cips.cardano.org/)
 - [Effective Go](https://golang.org/doc/effective_go.html)
-- [Project Roadmap](ROADMAP.md)
+
+---
+
+## Critical Invariants
+
+These invariants MUST be maintained. Violating them will cause test failures or incorrect behavior.
+
+| Invariant | Location | What Breaks If Violated |
+|-----------|----------|-------------------------|
+| Cost charged BEFORE computation | `cek/builtins.go` | Unbounded work possible; budget exhaustion won't stop expensive ops |
+| Builtin enum order must match Haskell spec | `builtin/default_function.go` | FLAT decoding produces wrong builtins |
+| De Bruijn indices are 1-indexed | `syn/conversions.go`, `cek/env.go` | Variable lookup returns wrong values |
+| V1/V2/V3 param name arrays must align with cost model | `lang/v*.go` | Cost model loading panics or uses wrong costs |
+| `MaxDefaultFunction` must equal highest builtin constant | `builtin/default_function.go` | Builtin parsing/iteration fails |
+| Arity, ForceCount, Availability must cover all builtins | `builtin/*.go` | Panics or incorrect evaluation |
+| Conformance test `.expected` files are canonical | `tests/conformance/` | False test failures |
+| Object pools must reset state before Put | `cek/machine.go` | Stale state leaks between evaluations |
+
+### Cost-Before-Computation Pattern
+
+Every builtin MUST charge costs before performing work:
+
+```go
+func addInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+    // 1. Extract arguments
+    arg1, err := unwrapInteger[T](m.argHolder[0])
+    // ...
+
+    // 2. CHARGE COST FIRST (before computation!)
+    err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
+    if err != nil {
+        return nil, err  // Budget exhausted - stop before work
+    }
+
+    // 3. Only now perform the actual computation
+    newInt.Add(arg1, arg2)
+    // ...
+}
+```
+
+---
+
+## Error Recovery Playbook
+
+Use this table to diagnose and fix errors encountered during development.
+
+### Error Classification
+
+| Error Type | Code Range | Recoverable | When It Occurs |
+|------------|------------|-------------|----------------|
+| `BudgetError` | 100-199 | Yes | Script ran out of CPU/memory budget |
+| `ScriptError` | 200-299 | No | Script logic failure (explicit error, missing case) |
+| `TypeError` | 300-399 | No | Malformed script structure (open term, type mismatch) |
+| `BuiltinError` | 400-499 | No | Builtin function failure (div by zero, decode error) |
+| `InternalError` | 500-599 | No | VM implementation bug |
+
+### Common Errors and Fixes
+
+| Error Message | Error Type | Cause | Investigation | Fix |
+|---------------|------------|-------|---------------|-----|
+| `out of budget` | BudgetError | Script exhausted CPU/memory | Check `machine.ExBudget` before/after | Increase budget or optimize script |
+| `open term evaluated` | TypeError | Variable not in scope | Check De Bruijn conversion in `syn/conversions.go` | Ensure all variables are bound |
+| `NonConstrScrutinized` | TypeError | `case` on non-constructor value | Print scrutinee with `syn.PrettyTerm` | Ensure case scrutinee is a Constr |
+| `expected Integer, got ByteString` | TypeError | Wrong argument type to builtin | Check argument order and types | Fix argument types at call site |
+| `division by zero` | BuiltinError | `divideInteger` with zero divisor | Check divisor value | Add zero check before division |
+| `index out of bounds` | BuiltinError | Array/bytestring index invalid | Check index vs length | Validate index before access |
+| `builtin not available` | BuiltinError | Using V4 builtin in V3 script | Check `builtin.IsAvailableIn()` | Use correct Plutus version |
+| `decode failure` | BuiltinError | Invalid CBOR/data format | Check input data encoding | Validate input format |
+| `missing case branch` | ScriptError | Case expression has no matching branch | Check number of case alternatives | Add missing case branches |
+
+### Error Handling Patterns
+
+```go
+// Check error type and handle appropriately
+result, err := machine.Run(term)
+if err != nil {
+    // Get numeric error code for metrics/logging
+    if code, ok := cek.GetErrorCode(err); ok {
+        metrics.RecordError(code)
+    }
+
+    switch {
+    case cek.IsBudgetError(err):
+        // Recoverable - could retry with more budget
+        log.Warn("budget exhausted", "remaining", machine.ExBudget)
+    case cek.IsScriptError(err):
+        // Script logic failure - contract rejected
+        log.Info("script failed", "error", err)
+    case cek.IsTypeError(err):
+        // Malformed script - should not happen with valid UPLC
+        log.Error("type error", "error", err)
+    case cek.IsBuiltinError(err):
+        // Builtin failure - check inputs
+        log.Error("builtin error", "error", err)
+    case cek.IsInternalError(err):
+        // VM bug - report issue
+        log.Error("internal error", "error", err)
+    }
+    return err
+}
+```
+
+---
+
+## Code Location by Concept
+
+Use this table to find where to make changes for specific tasks.
+
+### Feature Implementation
+
+| Task | Primary File | Supporting Files |
+|------|--------------|------------------|
+| Add a new builtin | `cek/builtins.go` | `builtin/default_function.go`, `builtin/availability.go`, `builtin/arity.go`, `builtin/force_count.go`, `cek/cost_model_builtins.go` |
+| Change evaluation semantics | `cek/machine.go` | `cek/state.go`, `cek/value.go`, `cek/env.go` |
+| Add a new Plutus version | `lang/version.go` | `lang/v*.go`, `builtin/availability.go`, `cek/cost_model.go` |
+| Modify CBOR encoding | `data/encode.go` | `data/decode.go`, `data/data.go` |
+| Change parsing behavior | `syn/parser.go` | `syn/lex/lexer.go`, `syn/lex/token.go` |
+| Modify pretty printing | `syn/pretty.go` | `syn/term.go` |
+| Change FLAT serialization | `syn/flat_encode.go` | `syn/flat_decode.go` |
+
+### Bug Investigation
+
+| Symptom | Start Here | Related Files |
+|---------|------------|---------------|
+| Wrong evaluation result | `cek/machine.go:step()` | `cek/builtins.go`, `cek/value.go` |
+| Budget calculation wrong | `cek/cost_model_builtins.go` | `cek/cost_model.go`, `lang/v*.go` |
+| Parsing fails on valid UPLC | `syn/parser.go` | `syn/lex/lexer.go` |
+| FLAT decode fails | `syn/flat_decode.go` | `builtin/default_function.go` |
+| Conformance test fails | `tests/conformance/` | Check `.expected` file matches spec |
+
+### Test Locations
+
+| Testing | Location | Command |
+|---------|----------|---------|
+| Unit tests | `*_test.go` in each package | `go test ./...` |
+| Conformance tests | `tests/conformance/` | `go test ./tests/...` |
+| Benchmarks | `*_test.go` with `Benchmark*` funcs | `make bench` |
+| Fuzz tests | `*_test.go` with `Fuzz*` funcs | `make fuzz` |
+
+---
+
+## Pre-Commit Validation
+
+Run validation before committing to catch CI failures early:
+
+```bash
+# Full validation (recommended)
+./scripts/validate.sh
+
+# Quick validation (skip benchmarks)
+./scripts/validate.sh --quick
+
+# Auto-fix formatting issues
+./scripts/validate.sh --fix
+```
+
+The script runs:
+1. Code formatting check
+2. All tests with race detection
+3. golangci-lint (must have 0 issues)
+4. nilaway (nil safety analysis)
+5. Quick benchmark sanity check
