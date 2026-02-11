@@ -176,7 +176,10 @@ func (f DefaultFunction) IsAvailableIn(version PlutusVersion) bool {
 //   - Builtins marked PlutusVUnreleased that are NOT activated at PV11 remain unavailable
 //
 // For protocol versions < 11, the original version-based gating applies.
-func (f DefaultFunction) IsAvailableInWithProto(version PlutusVersion, protoMajor uint) bool {
+func (f DefaultFunction) IsAvailableInWithProto(
+	version PlutusVersion,
+	protoMajor uint,
+) bool {
 	if protoMajor >= VanRossemProtoVersion {
 		introduced := builtinIntroducedIn[f]
 		// MultiIndexArray is V4-only, not part of PV11

@@ -62,7 +62,11 @@ func BenchmarkFlatFiles(b *testing.B) {
 					log.Fatalf("decode error: %v\n\n", err)
 				}
 
-				machine := cek.NewMachine[syn.DeBruijn](program.Version, 200, nil)
+				machine := cek.NewMachine[syn.DeBruijn](
+					program.Version,
+					200,
+					nil,
+				)
 
 				_, err = machine.Run(program.Term)
 				if err != nil {

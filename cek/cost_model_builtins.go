@@ -48,10 +48,18 @@ func (b *BuiltinCosts) update(param string, val int64) error {
 	case "mem", "memory":
 		args = builtinCost.mem
 	default:
-		return fmt.Errorf("unknown cost subkey for builtin %s: %s", builtinName, paramParts[1])
+		return fmt.Errorf(
+			"unknown cost subkey for builtin %s: %s",
+			builtinName,
+			paramParts[1],
+		)
 	}
 	if args == nil {
-		return fmt.Errorf("no existing cost info for builtin %s with arg: %s", builtinName, paramParts[1])
+		return fmt.Errorf(
+			"no existing cost info for builtin %s with arg: %s",
+			builtinName,
+			paramParts[1],
+		)
 	}
 
 	// Determine the parameter name index based on pattern
@@ -60,7 +68,8 @@ func (b *BuiltinCosts) update(param string, val int64) error {
 	//   builtin-cpu/memory-arguments-param (4 parts)
 	//   builtin-cpu/memory-arguments-model-arguments-param (6 parts)
 	paramIdx := 3
-	if len(paramParts) > 5 && paramParts[3] == "model" && paramParts[4] == "arguments" {
+	if len(paramParts) > 5 && paramParts[3] == "model" &&
+		paramParts[4] == "arguments" {
 		paramIdx = 5
 	}
 
@@ -1213,7 +1222,8 @@ func CostQuadtuple[T FourArgument](
 		zMem = z()
 	}
 
-	if len(memConstants) > 3 && memConstants[3] && len(cpuConstants) > 3 && cpuConstants[3] {
+	if len(memConstants) > 3 && memConstants[3] && len(cpuConstants) > 3 &&
+		cpuConstants[3] {
 		uMem = ExMem(0)
 	} else {
 		uMem = u()
@@ -1891,7 +1901,10 @@ func (ExpMod) HasConstants() []bool {
 	return []bool{false, false, false}
 }
 
-func buildBuiltinCosts(version lang.LanguageVersion, semantics SemanticsVariant) (BuiltinCosts, error) {
+func buildBuiltinCosts(
+	version lang.LanguageVersion,
+	semantics SemanticsVariant,
+) (BuiltinCosts, error) {
 	costs := DefaultBuiltinCosts.Clone()
 	// V1 and V2 have some slight changes from the default builtin costs, some depending on the semantics variant
 	if version == lang.LanguageVersionV1 || version == lang.LanguageVersionV2 {

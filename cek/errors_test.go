@@ -26,7 +26,11 @@ func TestBudgetError(t *testing.T) {
 
 	// Test ErrorCode
 	if err.ErrorCode() != ErrCodeBudgetExhausted {
-		t.Errorf("expected code %d, got %d", ErrCodeBudgetExhausted, err.ErrorCode())
+		t.Errorf(
+			"expected code %d, got %d",
+			ErrCodeBudgetExhausted,
+			err.ErrorCode(),
+		)
 	}
 }
 
@@ -48,7 +52,11 @@ func TestScriptError(t *testing.T) {
 
 	// Test ErrorCode
 	if err.ErrorCode() != ErrCodeExplicitError {
-		t.Errorf("expected code %d, got %d", ErrCodeExplicitError, err.ErrorCode())
+		t.Errorf(
+			"expected code %d, got %d",
+			ErrCodeExplicitError,
+			err.ErrorCode(),
+		)
 	}
 }
 
@@ -73,7 +81,11 @@ func TestTypeError(t *testing.T) {
 
 	// Test ErrorCode
 	if err.ErrorCode() != ErrCodeTypeMismatch {
-		t.Errorf("expected code %d, got %d", ErrCodeTypeMismatch, err.ErrorCode())
+		t.Errorf(
+			"expected code %d, got %d",
+			ErrCodeTypeMismatch,
+			err.ErrorCode(),
+		)
 	}
 
 	// Test without expected/got
@@ -106,7 +118,11 @@ func TestBuiltinError(t *testing.T) {
 
 	// Test ErrorCode
 	if err.ErrorCode() != ErrCodeDivisionByZero {
-		t.Errorf("expected code %d, got %d", ErrCodeDivisionByZero, err.ErrorCode())
+		t.Errorf(
+			"expected code %d, got %d",
+			ErrCodeDivisionByZero,
+			err.ErrorCode(),
+		)
 	}
 
 	// Test without builtin name
@@ -138,16 +154,29 @@ func TestInternalError(t *testing.T) {
 
 	// Test ErrorCode
 	if err.ErrorCode() != ErrCodeInternalError {
-		t.Errorf("expected code %d, got %d", ErrCodeInternalError, err.ErrorCode())
+		t.Errorf(
+			"expected code %d, got %d",
+			ErrCodeInternalError,
+			err.ErrorCode(),
+		)
 	}
 }
 
 func TestIsBudgetError(t *testing.T) {
-	budgetErr := &BudgetError{Code: ErrCodeBudgetExhausted, Message: "out of budget"}
+	budgetErr := &BudgetError{
+		Code:    ErrCodeBudgetExhausted,
+		Message: "out of budget",
+	}
 	scriptErr := &ScriptError{Code: ErrCodeExplicitError, Message: "error"}
 	typeErr := &TypeError{Code: ErrCodeOpenTerm, Message: "open term"}
-	builtinErr := &BuiltinError{Code: ErrCodeDivisionByZero, Message: "div zero"}
-	internalErr := &InternalError{Code: ErrCodeInternalError, Message: "internal"}
+	builtinErr := &BuiltinError{
+		Code:    ErrCodeDivisionByZero,
+		Message: "div zero",
+	}
+	internalErr := &InternalError{
+		Code:    ErrCodeInternalError,
+		Message: "internal",
+	}
 
 	if !IsBudgetError(budgetErr) {
 		t.Error("IsBudgetError should return true for BudgetError")
@@ -167,10 +196,16 @@ func TestIsBudgetError(t *testing.T) {
 }
 
 func TestIsScriptError(t *testing.T) {
-	budgetErr := &BudgetError{Code: ErrCodeBudgetExhausted, Message: "out of budget"}
+	budgetErr := &BudgetError{
+		Code:    ErrCodeBudgetExhausted,
+		Message: "out of budget",
+	}
 	scriptErr := &ScriptError{Code: ErrCodeExplicitError, Message: "error"}
 	typeErr := &TypeError{Code: ErrCodeOpenTerm, Message: "open term"}
-	builtinErr := &BuiltinError{Code: ErrCodeDivisionByZero, Message: "div zero"}
+	builtinErr := &BuiltinError{
+		Code:    ErrCodeDivisionByZero,
+		Message: "div zero",
+	}
 
 	if IsScriptError(budgetErr) {
 		t.Error("IsScriptError should return false for BudgetError")
@@ -187,10 +222,16 @@ func TestIsScriptError(t *testing.T) {
 }
 
 func TestIsTypeError(t *testing.T) {
-	budgetErr := &BudgetError{Code: ErrCodeBudgetExhausted, Message: "out of budget"}
+	budgetErr := &BudgetError{
+		Code:    ErrCodeBudgetExhausted,
+		Message: "out of budget",
+	}
 	scriptErr := &ScriptError{Code: ErrCodeExplicitError, Message: "error"}
 	typeErr := &TypeError{Code: ErrCodeOpenTerm, Message: "open term"}
-	builtinErr := &BuiltinError{Code: ErrCodeDivisionByZero, Message: "div zero"}
+	builtinErr := &BuiltinError{
+		Code:    ErrCodeDivisionByZero,
+		Message: "div zero",
+	}
 
 	if IsTypeError(budgetErr) {
 		t.Error("IsTypeError should return false for BudgetError")
@@ -207,10 +248,16 @@ func TestIsTypeError(t *testing.T) {
 }
 
 func TestIsBuiltinError(t *testing.T) {
-	budgetErr := &BudgetError{Code: ErrCodeBudgetExhausted, Message: "out of budget"}
+	budgetErr := &BudgetError{
+		Code:    ErrCodeBudgetExhausted,
+		Message: "out of budget",
+	}
 	scriptErr := &ScriptError{Code: ErrCodeExplicitError, Message: "error"}
 	typeErr := &TypeError{Code: ErrCodeOpenTerm, Message: "open term"}
-	builtinErr := &BuiltinError{Code: ErrCodeDivisionByZero, Message: "div zero"}
+	builtinErr := &BuiltinError{
+		Code:    ErrCodeDivisionByZero,
+		Message: "div zero",
+	}
 
 	if IsBuiltinError(budgetErr) {
 		t.Error("IsBuiltinError should return false for BudgetError")
@@ -227,8 +274,14 @@ func TestIsBuiltinError(t *testing.T) {
 }
 
 func TestIsInternalError(t *testing.T) {
-	budgetErr := &BudgetError{Code: ErrCodeBudgetExhausted, Message: "out of budget"}
-	internalErr := &InternalError{Code: ErrCodeInternalError, Message: "internal"}
+	budgetErr := &BudgetError{
+		Code:    ErrCodeBudgetExhausted,
+		Message: "out of budget",
+	}
+	internalErr := &InternalError{
+		Code:    ErrCodeInternalError,
+		Message: "internal",
+	}
 
 	if IsInternalError(budgetErr) {
 		t.Error("IsInternalError should return false for BudgetError")
@@ -239,11 +292,20 @@ func TestIsInternalError(t *testing.T) {
 }
 
 func TestIsRecoverable(t *testing.T) {
-	budgetErr := &BudgetError{Code: ErrCodeBudgetExhausted, Message: "out of budget"}
+	budgetErr := &BudgetError{
+		Code:    ErrCodeBudgetExhausted,
+		Message: "out of budget",
+	}
 	scriptErr := &ScriptError{Code: ErrCodeExplicitError, Message: "error"}
 	typeErr := &TypeError{Code: ErrCodeOpenTerm, Message: "open term"}
-	builtinErr := &BuiltinError{Code: ErrCodeDivisionByZero, Message: "div zero"}
-	internalErr := &InternalError{Code: ErrCodeInternalError, Message: "internal"}
+	builtinErr := &BuiltinError{
+		Code:    ErrCodeDivisionByZero,
+		Message: "div zero",
+	}
+	internalErr := &InternalError{
+		Code:    ErrCodeInternalError,
+		Message: "internal",
+	}
 
 	if !IsRecoverable(budgetErr) {
 		t.Error("BudgetError should be recoverable")
@@ -269,11 +331,20 @@ func TestIsRecoverable(t *testing.T) {
 }
 
 func TestGetErrorCode(t *testing.T) {
-	budgetErr := &BudgetError{Code: ErrCodeBudgetExhausted, Message: "out of budget"}
+	budgetErr := &BudgetError{
+		Code:    ErrCodeBudgetExhausted,
+		Message: "out of budget",
+	}
 	scriptErr := &ScriptError{Code: ErrCodeExplicitError, Message: "error"}
 	typeErr := &TypeError{Code: ErrCodeOpenTerm, Message: "open term"}
-	builtinErr := &BuiltinError{Code: ErrCodeDivisionByZero, Message: "div zero"}
-	internalErr := &InternalError{Code: ErrCodeInternalError, Message: "internal"}
+	builtinErr := &BuiltinError{
+		Code:    ErrCodeDivisionByZero,
+		Message: "div zero",
+	}
+	internalErr := &InternalError{
+		Code:    ErrCodeInternalError,
+		Message: "internal",
+	}
 
 	tests := []struct {
 		name     string
@@ -356,7 +427,12 @@ func TestErrorCodeRanges(t *testing.T) {
 
 	for _, tt := range tests {
 		if tt.code < tt.minRange || tt.code > tt.maxRange {
-			t.Errorf("error code %d not in expected range [%d, %d]", tt.code, tt.minRange, tt.maxRange)
+			t.Errorf(
+				"error code %d not in expected range [%d, %d]",
+				tt.code,
+				tt.minRange,
+				tt.maxRange,
+			)
 		}
 	}
 }

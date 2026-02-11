@@ -21,10 +21,30 @@ func TestBuiltinAvailability(t *testing.T) {
 		{"serialiseData in V1", SerialiseData, PlutusV1, false},
 		{"serialiseData in V2", SerialiseData, PlutusV2, true},
 		{"serialiseData in V3", SerialiseData, PlutusV3, true},
-		{"verifyEcdsaSecp256k1Signature in V1", VerifyEcdsaSecp256k1Signature, PlutusV1, false},
-		{"verifyEcdsaSecp256k1Signature in V2", VerifyEcdsaSecp256k1Signature, PlutusV2, true},
-		{"verifySchnorrSecp256k1Signature in V1", VerifySchnorrSecp256k1Signature, PlutusV1, false},
-		{"verifySchnorrSecp256k1Signature in V2", VerifySchnorrSecp256k1Signature, PlutusV2, true},
+		{
+			"verifyEcdsaSecp256k1Signature in V1",
+			VerifyEcdsaSecp256k1Signature,
+			PlutusV1,
+			false,
+		},
+		{
+			"verifyEcdsaSecp256k1Signature in V2",
+			VerifyEcdsaSecp256k1Signature,
+			PlutusV2,
+			true,
+		},
+		{
+			"verifySchnorrSecp256k1Signature in V1",
+			VerifySchnorrSecp256k1Signature,
+			PlutusV1,
+			false,
+		},
+		{
+			"verifySchnorrSecp256k1Signature in V2",
+			VerifySchnorrSecp256k1Signature,
+			PlutusV2,
+			true,
+		},
 
 		// V3 builtins
 		{"bls12_381_G1_add in V2", Bls12_381_G1_Add, PlutusV2, false},
@@ -43,8 +63,18 @@ func TestBuiltinAvailability(t *testing.T) {
 		{"insertCoin in V4", InsertCoin, PlutusV4, true},
 		{"valueContains in V3", ValueContains, PlutusV3, false},
 		{"valueContains in V4", ValueContains, PlutusV4, true},
-		{"bls12_381_G1_multiScalarMul in V3", Bls12_381_G1_MultiScalarMul, PlutusV3, false},
-		{"bls12_381_G1_multiScalarMul in V4", Bls12_381_G1_MultiScalarMul, PlutusV4, true},
+		{
+			"bls12_381_G1_multiScalarMul in V3",
+			Bls12_381_G1_MultiScalarMul,
+			PlutusV3,
+			false,
+		},
+		{
+			"bls12_381_G1_multiScalarMul in V4",
+			Bls12_381_G1_MultiScalarMul,
+			PlutusV4,
+			true,
+		},
 
 		// Unreleased builtins
 		{"dropList in V4", DropList, PlutusV4, false},
@@ -87,7 +117,13 @@ func TestBuiltinAvailabilityWithProto(t *testing.T) {
 		{"V4 builtin in V3 at PV11", ScaleValue, PlutusV3, 11, true},
 		{"expModInteger in V1 at PV11", ExpModInteger, PlutusV1, 11, true},
 		{"bitwise in V1 at PV11", AndByteString, PlutusV1, 11, true},
-		{"BLS MSM in V2 at PV11", Bls12_381_G1_MultiScalarMul, PlutusV2, 11, true},
+		{
+			"BLS MSM in V2 at PV11",
+			Bls12_381_G1_MultiScalarMul,
+			PlutusV2,
+			11,
+			true,
+		},
 		{"valueData in V1 at PV11", ValueData, PlutusV1, 11, true},
 		{"unValueData in V2 at PV11", UnValueData, PlutusV2, 11, true},
 
@@ -113,7 +149,13 @@ func TestBuiltinAvailabilityWithProto(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := tt.fn.IsAvailableInWithProto(tt.version, tt.protoMajor)
 			if got != tt.available {
-				t.Errorf("IsAvailableInWithProto(%v, %d) = %v, want %v", tt.version, tt.protoMajor, got, tt.available)
+				t.Errorf(
+					"IsAvailableInWithProto(%v, %d) = %v, want %v",
+					tt.version,
+					tt.protoMajor,
+					got,
+					tt.available,
+				)
 			}
 		})
 	}
@@ -137,7 +179,11 @@ func TestLanguageVersionToPlutusVersion(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := LanguageVersionToPlutusVersion(tt.version)
 			if got != tt.want {
-				t.Errorf("LanguageVersionToPlutusVersion() = %v, want %v", got, tt.want)
+				t.Errorf(
+					"LanguageVersionToPlutusVersion() = %v, want %v",
+					got,
+					tt.want,
+				)
 			}
 		})
 	}
@@ -146,18 +192,33 @@ func TestLanguageVersionToPlutusVersion(t *testing.T) {
 func TestIntroducedIn(t *testing.T) {
 	// Verify that key builtins return the correct version
 	if AddInteger.IntroducedIn() != PlutusV1 {
-		t.Errorf("AddInteger.IntroducedIn() = %v, want V1", AddInteger.IntroducedIn())
+		t.Errorf(
+			"AddInteger.IntroducedIn() = %v, want V1",
+			AddInteger.IntroducedIn(),
+		)
 	}
 	if SerialiseData.IntroducedIn() != PlutusV2 {
-		t.Errorf("SerialiseData.IntroducedIn() = %v, want V2", SerialiseData.IntroducedIn())
+		t.Errorf(
+			"SerialiseData.IntroducedIn() = %v, want V2",
+			SerialiseData.IntroducedIn(),
+		)
 	}
 	if Bls12_381_G1_Add.IntroducedIn() != PlutusV3 {
-		t.Errorf("Bls12_381_G1_Add.IntroducedIn() = %v, want V3", Bls12_381_G1_Add.IntroducedIn())
+		t.Errorf(
+			"Bls12_381_G1_Add.IntroducedIn() = %v, want V3",
+			Bls12_381_G1_Add.IntroducedIn(),
+		)
 	}
 	if LengthOfArray.IntroducedIn() != PlutusV4 {
-		t.Errorf("LengthOfArray.IntroducedIn() = %v, want V4", LengthOfArray.IntroducedIn())
+		t.Errorf(
+			"LengthOfArray.IntroducedIn() = %v, want V4",
+			LengthOfArray.IntroducedIn(),
+		)
 	}
 	if DropList.IntroducedIn() != PlutusVUnreleased {
-		t.Errorf("DropList.IntroducedIn() = %v, want unreleased", DropList.IntroducedIn())
+		t.Errorf(
+			"DropList.IntroducedIn() = %v, want unreleased",
+			DropList.IntroducedIn(),
+		)
 	}
 }

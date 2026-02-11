@@ -404,7 +404,10 @@ func (m *Machine[T]) compute(
 	}
 
 	if state == nil {
-		return nil, &InternalError{Code: ErrCodeInternalError, Message: "compute: state is nil"}
+		return nil, &InternalError{
+			Code:    ErrCodeInternalError,
+			Message: "compute: state is nil",
+		}
 	}
 
 	return state, nil
@@ -623,7 +626,10 @@ func (m *Machine[T]) returnCompute(
 	}
 
 	if state == nil {
-		return nil, &InternalError{Code: ErrCodeInternalError, Message: "returnCompute: state is nil"}
+		return nil, &InternalError{
+			Code:    ErrCodeInternalError,
+			Message: "returnCompute: state is nil",
+		}
 	}
 
 	return state, nil
@@ -951,8 +957,13 @@ func (m *Machine[T]) spendUnbudgetedSteps() error {
 
 func (m *Machine[T]) spendBudget(exBudget ExBudget) error {
 	if DebugBudget {
-		log.Printf("[PLUTIGO-BUDGET] Spending mem=%d cpu=%d, before: mem=%d cpu=%d",
-			exBudget.Mem, exBudget.Cpu, m.ExBudget.Mem, m.ExBudget.Cpu)
+		log.Printf(
+			"[PLUTIGO-BUDGET] Spending mem=%d cpu=%d, before: mem=%d cpu=%d",
+			exBudget.Mem,
+			exBudget.Cpu,
+			m.ExBudget.Mem,
+			m.ExBudget.Cpu,
+		)
 	}
 
 	m.ExBudget.Mem -= exBudget.Mem

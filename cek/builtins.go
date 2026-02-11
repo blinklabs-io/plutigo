@@ -139,7 +139,11 @@ func divideInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	// Check for division by zero
 
 	if arg2.Sign() == 0 {
-		return nil, &BuiltinError{Code: ErrCodeDivisionByZero, Builtin: "divideInteger", Message: "division by zero"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeDivisionByZero,
+			Builtin: "divideInteger",
+			Message: "division by zero",
+		}
 	}
 
 	err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
@@ -185,7 +189,11 @@ func quotientInteger[T syn.Eval](
 	// Check for division by zero
 
 	if arg2.Sign() == 0 {
-		return nil, &BuiltinError{Code: ErrCodeDivisionByZero, Builtin: "divideInteger", Message: "division by zero"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeDivisionByZero,
+			Builtin: "divideInteger",
+			Message: "division by zero",
+		}
 	}
 
 	err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
@@ -226,7 +234,11 @@ func remainderInteger[T syn.Eval](
 	// Check for division by zero
 
 	if arg2.Sign() == 0 {
-		return nil, &BuiltinError{Code: ErrCodeDivisionByZero, Builtin: "divideInteger", Message: "division by zero"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeDivisionByZero,
+			Builtin: "divideInteger",
+			Message: "division by zero",
+		}
 	}
 
 	err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
@@ -263,7 +275,11 @@ func modInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	// Check for division by zero
 	if arg2.Sign() == 0 {
-		return nil, &BuiltinError{Code: ErrCodeDivisionByZero, Builtin: "divideInteger", Message: "division by zero"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeDivisionByZero,
+			Builtin: "divideInteger",
+			Message: "division by zero",
+		}
 	}
 
 	err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
@@ -446,7 +462,11 @@ func consByteString[T syn.Eval](
 	}
 
 	if !arg1.IsInt64() {
-		return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "consByteString", Message: "int does not fit into a byte"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "consByteString",
+			Message: "int does not fit into a byte",
+		}
 	}
 
 	int_val := arg1.Int64()
@@ -461,7 +481,11 @@ func consByteString[T syn.Eval](
 	default:
 		// consByteString requires the integer to be in the range 0-255 in V3+
 		if int_val < 0 || int_val > 255 {
-			return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "consByteString", Message: "int does not fit into a byte"}
+			return nil, &BuiltinError{
+				Code:    ErrCodeOverflow,
+				Builtin: "consByteString",
+				Message: "int does not fit into a byte",
+			}
 		}
 	}
 
@@ -598,12 +622,20 @@ func indexByteString[T syn.Eval](
 
 	index, ok := arg2.Int64(), arg2.IsInt64()
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeOutOfBounds, Builtin: "indexByteString", Message: "byte string out of bounds"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOutOfBounds,
+			Builtin: "indexByteString",
+			Message: "byte string out of bounds",
+		}
 	}
 
 	// Check bounds: index must be in range [0, len(arg1))
 	if index < 0 || index > int64(math.MaxInt) || int(index) >= len(arg1) {
-		return nil, &BuiltinError{Code: ErrCodeOutOfBounds, Builtin: "indexByteString", Message: "byte string out of bounds"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOutOfBounds,
+			Builtin: "indexByteString",
+			Message: "byte string out of bounds",
+		}
 	}
 
 	res := int64(arg1[index])
@@ -938,15 +970,27 @@ func verifyEcdsaSecp256K1Signature[T syn.Eval](
 	}
 
 	if len(publicKey) != 33 {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "verifyEd25519Signature", Message: "invalid public key length"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "verifyEd25519Signature",
+			Message: "invalid public key length",
+		}
 	}
 
 	if len(signature) != 64 {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "verifyEcdsaSecp256k1Signature", Message: "invalid signature length"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "verifyEcdsaSecp256k1Signature",
+			Message: "invalid signature length",
+		}
 	}
 
 	if len(message) != 32 {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "verifyEcdsaSecp256k1Signature", Message: "invalid message length"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "verifyEcdsaSecp256k1Signature",
+			Message: "invalid message length",
+		}
 	}
 
 	key, err := btcec.ParsePubKey(publicKey)
@@ -958,13 +1002,21 @@ func verifyEcdsaSecp256K1Signature[T syn.Eval](
 
 	overflow := r.SetByteSlice(signature[0:32])
 	if overflow {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "verifyEcdsaSecp256k1Signature", Message: "invalid signature (r)"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "verifyEcdsaSecp256k1Signature",
+			Message: "invalid signature (r)",
+		}
 	}
 
 	s := new(btcec.ModNScalar)
 	overflow = s.SetByteSlice(signature[32:])
 	if overflow {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "verifyEcdsaSecp256k1Signature", Message: "invalid signature (s)"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "verifyEcdsaSecp256k1Signature",
+			Message: "invalid signature (s)",
+		}
 	}
 
 	sig := ecdsa.NewSignature(r, s)
@@ -1013,7 +1065,11 @@ func verifySchnorrSecp256K1Signature[T syn.Eval](
 	}
 
 	if len(signature) != 64 {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "verifySchnorrSecp256k1Signature", Message: "invalid signature length"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "verifySchnorrSecp256k1Signature",
+			Message: "invalid signature length",
+		}
 	}
 
 	key, err := schnorr.ParsePubKey(publicKey)
@@ -1134,7 +1190,11 @@ func schnorrVerify(
 	//
 	// Fail if R is the point at infinity
 	if (R.X.IsZero() && R.Y.IsZero()) || R.Z.IsZero() {
-		return &BuiltinError{Code: ErrCodeValidationFailed, Builtin: "schnorrVerify", Message: "calculated R point is the point at infinity"}
+		return &BuiltinError{
+			Code:    ErrCodeValidationFailed,
+			Builtin: "schnorrVerify",
+			Message: "calculated R point is the point at infinity",
+		}
 	}
 
 	// Step 8.
@@ -1144,7 +1204,11 @@ func schnorrVerify(
 	// Note that R must be in affine coordinates for this check.
 	R.ToAffine()
 	if R.Y.IsOdd() {
-		return &BuiltinError{Code: ErrCodeValidationFailed, Builtin: "schnorrVerify", Message: "calculated R y-value is odd"}
+		return &BuiltinError{
+			Code:    ErrCodeValidationFailed,
+			Builtin: "schnorrVerify",
+			Message: "calculated R y-value is odd",
+		}
 	}
 
 	// Step 9.
@@ -1153,7 +1217,11 @@ func schnorrVerify(
 	//
 	// Note that R must be in affine coordinates for this check.
 	if !r.Equals(&R.X) {
-		return &BuiltinError{Code: ErrCodeValidationFailed, Builtin: "schnorrVerify", Message: "calculated R point was not given R"}
+		return &BuiltinError{
+			Code:    ErrCodeValidationFailed,
+			Builtin: "schnorrVerify",
+			Message: "calculated R point was not given R",
+		}
 	}
 
 	// Step 10.
@@ -1275,7 +1343,11 @@ func decodeUtf8[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	if !utf8.Valid(arg1) {
-		return nil, &BuiltinError{Code: ErrCodeDecodeFailure, Builtin: "decodeUtf8", Message: "error decoding utf8 bytes"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeDecodeFailure,
+			Builtin: "decodeUtf8",
+			Message: "error decoding utf8 bytes",
+		}
 	}
 
 	res := string(arg1)
@@ -1477,7 +1549,11 @@ func headList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	if len(arg1.List) == 0 {
-		return nil, &BuiltinError{Code: ErrCodeOutOfBounds, Builtin: "headList", Message: "headList on an empty list"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOutOfBounds,
+			Builtin: "headList",
+			Message: "headList on an empty list",
+		}
 	}
 
 	value := &Constant{arg1.List[0]}
@@ -1499,7 +1575,11 @@ func tailList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	if len(arg1.List) == 0 {
-		return nil, &BuiltinError{Code: ErrCodeOutOfBounds, Builtin: "tailList", Message: "tailList on an empty list"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOutOfBounds,
+			Builtin: "tailList",
+			Message: "tailList on an empty list",
+		}
 	}
 
 	tailList := arg1.List[1:]
@@ -1595,7 +1675,11 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	if arg1.Sign() < 0 {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "constrData", Message: "constructor tag must be non-negative"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "constrData",
+			Message: "constructor tag must be non-negative",
+		}
 	}
 
 	arg2, err := unwrapList[T](&syn.TData{}, m.argHolder[1])
@@ -1616,11 +1700,19 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	if arg1.BitLen() > 64 {
-		return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "constrData", Message: "constructor tag too large"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "constrData",
+			Message: "constructor tag too large",
+		}
 	}
 	tag64 := arg1.Uint64()
 	if tag64 > uint64(math.MaxUint) {
-		return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "constrData", Message: "constructor tag too large"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "constrData",
+			Message: "constructor tag too large",
+		}
 	}
 	tag := uint(tag64)
 
@@ -2237,7 +2329,11 @@ func bls12381G1Uncompress[T syn.Eval](
 	}
 
 	if len(arg1) != bls.SizeOfG1AffineCompressed {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "bls12_381_G1_uncompress", Message: "bytestring is too long"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "bls12_381_G1_uncompress",
+			Message: "bytestring is too long",
+		}
 	}
 
 	uncompressed := new(bls.G1Affine)
@@ -2278,7 +2374,11 @@ func bls12381G1HashToGroup[T syn.Eval](
 	}
 
 	if len(arg2) > 255 {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "bls12_381_G1_hashToGroup", Message: "hash to curve dst too big"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "bls12_381_G1_hashToGroup",
+			Message: "hash to curve dst too big",
+		}
 	}
 
 	// TODO probably impement our own HashToG1
@@ -2413,11 +2513,19 @@ func bls12381G1MultiScalarMul[T syn.Eval](
 	for i := range n {
 		ni, ok := ints.List[i].(*syn.Integer)
 		if !ok {
-			return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "bls12_381_G1_multiScalarMul", Message: "expected integer list"}
+			return nil, &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: "bls12_381_G1_multiScalarMul",
+				Message: "expected integer list",
+			}
 		}
 		pi, ok := elems.List[i].(*syn.Bls12_381G1Element)
 		if !ok {
-			return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "bls12_381_G1_multiScalarMul", Message: "expected g1 element list"}
+			return nil, &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: "bls12_381_G1_multiScalarMul",
+				Message: "expected g1 element list",
+			}
 		}
 
 		tmp := new(bls.G1Jac).ScalarMultiplication(pi.Inner, ni.Inner)
@@ -2461,11 +2569,19 @@ func bls12381G2MultiScalarMul[T syn.Eval](
 	for i := range n {
 		ni, ok := ints.List[i].(*syn.Integer)
 		if !ok {
-			return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "bls12_381_G2_multiScalarMul", Message: "expected integer list"}
+			return nil, &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: "bls12_381_G2_multiScalarMul",
+				Message: "expected integer list",
+			}
 		}
 		pi, ok := elems.List[i].(*syn.Bls12_381G2Element)
 		if !ok {
-			return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "bls12_381_G2_multiScalarMul", Message: "expected g2 element list"}
+			return nil, &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: "bls12_381_G2_multiScalarMul",
+				Message: "expected g2 element list",
+			}
 		}
 
 		tmp := new(bls.G2Jac).ScalarMultiplication(pi.Inner, ni.Inner)
@@ -2545,7 +2661,11 @@ func bls12381G2Uncompress[T syn.Eval](
 	}
 
 	if len(arg1) != bls.SizeOfG2AffineCompressed {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "bls12_381_G2_uncompress", Message: "bytestring is too long"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "bls12_381_G2_uncompress",
+			Message: "bytestring is too long",
+		}
 	}
 
 	uncompressed := new(bls.G2Affine)
@@ -2586,7 +2706,11 @@ func bls12381G2HashToGroup[T syn.Eval](
 	}
 
 	if len(arg2) > 255 {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "bls12_381_G2_hashToGroup", Message: "hash to curve dst too big"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "bls12_381_G2_hashToGroup",
+			Message: "hash to curve dst too big",
+		}
 	}
 
 	// TODO probably impement our own HashToG2
@@ -2781,7 +2905,11 @@ func integerToByteString[T syn.Eval](
 
 	// Convert size to int64
 	if !size.IsInt64() {
-		return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "integerToByteString", Message: "size too large"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "integerToByteString",
+			Message: "size too large",
+		}
 	}
 
 	sizeInt64 := size.Int64()
@@ -2796,7 +2924,11 @@ func integerToByteString[T syn.Eval](
 	sizeUnwrapped := int(sizeInt64)
 
 	if sizeUnwrapped > IntegerToByteStringMaximumOutputLength {
-		return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "integerToByteString", Message: "size too large"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "integerToByteString",
+			Message: "size too large",
+		}
 	}
 
 	// Apply cost
@@ -3196,19 +3328,31 @@ func readBit[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	// Check for empty byte string
 	if len(bytes) == 0 {
-		return nil, &BuiltinError{Code: ErrCodeOutOfBounds, Builtin: "readBit", Message: "empty byte array"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOutOfBounds,
+			Builtin: "readBit",
+			Message: "empty byte array",
+		}
 	}
 
 	// Validate bit index
 	if bitIndex.Sign() < 0 ||
 		bitIndex.Cmp(big.NewInt(int64(len(bytes)*8))) >= 0 {
-		return nil, &BuiltinError{Code: ErrCodeOutOfBounds, Builtin: "readBit", Message: "bit index out of bounds"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOutOfBounds,
+			Builtin: "readBit",
+			Message: "bit index out of bounds",
+		}
 	}
 
 	// Convert bit index to int64
 	bitIndexInt, ok := bitIndex.Int64(), bitIndex.IsInt64()
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "readBit", Message: "bit index too large"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "readBit",
+			Message: "bit index too large",
+		}
 	}
 
 	// Compute byte index and bit offset
@@ -3277,13 +3421,21 @@ func writeBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		// Validate bit index
 		if bitIndex.Inner.Sign() < 0 ||
 			bitIndex.Inner.Cmp(big.NewInt(int64(len(bytes)*8))) >= 0 {
-			return nil, &BuiltinError{Code: ErrCodeOutOfBounds, Builtin: "writeBits", Message: "bit index out of bounds"}
+			return nil, &BuiltinError{
+				Code:    ErrCodeOutOfBounds,
+				Builtin: "writeBits",
+				Message: "bit index out of bounds",
+			}
 		}
 
 		// Convert bit index to int64
 		bitIndexInt, ok := bitIndex.Inner.Int64(), bitIndex.Inner.IsInt64()
 		if !ok {
-			return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "writeBits", Message: "bit index too large"}
+			return nil, &BuiltinError{
+				Code:    ErrCodeOverflow,
+				Builtin: "writeBits",
+				Message: "bit index too large",
+			}
 		}
 
 		// Compute byte index and bit offset
@@ -3327,19 +3479,35 @@ func replicateByte[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	// Validate size
 	if size.Sign() < 0 {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "replicateByte", Message: "negative size"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "replicateByte",
+			Message: "negative size",
+		}
 	}
 	if !size.IsInt64() {
-		return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "replicateByte", Message: "size too large"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "replicateByte",
+			Message: "size too large",
+		}
 	}
 	sizeInt64 := size.Int64()
 	if sizeInt64 > int64(math.MaxInt) {
-		return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "replicateByte", Message: "size too large"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "replicateByte",
+			Message: "size too large",
+		}
 	}
 	sizeInt := int(sizeInt64)
 
 	if sizeInt > IntegerToByteStringMaximumOutputLength {
-		return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "replicateByte", Message: "size too large"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "replicateByte",
+			Message: "size too large",
+		}
 	}
 
 	// Validate byte
@@ -3409,11 +3577,19 @@ func shiftByteString[T syn.Eval](
 
 	// Convert shift to int
 	if !shift.IsInt64() {
-		return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "shiftByteString", Message: "shift value too large"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "shiftByteString",
+			Message: "shift value too large",
+		}
 	}
 	shift64 := shift.Int64()
 	if shift64 > int64(math.MaxInt) || shift64 < int64(math.MinInt) {
-		return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "shiftByteString", Message: "shift value out of range"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "shiftByteString",
+			Message: "shift value out of range",
+		}
 	}
 	shiftVal := int(shift64)
 
@@ -3498,12 +3674,20 @@ func rotateByteString[T syn.Eval](
 
 	// Convert normalized shift to int64
 	if !normalizedShift.IsInt64() {
-		return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "rotateByteString", Message: "normalized shift too large"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "rotateByteString",
+			Message: "normalized shift too large",
+		}
 	}
 	normalizedShift64 := normalizedShift.Int64()
 	if normalizedShift64 > int64(math.MaxInt) ||
 		normalizedShift64 < int64(math.MinInt) {
-		return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "rotateByteString", Message: "normalized shift out of range"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "rotateByteString",
+			Message: "normalized shift out of range",
+		}
 	}
 	shiftVal := int(normalizedShift64)
 
@@ -3676,7 +3860,11 @@ func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	// Validate modulus
 	if mm.Sign() <= 0 {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "expModInteger", Message: "invalid modulus m <= 0"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "expModInteger",
+			Message: "invalid modulus m <= 0",
+		}
 	}
 
 	// Special case: modulus is 1
@@ -3808,7 +3996,11 @@ func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	if nVal.IsInt64() {
 		nVal64 := nVal.Int64()
 		if nVal64 > int64(math.MaxInt) {
-			return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "dropList", Message: "n too large"}
+			return nil, &BuiltinError{
+				Code:    ErrCodeOverflow,
+				Builtin: "dropList",
+				Message: "n too large",
+			}
 		}
 		ni := int(nVal64)
 		start = min(ni, len(lst.List))
@@ -3833,7 +4025,11 @@ func lengthOfArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	// The tests use (con (array t) [ ... ]) which is parsed to a ProtoList.
 	lstConst, ok := m.argHolder[0].(*Constant)
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "lengthOfArray", Message: "expected constant"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "lengthOfArray",
+			Message: "expected constant",
+		}
 	}
 
 	switch c := lstConst.Constant.(type) {
@@ -3887,20 +4083,36 @@ func indexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	if idx.Sign() < 0 {
-		return nil, &BuiltinError{Code: ErrCodeOutOfBounds, Builtin: "indexArray", Message: "negative index"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOutOfBounds,
+			Builtin: "indexArray",
+			Message: "negative index",
+		}
 	}
 
 	if !idx.IsInt64() {
-		return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "indexArray", Message: "index too large"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "indexArray",
+			Message: "index too large",
+		}
 	}
 
 	idx64 := idx.Int64()
 	if idx64 > int64(math.MaxInt) {
-		return nil, &BuiltinError{Code: ErrCodeOutOfBounds, Builtin: "indexArray", Message: "index out of range"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeOutOfBounds,
+			Builtin: "indexArray",
+			Message: "index out of range",
+		}
 	}
 	i := int(idx64)
 	if i >= len(lst.List) {
-		return nil, fmt.Errorf("index %d out of bounds for array of length %d", i, len(lst.List))
+		return nil, fmt.Errorf(
+			"index %d out of bounds for array of length %d",
+			i,
+			len(lst.List),
+		)
 	}
 
 	return &Constant{lst.List[i]}, nil
@@ -3941,16 +4153,28 @@ func multiIndexArray[T syn.Eval](
 		idx := idxInt.Inner
 
 		if idx.Sign() < 0 {
-			return nil, &BuiltinError{Code: ErrCodeOutOfBounds, Builtin: "indexArray", Message: "negative index"}
+			return nil, &BuiltinError{
+				Code:    ErrCodeOutOfBounds,
+				Builtin: "indexArray",
+				Message: "negative index",
+			}
 		}
 
 		if !idx.IsInt64() {
-			return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "indexArray", Message: "index too large"}
+			return nil, &BuiltinError{
+				Code:    ErrCodeOverflow,
+				Builtin: "indexArray",
+				Message: "index too large",
+			}
 		}
 
 		idx64 := idx.Int64()
 		if idx64 > int64(math.MaxInt) {
-			return nil, &BuiltinError{Code: ErrCodeOutOfBounds, Builtin: "indexArray", Message: "index out of range"}
+			return nil, &BuiltinError{
+				Code:    ErrCodeOutOfBounds,
+				Builtin: "indexArray",
+				Message: "index out of range",
+			}
 		}
 		i := int(idx64)
 		if i >= len(arr.List) {
@@ -4101,12 +4325,20 @@ func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	valConst, ok := m.argHolder[3].(*Constant)
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "insertCoin", Message: "expected value constant"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "insertCoin",
+			Message: "expected value constant",
+		}
 	}
 
 	plist, ok := valConst.Constant.(*syn.ProtoList)
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "insertCoin", Message: "expected value proto list"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "insertCoin",
+			Message: "expected value proto list",
+		}
 	}
 	// Spend budget for insertCoin (4 args: policy, token, amount, value)
 	// The cost model uses linear_in_u where u is the value size
@@ -4123,7 +4355,11 @@ func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	// allow oversize keys when inserting zero (effectively removing)
 	if len(policyBs) > 32 || len(tokenBs) > 32 {
 		if amt.Sign() != 0 {
-			return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "insertCoin", Message: "key too long"}
+			return nil, &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: "insertCoin",
+				Message: "key too long",
+			}
 		}
 	}
 
@@ -4133,7 +4369,11 @@ func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	negLimit := new(big.Int).Neg(limit)                     // -2^127
 	if amt.Sign() >= 0 {
 		if amt.Cmp(limitMinusOne) > 0 {
-			return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "insertCoin", Message: "amount out of range"}
+			return nil, &BuiltinError{
+				Code:    ErrCodeOverflow,
+				Builtin: "insertCoin",
+				Message: "amount out of range",
+			}
 		}
 	} else {
 		if amt.Cmp(negLimit) < 0 {
@@ -4173,11 +4413,19 @@ func lookupCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 	valConst, ok := m.argHolder[2].(*Constant)
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "lookupCoin", Message: "expected value constant"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "lookupCoin",
+			Message: "expected value constant",
+		}
 	}
 	plist, ok := valConst.Constant.(*syn.ProtoList)
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "lookupCoin", Message: "expected value proto list"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "lookupCoin",
+			Message: "expected value proto list",
+		}
 	}
 	// Spend budget for lookupCoin (3 args: policy, token, value)
 	// Cost model uses linear_in_z (the value size)
@@ -4207,11 +4455,19 @@ func scaleValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 	valConst, ok := m.argHolder[1].(*Constant)
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "scaleValue", Message: "expected value constant"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "scaleValue",
+			Message: "expected value constant",
+		}
 	}
 	plist, ok := valConst.Constant.(*syn.ProtoList)
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "scaleValue", Message: "expected value proto list"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "scaleValue",
+			Message: "expected value proto list",
+		}
 	}
 	// Spend budget for scaleValue (2 args: factor, value)
 	// Cost model uses linear_in_y (the value size with minus-one formula)
@@ -4238,7 +4494,11 @@ func scaleValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			// Check bounds: [-(2^127), 2^127-1]
 			if prod.Sign() >= 0 {
 				if prod.Cmp(limitMinusOne) > 0 {
-					return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "scaleValue", Message: "amount out of range"}
+					return nil, &BuiltinError{
+						Code:    ErrCodeOverflow,
+						Builtin: "scaleValue",
+						Message: "amount out of range",
+					}
 				}
 			} else {
 				if prod.Cmp(negLimit) < 0 {
@@ -4255,19 +4515,35 @@ func unionValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 	aConst, ok := m.argHolder[0].(*Constant)
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unionValue", Message: "expected value constant for a"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "unionValue",
+			Message: "expected value constant for a",
+		}
 	}
 	bConst, ok := m.argHolder[1].(*Constant)
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unionValue", Message: "expected value constant for b"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "unionValue",
+			Message: "expected value constant for b",
+		}
 	}
 	aList, ok := aConst.Constant.(*syn.ProtoList)
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unionValue", Message: "expected proto list for a"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "unionValue",
+			Message: "expected proto list for a",
+		}
 	}
 	bList, ok := bConst.Constant.(*syn.ProtoList)
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unionValue", Message: "expected proto list for b"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "unionValue",
+			Message: "expected proto list for b",
+		}
 	}
 	// Spend budget for unionValue (2 args: value a, value b)
 	// Cost model uses with_interaction_in_x_and_y (outer count only - number of policies)
@@ -4296,7 +4572,11 @@ func unionValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			// bounds check
 			if cur.Sign() >= 0 {
 				if cur.Cmp(limitMinusOne) > 0 {
-					return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "unionValue", Message: "amount out of range"}
+					return nil, &BuiltinError{
+						Code:    ErrCodeOverflow,
+						Builtin: "unionValue",
+						Message: "amount out of range",
+					}
 				}
 			} else {
 				if cur.Cmp(negLimit) < 0 {
@@ -4314,19 +4594,35 @@ func valueContains[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	// Args: value, requiredValue
 	valConst, ok := m.argHolder[0].(*Constant)
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "valueContains", Message: "expected value constant"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "valueContains",
+			Message: "expected value constant",
+		}
 	}
 	reqConst, ok := m.argHolder[1].(*Constant)
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "valueContains", Message: "expected required value constant"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "valueContains",
+			Message: "expected required value constant",
+		}
 	}
 	valList, ok := valConst.Constant.(*syn.ProtoList)
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "valueContains", Message: "expected proto list for value"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "valueContains",
+			Message: "expected proto list for value",
+		}
 	}
 	reqList, ok := reqConst.Constant.(*syn.ProtoList)
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "valueContains", Message: "expected proto list for required value"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "valueContains",
+			Message: "expected proto list for required value",
+		}
 	}
 	// Spend budget for valueContains (2 args: value, required value)
 	// Cost model uses const_above_diagonal with linear_in_x_and_y (token count)
@@ -4343,14 +4639,22 @@ func valueContains[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	for _, tokens := range rm {
 		for _, amt := range tokens {
 			if amt.Sign() < 0 {
-				return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "valueContains", Message: "required value contains negative amount"}
+				return nil, &BuiltinError{
+					Code:    ErrCodeInvalidArgument,
+					Builtin: "valueContains",
+					Message: "required value contains negative amount",
+				}
 			}
 		}
 	}
 	for _, tokens := range vm {
 		for _, amt := range tokens {
 			if amt.Sign() < 0 {
-				return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "valueContains", Message: "value contains negative amount"}
+				return nil, &BuiltinError{
+					Code:    ErrCodeInvalidArgument,
+					Builtin: "valueContains",
+					Message: "value contains negative amount",
+				}
 			}
 		}
 	}
@@ -4381,12 +4685,20 @@ func valueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	valConst, ok := m.argHolder[0].(*Constant)
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "valueData", Message: "expected value constant"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "valueData",
+			Message: "expected value constant",
+		}
 	}
 
 	plist, ok := valConst.Constant.(*syn.ProtoList)
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "valueData", Message: "expected value proto list"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "valueData",
+			Message: "expected value proto list",
+		}
 	}
 
 	// Spend budget for valueData (1 arg: value)
@@ -4460,7 +4772,11 @@ func unValueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	// Must be a Map
 	dmap, ok := d.(*data.Map)
 	if !ok {
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unValueData", Message: "expected data map"}
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "unValueData",
+			Message: "expected data map",
+		}
 	}
 
 	// Bounds for quantity: [-2^127, 2^127-1]
@@ -4476,22 +4792,38 @@ func unValueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		// Key must be ByteString (policy)
 		policyData, ok := pair[0].(*data.ByteString)
 		if !ok {
-			return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unValueData", Message: "expected bytestring for currency key"}
+			return nil, &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: "unValueData",
+				Message: "expected bytestring for currency key",
+			}
 		}
 
 		// Enforce max key length for policy (32 bytes)
 		if len(policyData.Inner) > 32 {
-			return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unValueData", Message: "currency key too long"}
+			return nil, &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: "unValueData",
+				Message: "currency key too long",
+			}
 		}
 
 		// Check ordering: currencies must be in ascending order
 		if prevPolicy != nil {
 			cmp := bytes.Compare(prevPolicy, policyData.Inner)
 			if cmp == 0 {
-				return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unValueData", Message: "duplicate currency key"}
+				return nil, &BuiltinError{
+					Code:    ErrCodeInvalidArgument,
+					Builtin: "unValueData",
+					Message: "duplicate currency key",
+				}
 			}
 			if cmp > 0 {
-				return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unValueData", Message: "currency keys not in ascending order"}
+				return nil, &BuiltinError{
+					Code:    ErrCodeInvalidArgument,
+					Builtin: "unValueData",
+					Message: "currency keys not in ascending order",
+				}
 			}
 		}
 		prevPolicy = policyData.Inner
@@ -4499,12 +4831,20 @@ func unValueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		// Value must be a Map of tokens
 		tokensData, ok := pair[1].(*data.Map) //nolint:gosec // pair is [2]PlutusData, always has 2 elements
 		if !ok {
-			return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unValueData", Message: "expected map for tokens"}
+			return nil, &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: "unValueData",
+				Message: "expected map for tokens",
+			}
 		}
 
 		// Check for empty tokens (not allowed)
 		if len(tokensData.Pairs) == 0 {
-			return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unValueData", Message: "empty token map"}
+			return nil, &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: "unValueData",
+				Message: "empty token map",
+			}
 		}
 
 		tokenPairs := make([]syn.IConstant, 0, len(tokensData.Pairs))
@@ -4514,22 +4854,38 @@ func unValueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			// Token key must be ByteString
 			tokenData, ok := tkPair[0].(*data.ByteString)
 			if !ok {
-				return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unValueData", Message: "expected bytestring for token key"}
+				return nil, &BuiltinError{
+					Code:    ErrCodeInvalidArgument,
+					Builtin: "unValueData",
+					Message: "expected bytestring for token key",
+				}
 			}
 
 			// Enforce max key length for token (32 bytes)
 			if len(tokenData.Inner) > 32 {
-				return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unValueData", Message: "token key too long"}
+				return nil, &BuiltinError{
+					Code:    ErrCodeInvalidArgument,
+					Builtin: "unValueData",
+					Message: "token key too long",
+				}
 			}
 
 			// Check ordering: tokens must be in ascending order
 			if prevToken != nil {
 				cmp := bytes.Compare(prevToken, tokenData.Inner)
 				if cmp == 0 {
-					return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unValueData", Message: "duplicate token key"}
+					return nil, &BuiltinError{
+						Code:    ErrCodeInvalidArgument,
+						Builtin: "unValueData",
+						Message: "duplicate token key",
+					}
 				}
 				if cmp > 0 {
-					return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unValueData", Message: "token keys not in ascending order"}
+					return nil, &BuiltinError{
+						Code:    ErrCodeInvalidArgument,
+						Builtin: "unValueData",
+						Message: "token keys not in ascending order",
+					}
 				}
 			}
 			prevToken = tokenData.Inner
@@ -4537,18 +4893,30 @@ func unValueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			// Amount must be Integer
 			amtData, ok := tkPair[1].(*data.Integer) //nolint:gosec // tkPair is [2]PlutusData, always has 2 elements
 			if !ok {
-				return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unValueData", Message: "expected integer for amount"}
+				return nil, &BuiltinError{
+					Code:    ErrCodeInvalidArgument,
+					Builtin: "unValueData",
+					Message: "expected integer for amount",
+				}
 			}
 
 			// Check for zero amounts (not allowed)
 			if amtData.Inner.Sign() == 0 {
-				return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unValueData", Message: "zero quantity not allowed"}
+				return nil, &BuiltinError{
+					Code:    ErrCodeInvalidArgument,
+					Builtin: "unValueData",
+					Message: "zero quantity not allowed",
+				}
 			}
 
 			// Check quantity bounds: [-2^127, 2^127-1]
 			if amtData.Inner.Sign() >= 0 {
 				if amtData.Inner.Cmp(limitMinusOne) > 0 {
-					return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "unValueData", Message: "quantity out of range"}
+					return nil, &BuiltinError{
+						Code:    ErrCodeOverflow,
+						Builtin: "unValueData",
+						Message: "quantity out of range",
+					}
 				}
 			} else {
 				if amtData.Inner.Cmp(negLimit) < 0 {
@@ -4567,11 +4935,17 @@ func unValueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		result = append(result, &syn.ProtoPair{
 			FstType: &syn.TByteString{},
 			SndType: &syn.TList{
-				Typ: &syn.TPair{First: &syn.TByteString{}, Second: &syn.TInteger{}},
+				Typ: &syn.TPair{
+					First:  &syn.TByteString{},
+					Second: &syn.TInteger{},
+				},
 			},
 			First: &syn.ByteString{Inner: policyData.Inner},
 			Second: &syn.ProtoList{
-				LTyp: &syn.TPair{First: &syn.TByteString{}, Second: &syn.TInteger{}},
+				LTyp: &syn.TPair{
+					First:  &syn.TByteString{},
+					Second: &syn.TInteger{},
+				},
 				List: tokenPairs,
 			},
 		})
