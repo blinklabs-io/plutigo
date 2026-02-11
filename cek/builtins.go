@@ -191,7 +191,7 @@ func quotientInteger[T syn.Eval](
 	if arg2.Sign() == 0 {
 		return nil, &BuiltinError{
 			Code:    ErrCodeDivisionByZero,
-			Builtin: "divideInteger",
+			Builtin: "quotientInteger",
 			Message: "division by zero",
 		}
 	}
@@ -236,7 +236,7 @@ func remainderInteger[T syn.Eval](
 	if arg2.Sign() == 0 {
 		return nil, &BuiltinError{
 			Code:    ErrCodeDivisionByZero,
-			Builtin: "divideInteger",
+			Builtin: "remainderInteger",
 			Message: "division by zero",
 		}
 	}
@@ -277,7 +277,7 @@ func modInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	if arg2.Sign() == 0 {
 		return nil, &BuiltinError{
 			Code:    ErrCodeDivisionByZero,
-			Builtin: "divideInteger",
+			Builtin: "modInteger",
 			Message: "division by zero",
 		}
 	}
@@ -972,7 +972,7 @@ func verifyEcdsaSecp256K1Signature[T syn.Eval](
 	if len(publicKey) != 33 {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
-			Builtin: "verifyEd25519Signature",
+			Builtin: "verifyEcdsaSecp256k1Signature",
 			Message: "invalid public key length",
 		}
 	}
@@ -4108,11 +4108,11 @@ func indexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 	i := int(idx64)
 	if i >= len(lst.List) {
-		return nil, fmt.Errorf(
-			"index %d out of bounds for array of length %d",
-			i,
-			len(lst.List),
-		)
+		return nil, &BuiltinError{
+			Code:    ErrCodeOutOfBounds,
+			Builtin: "indexArray",
+			Message: fmt.Sprintf("index %d out of bounds for array of length %d", i, len(lst.List)),
+		}
 	}
 
 	return &Constant{lst.List[i]}, nil
@@ -4155,7 +4155,7 @@ func multiIndexArray[T syn.Eval](
 		if idx.Sign() < 0 {
 			return nil, &BuiltinError{
 				Code:    ErrCodeOutOfBounds,
-				Builtin: "indexArray",
+				Builtin: "multiIndexArray",
 				Message: "negative index",
 			}
 		}
@@ -4163,7 +4163,7 @@ func multiIndexArray[T syn.Eval](
 		if !idx.IsInt64() {
 			return nil, &BuiltinError{
 				Code:    ErrCodeOverflow,
-				Builtin: "indexArray",
+				Builtin: "multiIndexArray",
 				Message: "index too large",
 			}
 		}
@@ -4172,13 +4172,17 @@ func multiIndexArray[T syn.Eval](
 		if idx64 > int64(math.MaxInt) {
 			return nil, &BuiltinError{
 				Code:    ErrCodeOutOfBounds,
-				Builtin: "indexArray",
+				Builtin: "multiIndexArray",
 				Message: "index out of range",
 			}
 		}
 		i := int(idx64)
 		if i >= len(arr.List) {
-			return nil, fmt.Errorf("index out of bounds %d", i)
+			return nil, &BuiltinError{
+				Code:    ErrCodeOutOfBounds,
+				Builtin: "multiIndexArray",
+				Message: fmt.Sprintf("index %d out of bounds for array of length %d", i, len(arr.List)),
+			}
 		}
 
 		result = append(result, arr.List[i])
