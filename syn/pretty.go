@@ -248,7 +248,7 @@ func (pp *PrettyPrinter) printConstant(c *Constant, inCollection bool) {
 		}
 
 		for _, b := range con.Inner {
-			pp.builder.WriteString(fmt.Sprintf("%02x", b))
+			fmt.Fprintf(&pp.builder, "%02x", b)
 		}
 	case *String:
 		if !inCollection {
@@ -332,7 +332,7 @@ func (pp *PrettyPrinter) printConstant(c *Constant, inCollection bool) {
 		affine := new(bls.G1Affine).FromJacobian(con.Inner)
 
 		for _, b := range affine.Bytes() {
-			pp.builder.WriteString(fmt.Sprintf("%02x", b))
+			fmt.Fprintf(&pp.builder, "%02x", b)
 		}
 	case *Bls12_381G2Element:
 		if !inCollection {
@@ -342,7 +342,7 @@ func (pp *PrettyPrinter) printConstant(c *Constant, inCollection bool) {
 		affine := new(bls.G2Affine).FromJacobian(con.Inner)
 
 		for _, b := range affine.Bytes() {
-			pp.builder.WriteString(fmt.Sprintf("%02x", b))
+			fmt.Fprintf(&pp.builder, "%02x", b)
 		}
 	default:
 		pp.write(fmt.Sprintf("unknown constant: %v", c))
@@ -392,7 +392,7 @@ func (pp *PrettyPrinter) printPlutusData(pd data.PlutusData) {
 	case *data.ByteString:
 		pp.write("B #")
 		for _, b := range d.Inner {
-			pp.builder.WriteString(fmt.Sprintf("%02x", b))
+			fmt.Fprintf(&pp.builder, "%02x", b)
 		}
 	case *data.List:
 		if len(d.Items) == 0 {
