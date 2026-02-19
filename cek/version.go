@@ -11,7 +11,7 @@ var (
 
 // VersionLessThan returns true if v is less than other
 func VersionLessThan(v, other LanguageVersion) bool {
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if v[i] < other[i] {
 			return true
 		}

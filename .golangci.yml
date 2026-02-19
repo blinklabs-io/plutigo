@@ -12,6 +12,10 @@ linters:
   disable:
     - depguard
     - unused
+  settings:
+    gosec:
+      excludes:
+        - G115 # conversion_overflow panics on rune constants (https://github.com/securego/gosec/issues/1502)
   exclusions:
     generated: lax
     presets:
