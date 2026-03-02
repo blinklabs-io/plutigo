@@ -10,10 +10,10 @@ Summary: This release covers the changes listed below.
 ```json
 {
   "New Features": [
-    "Added automated static analysis to catch nil-related issues earlier in the development process. The release introduced a GitHub Actions workflow and a `Makefile` target that run `nilaway` as part of CI and local checks.",
-    "Added a new JSON encoding format so serialized Cardano data is easier to integrate with other tools and services. The release implemented custom `cardano-detailed-schema` JSON serialization/deserialization for `PlutusData` types and added tests to validate round-trip behavior.",
-    "Added stricter and more predictable CBOR encoding behavior so encoded data matches expected on-chain and tooling conventions. The release refactored CBOR array encoding and updated `Constr`, `List`, `Map`, and `ByteString` `MarshalCBOR` implementations to follow specific definite/indefinite encoding rules, with tests that verify exact bytes and boundary conditions.",
-    "Added automation to keep project tracking up to date when work items are completed. The release added GitHub workflows that react to closed issues and update the project `Closed Date` field."
+    "Added automated static analysis to catch nil-related issues earlier in the development process by introducing a GitHub Actions workflow and a `Makefile` target that run `nilaway` as part of CI and local checks.",
+    "Added `cardano-detailed-schema` JSON serialization and deserialization for `PlutusData` types to simplify integration with external tools and services, with tests validating round-trip behavior.",
+    "Added stricter and more predictable CBOR encoding behavior by refactoring CBOR array encoding and updating `Constr`, `List`, `Map`, and `ByteString` `MarshalCBOR` implementations to follow specific definite and indefinite encoding rules, with tests verifying exact bytes and boundary conditions.",
+    "Added GitHub workflows that react to closed issues and update the project `Closed Date` field to keep project tracking current."
   ]
 }
 
