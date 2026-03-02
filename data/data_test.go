@@ -186,15 +186,17 @@ var testDefs = []struct {
 		CborHex: "a1a1010203",
 	},
 	{
+		// Constr(1, [Constr(0, [])]) — non-empty fields use indefinite-length,
+		// empty fields use definite-length (matches Haskell cborg)
 		Data: NewConstrDefIndef(
-			false,
+			true,
 			1,
 			NewConstrDefIndef(
 				false,
 				0,
 			),
 		),
-		CborHex: "d87a81d87980",
+		CborHex: "d87a9fd87980ff",
 	},
 	// Map with specific-order keys
 	{
@@ -218,10 +220,10 @@ var testDefs = []struct {
 		// {2:2,3:3,1:1}
 		CborHex: "a3020203030101",
 	},
-	// Indef-length map
+	// Map — maps always use definite-length per Haskell's encodeMapLen
 	{
 		Data: NewMapDefIndef(
-			true,
+			false,
 			[][2]PlutusData{
 				{
 					NewByteString([]byte{0x01}),
@@ -233,8 +235,8 @@ var testDefs = []struct {
 				},
 			},
 		),
-		// {_ h'01': 1, h'02': 2}
-		CborHex: "bf410101410202ff",
+		// {h'01': 1, h'02': 2}
+		CborHex: "a2410101410202",
 	},
 	// Map with duplicate keys
 	{
@@ -261,6 +263,118 @@ var testDefs = []struct {
 		),
 		CborHex: "a444364b6579413144354b6579413744364b65794044354b657940",
 	},
+}
+
+func TestUseIndefHonored(t *testing.T) {
+	tests := []struct {
+		name      string
+		data      PlutusData
+		byteIdx   int
+		wantByte  byte
+		minLen    int
+	}{
+		{
+			name:     "list definite non-empty",
+			data:     NewListDefIndef(false, NewInteger(big.NewInt(1)), NewInteger(big.NewInt(2))),
+			byteIdx:  0,
+			wantByte: 0x82, // definite-length array header for 2 items
+		},
+		{
+			name:     "list indefinite non-empty",
+			data:     NewListDefIndef(true, NewInteger(big.NewInt(1)), NewInteger(big.NewInt(2))),
+			byteIdx:  0,
+			wantByte: 0x9f, // indefinite-length array marker
+		},
+		{
+			name:     "list indefinite empty produces definite",
+			data:     NewListDefIndef(true),
+			byteIdx:  0,
+			wantByte: 0x80, // empty arrays always use definite-length
+		},
+		{
+			name: "map indefinite non-empty",
+			data: NewMapDefIndef(true, [][2]PlutusData{
+				{NewInteger(big.NewInt(1)), NewInteger(big.NewInt(2))},
+			}),
+			byteIdx:  0,
+			wantByte: 0xbf, // indefinite-length map marker
+		},
+		{
+			name:     "constr definite non-empty",
+			data:     NewConstrDefIndef(false, 0, NewInteger(big.NewInt(1))),
+			byteIdx:  2,    // tag bytes (d879) come first
+			wantByte: 0x81, // definite 1-element array
+			minLen:   3,
+		},
+		{
+			name:     "constr indefinite empty produces definite",
+			data:     NewConstrDefIndef(true, 0),
+			byteIdx:  2,    // tag bytes (d879) come first
+			wantByte: 0x80, // empty arrays always use definite-length
+			minLen:   3,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encoded, err := Encode(tt.data)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.minLen > 0 && len(encoded) < tt.minLen {
+				t.Fatalf("encoded too short: %x", encoded)
+			}
+			if encoded[tt.byteIdx] != tt.wantByte {
+				t.Errorf(
+					"expected byte 0x%02x at index %d, got 0x%02x (full: %x)",
+					tt.wantByte, tt.byteIdx, encoded[tt.byteIdx], encoded,
+				)
+			}
+		})
+	}
+}
+
+func TestByteStringEncode64ByteBoundary(t *testing.T) {
+	tests := []struct {
+		name         string
+		size         int
+		wantDefinite bool // true: must NOT start with 0x5f; false: must start with 0x5f and end with 0xff
+	}{
+		{
+			name:         "64 bytes uses definite-length",
+			size:         64,
+			wantDefinite: true,
+		},
+		{
+			name:         "65 bytes uses indefinite-length chunks",
+			size:         65,
+			wantDefinite: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := make([]byte, tt.size)
+			for i := range data {
+				data[i] = byte(i)
+			}
+			bs := ByteString{Inner: data}
+			encoded, err := bs.MarshalCBOR()
+			if err != nil {
+				t.Fatalf("unexpected error encoding %d-byte ByteString: %v", tt.size, err)
+			}
+			if tt.wantDefinite {
+				if encoded[0] == 0x5f {
+					t.Errorf("%d-byte ByteString should use definite-length encoding, but got indefinite-length marker 0x5f", tt.size)
+				}
+			} else {
+				if encoded[0] != 0x5f {
+					t.Errorf("%d-byte ByteString should start with indefinite-length marker 0x5f, got 0x%02x", tt.size, encoded[0])
+				}
+				if encoded[len(encoded)-1] != 0xff {
+					t.Errorf("%d-byte ByteString should end with break byte 0xff, got 0x%02x", tt.size, encoded[len(encoded)-1])
+				}
+			}
+		})
+	}
 }
 
 func TestPlutusDataEncode(t *testing.T) {

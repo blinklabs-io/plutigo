@@ -95,40 +95,17 @@ func (c *Constr) UnmarshalCBOR(data []byte) error {
 }
 
 func (c Constr) MarshalCBOR() ([]byte, error) {
+	// Determine whether to use indefinite-length encoding for fields.
+	// If useIndef is explicitly set, honor it; otherwise default to
+	// Haskell's cborg behavior: indefinite for non-empty, definite for empty.
 	useIndef := len(c.Fields) > 0
 	if c.useIndef != nil {
 		useIndef = *c.useIndef
 	}
-	// Encode fields first
-	var fields any
-	if !useIndef {
-		// Encode empty fields as simple array
-		tmpFields := make([]any, len(c.Fields))
-		for i, item := range c.Fields {
-			encoded, err := cborMarshal(item)
-			if err != nil {
-				return nil, fmt.Errorf(
-					"failed to encode Constr field %d: %w",
-					i,
-					err,
-				)
-			}
-			tmpFields[i] = cbor.RawMessage(encoded)
-		}
-		fields = tmpFields
-	} else {
-		// Encode as indefinite-length array using buffer to avoid repeated allocations
-		var buf bytes.Buffer
-		buf.WriteByte(0x9F) // Start indefinite-length list
-		for i, item := range c.Fields {
-			encoded, err := cborMarshal(item)
-			if err != nil {
-				return nil, fmt.Errorf("failed to encode Constr field %d: %w", i, err)
-			}
-			buf.Write(encoded)
-		}
-		buf.WriteByte(0xff) // End indefinite-length list
-		fields = cbor.RawMessage(buf.Bytes())
+
+	fields, err := encodeCBORArray(c.Fields, useIndef, "Constr field")
+	if err != nil {
+		return nil, err
 	}
 
 	// Determine CBOR tag based on Constr tag value
@@ -141,6 +118,7 @@ func (c Constr) MarshalCBOR() ([]byte, error) {
 		// Tags 7-127 map to CBOR tags 1280-1400
 		cborTag = 1280 + uint64(c.Tag-7)
 	default:
+		// Tag 102 uses a definite-length 2-element outer list
 		cborTag = 102
 		fields = []any{c.Tag, fields}
 	}
@@ -204,6 +182,52 @@ func NewConstrDefIndef(
 	tmpFields := make([]PlutusData, len(fields))
 	copy(tmpFields, fields)
 	return &Constr{Tag: tag, Fields: tmpFields, useIndef: &useIndef}
+}
+
+// encodeCBORArray encodes a slice of PlutusData items as a CBOR array.
+// When useIndef is true and the slice is non-empty, indefinite-length encoding
+// is used. Empty slices always use definite-length encoding regardless of
+// useIndef, matching Haskell's cborg behavior.
+func encodeCBORArray(
+	items []PlutusData,
+	useIndef bool,
+	desc string,
+) (any, error) {
+	if len(items) == 0 {
+		return [0]any{}, nil
+	}
+	if useIndef {
+		var buf bytes.Buffer
+		buf.WriteByte(0x9F) // Start indefinite-length array
+		for i, item := range items {
+			encoded, err := cborMarshal(item)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"failed to encode %s %d: %w",
+					desc,
+					i,
+					err,
+				)
+			}
+			buf.Write(encoded)
+		}
+		buf.WriteByte(0xff) // End indefinite-length array
+		return cbor.RawMessage(buf.Bytes()), nil
+	}
+	encoded := make([]cbor.RawMessage, len(items))
+	for i, item := range items {
+		raw, err := cborMarshal(item)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed to encode %s %d: %w",
+				desc,
+				i,
+				err,
+			)
+		}
+		encoded[i] = raw
+	}
+	return encoded, nil
 }
 
 // Map
@@ -286,6 +310,8 @@ func (m Map) MarshalCBOR() ([]byte, error) {
 	// steal and modify its header, and build our own output from pieces. This avoids
 	// needing to support 6 different possible encodings of a map's header byte depending
 	// on length
+	// Default to definite-length encoding to match Haskell's canonical CBOR.
+	// If useIndef is explicitly set, honor it.
 	useIndef := false
 	if m.useIndef != nil {
 		useIndef = *m.useIndef
@@ -439,10 +465,27 @@ func (b *ByteString) UnmarshalCBOR(data []byte) error {
 }
 
 func (b ByteString) MarshalCBOR() ([]byte, error) {
-	// The Rust code shows special handling for byte strings longer than 64 bytes
-	// using indefinite-length encoding, but the Go CBOR library handles this automatically
-	// when using cbor.Marshal, so we can just return the bytes directly
-	return cborMarshal(b.Inner)
+	// Haskell's Plutus encodes ByteStrings <= 64 bytes as definite-length,
+	// and ByteStrings > 64 bytes as indefinite-length with 64-byte chunks.
+	if len(b.Inner) <= 64 {
+		return cborMarshal(b.Inner)
+	}
+	// Indefinite-length byte string with 64-byte chunks
+	var buf bytes.Buffer
+	buf.WriteByte(0x5f) // Start indefinite-length byte string
+	for i := 0; i < len(b.Inner); i += 64 {
+		end := i + 64
+		if end > len(b.Inner) {
+			end = len(b.Inner)
+		}
+		chunk, err := cborMarshal(b.Inner[i:end])
+		if err != nil {
+			return nil, fmt.Errorf("failed to encode byte string chunk: %w", err)
+		}
+		buf.Write(chunk)
+	}
+	buf.WriteByte(0xff) // End indefinite-length byte string
+	return buf.Bytes(), nil
 }
 
 func (b ByteString) Clone() PlutusData {
@@ -502,33 +545,19 @@ func (l *List) UnmarshalCBOR(data []byte) error {
 }
 
 func (l List) MarshalCBOR() ([]byte, error) {
+	// Determine whether to use indefinite-length encoding.
+	// If useIndef is explicitly set, honor it; otherwise default to
+	// Haskell's cborg behavior: indefinite for non-empty, definite for empty.
 	useIndef := len(l.Items) > 0
 	if l.useIndef != nil {
 		useIndef = *l.useIndef
 	}
-	if !useIndef {
-		ret := make([]any, len(l.Items))
-		for i, item := range l.Items {
-			ret[i] = item
-		}
-		return cborMarshal(ret)
+
+	result, err := encodeCBORArray(l.Items, useIndef, "list item")
+	if err != nil {
+		return nil, err
 	}
-	// Use buffer to avoid repeated allocations from slices.Concat
-	var buf bytes.Buffer
-	buf.WriteByte(0x9F) // Start indefinite-length list
-	for i, item := range l.Items {
-		encoded, err := cborMarshal(item)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"failed to encode indef-length list item %d: %w",
-				i,
-				err,
-			)
-		}
-		buf.Write(encoded)
-	}
-	buf.WriteByte(0xff) // End indefinite-length list
-	return buf.Bytes(), nil
+	return cborMarshal(result)
 }
 
 func (l List) Clone() PlutusData {
