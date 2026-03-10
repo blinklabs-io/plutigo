@@ -107,9 +107,9 @@ func main() {
 
 	program, _ := syn.NameToDeBruijn(pprogram)
 
-	// Create machine with Plutus V3 support
-	// Third parameter is EvalContext (nil uses default cost model)
-	machine := cek.NewMachine[syn.DeBruijn](program.Version, 200, nil)
+	// Create a machine using the default cost model at protocol major 200.
+	ctx := cek.NewDefaultEvalContext(program.Version, cek.ProtoVersion{Major: 200})
+	machine := cek.NewMachine[syn.DeBruijn](program.Version, 0, ctx)
 
 	term, _ := machine.Run(program.Term)
 

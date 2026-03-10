@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
+	"math"
 	"math/big"
 	"testing"
 
@@ -27,7 +28,6 @@ func newTestMachineV4() *Machine[syn.DeBruijn] {
 func newTestBuiltin(fn builtin.DefaultFunction) *Builtin[syn.DeBruijn] {
 	return &Builtin[syn.DeBruijn]{
 		Func:     fn,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -181,6 +181,26 @@ func TestSubtractIntegerBuiltin(t *testing.T) {
 
 	if i.Inner.Cmp(big.NewInt(7)) != 0 {
 		t.Fatalf("expected 7, got %v", i.Inner)
+	}
+}
+
+func TestSubtractIntegerBuiltinOverflowFallback(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.SubtractInteger)
+
+	left := new(big.Int).SetInt64(math.MinInt64)
+	right := big.NewInt(1)
+
+	b = b.ApplyArg(&Constant{&syn.Integer{Inner: left}})
+	b = b.ApplyArg(&Constant{&syn.Integer{Inner: right}})
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	i := expectInteger(t, constVal)
+
+	expected := new(big.Int).Sub(left, right)
+	if i.Inner.Cmp(expected) != 0 {
+		t.Fatalf("expected %v, got %v", expected, i.Inner)
 	}
 }
 
@@ -417,6 +437,25 @@ func TestEqualsIntegerBuiltin(t *testing.T) {
 	}
 }
 
+func TestEqualsIntegerBuiltinBigInts(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.EqualsInteger)
+
+	left := new(big.Int).Lsh(big.NewInt(1), 80)
+	right := new(big.Int).Lsh(big.NewInt(1), 80)
+
+	b = b.ApplyArg(&Constant{&syn.Integer{Inner: left}})
+	b = b.ApplyArg(&Constant{&syn.Integer{Inner: right}})
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	bl := expectBool(t, constVal)
+
+	if !bl.Inner {
+		t.Fatalf("expected big integers to compare equal")
+	}
+}
+
 func TestAppendByteStringBuiltin(t *testing.T) {
 	m := newTestMachine()
 	b := newTestBuiltin(builtin.AppendByteString)
@@ -495,7 +534,6 @@ func TestEqualsDataBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.EqualsData,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -535,7 +573,6 @@ func TestUnConstrDataBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.UnConstrData,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -577,7 +614,6 @@ func TestAppendStringBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.AppendString,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -648,7 +684,6 @@ func TestSha2_256Builtin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Sha2_256,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -681,7 +716,6 @@ func TestSha2_256Builtin(t *testing.T) {
 	// Test with empty string
 	b2 := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Sha2_256,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -714,7 +748,6 @@ func TestSha3_256Builtin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Sha3_256,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -750,7 +783,6 @@ func TestHeadListBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.HeadList,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -792,7 +824,6 @@ func TestTailListBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.TailList,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -852,7 +883,6 @@ func TestNullListBuiltin(t *testing.T) {
 	// Test with non-empty list
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.NullList,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -889,7 +919,6 @@ func TestNullListBuiltin(t *testing.T) {
 	// Test with empty list
 	b2 := &Builtin[syn.DeBruijn]{
 		Func:     builtin.NullList,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -927,7 +956,6 @@ func TestBlake2b_256Builtin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Blake2b_256,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -964,7 +992,6 @@ func TestIfThenElseBuiltin(t *testing.T) {
 	// Test with true condition - should return "then" branch
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.IfThenElse,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -999,7 +1026,6 @@ func TestIfThenElseBuiltin(t *testing.T) {
 	// Test with false condition - should return "else" branch
 	b2 := &Builtin[syn.DeBruijn]{
 		Func:     builtin.IfThenElse,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1037,7 +1063,6 @@ func TestChooseUnitBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.ChooseUnit,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1074,7 +1099,6 @@ func TestFstPairBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.FstPair,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1113,7 +1137,6 @@ func TestSndPairBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.SndPair,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1152,7 +1175,6 @@ func TestConstrDataBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.ConstrData,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1201,7 +1223,6 @@ func TestIDataBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.IData,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1240,7 +1261,6 @@ func TestBDataBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.BData,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1279,7 +1299,6 @@ func TestListDataBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.ListData,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1327,7 +1346,6 @@ func TestKeccak_256Builtin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Keccak_256,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1363,7 +1381,6 @@ func TestMkConsBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.MkCons,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1413,10 +1430,10 @@ func TestMkConsBuiltin(t *testing.T) {
 
 func TestDivideIntegerByZeroBuiltin(t *testing.T) {
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	origBudget := m.ExBudget
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.DivideInteger,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1430,15 +1447,18 @@ func TestDivideIntegerByZeroBuiltin(t *testing.T) {
 	_, err := m.evalBuiltinApp(b)
 	if err == nil {
 		t.Fatal("expected division by zero error, got nil")
+	}
+	if m.ExBudget == origBudget {
+		t.Fatal("expected divideInteger to charge budget before failing")
 	}
 }
 
 func TestQuotientIntegerByZeroBuiltin(t *testing.T) {
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	origBudget := m.ExBudget
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.QuotientInteger,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1452,15 +1472,18 @@ func TestQuotientIntegerByZeroBuiltin(t *testing.T) {
 	_, err := m.evalBuiltinApp(b)
 	if err == nil {
 		t.Fatal("expected division by zero error, got nil")
+	}
+	if m.ExBudget == origBudget {
+		t.Fatal("expected quotientInteger to charge budget before failing")
 	}
 }
 
 func TestRemainderIntegerByZeroBuiltin(t *testing.T) {
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	origBudget := m.ExBudget
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.RemainderInteger,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1474,15 +1497,18 @@ func TestRemainderIntegerByZeroBuiltin(t *testing.T) {
 	_, err := m.evalBuiltinApp(b)
 	if err == nil {
 		t.Fatal("expected division by zero error, got nil")
+	}
+	if m.ExBudget == origBudget {
+		t.Fatal("expected remainderInteger to charge budget before failing")
 	}
 }
 
 func TestModIntegerByZeroBuiltin(t *testing.T) {
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	origBudget := m.ExBudget
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.ModInteger,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1496,6 +1522,9 @@ func TestModIntegerByZeroBuiltin(t *testing.T) {
 	_, err := m.evalBuiltinApp(b)
 	if err == nil {
 		t.Fatal("expected division by zero error, got nil")
+	}
+	if m.ExBudget == origBudget {
+		t.Fatal("expected modInteger to charge budget before failing")
 	}
 }
 
@@ -1504,7 +1533,6 @@ func TestBls12_381_G1_AddBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_G1_Add,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1554,7 +1582,6 @@ func TestBls12_381_G1_EqualBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_G1_Equal,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1594,7 +1621,6 @@ func TestBls12_381_G1_EqualBuiltin(t *testing.T) {
 	// Test unequal points
 	b2 := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_G1_Equal,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1633,7 +1659,6 @@ func TestBls12_381_G1_CompressBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_G1_Compress,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1675,7 +1700,6 @@ func TestBls12_381_G1_NegBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_G1_Neg,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1720,7 +1744,6 @@ func TestBls12_381_G2_AddBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_G2_Add,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1770,7 +1793,6 @@ func TestBls12_381_G2_EqualBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_G2_Equal,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1810,7 +1832,6 @@ func TestBls12_381_G2_EqualBuiltin(t *testing.T) {
 	// Test unequal points
 	b2 := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_G2_Equal,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1849,7 +1870,6 @@ func TestBls12_381_G2_CompressBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_G2_Compress,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1891,7 +1911,6 @@ func TestBls12_381_G2_NegBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_G2_Neg,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1936,7 +1955,6 @@ func TestBls12_381_MillerLoopBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_MillerLoop,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -1979,7 +1997,6 @@ func TestBls12_381_MulMlResultBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_MulMlResult,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -2037,7 +2054,6 @@ func TestBls12_381_FinalVerifyBuiltin(t *testing.T) {
 
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Bls12_381_FinalVerify,
-		Args:     nil,
 		ArgCount: 0,
 		Forces:   0,
 	}
@@ -2525,6 +2541,24 @@ func TestTraceBuiltin(t *testing.T) {
 
 	if len(m.Logs) != 1 || m.Logs[0] != message {
 		t.Errorf("expected log %q, got %v", message, m.Logs)
+	}
+}
+
+func TestTraceBuiltinPreservesEscapes(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.Trace)
+
+	message := `debug\nmessage`
+	returnValue := &Constant{&syn.Integer{Inner: big.NewInt(42)}}
+
+	b = b.ApplyArg(&Constant{&syn.String{Inner: message}})
+	b = b.ApplyArg(returnValue)
+
+	if _, err := m.evalBuiltinApp(b); err != nil {
+		t.Fatalf("evalBuiltinApp returned error: %v", err)
+	}
+	if len(m.Logs) != 1 || m.Logs[0] != message {
+		t.Fatalf("expected raw log %q, got %v", message, m.Logs)
 	}
 }
 
@@ -3781,23 +3815,19 @@ func TestMultiIndexArrayBuiltin(t *testing.T) {
 }
 
 func TestBuiltinArgsIter(t *testing.T) {
-	// Create some test values
 	val1 := Constant{Constant: &syn.Integer{Inner: big.NewInt(1)}}
 	val2 := Constant{Constant: &syn.Integer{Inner: big.NewInt(2)}}
 	val3 := Constant{Constant: &syn.Integer{Inner: big.NewInt(3)}}
 
-	// Create a chain: val3 -> val2 -> val1
 	args := &BuiltinArgs[syn.DeBruijn]{data: val1, next: nil}
 	args = &BuiltinArgs[syn.DeBruijn]{data: val2, next: args}
 	args = &BuiltinArgs[syn.DeBruijn]{data: val3, next: args}
 
-	// Collect values using Iter
 	var collected []Value[syn.DeBruijn]
 	for v := range args.Iter() {
 		collected = append(collected, v)
 	}
 
-	// Iter reverses the order, so should be val1, val2, val3
 	expected := []Value[syn.DeBruijn]{val1, val2, val3}
 	if len(collected) != len(expected) {
 		t.Fatalf("expected %d values, got %d", len(expected), len(collected))
@@ -3812,6 +3842,28 @@ func TestBuiltinArgsIter(t *testing.T) {
 				expectedInt.Inner,
 				collectedInt.Inner,
 			)
+		}
+	}
+}
+
+func TestBuiltinArgsExtract(t *testing.T) {
+	val1 := Constant{Constant: &syn.Integer{Inner: big.NewInt(1)}}
+	val2 := Constant{Constant: &syn.Integer{Inner: big.NewInt(2)}}
+	val3 := Constant{Constant: &syn.Integer{Inner: big.NewInt(3)}}
+
+	args := &BuiltinArgs[syn.DeBruijn]{data: val1, next: nil}
+	args = &BuiltinArgs[syn.DeBruijn]{data: val2, next: args}
+	args = &BuiltinArgs[syn.DeBruijn]{data: val3, next: args}
+
+	var holder argHolder[syn.DeBruijn]
+	args.Extract(&holder, 3)
+
+	expected := []Value[syn.DeBruijn]{val1, val2, val3}
+	for i, want := range expected {
+		got := holder[i].(Constant).Constant.(*syn.Integer)
+		wantInt := want.(Constant).Constant.(*syn.Integer)
+		if got.Inner.Cmp(wantInt.Inner) != 0 {
+			t.Fatalf("at index %d, expected %v, got %v", i, wantInt.Inner, got.Inner)
 		}
 	}
 }

@@ -1293,6 +1293,20 @@ type Arguments interface {
 	HasConstants() []bool
 }
 
+var (
+	hasConstantsAllTrue6          = []bool{true, true, true, true, true, true}
+	hasConstantsFalse1            = []bool{false}
+	hasConstantsFalseTrue         = []bool{false, true}
+	hasConstantsTrueFalse         = []bool{true, false}
+	hasConstantsFalseFalse        = []bool{false, false}
+	hasConstantsFalseFalseFalse   = []bool{false, false, false}
+	hasConstantsFalseTrueTrue     = []bool{false, true, true}
+	hasConstantsTrueFalseTrue     = []bool{true, false, true}
+	hasConstantsTrueTrueFalse     = []bool{true, true, false}
+	hasConstantsTrueFalseFalse    = []bool{true, false, false}
+	hasConstantsTrueTrueTrueFalse = []bool{true, true, true, false}
+)
+
 type OneArgument interface {
 	Cost(x ExMem) int64
 	Arguments
@@ -1305,7 +1319,7 @@ type ConstantCost struct {
 func (ConstantCost) isArguments() {}
 
 func (ConstantCost) HasConstants() []bool {
-	return []bool{true, true, true, true, true, true}
+	return hasConstantsAllTrue6
 }
 
 func (c ConstantCost) Cost(x ExMem) int64 {
@@ -1320,7 +1334,7 @@ type LinearCost struct {
 func (LinearCost) isArguments() {}
 
 func (LinearCost) HasConstants() []bool {
-	return []bool{false}
+	return hasConstantsFalse1
 }
 
 func (l LinearCost) Cost(x ExMem) int64 {
@@ -1409,7 +1423,7 @@ func (l LinearInX) CostTwo(x, y ExMem) int64 {
 
 // Y is not used so constant
 func (LinearInX) HasConstants() []bool {
-	return []bool{false, true}
+	return hasConstantsFalseTrue
 }
 
 func (LinearInX) isArguments() {}
@@ -1425,7 +1439,7 @@ func (l LinearInY) CostTwo(x, y ExMem) int64 {
 
 // X is not used so constant
 func (LinearInY) HasConstants() []bool {
-	return []bool{true, false}
+	return hasConstantsTrueFalse
 }
 
 func (LinearInY) isArguments() {}
@@ -1440,7 +1454,7 @@ func (l LinearInXAndY) CostTwo(x, y ExMem) int64 {
 }
 
 func (LinearInXAndY) HasConstants() []bool {
-	return []bool{false, false}
+	return hasConstantsFalseFalse
 }
 
 func (LinearInXAndY) isArguments() {}
@@ -1455,7 +1469,7 @@ func (a AddedSizesModel) CostTwo(x, y ExMem) int64 {
 }
 
 func (AddedSizesModel) HasConstants() []bool {
-	return []bool{false, false}
+	return hasConstantsFalseFalse
 }
 
 func (AddedSizesModel) isArguments() {}
@@ -1472,7 +1486,7 @@ func (s SubtractedSizesModel) CostTwo(x, y ExMem) int64 {
 }
 
 func (SubtractedSizesModel) HasConstants() []bool {
-	return []bool{false, false}
+	return hasConstantsFalseFalse
 }
 
 func (SubtractedSizesModel) isArguments() {}
@@ -1487,7 +1501,7 @@ func (m MultipliedSizesModel) CostTwo(x, y ExMem) int64 {
 }
 
 func (MultipliedSizesModel) HasConstants() []bool {
-	return []bool{false, false}
+	return hasConstantsFalseFalse
 }
 
 func (MultipliedSizesModel) isArguments() {}
@@ -1507,7 +1521,7 @@ func (m MinSizeModel) CostTwo(x, y ExMem) int64 {
 }
 
 func (MinSizeModel) HasConstants() []bool {
-	return []bool{false, false}
+	return hasConstantsFalseFalse
 }
 
 func (MinSizeModel) isArguments() {}
@@ -1527,7 +1541,7 @@ func (m MaxSizeModel) CostTwo(x, y ExMem) int64 {
 }
 
 func (MaxSizeModel) HasConstants() []bool {
-	return []bool{false, false}
+	return hasConstantsFalseFalse
 }
 
 func (MaxSizeModel) isArguments() {}
@@ -1546,7 +1560,7 @@ func (l LinearOnDiagonalModel) CostTwo(x, y ExMem) int64 {
 }
 
 func (LinearOnDiagonalModel) HasConstants() []bool {
-	return []bool{false, false}
+	return hasConstantsFalseFalse
 }
 
 func (LinearOnDiagonalModel) isArguments() {}
@@ -1565,7 +1579,7 @@ func (c ConstAboveDiagonalModel) CostTwo(x, y ExMem) int64 {
 }
 
 func (ConstAboveDiagonalModel) HasConstants() []bool {
-	return []bool{false, false}
+	return hasConstantsFalseFalse
 }
 
 func (ConstAboveDiagonalModel) isArguments() {}
@@ -1584,7 +1598,7 @@ func (c ConstBelowDiagonalModel) CostTwo(x, y ExMem) int64 {
 }
 
 func (ConstBelowDiagonalModel) HasConstants() []bool {
-	return []bool{false, false}
+	return hasConstantsFalseFalse
 }
 
 func (ConstBelowDiagonalModel) isArguments() {}
@@ -1602,7 +1616,7 @@ func (q QuadraticInYModel) CostTwo(x, y ExMem) int64 {
 
 // X is not used so constant
 func (QuadraticInYModel) HasConstants() []bool {
-	return []bool{true, false}
+	return hasConstantsTrueFalse
 }
 
 func (QuadraticInYModel) isArguments() {}
@@ -1619,7 +1633,7 @@ func (q QuadraticInXModel) Cost(x ExMem) int64 {
 
 // X is used for computation
 func (QuadraticInXModel) HasConstants() []bool {
-	return []bool{false}
+	return hasConstantsFalse1
 }
 
 func (QuadraticInXModel) isArguments() {}
@@ -1639,7 +1653,7 @@ func (w WithInteractionInXAndY) CostTwo(x, y ExMem) int64 {
 }
 
 func (WithInteractionInXAndY) HasConstants() []bool {
-	return []bool{false, false}
+	return hasConstantsFalseFalse
 }
 
 func (WithInteractionInXAndY) isArguments() {}
@@ -1671,7 +1685,7 @@ func (c ConstAboveDiagonalIntoQuadraticXAndYModel) CostTwo(x, y ExMem) int64 {
 }
 
 func (ConstAboveDiagonalIntoQuadraticXAndYModel) HasConstants() []bool {
-	return []bool{false, false}
+	return hasConstantsFalseFalse
 }
 
 func (ConstAboveDiagonalIntoQuadraticXAndYModel) isArguments() {}
@@ -1699,7 +1713,7 @@ func (a ThreeAddedSizesModel) CostThree(x, y, z ExMem) int64 {
 }
 
 func (ThreeAddedSizesModel) HasConstants() []bool {
-	return []bool{false, false, false}
+	return hasConstantsFalseFalseFalse
 }
 
 func (ThreeAddedSizesModel) isArguments() {}
@@ -1715,7 +1729,7 @@ func (l ThreeLinearInX) CostThree(x, y, z ExMem) int64 {
 
 // Y,Z are not used so constant
 func (ThreeLinearInX) HasConstants() []bool {
-	return []bool{false, true, true}
+	return hasConstantsFalseTrueTrue
 }
 
 func (ThreeLinearInX) isArguments() {}
@@ -1731,7 +1745,7 @@ func (l ThreeLinearInY) CostThree(x, y, z ExMem) int64 {
 
 // X,Z are not used so constant
 func (ThreeLinearInY) HasConstants() []bool {
-	return []bool{true, false, true}
+	return hasConstantsTrueFalseTrue
 }
 
 func (ThreeLinearInY) isArguments() {}
@@ -1747,7 +1761,7 @@ func (l ThreeLinearInZ) CostThree(x, y, z ExMem) int64 {
 
 // X,Y are not used so constant
 func (ThreeLinearInZ) HasConstants() []bool {
-	return []bool{true, true, false}
+	return hasConstantsTrueTrueFalse
 }
 
 func (ThreeLinearInZ) isArguments() {}
@@ -1765,7 +1779,7 @@ func (q ThreeQuadraticInZ) CostThree(x, y, z ExMem) int64 {
 }
 
 func (ThreeQuadraticInZ) HasConstants() []bool {
-	return []bool{true, true, false}
+	return hasConstantsTrueTrueFalse
 }
 
 func (ThreeQuadraticInZ) isArguments() {}
@@ -1785,7 +1799,7 @@ func (l ThreeLiteralInYorLinearInZ) CostThree(x, y, z ExMem) int64 {
 
 // X is not used so constant
 func (ThreeLiteralInYorLinearInZ) HasConstants() []bool {
-	return []bool{true, false, false}
+	return hasConstantsTrueFalseFalse
 }
 
 func (ThreeLiteralInYorLinearInZ) isArguments() {}
@@ -1806,7 +1820,7 @@ func (l ThreeLinearInMaxYZ) CostThree(x, y, z ExMem) int64 {
 
 // X is not used so constant
 func (ThreeLinearInMaxYZ) HasConstants() []bool {
-	return []bool{true, false, false}
+	return hasConstantsTrueFalseFalse
 }
 
 func (ThreeLinearInMaxYZ) isArguments() {}
@@ -1822,7 +1836,7 @@ func (l ThreeLinearInYandZ) CostThree(x, y, z ExMem) int64 {
 
 // X is not used so constant
 func (ThreeLinearInYandZ) HasConstants() []bool {
-	return []bool{true, false, false}
+	return hasConstantsTrueFalseFalse
 }
 
 func (ThreeLinearInYandZ) isArguments() {}
@@ -1851,7 +1865,7 @@ func (l FourLinearInU) CostFour(x, y, z, u ExMem) int64 {
 
 // X,Y,Z are not used so constant
 func (FourLinearInU) HasConstants() []bool {
-	return []bool{true, true, true, false}
+	return hasConstantsTrueTrueTrueFalse
 }
 
 func (FourLinearInU) isArguments() {}
@@ -1898,7 +1912,7 @@ func (l ExpMod) CostThree(aa, ee, mm ExMem) int64 {
 }
 
 func (ExpMod) HasConstants() []bool {
-	return []bool{false, false, false}
+	return hasConstantsFalseFalseFalse
 }
 
 func buildBuiltinCosts(

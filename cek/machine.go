@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"sync"
+	"reflect"
 	"unsafe"
 
+	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 )
@@ -17,82 +18,42 @@ const debug = false
 // DebugBudget enables verbose budget logging for debugging cost calculation issues
 const DebugBudget = false
 
-// Object pools for frequently allocated CEK machine objects.
-// Note: sync.Pool can grow unbounded, but this is acceptable for the CEK machine's
-// performance goals. The pools reduce allocations by 25-40% and the memory overhead
-// is minimal compared to the evaluation performance benefits.
-//
-// SAFETY: These pools store *Compute[syn.DeBruijn] (and similar) but are accessed
-// via generic functions that use unsafe.Pointer to cast between type instantiations.
-// This works because:
-// 1. Machine[T] is only ever instantiated with syn.DeBruijn in practice
-// 2. All syn.Eval types have structurally equivalent generic instantiations
-// If Machine is ever used with a different type parameter, the unsafe casts could
-// produce undefined behavior. Any changes to the Compute/Return/Done structs or
-// syn.Eval implementations should be tested carefully.
 var (
-	computePool = sync.Pool{
-		New: func() any {
-			return &Compute[syn.DeBruijn]{}
-		},
-	}
-	returnPool = sync.Pool{
-		New: func() any {
-			return &Return[syn.DeBruijn]{}
-		},
-	}
-	donePool = sync.Pool{
-		New: func() any {
-			return &Done[syn.DeBruijn]{}
-		},
-	}
+	sharedBuiltinTable = newBuiltins[syn.DeBruijn]()
+	deBruijnEvalType   = reflect.TypeFor[syn.DeBruijn]()
 )
 
-// getCompute returns a Compute state from the pool
-func getCompute[T syn.Eval]() *Compute[T] {
-	c := computePool.Get().(*Compute[syn.DeBruijn])
-	return (*Compute[T])(unsafe.Pointer(c))
+// Machine is only instantiated with syn.DeBruijn in this codebase. These
+// helpers reuse shared syn.DeBruijn builtin tables across Machine[T] instances,
+// and NewMachine panics if T does not match syn.DeBruijn.
+func getSharedBuiltins[T syn.Eval]() *Builtins[T] {
+	return (*Builtins[T])(unsafe.Pointer(&sharedBuiltinTable))
 }
 
-// putCompute returns a Compute state to the pool
-func putCompute[T syn.Eval](c *Compute[T]) {
-	// Reset the state
-	c.Ctx = nil
-	c.Env = nil
-	c.Term = nil
-	computePool.Put((*Compute[syn.DeBruijn])(unsafe.Pointer(c)))
-}
-
-// getReturn returns a Return state from the pool
-func getReturn[T syn.Eval]() *Return[T] {
-	r := returnPool.Get().(*Return[syn.DeBruijn])
-	return (*Return[T])(unsafe.Pointer(r))
-}
-
-// putReturn returns a Return state to the pool
-func putReturn[T syn.Eval](r *Return[T]) {
-	// Reset the state
-	r.Ctx = nil
-	r.Value = nil
-	returnPool.Put((*Return[syn.DeBruijn])(unsafe.Pointer(r)))
-}
-
-// getDone returns a Done state from the pool
-func getDone[T syn.Eval]() *Done[T] {
-	d := donePool.Get().(*Done[syn.DeBruijn])
-	return (*Done[T])(unsafe.Pointer(d))
-}
-
-// putDone returns a Done state to the pool
-func putDone[T syn.Eval](d *Done[T]) {
-	// Reset the state
-	d.term = nil
-	donePool.Put((*Done[syn.DeBruijn])(unsafe.Pointer(d)))
+// See getSharedBuiltins for the syn.DeBruijn invariant behind this cast.
+func getFilteredBuiltins[T syn.Eval](
+	version lang.LanguageVersion,
+	protoMajor uint,
+) *Builtins[T] {
+	if protoMajor == 0 {
+		switch version {
+		case lang.LanguageVersionV1:
+			return (*Builtins[T])(unsafe.Pointer(filteredBuiltinsV10))
+		case lang.LanguageVersionV2:
+			return (*Builtins[T])(unsafe.Pointer(filteredBuiltinsV20))
+		case lang.LanguageVersionV3:
+			return (*Builtins[T])(unsafe.Pointer(filteredBuiltinsV30))
+		case lang.LanguageVersionV4:
+			return (*Builtins[T])(unsafe.Pointer(filteredBuiltinsV40))
+		}
+	}
+	return nil
 }
 
 type Machine[T syn.Eval] struct {
 	costs      CostModel
-	builtins   Builtins[T]
+	builtins   *Builtins[T]
+	available  *[builtin.TotalBuiltinCount]bool
 	slippage   uint32
 	version    lang.LanguageVersion
 	semantics  SemanticsVariant
@@ -102,13 +63,190 @@ type Machine[T syn.Eval] struct {
 
 	argHolder       argHolder[T]
 	unbudgetedSteps [10]uint32
+
+	freeCompute            []*Compute[T]
+	freeReturn             []*Return[T]
+	freeDone               []*Done[T]
+	freeFrameAwaitArg      []*FrameAwaitArg[T]
+	freeFrameAwaitFunTerm  []*FrameAwaitFunTerm[T]
+	freeFrameAwaitFunValue []*FrameAwaitFunValue[T]
+	freeFrameForce         []*FrameForce[T]
+	freeFrameConstr        []*FrameConstr[T]
+	freeFrameCases         []*FrameCases[T]
+	envChunks              [][]Env[T]
+	envChunkPos            int
+	budgetTemplate         ExBudget
+	lastRunRemaining       ExBudget
+	hasRun                 bool
 }
 
+const envChunkSize = 256
+
+func (m *Machine[T]) getCompute() *Compute[T] {
+	n := len(m.freeCompute)
+	if n == 0 {
+		return &Compute[T]{}
+	}
+	c := m.freeCompute[n-1]
+	m.freeCompute = m.freeCompute[:n-1]
+	return c
+}
+
+func (m *Machine[T]) putCompute(c *Compute[T]) {
+	c.Ctx = nil
+	c.Env = nil
+	c.Term = nil
+	m.freeCompute = append(m.freeCompute, c)
+}
+
+func (m *Machine[T]) getReturn() *Return[T] {
+	n := len(m.freeReturn)
+	if n == 0 {
+		return &Return[T]{}
+	}
+	r := m.freeReturn[n-1]
+	m.freeReturn = m.freeReturn[:n-1]
+	return r
+}
+
+func (m *Machine[T]) putReturn(r *Return[T]) {
+	r.Ctx = nil
+	r.Value = nil
+	m.freeReturn = append(m.freeReturn, r)
+}
+
+func (m *Machine[T]) getDone() *Done[T] {
+	n := len(m.freeDone)
+	if n == 0 {
+		return &Done[T]{}
+	}
+	d := m.freeDone[n-1]
+	m.freeDone = m.freeDone[:n-1]
+	return d
+}
+
+func (m *Machine[T]) putDone(d *Done[T]) {
+	d.term = nil
+	m.freeDone = append(m.freeDone, d)
+}
+
+func (m *Machine[T]) getFrameAwaitArg() *FrameAwaitArg[T] {
+	n := len(m.freeFrameAwaitArg)
+	if n == 0 {
+		return &FrameAwaitArg[T]{}
+	}
+	f := m.freeFrameAwaitArg[n-1]
+	m.freeFrameAwaitArg = m.freeFrameAwaitArg[:n-1]
+	return f
+}
+
+func (m *Machine[T]) putFrameAwaitArg(f *FrameAwaitArg[T]) {
+	f.Value = nil
+	f.Ctx = nil
+	m.freeFrameAwaitArg = append(m.freeFrameAwaitArg, f)
+}
+
+func (m *Machine[T]) getFrameAwaitFunTerm() *FrameAwaitFunTerm[T] {
+	n := len(m.freeFrameAwaitFunTerm)
+	if n == 0 {
+		return &FrameAwaitFunTerm[T]{}
+	}
+	f := m.freeFrameAwaitFunTerm[n-1]
+	m.freeFrameAwaitFunTerm = m.freeFrameAwaitFunTerm[:n-1]
+	return f
+}
+
+func (m *Machine[T]) putFrameAwaitFunTerm(f *FrameAwaitFunTerm[T]) {
+	f.Env = nil
+	f.Term = nil
+	f.Ctx = nil
+	m.freeFrameAwaitFunTerm = append(m.freeFrameAwaitFunTerm, f)
+}
+
+func (m *Machine[T]) getFrameAwaitFunValue() *FrameAwaitFunValue[T] {
+	n := len(m.freeFrameAwaitFunValue)
+	if n == 0 {
+		return &FrameAwaitFunValue[T]{}
+	}
+	f := m.freeFrameAwaitFunValue[n-1]
+	m.freeFrameAwaitFunValue = m.freeFrameAwaitFunValue[:n-1]
+	return f
+}
+
+func (m *Machine[T]) putFrameAwaitFunValue(f *FrameAwaitFunValue[T]) {
+	f.Value = nil
+	f.Ctx = nil
+	m.freeFrameAwaitFunValue = append(m.freeFrameAwaitFunValue, f)
+}
+
+func (m *Machine[T]) getFrameForce() *FrameForce[T] {
+	n := len(m.freeFrameForce)
+	if n == 0 {
+		return &FrameForce[T]{}
+	}
+	f := m.freeFrameForce[n-1]
+	m.freeFrameForce = m.freeFrameForce[:n-1]
+	return f
+}
+
+func (m *Machine[T]) putFrameForce(f *FrameForce[T]) {
+	f.Ctx = nil
+	m.freeFrameForce = append(m.freeFrameForce, f)
+}
+
+func (m *Machine[T]) getFrameConstr() *FrameConstr[T] {
+	n := len(m.freeFrameConstr)
+	if n == 0 {
+		return &FrameConstr[T]{}
+	}
+	f := m.freeFrameConstr[n-1]
+	m.freeFrameConstr = m.freeFrameConstr[:n-1]
+	return f
+}
+
+func (m *Machine[T]) putFrameConstr(f *FrameConstr[T]) {
+	f.Env = nil
+	f.Tag = 0
+	f.Fields = nil
+	f.ResolvedFields = nil
+	f.Ctx = nil
+	m.freeFrameConstr = append(m.freeFrameConstr, f)
+}
+
+func (m *Machine[T]) getFrameCases() *FrameCases[T] {
+	n := len(m.freeFrameCases)
+	if n == 0 {
+		return &FrameCases[T]{}
+	}
+	f := m.freeFrameCases[n-1]
+	m.freeFrameCases = m.freeFrameCases[:n-1]
+	return f
+}
+
+func (m *Machine[T]) putFrameCases(f *FrameCases[T]) {
+	f.Env = nil
+	f.Branches = nil
+	f.Ctx = nil
+	m.freeFrameCases = append(m.freeFrameCases, f)
+}
+
+// NewMachine creates a CEK machine for a De Bruijn-indexed program.
+// The second argument is slippage, which controls batched budget checking.
+// Protocol-version-dependent semantics and builtin availability come from
+// evalContext.ProtoMajor, not from slippage.
 func NewMachine[T syn.Eval](
 	version lang.LanguageVersion,
 	slippage uint32,
 	evalContext *EvalContext,
 ) *Machine[T] {
+	if reflect.TypeFor[T]() != deBruijnEvalType {
+		panic(
+			fmt.Sprintf(
+				"cek.NewMachine requires T == syn.DeBruijn, got %v",
+				reflect.TypeFor[T](),
+			),
+		)
+	}
 	if evalContext == nil {
 		// Use the default V3 cost models and semantics variant if no eval context is provided
 		evalContext = &EvalContext{
@@ -118,7 +256,8 @@ func NewMachine[T syn.Eval](
 	}
 	return &Machine[T]{
 		costs:      evalContext.CostModel,
-		builtins:   newBuiltins[T](),
+		builtins:   chooseBuiltins[T](version, evalContext.ProtoMajor),
+		available:  chooseAvailableBuiltins(version, evalContext.ProtoMajor),
 		slippage:   slippage,
 		version:    version,
 		semantics:  evalContext.SemanticsVariant,
@@ -128,7 +267,86 @@ func NewMachine[T syn.Eval](
 
 		argHolder:       newArgHolder[T](),
 		unbudgetedSteps: [10]uint32{0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+
+		freeCompute:            make([]*Compute[T], 0, 32),
+		freeReturn:             make([]*Return[T], 0, 32),
+		freeDone:               make([]*Done[T], 0, 4),
+		freeFrameAwaitArg:      make([]*FrameAwaitArg[T], 0, 32),
+		freeFrameAwaitFunTerm:  make([]*FrameAwaitFunTerm[T], 0, 32),
+		freeFrameAwaitFunValue: make([]*FrameAwaitFunValue[T], 0, 32),
+		freeFrameForce:         make([]*FrameForce[T], 0, 16),
+		freeFrameConstr:        make([]*FrameConstr[T], 0, 16),
+		freeFrameCases:         make([]*FrameCases[T], 0, 16),
+		envChunks:              make([][]Env[T], 0, 8),
+		envChunkPos:            0,
+		budgetTemplate:         DefaultExBudget,
+		lastRunRemaining:       DefaultExBudget,
+		hasRun:                 false,
 	}
+}
+
+func chooseBuiltins[T syn.Eval](
+	version lang.LanguageVersion,
+	protoMajor uint,
+) *Builtins[T] {
+	if filtered := getFilteredBuiltins[T](version, protoMajor); filtered != nil {
+		return filtered
+	}
+	return getSharedBuiltins[T]()
+}
+
+func chooseAvailableBuiltins(
+	version lang.LanguageVersion,
+	protoMajor uint,
+) *[builtin.TotalBuiltinCount]bool {
+	if getFilteredBuiltins[syn.DeBruijn](version, protoMajor) != nil {
+		return nil
+	}
+	return newAvailableBuiltins(version, protoMajor)
+}
+
+func (m *Machine[T]) extendEnv(parent *Env[T], data Value[T]) *Env[T] {
+	var chunk []Env[T]
+	if len(m.envChunks) > 0 {
+		chunk = m.envChunks[len(m.envChunks)-1]
+	}
+	if chunk == nil || m.envChunkPos >= len(chunk) {
+		chunk = make([]Env[T], envChunkSize)
+		m.envChunks = append(m.envChunks, chunk)
+		m.envChunkPos = 0
+	}
+
+	env := &chunk[m.envChunkPos]
+	m.envChunkPos++
+	env.data = data
+	env.next = parent
+	return env
+}
+
+func (m *Machine[T]) resetEnvArena() {
+	if len(m.envChunks) == 0 {
+		return
+	}
+
+	for i := range m.envChunks {
+		chunk := m.envChunks[i]
+		if chunk == nil {
+			continue
+		}
+		used := len(chunk)
+		if i == len(m.envChunks)-1 {
+			used = m.envChunkPos
+		}
+		clear(chunk[:used])
+	}
+
+	if len(m.envChunks) > 1 {
+		for i := 1; i < len(m.envChunks); i++ {
+			m.envChunks[i] = nil
+		}
+		m.envChunks = m.envChunks[:1]
+	}
+	m.envChunkPos = 0
 }
 
 // Run executes a Plutus term using the CEK (Control, Environment, Kontinuation) abstract machine.
@@ -146,6 +364,23 @@ func NewMachine[T syn.Eval](
 // This implementation uses object pooling for performance optimization, reusing
 // Compute/Return/Done state objects to minimize garbage collection pressure.
 func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
+	if m.hasRun {
+		if m.ExBudget != m.lastRunRemaining {
+			m.budgetTemplate = m.ExBudget
+		} else {
+			m.ExBudget = m.budgetTemplate
+		}
+	} else {
+		m.budgetTemplate = m.ExBudget
+	}
+	m.Logs = m.Logs[:0]
+	clear(m.unbudgetedSteps[:])
+	defer func() {
+		m.lastRunRemaining = m.ExBudget
+		m.hasRun = true
+		m.resetEnvArena()
+	}()
+
 	// Spend initial startup budget for machine initialization
 	startupBudget := m.costs.machineCosts.startup
 	if err := m.spendBudget(startupBudget); err != nil {
@@ -156,7 +391,7 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 
 	// Initialize with a Compute state: evaluate the input term with empty environment
 	// and no continuation context (NoFrame)
-	comp := getCompute[T]()
+	comp := m.getCompute()
 	comp.Ctx = &NoFrame{}
 	comp.Env = nil
 	comp.Term = term
@@ -169,38 +404,38 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 			// Compute state: evaluate the current term
 			newState, err := m.compute(v.Ctx, v.Env, v.Term)
 			if err != nil {
-				putCompute(v) // Return object to pool
+				m.putCompute(v)
 				return nil, err
 			}
 			if newState == nil {
-				putCompute(v) // Return object to pool
+				m.putCompute(v)
 				return nil, &InternalError{Code: ErrCodeInternalError, Message: "compute returned nil state"}
 			}
-			putCompute(v) // Return object to pool
+			m.putCompute(v)
 			state = newState
 		case *Return[T]:
 			// Return state: handle a computed value in current context
 			newState, err := m.returnCompute(v.Ctx, v.Value)
 			if err != nil {
-				putReturn(v) // Return object to pool
+				m.putReturn(v)
 				return nil, err
 			}
 			if newState == nil {
-				putReturn(v) // Return object to pool
+				m.putReturn(v)
 				return nil, &InternalError{Code: ErrCodeInternalError, Message: "returnCompute returned nil state"}
 			}
-			putReturn(v) // Return object to pool
+			m.putReturn(v)
 			state = newState
 		case *Done[T]:
 			// Done state: evaluation complete, extract final result
 			// Flush any remaining unbudgeted steps before returning
 			// This matches Haskell's spendAccumulatedBudget in returnCek NoFrame
 			if err := m.spendUnbudgetedSteps(); err != nil {
-				putDone(v)
+				m.putDone(v)
 				return nil, err
 			}
 			term := v.term
-			putDone(v) // Return object to pool
+			m.putDone(v)
 			return term, nil
 		default:
 			panic(fmt.Sprintf("unknown machine state: %T", state))
@@ -243,7 +478,7 @@ func (m *Machine[T]) compute(
 		}
 
 		// Transition to Return state with the looked-up value
-		ret := getReturn[T]()
+		ret := m.getReturn()
 		ret.Ctx = context
 		ret.Value = value
 		state = ret
@@ -258,7 +493,7 @@ func (m *Machine[T]) compute(
 			Env:  env, // Capture current environment for later evaluation
 		}
 
-		ret := getReturn[T]()
+		ret := m.getReturn()
 		ret.Ctx = context
 		ret.Value = value
 		state = ret
@@ -274,7 +509,7 @@ func (m *Machine[T]) compute(
 			Env:           env, // Capture environment for closure
 		}
 
-		ret := getReturn[T]()
+		ret := m.getReturn()
 		ret.Ctx = context
 		ret.Value = value
 		state = ret
@@ -285,13 +520,12 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 
-		frame := &FrameAwaitFunTerm[T]{
-			Env:  env,
-			Term: t.Argument, // Remember argument to evaluate later
-			Ctx:  context,
-		}
+		frame := m.getFrameAwaitFunTerm()
+		frame.Env = env
+		frame.Term = t.Argument // Remember argument to evaluate later
+		frame.Ctx = context
 
-		comp := getCompute[T]()
+		comp := m.getCompute()
 		comp.Ctx = frame
 		comp.Env = env
 		comp.Term = t.Function // Evaluate function first
@@ -302,7 +536,7 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 
-		ret := getReturn[T]()
+		ret := m.getReturn()
 		ret.Ctx = context
 		ret.Value = &Constant{
 			Constant: t.Con,
@@ -315,11 +549,10 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 
-		frame := &FrameForce[T]{
-			Ctx: context,
-		}
+		frame := m.getFrameForce()
+		frame.Ctx = context
 
-		comp := getCompute[T]()
+		comp := m.getCompute()
 		comp.Ctx = frame
 		comp.Env = env
 		comp.Term = t.Term
@@ -334,7 +567,7 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 
-		ret := getReturn[T]()
+		ret := m.getReturn()
 		ret.Ctx = context
 		ret.Value = &Builtin[T]{
 			Func:   t.DefaultFunction,
@@ -354,7 +587,7 @@ func (m *Machine[T]) compute(
 
 		if len(fields) == 0 {
 			// No fields to evaluate
-			ret := getReturn[T]()
+			ret := m.getReturn()
 			ret.Ctx = context
 			ret.Value = &Constr[T]{
 				Tag:    t.Tag,
@@ -367,15 +600,14 @@ func (m *Machine[T]) compute(
 
 			rest := fields[1:]
 
-			frame := &FrameConstr[T]{
-				Ctx:            context,
-				Tag:            t.Tag,
-				Fields:         rest,                               // Remaining fields to evaluate
-				ResolvedFields: make([]Value[T], 0, len(t.Fields)), // Pre-allocate for all fields
-				Env:            env,
-			}
+			frame := m.getFrameConstr()
+			frame.Ctx = context
+			frame.Tag = t.Tag
+			frame.Fields = rest                                       // Remaining fields to evaluate
+			frame.ResolvedFields = make([]Value[T], 0, len(t.Fields)) // Pre-allocate for all fields
+			frame.Env = env
 
-			comp := getCompute[T]()
+			comp := m.getCompute()
 			comp.Ctx = frame
 			comp.Env = env
 			comp.Term = first_field // Evaluate first field
@@ -388,13 +620,12 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 
-		frame := &FrameCases[T]{
-			Env:      env,
-			Ctx:      context,
-			Branches: t.Branches,
-		}
+		frame := m.getFrameCases()
+		frame.Env = env
+		frame.Ctx = context
+		frame.Branches = t.Branches
 
-		comp := getCompute[T]()
+		comp := m.getCompute()
 		comp.Ctx = frame
 		comp.Env = env
 		comp.Term = t.Constr // Evaluate scrutinee
@@ -436,28 +667,32 @@ func (m *Machine[T]) returnCompute(
 	case *FrameAwaitArg[T]:
 		// Function term evaluated, now apply to argument value
 		state, err = m.applyEvaluate(c.Ctx, c.Value, value)
+		m.putFrameAwaitArg(c)
 		if err != nil {
 			return nil, err
 		}
 	case *FrameAwaitFunTerm[T]:
 		// Function evaluated to a value, now evaluate argument term
-		comp := getCompute[T]()
-		comp.Ctx = &FrameAwaitArg[T]{
-			Ctx:   c.Ctx,
-			Value: value, // Function value
-		}
+		comp := m.getCompute()
+		frame := m.getFrameAwaitArg()
+		frame.Ctx = c.Ctx
+		frame.Value = value // Function value
+		comp.Ctx = frame
 		comp.Env = c.Env
 		comp.Term = c.Term // Argument term to evaluate
+		m.putFrameAwaitFunTerm(c)
 		state = comp
 	case *FrameAwaitFunValue[T]:
 		// Argument evaluated to a value, now apply to function value
 		state, err = m.applyEvaluate(c.Ctx, value, c.Value)
+		m.putFrameAwaitFunValue(c)
 		if err != nil {
 			return nil, err
 		}
 	case *FrameForce[T]:
 		// Handle forcing of delayed computations or builtin applications
 		state, err = m.forceEvaluate(c.Ctx, value)
+		m.putFrameForce(c)
 		if err != nil {
 			return nil, err
 		}
@@ -469,30 +704,31 @@ func (m *Machine[T]) returnCompute(
 
 		if len(fields) == 0 {
 			// All fields evaluated, create constructor value
-			ret := getReturn[T]()
+			ret := m.getReturn()
 			ret.Ctx = c.Ctx
 			ret.Value = &Constr[T]{
 				Tag:    c.Tag,
 				Fields: resolvedFields,
 			}
+			m.putFrameConstr(c)
 			state = ret
 		} else {
 			// More fields to evaluate
 			first_field := fields[0]
 			rest := fields[1:]
 
-			frame := &FrameConstr[T]{
-				Ctx:            c.Ctx,
-				Tag:            c.Tag,
-				Fields:         rest,
-				ResolvedFields: resolvedFields,
-				Env:            c.Env,
-			}
+			frame := m.getFrameConstr()
+			frame.Ctx = c.Ctx
+			frame.Tag = c.Tag
+			frame.Fields = rest
+			frame.ResolvedFields = resolvedFields
+			frame.Env = c.Env
 
-			comp := getCompute[T]()
+			comp := m.getCompute()
 			comp.Ctx = frame
 			comp.Env = c.Env
 			comp.Term = first_field
+			m.putFrameConstr(c)
 			state = comp
 		}
 	case *FrameCases[T]:
@@ -500,16 +736,19 @@ func (m *Machine[T]) returnCompute(
 		switch v := value.(type) {
 		case *Constr[T]:
 			if v.Tag > math.MaxInt {
+				m.putFrameCases(c)
 				return nil, &ScriptError{Code: ErrCodeMaxIntExceeded, Message: "MaxIntExceeded"}
 			}
 			if indexExists(c.Branches, int(v.Tag)) {
 				// Matching branch found, evaluate it with arguments on stack
-				comp := getCompute[T]()
-				comp.Ctx = transferArgStack(v.Fields, c.Ctx)
+				comp := m.getCompute()
+				comp.Ctx = m.transferArgStack(v.Fields, c.Ctx)
 				comp.Env = c.Env
 				comp.Term = c.Branches[v.Tag]
+				m.putFrameCases(c)
 				state = comp
 			} else {
+				m.putFrameCases(c)
 				return nil, &ScriptError{Code: ErrCodeMissingCaseBranch, Message: "MissingCaseBranch"}
 			}
 		case *Constant:
@@ -540,18 +779,22 @@ func (m *Machine[T]) returnCompute(
 			case *syn.Integer:
 				// Integer: use value as branch index
 				if cval.Inner.Sign() < 0 {
+					m.putFrameCases(c)
 					return nil, &ScriptError{Code: ErrCodeCaseOnNegativeInt, Message: "case on negative integer"}
 				}
 				if !cval.Inner.IsInt64() {
+					m.putFrameCases(c)
 					return nil, &ScriptError{Code: ErrCodeCaseIntOutOfRange, Message: "case on integer out of range"}
 				}
 				ival := cval.Inner.Int64()
 				if ival > int64(math.MaxInt) {
+					m.putFrameCases(c)
 					return nil, &ScriptError{Code: ErrCodeCaseIntOutOfRange, Message: "case on integer out of range"}
 				}
 				tag = int(ival)
 			case *syn.ByteString:
 				// ByteString constant not valid in case according to conformance
+				m.putFrameCases(c)
 				return nil, &ScriptError{Code: ErrCodeCaseOnByteString, Message: "case on bytestring constant not allowed"}
 			case *syn.ProtoList:
 				// List: allow 1 or 2 branches; >2 invalid
@@ -576,6 +819,7 @@ func (m *Machine[T]) returnCompute(
 				args[0] = &Constant{cval.First}
 				args[1] = &Constant{cval.Second}
 			default:
+				m.putFrameCases(c)
 				return nil, &TypeError{Code: ErrCodeNonConstrScrutinized, Message: "NonConstrScrutinized"}
 			}
 
@@ -584,29 +828,34 @@ func (m *Machine[T]) returnCompute(
 			case 1:
 				// exact 1
 				if len(c.Branches) != 1 {
+					m.putFrameCases(c)
 					return nil, &ScriptError{Code: ErrCodeInvalidBranchCount, Message: "InvalidCaseBranchCount"}
 				}
 			case 2:
 				// 1 or 2
 				if len(c.Branches) < 1 || len(c.Branches) > 2 {
+					m.putFrameCases(c)
 					return nil, &ScriptError{Code: ErrCodeInvalidBranchCount, Message: "InvalidCaseBranchCount"}
 				}
 			}
 
 			if indexExists(c.Branches, tag) {
-				comp := getCompute[T]()
+				comp := m.getCompute()
 				if args != nil {
-					comp.Ctx = transferArgStack(args, c.Ctx)
+					comp.Ctx = m.transferArgStack(args, c.Ctx)
 				} else {
 					comp.Ctx = c.Ctx
 				}
 				comp.Env = c.Env
 				comp.Term = c.Branches[tag]
+				m.putFrameCases(c)
 				state = comp
 			} else {
+				m.putFrameCases(c)
 				return nil, &ScriptError{Code: ErrCodeMissingCaseBranch, Message: "MissingCaseBranch"}
 			}
 		default:
+			m.putFrameCases(c)
 			return nil, &TypeError{Code: ErrCodeNonConstrScrutinized, Message: "NonConstrScrutinized"}
 		}
 	case *NoFrame:
@@ -618,7 +867,7 @@ func (m *Machine[T]) returnCompute(
 			}
 		}
 
-		done := getDone[T]()
+		done := m.getDone()
 		done.term = dischargeValue[T](value)
 		state = done
 	default:
@@ -649,7 +898,7 @@ func (m *Machine[T]) forceEvaluate(
 	switch v := value.(type) {
 	case *Delay[T]:
 		// Force a delayed computation: evaluate body in captured environment
-		comp := getCompute[T]()
+		comp := m.getCompute()
 		comp.Ctx = context
 		comp.Env = v.Env // Use environment captured at delay creation
 		comp.Term = v.Body
@@ -658,23 +907,32 @@ func (m *Machine[T]) forceEvaluate(
 		// Force a builtin function application
 		if v.NeedsForce() {
 			var resolved Value[T]
-
-			b := v.ConsumeForce() // Consume one force
-
-			if b.IsReady() {
+			nextForces := v.Forces + 1
+			if v.Func.ForceCount() == nextForces && v.Func.Arity() == v.ArgCount {
 				// Builtin has all arguments, evaluate it
+				tmpBuiltin := Builtin[T]{
+					Func:     v.Func,
+					Forces:   nextForces,
+					ArgCount: v.ArgCount,
+					Args:     v.Args,
+				}
 				var err error
 
-				resolved, err = m.evalBuiltinApp(b)
+				resolved, err = m.evalBuiltinApp(&tmpBuiltin)
 				if err != nil {
 					return nil, err
 				}
 			} else {
 				// Still needs more arguments/forces
-				resolved = b
+				resolved = &Builtin[T]{
+					Func:     v.Func,
+					Forces:   nextForces,
+					ArgCount: v.ArgCount,
+					Args:     v.Args,
+				}
 			}
 
-			ret := getReturn[T]()
+			ret := m.getReturn()
 			ret.Ctx = context
 			ret.Value = resolved
 			state = ret
@@ -703,9 +961,9 @@ func (m *Machine[T]) applyEvaluate(
 	switch f := function.(type) {
 	case *Lambda[T]:
 		// Apply lambda: extend environment and evaluate body
-		env := f.Env.Extend(arg)
+		env := m.extendEnv(f.Env, arg)
 
-		comp := getCompute[T]()
+		comp := m.getCompute()
 		comp.Ctx = context
 		comp.Env = env // Extended environment with argument bound
 		comp.Term = f.Body
@@ -714,23 +972,36 @@ func (m *Machine[T]) applyEvaluate(
 		// Apply builtin function
 		if !f.NeedsForce() && f.IsArrow() {
 			var resolved Value[T]
-
-			b := f.ApplyArg(arg) // Apply argument to builtin
-
-			if b.IsReady() {
+			nextArgCount := f.ArgCount + 1
+			if f.Func.Arity() == nextArgCount && f.Func.ForceCount() == f.Forces {
 				// Builtin has all arguments, evaluate it
+				tmpArgs := BuiltinArgs[T]{
+					data: arg,
+					next: f.Args,
+				}
+				tmpBuiltin := Builtin[T]{
+					Func:     f.Func,
+					Forces:   f.Forces,
+					ArgCount: nextArgCount,
+					Args:     &tmpArgs,
+				}
 				var err error
 
-				resolved, err = m.evalBuiltinApp(b)
+				resolved, err = m.evalBuiltinApp(&tmpBuiltin)
 				if err != nil {
 					return nil, err
 				}
 			} else {
 				// Still needs more arguments
-				resolved = b
+				resolved = &Builtin[T]{
+					Func:     f.Func,
+					Forces:   f.Forces,
+					ArgCount: nextArgCount,
+					Args:     f.Args.Extend(arg),
+				}
 			}
 
-			ret := getReturn[T]()
+			ret := m.getReturn()
 			ret.Ctx = context
 			ret.Value = resolved
 			state = ret
@@ -744,17 +1015,17 @@ func (m *Machine[T]) applyEvaluate(
 	return state, nil
 }
 
-func transferArgStack[T syn.Eval](
+func (m *Machine[T]) transferArgStack(
 	fields []Value[T],
 	ctx MachineContext[T],
 ) MachineContext[T] {
 	c := ctx
 
 	for arg := len(fields) - 1; arg >= 0; arg-- {
-		c = &FrameAwaitFunValue[T]{
-			Ctx:   c,
-			Value: fields[arg],
-		}
+		frame := m.getFrameAwaitFunValue()
+		frame.Ctx = c
+		frame.Value = fields[arg]
+		c = frame
 	}
 
 	return c

@@ -1,0 +1,287 @@
+PASS
+ok  	github.com/blinklabs-io/plutigo/builtin	0.012s
+goos: linux
+goarch: arm64
+pkg: github.com/blinklabs-io/plutigo/cek
+BenchmarkEnvLookupDepth/depth=1-128  	1000000000	         5.000 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEnvLookupDepth/depth=4-128  	1000000000	         5.000 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEnvLookupDepth/depth=8-128  	1000000000	         5.468 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEnvLookupDepth/depth=16-128 	565804333	        10.15 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEnvLookupDepth/depth=32-128 	357731836	        16.39 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEnvLookupDepth/depth=64-128 	161676267	        36.70 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMachineLambdaChain/depth=4-128         	  323451	     18588 ns/op	   11248 B/op	      60 allocs/op
+BenchmarkMachineLambdaChain/depth=8-128         	  212863	     27853 ns/op	   12592 B/op	     112 allocs/op
+BenchmarkMachineLambdaChain/depth=16-128        	  129752	     45838 ns/op	   15280 B/op	     216 allocs/op
+BenchmarkMachineLambdaChain/depth=32-128        	   72217	     83470 ns/op	   20656 B/op	     424 allocs/op
+BenchmarkMachineBuiltinHeavy/ops=7-128          	  299086	     19286 ns/op	    5808 B/op	     103 allocs/op
+BenchmarkMachineBuiltinHeavy/ops=31-128         	   90166	     64572 ns/op	   13104 B/op	     391 allocs/op
+BenchmarkMachineBuiltinHeavy/ops=127-128        	   23497	    256608 ns/op	   45616 B/op	    1547 allocs/op
+BenchmarkMachineBuiltinHeavy/ops=255-128        	   10000	    505383 ns/op	   89136 B/op	    3085 allocs/op
+BenchmarkDischarge/depth=4-128                  	 1374310	      4363 ns/op	     841 B/op	      33 allocs/op
+BenchmarkDischarge/depth=8-128                  	  716326	      8173 ns/op	    1481 B/op	      57 allocs/op
+BenchmarkDischarge/depth=16-128                 	  374253	     15626 ns/op	    2761 B/op	     105 allocs/op
+BenchmarkDischarge/depth=32-128                 	  189064	     31660 ns/op	    5321 B/op	     201 allocs/op
+BenchmarkBuiltinIntegerOps/AddSmall-128         	11836640	       521.4 ns/op	      64 B/op	       4 allocs/op
+BenchmarkBuiltinIntegerOps/SubtractSmall-128    	10869562	       537.6 ns/op	      64 B/op	       4 allocs/op
+BenchmarkBuiltinIntegerOps/EqualsSmall-128      	19873224	       297.8 ns/op	      17 B/op	       2 allocs/op
+BenchmarkBuiltinIntegerOps/LessThanSmall-128    	21259112	       288.6 ns/op	      17 B/op	       2 allocs/op
+BenchmarkBuiltinIntegerOps/LessThanEqualsSmall-128         	19080228	       309.6 ns/op	      17 B/op	       2 allocs/op
+PASS
+ok  	github.com/blinklabs-io/plutigo/cek	133.338s
+PASS
+ok  	github.com/blinklabs-io/plutigo/data	0.012s
+?   	github.com/blinklabs-io/plutigo/lang	[no test files]
+PASS
+ok  	github.com/blinklabs-io/plutigo/syn	0.012s
+PASS
+ok  	github.com/blinklabs-io/plutigo/syn/lex	0.010s
+goos: linux
+goarch: arm64
+pkg: github.com/blinklabs-io/plutigo/tests
+BenchmarkFlatFiles/auction_1-1-128         	    2002	   3434220 ns/op
+BenchmarkFlatFiles/auction_1-2-128         	     603	  10017385 ns/op
+BenchmarkFlatFiles/auction_1-3-128         	     594	  10055908 ns/op
+BenchmarkFlatFiles/auction_1-4-128         	    1363	   4354563 ns/op
+BenchmarkFlatFiles/auction_2-1-128         	    1723	   3428290 ns/op
+BenchmarkFlatFiles/auction_2-2-128         	     606	  10031100 ns/op
+BenchmarkFlatFiles/auction_2-3-128         	     472	  12209563 ns/op
+BenchmarkFlatFiles/auction_2-4-128         	     602	  10044736 ns/op
+BenchmarkFlatFiles/auction_2-5-128         	    1389	   4355691 ns/op
+BenchmarkFlatFiles/crowdfunding-success-1-128         	    1503	   4102632 ns/op
+BenchmarkFlatFiles/crowdfunding-success-2-128         	    1472	   4121269 ns/op
+BenchmarkFlatFiles/crowdfunding-success-3-128         	    1437	   4112230 ns/op
+BenchmarkFlatFiles/currency-1-128                     	    1401	   4247456 ns/op
+BenchmarkFlatFiles/escrow-redeem_1-1-128              	    1000	   5896076 ns/op
+BenchmarkFlatFiles/escrow-redeem_1-2-128              	    1034	   5814001 ns/op
+BenchmarkFlatFiles/escrow-redeem_2-1-128              	     878	   6715282 ns/op
+BenchmarkFlatFiles/escrow-redeem_2-2-128              	     885	   6736032 ns/op
+BenchmarkFlatFiles/escrow-redeem_2-3-128              	     892	   6710418 ns/op
+BenchmarkFlatFiles/escrow-refund-1-128                	    1747	   3361230 ns/op
+BenchmarkFlatFiles/future-increase-margin-1-128       	    1438	   4185420 ns/op
+BenchmarkFlatFiles/future-increase-margin-2-128       	     686	   8461949 ns/op
+BenchmarkFlatFiles/future-increase-margin-3-128       	     722	   8369901 ns/op
+BenchmarkFlatFiles/future-increase-margin-4-128       	     703	   8575952 ns/op
+BenchmarkFlatFiles/future-increase-margin-5-128       	     496	  11973823 ns/op
+BenchmarkFlatFiles/future-pay-out-1-128               	    1418	   4172421 ns/op
+BenchmarkFlatFiles/future-pay-out-2-128               	     721	   8310214 ns/op
+BenchmarkFlatFiles/future-pay-out-3-128               	     708	   8347467 ns/op
+BenchmarkFlatFiles/future-pay-out-4-128               	     495	  11727765 ns/op
+BenchmarkFlatFiles/future-settle-early-1-128          	    1449	   4086694 ns/op
+BenchmarkFlatFiles/future-settle-early-2-128          	     705	   8463319 ns/op
+BenchmarkFlatFiles/future-settle-early-3-128          	     710	   8378532 ns/op
+BenchmarkFlatFiles/future-settle-early-4-128          	     594	  10029257 ns/op
+BenchmarkFlatFiles/game-sm-success_1-1-128            	     882	   6835376 ns/op
+BenchmarkFlatFiles/game-sm-success_1-2-128            	    1632	   3699605 ns/op
+BenchmarkFlatFiles/game-sm-success_1-3-128            	     586	  10080078 ns/op
+BenchmarkFlatFiles/game-sm-success_1-4-128            	    1440	   4188819 ns/op
+BenchmarkFlatFiles/game-sm-success_2-1-128            	     870	   6757904 ns/op
+BenchmarkFlatFiles/game-sm-success_2-2-128            	    1702	   3667045 ns/op
+BenchmarkFlatFiles/game-sm-success_2-3-128            	     608	   9940143 ns/op
+BenchmarkFlatFiles/game-sm-success_2-4-128            	    1449	   4217036 ns/op
+BenchmarkFlatFiles/game-sm-success_2-5-128            	     601	   9904149 ns/op
+BenchmarkFlatFiles/game-sm-success_2-6-128            	    1432	   4218569 ns/op
+BenchmarkFlatFiles/multisig-sm-1-128                  	     861	   7062363 ns/op
+BenchmarkFlatFiles/multisig-sm-10-128                 	     661	   9043340 ns/op
+BenchmarkFlatFiles/multisig-sm-2-128                  	     847	   7107466 ns/op
+BenchmarkFlatFiles/multisig-sm-3-128                  	     864	   7038734 ns/op
+BenchmarkFlatFiles/multisig-sm-4-128                  	     883	   7087556 ns/op
+BenchmarkFlatFiles/multisig-sm-5-128                  	     660	   8964943 ns/op
+BenchmarkFlatFiles/multisig-sm-6-128                  	     856	   7136268 ns/op
+BenchmarkFlatFiles/multisig-sm-7-128                  	     865	   7021034 ns/op
+BenchmarkFlatFiles/multisig-sm-8-128                  	     823	   7115097 ns/op
+BenchmarkFlatFiles/multisig-sm-9-128                  	     837	   7103315 ns/op
+BenchmarkFlatFiles/ping-pong-1-128                    	     988	   5823710 ns/op
+BenchmarkFlatFiles/ping-pong-2-128                    	    1026	   5879377 ns/op
+BenchmarkFlatFiles/ping-pong_2-1-128                  	    1378	   4371029 ns/op
+BenchmarkFlatFiles/prism-1-128                        	    1870	   3155258 ns/op
+BenchmarkFlatFiles/prism-2-128                        	     825	   7267983 ns/op
+BenchmarkFlatFiles/prism-3-128                        	     972	   6123097 ns/op
+BenchmarkFlatFiles/pubkey-1-128                       	    2107	   2816063 ns/op
+BenchmarkFlatFiles/stablecoin_1-1-128                 	     418	  14254418 ns/op
+BenchmarkFlatFiles/stablecoin_1-2-128                 	    1557	   3750998 ns/op
+BenchmarkFlatFiles/stablecoin_1-3-128                 	     378	  15784426 ns/op
+BenchmarkFlatFiles/stablecoin_1-4-128                 	    1532	   3906086 ns/op
+BenchmarkFlatFiles/stablecoin_1-5-128                 	     309	  19352036 ns/op
+BenchmarkFlatFiles/stablecoin_1-6-128                 	    1273	   4695701 ns/op
+BenchmarkFlatFiles/stablecoin_2-1-128                 	     436	  13863841 ns/op
+BenchmarkFlatFiles/stablecoin_2-2-128                 	    1662	   3676725 ns/op
+BenchmarkFlatFiles/stablecoin_2-3-128                 	     385	  15597335 ns/op
+BenchmarkFlatFiles/stablecoin_2-4-128                 	    1533	   3860011 ns/op
+BenchmarkFlatFiles/token-account-1-128                	    1744	   3478367 ns/op
+BenchmarkFlatFiles/token-account-2-128                	    1116	   5509696 ns/op
+BenchmarkFlatFiles/uniswap-1-128                      	     950	   6296322 ns/op
+BenchmarkFlatFiles/uniswap-2-128                      	    1444	   4157786 ns/op
+BenchmarkFlatFiles/uniswap-3-128                      	     268	  22470281 ns/op
+BenchmarkFlatFiles/uniswap-4-128                      	     951	   6225199 ns/op
+BenchmarkFlatFiles/uniswap-5-128                      	     369	  16309153 ns/op
+BenchmarkFlatFiles/uniswap-6-128                      	    1044	   5864061 ns/op
+BenchmarkFlatFiles/vesting-1-128                      	    1056	   5668574 ns/op
+BenchmarkFlatFilesDecode/auction_1-1-128              	    4815	   1222656 ns/op
+BenchmarkFlatFilesDecode/auction_1-2-128              	    2396	   2468705 ns/op
+BenchmarkFlatFilesDecode/auction_1-3-128              	    2362	   2565880 ns/op
+BenchmarkFlatFilesDecode/auction_1-4-128              	    4087	   1473058 ns/op
+BenchmarkFlatFilesDecode/auction_2-1-128              	    4903	   1224533 ns/op
+BenchmarkFlatFilesDecode/auction_2-2-128              	    2438	   2466174 ns/op
+BenchmarkFlatFilesDecode/auction_2-3-128              	    2293	   2656110 ns/op
+BenchmarkFlatFilesDecode/auction_2-4-128              	    2354	   2579645 ns/op
+BenchmarkFlatFilesDecode/auction_2-5-128              	    4024	   1492507 ns/op
+BenchmarkFlatFilesDecode/crowdfunding-success-1-128   	    3784	   1538182 ns/op
+BenchmarkFlatFilesDecode/crowdfunding-success-2-128   	    3883	   1539673 ns/op
+BenchmarkFlatFilesDecode/crowdfunding-success-3-128   	    4545	   1510006 ns/op
+BenchmarkFlatFilesDecode/currency-1-128               	    4825	   1215922 ns/op
+BenchmarkFlatFilesDecode/escrow-redeem_1-1-128        	    3358	   1795096 ns/op
+BenchmarkFlatFilesDecode/escrow-redeem_1-2-128        	    3270	   1816711 ns/op
+BenchmarkFlatFilesDecode/escrow-redeem_2-1-128        	    3091	   1928555 ns/op
+BenchmarkFlatFilesDecode/escrow-redeem_2-2-128        	    3168	   1918020 ns/op
+BenchmarkFlatFilesDecode/escrow-redeem_2-3-128        	    3062	   1943658 ns/op
+BenchmarkFlatFilesDecode/escrow-refund-1-128          	    3741	   1528494 ns/op
+BenchmarkFlatFilesDecode/future-increase-margin-1-128 	    4752	   1242761 ns/op
+BenchmarkFlatFilesDecode/future-increase-margin-2-128 	    2746	   2194464 ns/op
+BenchmarkFlatFilesDecode/future-increase-margin-3-128 	    2746	   2201347 ns/op
+BenchmarkFlatFilesDecode/future-increase-margin-4-128 	    1969	   2927758 ns/op
+BenchmarkFlatFilesDecode/future-increase-margin-5-128 	    1950	   2991696 ns/op
+BenchmarkFlatFilesDecode/future-pay-out-1-128         	    5053	   1221371 ns/op
+BenchmarkFlatFilesDecode/future-pay-out-2-128         	    2666	   2135786 ns/op
+BenchmarkFlatFilesDecode/future-pay-out-3-128         	    2730	   2181843 ns/op
+BenchmarkFlatFilesDecode/future-pay-out-4-128         	    2056	   2908404 ns/op
+BenchmarkFlatFilesDecode/future-settle-early-1-128    	    4851	   1231215 ns/op
+BenchmarkFlatFilesDecode/future-settle-early-2-128    	    2719	   2191566 ns/op
+BenchmarkFlatFilesDecode/future-settle-early-3-128    	    2725	   2175646 ns/op
+BenchmarkFlatFilesDecode/future-settle-early-4-128    	    2113	   2848201 ns/op
+BenchmarkFlatFilesDecode/game-sm-success_1-1-128      	    2499	   2373393 ns/op
+BenchmarkFlatFilesDecode/game-sm-success_1-2-128      	    4851	   1243067 ns/op
+BenchmarkFlatFilesDecode/game-sm-success_1-3-128      	    2311	   2596806 ns/op
+BenchmarkFlatFilesDecode/game-sm-success_1-4-128      	    4190	   1402202 ns/op
+BenchmarkFlatFilesDecode/game-sm-success_2-1-128      	    2385	   2401108 ns/op
+BenchmarkFlatFilesDecode/game-sm-success_2-2-128      	    4869	   1246191 ns/op
+BenchmarkFlatFilesDecode/game-sm-success_2-3-128      	    2398	   2562709 ns/op
+BenchmarkFlatFilesDecode/game-sm-success_2-4-128      	    4264	   1406004 ns/op
+BenchmarkFlatFilesDecode/game-sm-success_2-5-128      	    2268	   2627977 ns/op
+BenchmarkFlatFilesDecode/game-sm-success_2-6-128      	    4126	   1397681 ns/op
+BenchmarkFlatFilesDecode/multisig-sm-1-128            	    2424	   2546045 ns/op
+BenchmarkFlatFilesDecode/multisig-sm-10-128           	    2332	   2536259 ns/op
+BenchmarkFlatFilesDecode/multisig-sm-2-128            	    2376	   2573110 ns/op
+BenchmarkFlatFilesDecode/multisig-sm-3-128            	    2307	   2556357 ns/op
+BenchmarkFlatFilesDecode/multisig-sm-4-128            	    2299	   2552647 ns/op
+BenchmarkFlatFilesDecode/multisig-sm-5-128            	    2395	   2517436 ns/op
+BenchmarkFlatFilesDecode/multisig-sm-6-128            	    2412	   2533779 ns/op
+BenchmarkFlatFilesDecode/multisig-sm-7-128            	    2376	   2513676 ns/op
+BenchmarkFlatFilesDecode/multisig-sm-8-128            	    2541	   2527636 ns/op
+BenchmarkFlatFilesDecode/multisig-sm-9-128            	    2461	   2582642 ns/op
+BenchmarkFlatFilesDecode/ping-pong-1-128              	    2760	   2126001 ns/op
+BenchmarkFlatFilesDecode/ping-pong-2-128              	    2714	   2167509 ns/op
+BenchmarkFlatFilesDecode/ping-pong_2-1-128            	    2985	   2068460 ns/op
+BenchmarkFlatFilesDecode/prism-1-128                  	    5415	   1081475 ns/op
+BenchmarkFlatFilesDecode/prism-2-128                  	    2353	   2496876 ns/op
+BenchmarkFlatFilesDecode/prism-3-128                  	    3679	   1602868 ns/op
+BenchmarkFlatFilesDecode/pubkey-1-128                 	    5905	   1071553 ns/op
+BenchmarkFlatFilesDecode/stablecoin_1-1-128           	    2094	   2935496 ns/op
+BenchmarkFlatFilesDecode/stablecoin_1-2-128           	    4760	   1173695 ns/op
+BenchmarkFlatFilesDecode/stablecoin_1-3-128           	    1662	   3534558 ns/op
+BenchmarkFlatFilesDecode/stablecoin_1-4-128           	    4460	   1353478 ns/op
+BenchmarkFlatFilesDecode/stablecoin_1-5-128           	    1584	   3766212 ns/op
+BenchmarkFlatFilesDecode/stablecoin_1-6-128           	    3850	   1542147 ns/op
+BenchmarkFlatFilesDecode/stablecoin_2-1-128           	    1747	   3475726 ns/op
+BenchmarkFlatFilesDecode/stablecoin_2-2-128           	    4560	   1303723 ns/op
+BenchmarkFlatFilesDecode/stablecoin_2-3-128           	    1644	   3586521 ns/op
+BenchmarkFlatFilesDecode/stablecoin_2-4-128           	    4398	   1349252 ns/op
+BenchmarkFlatFilesDecode/token-account-1-128          	    5004	   1206519 ns/op
+BenchmarkFlatFilesDecode/token-account-2-128          	    4022	   1442764 ns/op
+BenchmarkFlatFilesDecode/uniswap-1-128                	    4366	   1307949 ns/op
+BenchmarkFlatFilesDecode/uniswap-2-128                	    4244	   1396664 ns/op
+BenchmarkFlatFilesDecode/uniswap-3-128                	    1615	   3653305 ns/op
+BenchmarkFlatFilesDecode/uniswap-4-128                	    3538	   1949336 ns/op
+BenchmarkFlatFilesDecode/uniswap-5-128                	    1633	   3630167 ns/op
+BenchmarkFlatFilesDecode/uniswap-6-128                	    3315	   1808453 ns/op
+BenchmarkFlatFilesDecode/vesting-1-128                	    3453	   1717924 ns/op
+BenchmarkFlatFilesEval/auction_1-1-128                	    2758	   2218485 ns/op
+BenchmarkFlatFilesEval/auction_1-2-128                	     822	   7179054 ns/op
+BenchmarkFlatFilesEval/auction_1-3-128                	     842	   7210753 ns/op
+BenchmarkFlatFilesEval/auction_1-4-128                	    2224	   2835241 ns/op
+BenchmarkFlatFilesEval/auction_2-1-128                	    2594	   2192210 ns/op
+BenchmarkFlatFilesEval/auction_2-2-128                	     835	   7118293 ns/op
+BenchmarkFlatFilesEval/auction_2-3-128                	     643	   9532569 ns/op
+BenchmarkFlatFilesEval/auction_2-4-128                	     799	   7261849 ns/op
+BenchmarkFlatFilesEval/auction_2-5-128                	    2079	   2835556 ns/op
+BenchmarkFlatFilesEval/crowdfunding-success-1-128     	    2388	   2518642 ns/op
+BenchmarkFlatFilesEval/crowdfunding-success-2-128     	    2420	   2506267 ns/op
+BenchmarkFlatFilesEval/crowdfunding-success-3-128     	    2259	   2363589 ns/op
+BenchmarkFlatFilesEval/currency-1-128                 	    2914	   2555875 ns/op
+BenchmarkFlatFilesEval/escrow-redeem_1-1-128          	    1558	   4000261 ns/op
+BenchmarkFlatFilesEval/escrow-redeem_1-2-128          	    1448	   4069533 ns/op
+BenchmarkFlatFilesEval/escrow-redeem_2-1-128          	    1238	   4809961 ns/op
+BenchmarkFlatFilesEval/escrow-redeem_2-2-128          	    1236	   4736245 ns/op
+BenchmarkFlatFilesEval/escrow-redeem_2-3-128          	    1255	   4802444 ns/op
+BenchmarkFlatFilesEval/escrow-refund-1-128            	    3085	   1932361 ns/op
+BenchmarkFlatFilesEval/future-increase-margin-1-128   	    2024	   2929904 ns/op
+BenchmarkFlatFilesEval/future-increase-margin-2-128   	     954	   6354366 ns/op
+BenchmarkFlatFilesEval/future-increase-margin-3-128   	     987	   6241774 ns/op
+BenchmarkFlatFilesEval/future-increase-margin-4-128   	    1027	   5683052 ns/op
+BenchmarkFlatFilesEval/future-increase-margin-5-128   	     638	   9426403 ns/op
+BenchmarkFlatFilesEval/future-pay-out-1-128           	    1972	   2955286 ns/op
+BenchmarkFlatFilesEval/future-pay-out-2-128           	     957	   6286750 ns/op
+BenchmarkFlatFilesEval/future-pay-out-3-128           	     961	   6308961 ns/op
+BenchmarkFlatFilesEval/future-pay-out-4-128           	     625	   9532597 ns/op
+BenchmarkFlatFilesEval/future-settle-early-1-128      	    2004	   2991410 ns/op
+BenchmarkFlatFilesEval/future-settle-early-2-128      	     945	   6297528 ns/op
+BenchmarkFlatFilesEval/future-settle-early-3-128      	     963	   6148207 ns/op
+BenchmarkFlatFilesEval/future-settle-early-4-128      	     829	   6983960 ns/op
+BenchmarkFlatFilesEval/game-sm-success_1-1-128        	    1366	   4535483 ns/op
+BenchmarkFlatFilesEval/game-sm-success_1-2-128        	    2386	   2473918 ns/op
+BenchmarkFlatFilesEval/game-sm-success_1-3-128        	     806	   7344020 ns/op
+BenchmarkFlatFilesEval/game-sm-success_1-4-128        	    2030	   2922465 ns/op
+BenchmarkFlatFilesEval/game-sm-success_2-1-128        	    1291	   4494049 ns/op
+BenchmarkFlatFilesEval/game-sm-success_2-2-128        	    2433	   2498286 ns/op
+BenchmarkFlatFilesEval/game-sm-success_2-3-128        	     807	   7347999 ns/op
+BenchmarkFlatFilesEval/game-sm-success_2-4-128        	    2061	   2916281 ns/op
+BenchmarkFlatFilesEval/game-sm-success_2-5-128        	     824	   7415402 ns/op
+BenchmarkFlatFilesEval/game-sm-success_2-6-128        	    2028	   2892033 ns/op
+BenchmarkFlatFilesEval/multisig-sm-1-128              	    1274	   4651573 ns/op
+BenchmarkFlatFilesEval/multisig-sm-10-128             	     966	   6388265 ns/op
+BenchmarkFlatFilesEval/multisig-sm-2-128              	    1308	   4469267 ns/op
+BenchmarkFlatFilesEval/multisig-sm-3-128              	    1309	   4497793 ns/op
+BenchmarkFlatFilesEval/multisig-sm-4-128              	    1345	   4521657 ns/op
+BenchmarkFlatFilesEval/multisig-sm-5-128              	     920	   6410506 ns/op
+BenchmarkFlatFilesEval/multisig-sm-6-128              	    1310	   4624377 ns/op
+BenchmarkFlatFilesEval/multisig-sm-7-128              	    1310	   4491844 ns/op
+BenchmarkFlatFilesEval/multisig-sm-8-128              	    1369	   4546018 ns/op
+BenchmarkFlatFilesEval/multisig-sm-9-128              	    1251	   4574380 ns/op
+BenchmarkFlatFilesEval/ping-pong-1-128                	    1603	   3880114 ns/op
+BenchmarkFlatFilesEval/ping-pong-2-128                	    1514	   3866912 ns/op
+BenchmarkFlatFilesEval/ping-pong_2-1-128              	    2548	   2397669 ns/op
+BenchmarkFlatFilesEval/prism-1-128                    	    2858	   2085240 ns/op
+BenchmarkFlatFilesEval/prism-2-128                    	    1208	   4908282 ns/op
+BenchmarkFlatFilesEval/prism-3-128                    	    1323	   4464244 ns/op
+BenchmarkFlatFilesEval/pubkey-1-128                   	    3349	   1768894 ns/op
+BenchmarkFlatFilesEval/stablecoin_1-1-128             	     573	  10424134 ns/op
+BenchmarkFlatFilesEval/stablecoin_1-2-128             	    2456	   2394952 ns/op
+BenchmarkFlatFilesEval/stablecoin_1-3-128             	     498	  12058865 ns/op
+BenchmarkFlatFilesEval/stablecoin_1-4-128             	    2400	   2573645 ns/op
+BenchmarkFlatFilesEval/stablecoin_1-5-128             	     384	  15523796 ns/op
+BenchmarkFlatFilesEval/stablecoin_1-6-128             	    1938	   3164453 ns/op
+BenchmarkFlatFilesEval/stablecoin_2-1-128             	     570	  10464480 ns/op
+BenchmarkFlatFilesEval/stablecoin_2-2-128             	    2434	   2443673 ns/op
+BenchmarkFlatFilesEval/stablecoin_2-3-128             	     492	  12189638 ns/op
+BenchmarkFlatFilesEval/stablecoin_2-4-128             	    2216	   2604593 ns/op
+BenchmarkFlatFilesEval/token-account-1-128            	    2581	   2289032 ns/op
+BenchmarkFlatFilesEval/token-account-2-128            	    1490	   4038033 ns/op
+BenchmarkFlatFilesEval/uniswap-1-128                  	    1203	   4922202 ns/op
+BenchmarkFlatFilesEval/uniswap-2-128                  	    2262	   2731727 ns/op
+BenchmarkFlatFilesEval/uniswap-3-128                  	     307	  19168662 ns/op
+BenchmarkFlatFilesEval/uniswap-4-128                  	    1429	   4158062 ns/op
+BenchmarkFlatFilesEval/uniswap-5-128                  	     468	  12981270 ns/op
+BenchmarkFlatFilesEval/uniswap-6-128                  	    1558	   3905403 ns/op
+BenchmarkFlatFilesEval/vesting-1-128                  	    1533	   3985746 ns/op
+BenchmarkDirectCrypto/SHA256_minio-128                	64337821	        93.06 ns/op
+BenchmarkDirectCrypto/Keccak_256-128                  	 4839714	      1266 ns/op
+BenchmarkDirectCrypto/Blake2b_256-128                 	16000633	       326.1 ns/op
+BenchmarkDirectCrypto/Keccak_256_Hash-128             	 4512963	      1262 ns/op
+BenchmarkDirectCrypto/Ed25519_Verify-128              	   24092	    246223 ns/op
+BenchmarkDirectCrypto/ECDSA_Verify-128                	   14550	    409548 ns/op
+BenchmarkDirectCrypto/BLS_HashToG1-128                	   12885	    464750 ns/op
+BenchmarkDirectCrypto/BLS_G1_Add-128                  	 1748444	      3399 ns/op
+BenchmarkDirectCrypto/BLS_G1_ScalarMul-128            	   20960	    283557 ns/op
+BenchmarkDirectCrypto/BLS_G2_Add-128                  	  629079	      9498 ns/op
+BenchmarkDirectCrypto/BLS_Pairing-128                 	    1795	   3391753 ns/op
+PASS
+ok  	github.com/blinklabs-io/plutigo/tests	1470.071s

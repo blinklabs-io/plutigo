@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"math/big"
 	"reflect"
-	"strconv"
-	"strings"
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
+	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
@@ -16,6 +15,63 @@ import (
 const IntegerToByteStringMaximumOutputLength = 8192
 
 type Builtins[T syn.Eval] [builtin.TotalBuiltinCount]func(*Machine[T], *Builtin[T]) (Value[T], error)
+
+var (
+	availableBuiltinsV10 = buildAvailableBuiltins(lang.LanguageVersionV1, 0)
+	availableBuiltinsV20 = buildAvailableBuiltins(lang.LanguageVersionV2, 0)
+	availableBuiltinsV30 = buildAvailableBuiltins(lang.LanguageVersionV3, 0)
+	availableBuiltinsV40 = buildAvailableBuiltins(lang.LanguageVersionV4, 0)
+	filteredBuiltinsV10  = buildFilteredBuiltins(lang.LanguageVersionV1, 0)
+	filteredBuiltinsV20  = buildFilteredBuiltins(lang.LanguageVersionV2, 0)
+	filteredBuiltinsV30  = buildFilteredBuiltins(lang.LanguageVersionV3, 0)
+	filteredBuiltinsV40  = buildFilteredBuiltins(lang.LanguageVersionV4, 0)
+)
+
+func buildAvailableBuiltins(
+	version lang.LanguageVersion,
+	protoMajor uint,
+) *[builtin.TotalBuiltinCount]bool {
+	plutusVersion := builtin.LanguageVersionToPlutusVersion(version)
+	available := new([builtin.TotalBuiltinCount]bool)
+	for i := 0; i < int(builtin.TotalBuiltinCount); i++ {
+		fn := builtin.DefaultFunction(i)
+		available[i] = fn.IsAvailableInWithProto(plutusVersion, protoMajor)
+	}
+	return available
+}
+
+func buildFilteredBuiltins(
+	version lang.LanguageVersion,
+	protoMajor uint,
+) *Builtins[syn.DeBruijn] {
+	ret := newBuiltins[syn.DeBruijn]()
+	available := buildAvailableBuiltins(version, protoMajor)
+	for i := 0; i < int(builtin.TotalBuiltinCount); i++ {
+		if !available[i] {
+			ret[i] = nil
+		}
+	}
+	return &ret
+}
+
+func newAvailableBuiltins(
+	version lang.LanguageVersion,
+	protoMajor uint,
+) *[builtin.TotalBuiltinCount]bool {
+	if protoMajor == 0 {
+		switch version {
+		case lang.LanguageVersionV1:
+			return availableBuiltinsV10
+		case lang.LanguageVersionV2:
+			return availableBuiltinsV20
+		case lang.LanguageVersionV3:
+			return availableBuiltinsV30
+		case lang.LanguageVersionV4:
+			return availableBuiltinsV40
+		}
+	}
+	return buildAvailableBuiltins(version, protoMajor)
+}
 
 func newBuiltins[T syn.Eval]() Builtins[T] {
 	return Builtins[T]{
@@ -135,18 +191,22 @@ func newBuiltins[T syn.Eval]() Builtins[T] {
 }
 
 func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
-	// Check if the builtin is available in the current Plutus version
-	plutusVersion := builtin.LanguageVersionToPlutusVersion(m.version)
-	if !b.Func.IsAvailableInWithProto(plutusVersion, m.protoMajor) {
-		return nil, fmt.Errorf(
-			"builtin %s is not available in Plutus %s at protocol version %d (introduced in %s)",
-			b.Func.String(),
-			plutusVersionName(plutusVersion),
-			m.protoMajor,
-			plutusVersionName(b.Func.IntroducedIn()),
-		)
+	fn := (*m.builtins)[b.Func]
+	if fn == nil || (m.available != nil && !m.available[b.Func]) {
+		plutusVersion := builtin.LanguageVersionToPlutusVersion(m.version)
+		return nil, &BuiltinError{
+			Code:    ErrCodeBuiltinFailure,
+			Builtin: b.Func.String(),
+			Message: fmt.Sprintf(
+				"builtin %s is not available in Plutus %s at protocol version %d (introduced in %s)",
+				b.Func.String(),
+				plutusVersionName(plutusVersion),
+				m.protoMajor,
+				plutusVersionName(b.Func.IntroducedIn()),
+			),
+		}
 	}
-	return m.builtins[b.Func](m, b)
+	return fn(m, b)
 }
 
 // plutusVersionName returns a human-readable name for the Plutus version
@@ -198,6 +258,29 @@ func (m *Machine[T]) CostTwo(
 
 	cost := CostPair(cf, x, y)
 	return m.spendBudget(cost)
+}
+
+func (m *Machine[T]) CostTwoExMem(
+	b *builtin.DefaultFunction,
+	x, y ExMem,
+) error {
+	model := m.costs.builtinCosts[*b]
+	mem := model.mem.(TwoArgument)
+	cpu := model.cpu.(TwoArgument)
+	memConstants := mem.HasConstants()
+	cpuConstants := cpu.HasConstants()
+	xMem := x
+	if memConstants[0] && cpuConstants[0] {
+		xMem = ExMem(0)
+	}
+	yMem := y
+	if memConstants[1] && cpuConstants[1] {
+		yMem = ExMem(0)
+	}
+	return m.spendBudget(ExBudget{
+		Mem: int64(mem.CostTwo(xMem, yMem)),
+		Cpu: int64(cpu.CostTwo(xMem, yMem)),
+	})
 }
 
 func (m *Machine[T]) CostThree(
@@ -312,12 +395,6 @@ func unwrapString[T syn.Eval](value Value[T]) (string, error) {
 		switch c := v.Constant.(type) {
 		case *syn.String:
 			i = c.Inner
-			// Process escape sequences and normalize Unicode
-			processed, err := processEscapeSequences(i)
-			if err != nil {
-				return "", fmt.Errorf("failed to process escape sequences: %w", err)
-			}
-			i = processed
 		default:
 			return "", &TypeError{Code: ErrCodeTypeMismatch, Expected: "String", Got: fmt.Sprintf("%T", v.Constant), Message: "type mismatch"}
 		}
@@ -326,98 +403,6 @@ func unwrapString[T syn.Eval](value Value[T]) (string, error) {
 	}
 
 	return i, nil
-}
-
-// Enhanced processEscapeSequences to handle additional cases
-func processEscapeSequences(input string) (string, error) {
-	var sb strings.Builder
-	for i := 0; i < len(input); i++ {
-		ch := input[i]
-		if ch != '\\' {
-			sb.WriteByte(ch)
-			continue
-		}
-
-		// at a backslash
-		i++
-		if i >= len(input) {
-			// trailing backslash, keep it
-			sb.WriteByte('\\')
-			break
-		}
-
-		next := input[i]
-		switch next {
-		case 'n':
-			sb.WriteByte('\n')
-		case 'r':
-			sb.WriteByte('\r')
-		case 't':
-			sb.WriteByte('\t')
-		case 'b':
-			sb.WriteByte('\b')
-		case 'a':
-			sb.WriteByte('\a')
-		case '\\':
-			sb.WriteByte('\\')
-		case '"':
-			sb.WriteByte('"')
-		case 'D':
-			// possible \DEL sequence
-			// check remaining substring
-			if strings.HasPrefix(input[i:], "DEL") {
-				sb.WriteRune(rune(127))
-				i += 2 // consumed 'D' then 'E' and 'L' in loop increment; adjust by 2 to move past 'EL'
-			} else {
-				// unknown, keep as-is
-				sb.WriteByte('\\')
-				sb.WriteByte(next)
-			}
-		case 'u':
-			// expect 4 hex digits after \u
-			if i+4 < len(input) {
-				hex := input[i+1 : i+5]
-				if v, err := strconv.ParseInt(hex, 16, 32); err == nil {
-					sb.WriteRune(rune(v))
-					i += 4
-				} else {
-					// fallback: write original sequence
-					sb.WriteString("\\u")
-				}
-			} else {
-				sb.WriteString("\\u")
-			}
-		default:
-			// numeric escape like \8712 (4 digits) or other
-			// try to read up to 4 digits
-			if next >= '0' && next <= '9' {
-				j := i
-				// we've already got one digit at position j
-				for k := 0; k < 4 && j < len(input) && input[j] >= '0' && input[j] <= '9'; k++ {
-					j++
-				}
-				digits := input[i:j]
-				if len(digits) > 0 {
-					if v, err := strconv.ParseInt(digits, 10, 32); err == nil {
-						sb.WriteRune(rune(v))
-						i = j - 1
-						break
-					}
-				}
-
-				// fallback: write original
-				sb.WriteByte('\\')
-				sb.WriteString(digits)
-				i = j - 1
-			} else {
-				// unknown escape, preserve backslash and char
-				sb.WriteByte('\\')
-				sb.WriteByte(next)
-			}
-		}
-	}
-
-	return sb.String(), nil
 }
 
 func unwrapBool[T syn.Eval](value Value[T]) (bool, error) {
