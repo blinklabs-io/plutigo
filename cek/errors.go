@@ -3,6 +3,7 @@ package cek
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // EvalError is the base interface for all evaluation errors.
@@ -129,6 +130,9 @@ type BuiltinError struct {
 }
 
 func (e *BuiltinError) Error() string {
+	if strings.HasPrefix(e.Message, "builtin ") {
+		return e.Message
+	}
 	if e.Builtin != "" {
 		return fmt.Sprintf("%s: %s", e.Builtin, e.Message)
 	}

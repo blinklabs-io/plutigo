@@ -44,9 +44,27 @@ func addInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
+	err = m.CostTwoExMem(
+		&b.Func,
+		bigIntExMemValue(arg1),
+		bigIntExMemValue(arg2),
+	)
 	if err != nil {
 		return nil, err
+	}
+
+	if arg1.IsInt64() && arg2.IsInt64() {
+		left := arg1.Int64()
+		right := arg2.Int64()
+		if (right > 0 && left <= math.MaxInt64-right) ||
+			(right < 0 && left >= math.MinInt64-right) ||
+			right == 0 {
+			return &Constant{
+				Constant: &syn.Integer{
+					Inner: big.NewInt(left + right),
+				},
+			}, nil
+		}
 	}
 
 	var newInt big.Int
@@ -76,7 +94,11 @@ func subtractInteger[T syn.Eval](
 		return nil, err
 	}
 
-	err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
+	err = m.CostTwoExMem(
+		&b.Func,
+		bigIntExMemValue(arg1),
+		bigIntExMemValue(arg2),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +130,11 @@ func multiplyInteger[T syn.Eval](
 		return nil, err
 	}
 
-	err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
+	err = m.CostTwoExMem(
+		&b.Func,
+		bigIntExMemValue(arg1),
+		bigIntExMemValue(arg2),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +162,15 @@ func divideInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	if err != nil {
 		return nil, err
 	}
-	// Check for division by zero
+
+	err = m.CostTwoExMem(
+		&b.Func,
+		bigIntExMemValue(arg1),
+		bigIntExMemValue(arg2),
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	if arg2.Sign() == 0 {
 		return nil, &BuiltinError{
@@ -144,11 +178,6 @@ func divideInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Builtin: "divideInteger",
 			Message: "division by zero",
 		}
-	}
-
-	err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
-	if err != nil {
-		return nil, err
 	}
 
 	var newInt big.Int
@@ -186,7 +215,14 @@ func quotientInteger[T syn.Eval](
 		return nil, err
 	}
 
-	// Check for division by zero
+	err = m.CostTwoExMem(
+		&b.Func,
+		bigIntExMemValue(arg1),
+		bigIntExMemValue(arg2),
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	if arg2.Sign() == 0 {
 		return nil, &BuiltinError{
@@ -194,11 +230,6 @@ func quotientInteger[T syn.Eval](
 			Builtin: "quotientInteger",
 			Message: "division by zero",
 		}
-	}
-
-	err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
-	if err != nil {
-		return nil, err
 	}
 
 	var newInt big.Int
@@ -231,7 +262,14 @@ func remainderInteger[T syn.Eval](
 		return nil, err
 	}
 
-	// Check for division by zero
+	err = m.CostTwoExMem(
+		&b.Func,
+		bigIntExMemValue(arg1),
+		bigIntExMemValue(arg2),
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	if arg2.Sign() == 0 {
 		return nil, &BuiltinError{
@@ -239,11 +277,6 @@ func remainderInteger[T syn.Eval](
 			Builtin: "remainderInteger",
 			Message: "division by zero",
 		}
-	}
-
-	err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
-	if err != nil {
-		return nil, err
 	}
 
 	var newInt big.Int
@@ -273,18 +306,21 @@ func modInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	// Check for division by zero
+	err = m.CostTwoExMem(
+		&b.Func,
+		bigIntExMemValue(arg1),
+		bigIntExMemValue(arg2),
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	if arg2.Sign() == 0 {
 		return nil, &BuiltinError{
 			Code:    ErrCodeDivisionByZero,
 			Builtin: "modInteger",
 			Message: "division by zero",
 		}
-	}
-
-	err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
-	if err != nil {
-		return nil, err
 	}
 
 	var quotient, remainder big.Int
@@ -319,21 +355,16 @@ func equalsInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	// Charge budget for integer comparison
-	err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
+	err = m.CostTwoExMem(
+		&b.Func,
+		bigIntExMemValue(arg1),
+		bigIntExMemValue(arg2),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	// Compare big.Int values for equality
-	res := arg1.Cmp(arg2) == 0
-
-	con := &syn.Bool{
-		Inner: res,
-	}
-
-	value := &Constant{con}
-
-	return value, nil
+	return boolConstant(arg1.Cmp(arg2) == 0), nil
 }
 
 func lessThanInteger[T syn.Eval](
@@ -352,20 +383,16 @@ func lessThanInteger[T syn.Eval](
 		return nil, err
 	}
 
-	err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
+	err = m.CostTwoExMem(
+		&b.Func,
+		bigIntExMemValue(arg1),
+		bigIntExMemValue(arg2),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	res := arg1.Cmp(arg2)
-
-	con := &syn.Bool{
-		Inner: res == -1,
-	}
-
-	value := &Constant{con}
-
-	return value, nil
+	return boolConstant(arg1.Cmp(arg2) == -1), nil
 }
 
 func lessThanEqualsInteger[T syn.Eval](
@@ -384,20 +411,17 @@ func lessThanEqualsInteger[T syn.Eval](
 		return nil, err
 	}
 
-	err = m.CostTwo(&b.Func, bigIntExMem(arg1), bigIntExMem(arg2))
+	err = m.CostTwoExMem(
+		&b.Func,
+		bigIntExMemValue(arg1),
+		bigIntExMemValue(arg2),
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	res := arg1.Cmp(arg2)
-
-	con := &syn.Bool{
-		Inner: res == -1 || res == 0,
-	}
-
-	value := &Constant{con}
-
-	return value, nil
+	return boolConstant(res == -1 || res == 0), nil
 }
 
 // ============================================================================
@@ -670,13 +694,7 @@ func equalsByteString[T syn.Eval](
 		return nil, err
 	}
 
-	res := bytes.Equal(arg1, arg2)
-
-	value := &Constant{&syn.Bool{
-		Inner: res,
-	}}
-
-	return value, nil
+	return boolConstant(bytes.Equal(arg1, arg2)), nil
 }
 
 func lessThanByteString[T syn.Eval](
@@ -700,15 +718,7 @@ func lessThanByteString[T syn.Eval](
 		return nil, err
 	}
 
-	res := bytes.Compare(arg1, arg2)
-
-	con := &syn.Bool{
-		Inner: res == -1,
-	}
-
-	value := &Constant{con}
-
-	return value, nil
+	return boolConstant(bytes.Compare(arg1, arg2) == -1), nil
 }
 
 func lessThanEqualsByteString[T syn.Eval](
@@ -733,14 +743,7 @@ func lessThanEqualsByteString[T syn.Eval](
 	}
 
 	res := bytes.Compare(arg1, arg2)
-
-	con := &syn.Bool{
-		Inner: res == -1 || res == 0,
-	}
-
-	value := &Constant{con}
-
-	return value, nil
+	return boolConstant(res == -1 || res == 0), nil
 }
 
 // ============================================================================

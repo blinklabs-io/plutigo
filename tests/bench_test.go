@@ -2,7 +2,6 @@ package tests
 
 import (
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -10,10 +9,23 @@ import (
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/cek"
+	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
 func BenchmarkFlatFiles(b *testing.B) {
+	benchFlatFiles(b, true, true)
+}
+
+func BenchmarkFlatFilesDecode(b *testing.B) {
+	benchFlatFiles(b, true, false)
+}
+
+func BenchmarkFlatFilesEval(b *testing.B) {
+	benchFlatFiles(b, false, true)
+}
+
+func benchFlatFiles(b *testing.B, includeDecode, includeEval bool) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
 		b.Fatal("Could not get caller information")
@@ -53,28 +65,66 @@ func BenchmarkFlatFiles(b *testing.B) {
 			b.Fatalf("failed to load file %s: %v", filePath, err)
 		}
 
+		var decodedProgram *syn.Program[syn.DeBruijn]
+		if !includeDecode || includeEval {
+			decodedProgram, err = syn.Decode[syn.DeBruijn](content)
+			if err != nil {
+				b.Fatalf("decode error: %v", err)
+			}
+		}
+
+		var evalContext *cek.EvalContext
+		if includeEval {
+			evalContext = benchmarkEvalContext(
+				benchmarkProgramVersion(b, decodedProgram),
+			)
+		}
+
 		// Register a sub-benchmark for this file.
 		b.Run(benchmarkName, func(b *testing.B) {
-
 			for b.Loop() {
-				program, err := syn.Decode[syn.DeBruijn](content)
-				if err != nil {
-					log.Fatalf("decode error: %v\n\n", err)
+				program := decodedProgram
+				if includeDecode {
+					var decodeErr error
+					program, decodeErr = syn.Decode[syn.DeBruijn](content)
+					if decodeErr != nil {
+						b.Fatalf("decode error: %v", decodeErr)
+					}
 				}
 
-				machine := cek.NewMachine[syn.DeBruijn](
-					program.Version,
-					200,
-					nil,
-				)
+				if includeEval {
+					// Use an eval context with protocol major 200 so benchmark
+					// coverage includes every builtin without availability gating.
+					machine := cek.NewMachine[syn.DeBruijn](
+						program.Version,
+						0,
+						evalContext,
+					)
 
-				_, err = machine.Run(program.Term)
-				if err != nil {
-					log.Fatalf("eval error: %v\n\n", err)
+					_, err = machine.Run(program.Term)
+					if err != nil {
+						b.Fatalf("eval error: %v", err)
+					}
 				}
 			}
 		})
 	}
+}
+
+func benchmarkEvalContext(version lang.LanguageVersion) *cek.EvalContext {
+	return cek.NewDefaultEvalContext(version, cek.ProtoVersion{Major: 200})
+}
+
+func benchmarkProgramVersion(
+	b *testing.B,
+	program *syn.Program[syn.DeBruijn],
+) lang.LanguageVersion {
+	b.Helper()
+
+	if program == nil {
+		b.Fatal("decoded program is required when includeEval is true")
+	}
+	return program.Version
 }
 
 // loadFile reads the entire file into a byte slice.

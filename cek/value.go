@@ -17,6 +17,12 @@ type Constant struct {
 	Constant syn.IConstant
 }
 
+func boolConstant(v bool) *Constant {
+	return &Constant{
+		Constant: &syn.Bool{Inner: v},
+	}
+}
+
 func (c Constant) String() string {
 	return fmt.Sprintf("%v", c.Constant)
 }
@@ -81,9 +87,10 @@ func (b Builtin[T]) NeedsForce() bool {
 
 func (b *Builtin[T]) ConsumeForce() *Builtin[T] {
 	return &Builtin[T]{
-		Func:   b.Func,
-		Forces: b.Forces + 1,
-		Args:   b.Args,
+		Func:     b.Func,
+		Forces:   b.Forces + 1,
+		ArgCount: b.ArgCount,
+		Args:     b.Args,
 	}
 }
 

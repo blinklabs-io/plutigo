@@ -1,6 +1,7 @@
 package cek
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -19,6 +20,23 @@ func TestPV11ProtoVersionPropagation(t *testing.T) {
 	}
 	if ctx.ProtoMajor != 11 {
 		t.Errorf("EvalContext.ProtoMajor = %d, want 11", ctx.ProtoMajor)
+	}
+}
+
+func TestNewDefaultEvalContext(t *testing.T) {
+	ctx := NewDefaultEvalContext(
+		lang.LanguageVersionV1,
+		ProtoVersion{Major: 11},
+	)
+
+	if ctx.CostModel != DefaultCostModel {
+		t.Fatal("NewDefaultEvalContext should use DefaultCostModel")
+	}
+	if ctx.ProtoMajor != 11 {
+		t.Fatalf("ProtoMajor = %d, want 11", ctx.ProtoMajor)
+	}
+	if ctx.SemanticsVariant != SemanticsVariantB {
+		t.Fatalf("SemanticsVariant = %v, want %v", ctx.SemanticsVariant, SemanticsVariantB)
 	}
 }
 
@@ -110,5 +128,35 @@ func TestPV11DefaultProtoVersion(t *testing.T) {
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV1, 0, nil)
 	if m.protoMajor != 0 {
 		t.Errorf("default protoMajor = %d, want 0", m.protoMajor)
+	}
+}
+
+func TestUnavailableBuiltinReturnsBuiltinError(t *testing.T) {
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV1, 0, nil)
+	b := &Builtin[syn.DeBruijn]{
+		Func: builtin.Bls12_381_G1_Add,
+	}
+
+	_, err := m.evalBuiltinApp(b)
+	if err == nil {
+		t.Fatal("expected unavailable builtin error")
+	}
+	if !IsBuiltinError(err) {
+		t.Fatalf("expected builtin-classified error, got %T: %v", err, err)
+	}
+
+	var builtinErr *BuiltinError
+	if !errors.As(err, &builtinErr) {
+		t.Fatalf("expected BuiltinError, got %T: %v", err, err)
+	}
+	if builtinErr.Code != ErrCodeBuiltinFailure {
+		t.Fatalf("BuiltinError.Code = %v, want %v", builtinErr.Code, ErrCodeBuiltinFailure)
+	}
+	if builtinErr.Builtin != builtin.Bls12_381_G1_Add.String() {
+		t.Fatalf("BuiltinError.Builtin = %q, want %q", builtinErr.Builtin, builtin.Bls12_381_G1_Add.String())
+	}
+	want := "builtin " + builtin.Bls12_381_G1_Add.String() + " is not available in Plutus V1 at protocol version 0 (introduced in V3)"
+	if builtinErr.Error() != want {
+		t.Fatalf("BuiltinError.Error() = %q, want %q", builtinErr.Error(), want)
 	}
 }

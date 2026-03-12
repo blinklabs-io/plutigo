@@ -12,6 +12,20 @@ type EvalContext struct {
 	ProtoMajor       uint
 }
 
+// NewDefaultEvalContext builds an EvalContext using the default cost model
+// while still honoring the supplied protocol version for semantics and builtin
+// availability gating.
+func NewDefaultEvalContext(
+	version LanguageVersion,
+	protoVersion ProtoVersion,
+) *EvalContext {
+	return &EvalContext{
+		CostModel:        DefaultCostModel,
+		SemanticsVariant: GetSemantics(version, protoVersion),
+		ProtoMajor:       protoVersion.Major,
+	}
+}
+
 // NewEvalContext returns a new EvalContext based on the provided language version, protocol version, and
 // cost models from protocol parameters
 func NewEvalContext(

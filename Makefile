@@ -30,13 +30,18 @@ test-match: ## Run specific tests (usage: make test-one TEST=TestName)
 	@echo "Running test: $(TEST)..."
 	@go test -run $(TEST) -v ./...
 
+# Benchmark targets pin `CGO_ENABLED=0` to measure pure-Go behavior consistently.
+# That forces pure-Go fallbacks for some dependencies (for example crypto paths),
+# so benchmark numbers can be slower than CGO-enabled production-like builds.
+# To benchmark with CGO-enabled implementations instead, unset `CGO_ENABLED` or
+# run the equivalent `go test -bench=...` command with `CGO_ENABLED=1`.
 bench: ## Run benchmarks
 	@echo "Running benchmarks..."
-	@go test -bench=. -benchtime=5s -run='^$$' ./...
+	@CGO_ENABLED=0 go test -bench=. -benchtime=5s -run='^$$' ./...
 
 bench-baseline: ## Run benchmarks and save as baseline
 	@echo "Running benchmarks and saving baseline..."
-	@go test -bench=. -benchtime=5s -run='^$$' ./... > bench-baseline.txt
+	@CGO_ENABLED=0 go test -bench=. -benchtime=5s -run='^$$' ./... > bench-baseline.txt
 
 bench-compare: ## Run benchmarks and compare against baseline
 	@echo "Running benchmarks and comparing against baseline..."
@@ -44,7 +49,7 @@ bench-compare: ## Run benchmarks and compare against baseline
 		echo "No baseline found. Run 'make bench-baseline' first."; \
 		exit 1; \
 	fi
-	@go test -bench=. -benchtime=5s -run='^$$' ./... > bench-current.txt
+	@CGO_ENABLED=0 go test -bench=. -benchtime=5s -run='^$$' ./... > bench-current.txt
 	@echo "Benchmark comparison:"
 	@benchstat bench-baseline.txt bench-current.txt || echo "Install benchstat: go install golang.org/x/perf/cmd/benchstat@latest"
 
