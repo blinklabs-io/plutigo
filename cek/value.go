@@ -1,7 +1,9 @@
 package cek
 
 import (
+	"bytes"
 	"fmt"
+	"math/big"
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/syn"
@@ -17,10 +19,62 @@ type Constant struct {
 	Constant syn.IConstant
 }
 
-func boolConstant(v bool) *Constant {
-	return &Constant{
-		Constant: &syn.Bool{Inner: v},
+const (
+	cachedIntMin = -256
+	cachedIntMax = 65535
+)
+
+var (
+	cachedBoolFalse = &Constant{
+		Constant: &syn.Bool{Inner: false},
 	}
+	cachedBoolTrue = &Constant{
+		Constant: &syn.Bool{Inner: true},
+	}
+	cachedUnitConstant = &Constant{
+		Constant: &syn.Unit{},
+	}
+	cachedIntConstants = buildCachedIntConstants()
+)
+
+func boolConstant(v bool) *Constant {
+	if v {
+		return cachedBoolTrue
+	}
+	return cachedBoolFalse
+}
+
+// int64Constant reuses immutable small constants to avoid repeated big.Int and
+// syn.Integer allocations on hot integer builtin paths.
+func int64Constant(v int64) *Constant {
+	if v >= cachedIntMin && v <= cachedIntMax {
+		return cachedIntConstants[v-cachedIntMin]
+	}
+	return &Constant{
+		Constant: &syn.Integer{Inner: big.NewInt(v)},
+	}
+}
+
+// constantValue may return shared cached *Constant instances for bools, unit,
+// and small integers; callers must treat the returned value and its inner
+// fields as read-only. Callers that need an independent mutable syntax value
+// should use constantTerm, which clones the underlying constant.
+func constantValue(constant syn.IConstant) *Constant {
+	switch c := constant.(type) {
+	case *syn.Bool:
+		return boolConstant(c.Inner)
+	case *syn.Unit:
+		return cachedUnitConstant
+	case *syn.Integer:
+		if c.Inner.IsInt64() {
+			return int64Constant(c.Inner.Int64())
+		}
+	}
+	return &Constant{Constant: constant}
+}
+
+func constantTerm[T syn.Eval](constant syn.IConstant) syn.Term[T] {
+	return &syn.Constant{Con: cloneConstant(constant)}
 }
 
 func (c Constant) String() string {
@@ -31,6 +85,69 @@ func (Constant) isValue() {}
 
 func (c Constant) toExMem() ExMem {
 	return iconstantExMem(c.Constant)()
+}
+
+func buildCachedIntConstants() []*Constant {
+	ret := make([]*Constant, cachedIntMax-cachedIntMin+1)
+	for i := int64(cachedIntMin); i <= cachedIntMax; i++ {
+		ret[i-cachedIntMin] = &Constant{
+			Constant: &syn.Integer{Inner: big.NewInt(i)},
+		}
+	}
+	return ret
+}
+
+func cloneConstant(constant syn.IConstant) syn.IConstant {
+	switch c := constant.(type) {
+	case *syn.Integer:
+		return &syn.Integer{Inner: new(big.Int).Set(c.Inner)}
+	case *syn.ByteString:
+		return &syn.ByteString{Inner: bytes.Clone(c.Inner)}
+	case *syn.String:
+		return &syn.String{Inner: c.Inner}
+	case *syn.Unit:
+		return &syn.Unit{}
+	case *syn.Bool:
+		return &syn.Bool{Inner: c.Inner}
+	case *syn.ProtoList:
+		items := make([]syn.IConstant, len(c.List))
+		for i := range c.List {
+			items[i] = cloneConstant(c.List[i])
+		}
+		return &syn.ProtoList{
+			LTyp: c.LTyp,
+			List: items,
+		}
+	case *syn.ProtoPair:
+		return &syn.ProtoPair{
+			FstType: c.FstType,
+			SndType: c.SndType,
+			First:   cloneConstant(c.First),
+			Second:  cloneConstant(c.Second),
+		}
+	case *syn.Data:
+		return &syn.Data{Inner: c.Inner.Clone()}
+	case *syn.Bls12_381G1Element:
+		if c.Inner == nil {
+			return &syn.Bls12_381G1Element{}
+		}
+		tmp := *c.Inner
+		return &syn.Bls12_381G1Element{Inner: &tmp}
+	case *syn.Bls12_381G2Element:
+		if c.Inner == nil {
+			return &syn.Bls12_381G2Element{}
+		}
+		tmp := *c.Inner
+		return &syn.Bls12_381G2Element{Inner: &tmp}
+	case *syn.Bls12_381MlResult:
+		if c.Inner == nil {
+			return &syn.Bls12_381MlResult{}
+		}
+		tmp := *c.Inner
+		return &syn.Bls12_381MlResult{Inner: &tmp}
+	default:
+		panic(fmt.Sprintf("unsupported constant type: %T", constant))
+	}
 }
 
 type Delay[T syn.Eval] struct {

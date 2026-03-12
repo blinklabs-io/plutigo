@@ -161,6 +161,9 @@ func bigIntExMemValue(i *big.Int) ExMem {
 	if i.Sign() == 0 {
 		return ExMem(1)
 	}
+	if i.IsInt64() || i.IsUint64() {
+		return ExMem(1)
+	}
 	return ExMem((i.BitLen()-1)/64 + 1)
 }
 

@@ -7,6 +7,7 @@ toolchain go1.24.3
 require (
 	github.com/btcsuite/btcd/btcec/v2 v2.3.6
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0
+	github.com/cloudflare/circl v1.6.3
 	github.com/consensys/gnark-crypto v0.19.2
 	github.com/ethereum/go-ethereum v1.17.1
 	github.com/fxamacker/cbor/v2 v2.9.0

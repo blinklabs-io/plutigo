@@ -7,11 +7,17 @@ import (
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/ecdsa"
+	circlbls "github.com/cloudflare/circl/ecc/bls12381"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 	"github.com/ethereum/go-ethereum/crypto"
 	sha256 "github.com/minio/sha256-simd"
 	"golang.org/x/crypto/blake2b"
 )
+
+var benchmarkBLSScalarBytes = []byte{
+	1, 2, 3, 4, 5, 6, 7, 8,
+	9, 10, 11, 12, 13, 14, 15, 16,
+}
 
 func BenchmarkDirectCrypto(b *testing.B) {
 	message := []byte("test message for hashing and signing")
@@ -61,60 +67,134 @@ func BenchmarkDirectCrypto(b *testing.B) {
 		}
 	})
 
+	benchmarkBLSLibraryComparisons(b, message, dst)
+}
+
+func benchmarkBLSLibraryComparisons(b *testing.B, message, dst []byte) {
+	otherMessage := []byte("another message")
+
 	b.Run("BLS_HashToG1", func(b *testing.B) {
-		for b.Loop() {
-			bls.HashToG1(message, dst)
-		}
+		b.Run("gnark", func(b *testing.B) {
+			for b.Loop() {
+				_, _ = bls.HashToG1(message, dst)
+			}
+		})
+
+		b.Run("circl", func(b *testing.B) {
+			for b.Loop() {
+				var point circlbls.G1
+				point.Hash(message, dst)
+			}
+		})
 	})
 
 	b.Run("BLS_G1_Add", func(b *testing.B) {
-		p1, _ := bls.HashToG1(message, dst)
-		p2, _ := bls.HashToG1([]byte("another message"), dst)
-		var jac1, jac2 bls.G1Jac
-		jac1.FromAffine(&p1)
-		jac2.FromAffine(&p2)
-		b.ResetTimer()
-		for b.Loop() {
-			var result bls.G1Jac
-			result.Set(&jac1).AddAssign(&jac2)
-		}
+		gnarkP1, _ := bls.HashToG1(message, dst)
+		gnarkP2, _ := bls.HashToG1(otherMessage, dst)
+		var gnarkJac1, gnarkJac2 bls.G1Jac
+		gnarkJac1.FromAffine(&gnarkP1)
+		gnarkJac2.FromAffine(&gnarkP2)
+
+		var circlP1, circlP2 circlbls.G1
+		circlP1.Hash(message, dst)
+		circlP2.Hash(otherMessage, dst)
+
+		b.Run("gnark", func(b *testing.B) {
+			b.ResetTimer()
+			for b.Loop() {
+				var result bls.G1Jac
+				result.Set(&gnarkJac1).AddAssign(&gnarkJac2)
+			}
+		})
+
+		b.Run("circl", func(b *testing.B) {
+			b.ResetTimer()
+			for b.Loop() {
+				var result circlbls.G1
+				result.Add(&circlP1, &circlP2)
+			}
+		})
 	})
 
 	b.Run("BLS_G1_ScalarMul", func(b *testing.B) {
-		p, _ := bls.HashToG1(message, dst)
-		var jac bls.G1Jac
-		jac.FromAffine(&p)
-		scalar := new(
-			big.Int,
-		).SetBytes([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16})
-		b.ResetTimer()
-		for b.Loop() {
-			var result bls.G1Jac
-			result.ScalarMultiplication(&jac, scalar)
-		}
+		gnarkPoint, _ := bls.HashToG1(message, dst)
+		var gnarkJac bls.G1Jac
+		gnarkJac.FromAffine(&gnarkPoint)
+		gnarkScalar := new(big.Int).SetBytes(benchmarkBLSScalarBytes)
+
+		var circlPoint circlbls.G1
+		circlPoint.Hash(message, dst)
+		var circlScalar circlbls.Scalar
+		circlScalar.SetBytes(benchmarkBLSScalarBytes)
+
+		b.Run("gnark", func(b *testing.B) {
+			b.ResetTimer()
+			for b.Loop() {
+				var result bls.G1Jac
+				result.ScalarMultiplication(&gnarkJac, gnarkScalar)
+			}
+		})
+
+		b.Run("circl", func(b *testing.B) {
+			b.ResetTimer()
+			for b.Loop() {
+				var result circlbls.G1
+				result.ScalarMult(&circlScalar, &circlPoint)
+			}
+		})
 	})
 
 	b.Run("BLS_G2_Add", func(b *testing.B) {
-		p1, _ := bls.HashToG2(message, dst)
-		p2, _ := bls.HashToG2([]byte("another message"), dst)
-		var jac1, jac2 bls.G2Jac
-		jac1.FromAffine(&p1)
-		jac2.FromAffine(&p2)
-		b.ResetTimer()
-		for b.Loop() {
-			var result bls.G2Jac
-			result.Set(&jac1).AddAssign(&jac2)
-		}
+		gnarkP1, _ := bls.HashToG2(message, dst)
+		gnarkP2, _ := bls.HashToG2(otherMessage, dst)
+		var gnarkJac1, gnarkJac2 bls.G2Jac
+		gnarkJac1.FromAffine(&gnarkP1)
+		gnarkJac2.FromAffine(&gnarkP2)
+
+		var circlP1, circlP2 circlbls.G2
+		circlP1.Hash(message, dst)
+		circlP2.Hash(otherMessage, dst)
+
+		b.Run("gnark", func(b *testing.B) {
+			b.ResetTimer()
+			for b.Loop() {
+				var result bls.G2Jac
+				result.Set(&gnarkJac1).AddAssign(&gnarkJac2)
+			}
+		})
+
+		b.Run("circl", func(b *testing.B) {
+			b.ResetTimer()
+			for b.Loop() {
+				var result circlbls.G2
+				result.Add(&circlP1, &circlP2)
+			}
+		})
 	})
 
 	b.Run("BLS_Pairing", func(b *testing.B) {
-		g1, _ := bls.HashToG1(message, dst)
-		g2, _ := bls.HashToG2([]byte("another message"), dst)
-		g1s := []bls.G1Affine{g1}
-		g2s := []bls.G2Affine{g2}
-		b.ResetTimer()
-		for b.Loop() {
-			bls.Pair(g1s, g2s)
-		}
+		gnarkG1, _ := bls.HashToG1(message, dst)
+		gnarkG2, _ := bls.HashToG2(otherMessage, dst)
+		gnarkG1s := []bls.G1Affine{gnarkG1}
+		gnarkG2s := []bls.G2Affine{gnarkG2}
+
+		var circlG1 circlbls.G1
+		var circlG2 circlbls.G2
+		circlG1.Hash(message, dst)
+		circlG2.Hash(otherMessage, dst)
+
+		b.Run("gnark", func(b *testing.B) {
+			b.ResetTimer()
+			for b.Loop() {
+				_, _ = bls.Pair(gnarkG1s, gnarkG2s)
+			}
+		})
+
+		b.Run("circl", func(b *testing.B) {
+			b.ResetTimer()
+			for b.Loop() {
+				_ = circlbls.Pair(&circlG1, &circlG2)
+			}
+		})
 	})
 }

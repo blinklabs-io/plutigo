@@ -44,6 +44,49 @@ func TestRunConstant(t *testing.T) {
 	}
 }
 
+func TestRunReturnsIndependentConstantTerms(t *testing.T) {
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	term := &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(42)}}
+
+	first, err := m.Run(term)
+	if err != nil {
+		t.Fatalf("first Run returned error: %v", err)
+	}
+
+	firstConst, ok := first.(*syn.Constant)
+	if !ok {
+		t.Fatalf("first Run returned %T, want *syn.Constant", first)
+	}
+	firstInt, ok := firstConst.Con.(*syn.Integer)
+	if !ok {
+		t.Fatalf("first Run returned %T constant, want *syn.Integer", firstConst.Con)
+	}
+	firstInt.Inner.SetInt64(99)
+
+	second, err := m.Run(term)
+	if err != nil {
+		t.Fatalf("second Run returned error: %v", err)
+	}
+
+	secondConst, ok := second.(*syn.Constant)
+	if !ok {
+		t.Fatalf("second Run returned %T, want *syn.Constant", second)
+	}
+	secondInt, ok := secondConst.Con.(*syn.Integer)
+	if !ok {
+		t.Fatalf("second Run returned %T constant, want *syn.Integer", secondConst.Con)
+	}
+	if got := secondInt.Inner.Int64(); got != 42 {
+		t.Fatalf("second Run integer = %d, want 42", got)
+	}
+	if firstConst == secondConst {
+		t.Fatal("Run reused the same *syn.Constant across invocations")
+	}
+	if firstConst.Con == secondConst.Con {
+		t.Fatal("Run reused the same syn.IConstant across invocations")
+	}
+}
+
 func TestRunResetsEnvArena(t *testing.T) {
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
@@ -122,7 +165,8 @@ func TestRunResetsTransientStateAcrossInvocations(t *testing.T) {
 	}
 	firstRemaining := m.ExBudget
 	m.Logs = append(m.Logs, "stale log")
-	m.unbudgetedSteps = [10]uint32{1, 1, 1, 1, 1, 1, 1, 1, 1, 9}
+	m.unbudgetedSteps = [9]uint32{1, 1, 1, 1, 1, 1, 1, 1, 1}
+	m.unbudgetedTotal = 9
 
 	if _, err := m.Run(constTerm); err != nil {
 		t.Fatalf("second Run returned error: %v", err)
@@ -133,8 +177,11 @@ func TestRunResetsTransientStateAcrossInvocations(t *testing.T) {
 	if len(m.Logs) != 0 {
 		t.Fatalf("Logs after second Run = %v, want empty", m.Logs)
 	}
-	if got := m.unbudgetedSteps; got != [10]uint32{} {
+	if got := m.unbudgetedSteps; got != [9]uint32{} {
 		t.Fatalf("unbudgetedSteps after second Run = %v, want zeroed", got)
+	}
+	if m.unbudgetedTotal != 0 {
+		t.Fatalf("unbudgetedTotal after second Run = %d, want 0", m.unbudgetedTotal)
 	}
 }
 
