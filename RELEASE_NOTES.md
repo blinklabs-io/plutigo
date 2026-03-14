@@ -1,23 +1,21 @@
 # Release Notes
 
-## v0.0.27 - maintenance updates
+## v0.0.27 - performance and tooling updates
 
 - Date: 2026-03-14
 - Version: v0.0.27
 
 Summary: This release includes incremental improvements and fixes across the library.
 
-{
-  "Additional Changes": [
-    "Updated project dependencies and CI tooling to newer versions to keep builds current and reliable.",
-    "Updated documentation and tests to match runtime behavior and improve developer ergonomics.",
-    "Added release documentation for this version to make changes easier to track."
-  ],
-  "Performance": [
-    "Improved program evaluation performance and reduced memory usage during execution and benchmarking."
-  ]
-}
+### Performance
 
+- Improved CEK evaluation performance by reducing allocations, caching constants, reusing machines in benchmarks, and caching two-argument builtin costs.
+
+### Additional Changes
+
+- Updated GitHub Actions to use `actions/setup-go@v6.3.0` and updated `github.com/ethereum/go-ethereum` to `v1.17.1`.
+- Updated documentation and tests to align with runtime string escaping, an `eval` context helper, and builtin availability filtering.
+- Added `v0.0.26` release notes to improve change tracking.
 
 ## v0.0.26 - data serialization and ci automation
 
