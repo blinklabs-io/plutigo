@@ -9,12 +9,12 @@ Summary: This release includes incremental improvements and fixes across the lib
 
 {
   "Additional Changes": [
-    "Project dependencies and CI tooling were updated to newer versions to keep builds current and reliable. GitHub workflows now use actions/setup-go v6.3.0 and the ethereum go-ethereum module was updated from v1.17.0 to v1.17.1.",
-    "Documentation and tests were updated to match runtime behavior and improve developer ergonomics. The implementation preserves raw string escapes, introduces an eval-context helper, adds builtin-availability filtering, and adjusts related docs and test fixtures accordingly.",
-    "Release documentation was added for this version to make changes easier to track. A release notes document for v0.0.26 was introduced and pre-populated from the knowledge base."
+    "Updated project dependencies and CI tooling to newer versions to keep builds current and reliable.",
+    "Updated documentation and tests to match runtime behavior and improve developer ergonomics.",
+    "Added release documentation for this version to make changes easier to track."
   ],
   "Performance": [
-    "Program evaluation now runs faster and uses less memory during execution and benchmarking. The CEK machine reduces allocations via arena-backed storage and cached constants, reuses machines in benchmarks, and caches two-argument builtin costs to lower runtime overhead."
+    "Improved program evaluation performance and reduced memory usage during execution and benchmarking."
   ]
 }
 
