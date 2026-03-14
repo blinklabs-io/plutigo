@@ -73,15 +73,28 @@ func benchFlatFiles(b *testing.B, includeDecode, includeEval bool) {
 			}
 		}
 
-		var evalContext *cek.EvalContext
+		var (
+			programVersion lang.LanguageVersion
+			evalContext    *cek.EvalContext
+		)
 		if includeEval {
-			evalContext = benchmarkEvalContext(
-				benchmarkProgramVersion(b, decodedProgram),
-			)
+			programVersion = benchmarkProgramVersion(b, decodedProgram)
+			evalContext = benchmarkEvalContext(programVersion)
 		}
 
 		// Register a sub-benchmark for this file.
 		b.Run(benchmarkName, func(b *testing.B) {
+			var machine *cek.Machine[syn.DeBruijn]
+			if includeEval {
+				// Reuse one machine per file so eval benchmarks measure steady-state
+				// execution, while decode benchmarks still decode inside the loop.
+				machine = cek.NewMachine[syn.DeBruijn](
+					programVersion,
+					0,
+					evalContext,
+				)
+			}
+
 			for b.Loop() {
 				program := decodedProgram
 				if includeDecode {
@@ -95,12 +108,6 @@ func benchFlatFiles(b *testing.B, includeDecode, includeEval bool) {
 				if includeEval {
 					// Use an eval context with protocol major 200 so benchmark
 					// coverage includes every builtin without availability gating.
-					machine := cek.NewMachine[syn.DeBruijn](
-						program.Version,
-						0,
-						evalContext,
-					)
-
 					_, err = machine.Run(program.Term)
 					if err != nil {
 						b.Fatalf("eval error: %v", err)

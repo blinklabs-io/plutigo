@@ -34,42 +34,38 @@ import (
 func addInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	arg1, err := unwrapInteger[T](m.argHolder[0])
+	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](m.argHolder[1])
+	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
 
 	err = m.CostTwoExMem(
 		&b.Func,
-		bigIntExMemValue(arg1),
-		bigIntExMemValue(arg2),
+		arg1.exMem,
+		arg2.exMem,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	if arg1.IsInt64() && arg2.IsInt64() {
-		left := arg1.Int64()
-		right := arg2.Int64()
+	if arg1.isInt64 && arg2.isInt64 {
+		left := arg1.int64Val
+		right := arg2.int64Val
 		if (right > 0 && left <= math.MaxInt64-right) ||
 			(right < 0 && left >= math.MinInt64-right) ||
 			right == 0 {
-			return &Constant{
-				Constant: &syn.Integer{
-					Inner: big.NewInt(left + right),
-				},
-			}, nil
+			return int64Constant(left + right), nil
 		}
 	}
 
 	var newInt big.Int
 
-	newInt.Add(arg1, arg2)
+	newInt.Add(arg1.value, arg2.value)
 
 	value := &Constant{&syn.Integer{
 		Inner: &newInt,
@@ -84,28 +80,38 @@ func subtractInteger[T syn.Eval](
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	arg1, err := unwrapInteger[T](m.argHolder[0])
+	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](m.argHolder[1])
+	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
 
 	err = m.CostTwoExMem(
 		&b.Func,
-		bigIntExMemValue(arg1),
-		bigIntExMemValue(arg2),
+		arg1.exMem,
+		arg2.exMem,
 	)
 	if err != nil {
 		return nil, err
 	}
 
+	if arg1.isInt64 && arg2.isInt64 {
+		left := arg1.int64Val
+		right := arg2.int64Val
+		if (right > 0 && left >= math.MinInt64+right) ||
+			(right < 0 && left <= math.MaxInt64+right) ||
+			right == 0 {
+			return int64Constant(left - right), nil
+		}
+	}
+
 	var newInt big.Int
 
-	newInt.Sub(arg1, arg2)
+	newInt.Sub(arg1.value, arg2.value)
 
 	value := &Constant{&syn.Integer{
 		Inner: &newInt,
@@ -344,12 +350,12 @@ func modInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 func equalsInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	arg1, err := unwrapInteger[T](m.argHolder[0])
+	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](m.argHolder[1])
+	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
@@ -357,14 +363,14 @@ func equalsInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	// Charge budget for integer comparison
 	err = m.CostTwoExMem(
 		&b.Func,
-		bigIntExMemValue(arg1),
-		bigIntExMemValue(arg2),
+		arg1.exMem,
+		arg2.exMem,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return boolConstant(arg1.Cmp(arg2) == 0), nil
+	return boolConstant(arg1.value.Cmp(arg2.value) == 0), nil
 }
 
 func lessThanInteger[T syn.Eval](
@@ -373,26 +379,26 @@ func lessThanInteger[T syn.Eval](
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	arg1, err := unwrapInteger[T](m.argHolder[0])
+	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](m.argHolder[1])
+	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
 
 	err = m.CostTwoExMem(
 		&b.Func,
-		bigIntExMemValue(arg1),
-		bigIntExMemValue(arg2),
+		arg1.exMem,
+		arg2.exMem,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return boolConstant(arg1.Cmp(arg2) == -1), nil
+	return boolConstant(arg1.value.Cmp(arg2.value) == -1), nil
 }
 
 func lessThanEqualsInteger[T syn.Eval](
@@ -401,26 +407,26 @@ func lessThanEqualsInteger[T syn.Eval](
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	arg1, err := unwrapInteger[T](m.argHolder[0])
+	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](m.argHolder[1])
+	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
 
 	err = m.CostTwoExMem(
 		&b.Func,
-		bigIntExMemValue(arg1),
-		bigIntExMemValue(arg2),
+		arg1.exMem,
+		arg2.exMem,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	res := arg1.Cmp(arg2)
+	res := arg1.value.Cmp(arg2.value)
 	return boolConstant(res == -1 || res == 0), nil
 }
 

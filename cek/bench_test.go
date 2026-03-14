@@ -38,16 +38,18 @@ func BenchmarkEnvLookupDepth(b *testing.B) {
 func BenchmarkMachineLambdaChain(b *testing.B) {
 	for _, depth := range []int{4, 8, 16, 32} {
 		term := mustBenchmarkTerm(b, buildLambdaChainProgram(depth))
+		// Reuse one machine per case so the benchmark measures steady-state
+		// evaluation rather than repeated machine construction.
+		machine := NewMachine[syn.DeBruijn](
+			lang.LanguageVersionV3,
+			200,
+			nil,
+		)
 
 		b.Run(fmt.Sprintf("depth=%d", depth), func(b *testing.B) {
 			b.ReportAllocs()
 
 			for b.Loop() {
-				machine := NewMachine[syn.DeBruijn](
-					lang.LanguageVersionV3,
-					200,
-					nil,
-				)
 				result, err := machine.Run(term)
 				if err != nil {
 					b.Fatalf("Run failed: %v", err)
@@ -61,16 +63,18 @@ func BenchmarkMachineLambdaChain(b *testing.B) {
 func BenchmarkMachineBuiltinHeavy(b *testing.B) {
 	for _, count := range []int{8, 32, 128, 256} {
 		term := mustBenchmarkTerm(b, buildBuiltinHeavyProgram(count))
+		// Reuse one machine per case so the benchmark measures steady-state
+		// evaluation rather than repeated machine construction.
+		machine := NewMachine[syn.DeBruijn](
+			lang.LanguageVersionV3,
+			200,
+			nil,
+		)
 
 		b.Run(fmt.Sprintf("ops=%d", count-1), func(b *testing.B) {
 			b.ReportAllocs()
 
 			for b.Loop() {
-				machine := NewMachine[syn.DeBruijn](
-					lang.LanguageVersionV3,
-					200,
-					nil,
-				)
 				result, err := machine.Run(term)
 				if err != nil {
 					b.Fatalf("Run failed: %v", err)

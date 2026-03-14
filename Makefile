@@ -33,8 +33,9 @@ test-match: ## Run specific tests (usage: make test-one TEST=TestName)
 # Benchmark targets pin `CGO_ENABLED=0` to measure pure-Go behavior consistently.
 # That forces pure-Go fallbacks for some dependencies (for example crypto paths),
 # so benchmark numbers can be slower than CGO-enabled production-like builds.
-# To benchmark with CGO-enabled implementations instead, unset `CGO_ENABLED` or
-# run the equivalent `go test -bench=...` command with `CGO_ENABLED=1`.
+# To benchmark with CGO-enabled implementations instead, run the equivalent
+# `go test -bench=...` command with `CGO_ENABLED=1`, or override these target
+# commands to remove the explicit `CGO_ENABLED=0`.
 bench: ## Run benchmarks
 	@echo "Running benchmarks..."
 	@CGO_ENABLED=0 go test -bench=. -benchtime=5s -run='^$$' ./...

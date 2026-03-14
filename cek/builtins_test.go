@@ -137,6 +137,60 @@ func TestAddIntegerBuiltin(t *testing.T) {
 	}
 }
 
+func TestAddIntegerBuiltinFastPathMatchesBigInt(t *testing.T) {
+	tests := []struct {
+		name  string
+		left  int64
+		right int64
+	}{
+		{name: "zero_zero", left: 0, right: 0},
+		{name: "mixed_signs_pos_neg", left: 123, right: -45},
+		{name: "mixed_signs_neg_pos", left: -123, right: 45},
+		{name: "max_plus_zero", left: math.MaxInt64, right: 0},
+		{name: "min_plus_zero", left: math.MinInt64, right: 0},
+		{name: "max_minus_one", left: math.MaxInt64, right: -1},
+		{name: "min_plus_one", left: math.MinInt64, right: 1},
+		{name: "max_plus_one_overflow", left: math.MaxInt64, right: 1},
+		{name: "min_minus_one_overflow", left: math.MinInt64, right: -1},
+		{name: "near_max_no_overflow", left: math.MaxInt64 - 1, right: 1},
+		{name: "near_min_no_overflow", left: math.MinInt64 + 1, right: -1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.AddInteger)
+
+			left := &Constant{&syn.Integer{Inner: big.NewInt(tt.left)}}
+			right := &Constant{&syn.Integer{Inner: big.NewInt(tt.right)}}
+			b = b.ApplyArg(left)
+			b = b.ApplyArg(right)
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			i := expectInteger(t, constVal)
+
+			expected := new(big.Int).Add(big.NewInt(tt.left), big.NewInt(tt.right))
+			if i.Inner.Cmp(expected) != 0 {
+				t.Fatalf("addInteger(%d, %d) = %v, want %v", tt.left, tt.right, i.Inner, expected)
+			}
+
+			resultInfo, err := unwrapIntegerInfo[syn.DeBruijn](constVal)
+			if err != nil {
+				t.Fatalf("unwrapIntegerInfo returned error: %v", err)
+			}
+			if expected.IsInt64() && expected.Int64() >= cachedIntMin && expected.Int64() <= cachedIntMax {
+				if constVal != int64Constant(expected.Int64()) {
+					t.Fatalf("expected cached int64Constant(%d) result", expected.Int64())
+				}
+				if !resultInfo.isInt64 || resultInfo.int64Val != expected.Int64() {
+					t.Fatalf("result integer info = %+v, want int64Val=%d", resultInfo, expected.Int64())
+				}
+			}
+		})
+	}
+}
+
 func TestCostAccounting(t *testing.T) {
 	m := newTestMachine()
 	orig := m.ExBudget

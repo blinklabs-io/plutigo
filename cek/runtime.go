@@ -209,6 +209,44 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 	return fn(m, b)
 }
 
+type twoArgCost struct {
+	mem       TwoArgument
+	cpu       TwoArgument
+	memConstX bool
+	memConstY bool
+	cpuConstX bool
+	cpuConstY bool
+}
+
+func newTwoArgCostCache(
+	costs BuiltinCosts,
+) [builtin.TotalBuiltinCount]twoArgCost {
+	var ret [builtin.TotalBuiltinCount]twoArgCost
+	for i, model := range costs {
+		if model == nil {
+			continue
+		}
+
+		mem, memOK := model.mem.(TwoArgument)
+		cpu, cpuOK := model.cpu.(TwoArgument)
+		if !memOK || !cpuOK {
+			continue
+		}
+
+		memConstants := mem.HasConstants()
+		cpuConstants := cpu.HasConstants()
+		ret[i] = twoArgCost{
+			mem:       mem,
+			cpu:       cpu,
+			memConstX: memConstants[0],
+			memConstY: memConstants[1],
+			cpuConstX: cpuConstants[0],
+			cpuConstY: cpuConstants[1],
+		}
+	}
+	return ret
+}
+
 // plutusVersionName returns a human-readable name for the Plutus version
 func plutusVersionName(v builtin.PlutusVersion) string {
 	switch v {
@@ -264,17 +302,29 @@ func (m *Machine[T]) CostTwoExMem(
 	b *builtin.DefaultFunction,
 	x, y ExMem,
 ) error {
-	model := m.costs.builtinCosts[*b]
-	mem := model.mem.(TwoArgument)
-	cpu := model.cpu.(TwoArgument)
-	memConstants := mem.HasConstants()
-	cpuConstants := cpu.HasConstants()
+	model := &m.twoArgCosts[*b]
+	mem := model.mem
+	cpu := model.cpu
+	if mem == nil || cpu == nil {
+		fallbackModel := m.costs.builtinCosts[*b]
+		mem = fallbackModel.mem.(TwoArgument)
+		cpu = fallbackModel.cpu.(TwoArgument)
+		model.mem = mem
+		model.cpu = cpu
+		memConstants := mem.HasConstants()
+		cpuConstants := cpu.HasConstants()
+		model.memConstX = memConstants[0]
+		model.memConstY = memConstants[1]
+		model.cpuConstX = cpuConstants[0]
+		model.cpuConstY = cpuConstants[1]
+	}
+
 	xMem := x
-	if memConstants[0] && cpuConstants[0] {
+	if model.memConstX && model.cpuConstX {
 		xMem = ExMem(0)
 	}
 	yMem := y
-	if memConstants[1] && cpuConstants[1] {
+	if model.memConstY && model.cpuConstY {
 		yMem = ExMem(0)
 	}
 	return m.spendBudget(ExBudget{
@@ -367,6 +417,52 @@ func unwrapInteger[T syn.Eval](value Value[T]) (*big.Int, error) {
 	}
 
 	return i, nil
+}
+
+type integerInfo struct {
+	value    *big.Int
+	exMem    ExMem
+	int64Val int64
+	isInt64  bool
+}
+
+func unwrapIntegerInfo[T syn.Eval](value Value[T]) (integerInfo, error) {
+	var info integerInfo
+
+	c, ok := value.(*Constant)
+	if !ok {
+		return integerInfo{}, &TypeError{
+			Code:     ErrCodeTypeMismatch,
+			Expected: "Constant Integer",
+			Got:      fmt.Sprintf("%T", value),
+			Message:  "type mismatch",
+		}
+	}
+
+	i, ok := c.Constant.(*syn.Integer)
+	if !ok {
+		return integerInfo{}, &TypeError{
+			Code:     ErrCodeTypeMismatch,
+			Expected: "Integer",
+			Got:      fmt.Sprintf("%T", c.Constant),
+			Message:  "type mismatch",
+		}
+	}
+
+	info.value = i.Inner
+	if i.Inner.IsInt64() {
+		info.isInt64 = true
+		info.int64Val = i.Inner.Int64()
+		info.exMem = ExMem(1)
+		return info, nil
+	}
+	if i.Inner.IsUint64() {
+		info.exMem = ExMem(1)
+		return info, nil
+	}
+
+	info.exMem = bigIntExMemValue(i.Inner)
+	return info, nil
 }
 
 func unwrapByteString[T syn.Eval](value Value[T]) ([]byte, error) {
