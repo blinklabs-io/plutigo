@@ -376,6 +376,46 @@ func TestModIntegerBuiltin(t *testing.T) {
 	}
 }
 
+func TestIntegerDivisionEdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		fn       builtin.DefaultFunction
+		left     int64
+		right    int64
+		expected string
+	}{
+		{name: "divide_neg_pos", fn: builtin.DivideInteger, left: -10, right: 3, expected: "-4"},
+		{name: "divide_pos_neg", fn: builtin.DivideInteger, left: 10, right: -3, expected: "-4"},
+		{name: "divide_minint_fallback", fn: builtin.DivideInteger, left: math.MinInt64, right: -1, expected: "9223372036854775808"},
+		{name: "quotient_neg_pos", fn: builtin.QuotientInteger, left: -10, right: 3, expected: "-3"},
+		{name: "quotient_pos_neg", fn: builtin.QuotientInteger, left: 10, right: -3, expected: "-3"},
+		{name: "quotient_minint_fallback", fn: builtin.QuotientInteger, left: math.MinInt64, right: -1, expected: "9223372036854775808"},
+		{name: "remainder_neg_pos", fn: builtin.RemainderInteger, left: -10, right: 3, expected: "-1"},
+		{name: "remainder_pos_neg", fn: builtin.RemainderInteger, left: 10, right: -3, expected: "1"},
+		{name: "remainder_minint", fn: builtin.RemainderInteger, left: math.MinInt64, right: -1, expected: "0"},
+		{name: "mod_neg_pos", fn: builtin.ModInteger, left: -10, right: 3, expected: "2"},
+		{name: "mod_pos_neg", fn: builtin.ModInteger, left: 10, right: -3, expected: "-2"},
+		{name: "mod_minint", fn: builtin.ModInteger, left: math.MinInt64, right: -1, expected: "0"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(tt.fn)
+			b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(tt.left)}})
+			b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(tt.right)}})
+
+			val := evalBuiltin(t, m, b)
+			constVal := expectConstant(t, val)
+			integer := expectInteger(t, constVal)
+
+			if got := integer.Inner.String(); got != tt.expected {
+				t.Fatalf("%s(%d, %d) = %s, want %s", tt.fn, tt.left, tt.right, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestChooseDataBuiltin(t *testing.T) {
 	m := newTestMachine()
 	b := newTestBuiltin(builtin.ChooseData)

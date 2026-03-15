@@ -7,6 +7,23 @@ type Env[T syn.Eval] struct {
 	next *Env[T]
 }
 
+func lookupEnv[T syn.Eval](env *Env[T], idx int) (Value[T], bool) {
+	var zero Value[T]
+	if idx <= 0 {
+		return zero, false
+	}
+
+	current := env
+	for remaining := idx; current != nil; remaining-- {
+		if remaining == 1 {
+			return current.data, true
+		}
+		current = current.next
+	}
+
+	return zero, false
+}
+
 func (e *Env[T]) Extend(data Value[T]) *Env[T] {
 	return &Env[T]{
 		data: data,
@@ -15,40 +32,5 @@ func (e *Env[T]) Extend(data Value[T]) *Env[T] {
 }
 
 func (e *Env[T]) Lookup(name int) (Value[T], bool) {
-	if name <= 0 {
-		return nil, false
-	}
-
-	switch name {
-	case 1:
-		if e != nil {
-			return e.data, true
-		}
-		return nil, false
-	case 2:
-		if e != nil && e.next != nil {
-			return e.next.data, true
-		}
-		return nil, false
-	case 3:
-		if e != nil && e.next != nil && e.next.next != nil {
-			return e.next.next.data, true
-		}
-		return nil, false
-	case 4:
-		if e != nil && e.next != nil && e.next.next != nil && e.next.next.next != nil {
-			return e.next.next.next.data, true
-		}
-		return nil, false
-	}
-
-	current := e
-	for remaining := name; current != nil; remaining-- {
-		if remaining == 1 {
-			return current.data, true
-		}
-		current = current.next
-	}
-
-	return nil, false
+	return lookupEnv(e, name)
 }

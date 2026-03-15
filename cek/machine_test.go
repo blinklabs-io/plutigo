@@ -3,6 +3,7 @@ package cek
 import (
 	"math/big"
 	"testing"
+	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
@@ -96,51 +97,108 @@ func TestRunResetsEnvArena(t *testing.T) {
 	}
 	term := dbProgram.Term
 
-	if _, err := m.Run(term); err != nil {
-		t.Fatalf("first Run returned error: %v", err)
-	}
-	if got := len(m.envChunks); got > 1 {
-		t.Fatalf("len(envChunks) after first Run = %d, want <= 1", got)
-	}
-	if m.envChunkPos != 0 {
-		t.Fatalf("envChunkPos after first Run = %d, want 0", m.envChunkPos)
-	}
-
-	if _, err := m.Run(term); err != nil {
-		t.Fatalf("second Run returned error: %v", err)
-	}
-	if got := len(m.envChunks); got > 1 {
-		t.Fatalf("len(envChunks) after second Run = %d, want <= 1", got)
-	}
-	if m.envChunkPos != 0 {
-		t.Fatalf("envChunkPos after second Run = %d, want 0", m.envChunkPos)
+	for _, run := range []string{"first", "second"} {
+		if _, err := m.Run(term); err != nil {
+			t.Fatalf("%s Run returned error: %v", run, err)
+		}
+		if got := len(m.envChunks); got > envRetainChunkCap {
+			t.Fatalf("len(envChunks) after %s Run = %d, want <= %d", run, got, envRetainChunkCap)
+		}
+		if m.envChunkPos != 0 {
+			t.Fatalf("envChunkPos after %s Run = %d, want 0", run, m.envChunkPos)
+		}
 	}
 }
 
 func TestResetEnvArenaClearsDroppedChunkHeaders(t *testing.T) {
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
-	for i := 0; i < envChunkSize+1; i++ {
+	usedChunks := envRetainChunkCap + 2
+	for i := 0; i < envChunkSize*usedChunks; i++ {
 		m.extendEnv(nil, &Constant{&syn.Integer{Inner: big.NewInt(int64(i))}})
 	}
-	if len(m.envChunks) < 2 {
+	if len(m.envChunks) < usedChunks {
 		t.Fatalf("expected multiple env chunks, got %d", len(m.envChunks))
 	}
 
 	m.resetEnvArena()
 
-	if len(m.envChunks) != 1 {
-		t.Fatalf("len(envChunks) after reset = %d, want 1", len(m.envChunks))
+	if len(m.envChunks) != envRetainChunkCap {
+		t.Fatalf("len(envChunks) after reset = %d, want %d", len(m.envChunks), envRetainChunkCap)
 	}
 	if m.envChunkPos != 0 {
 		t.Fatalf("envChunkPos after reset = %d, want 0", m.envChunkPos)
 	}
 
 	hidden := m.envChunks[:cap(m.envChunks)]
-	for i := 1; i < len(hidden); i++ {
+	for i := envRetainChunkCap; i < len(hidden); i++ {
 		if hidden[i] != nil {
 			t.Fatalf("envChunks[%d] still references a dropped chunk", i)
 		}
+	}
+}
+
+func TestAllocArenaSliceReusesLaterChunk(t *testing.T) {
+	chunks := [][]int{
+		make([]int, 4),
+		make([]int, 8),
+	}
+	pos := 3
+
+	allocated := allocArenaSlice(&chunks, &pos, 2, 4)
+
+	if len(chunks) != 2 {
+		t.Fatalf("allocArenaSlice appended a chunk, len(chunks) = %d, want 2", len(chunks))
+	}
+	if pos != 6 {
+		t.Fatalf("allocArenaSlice pos = %d, want 6", pos)
+	}
+	if unsafe.SliceData(allocated) != unsafe.SliceData(chunks[1]) {
+		t.Fatal("allocArenaSlice did not reuse the next existing chunk from its start")
+	}
+}
+
+func TestLookupEnvUsesOneIndexedDepth(t *testing.T) {
+	var env *Env[syn.DeBruijn]
+	env = env.Extend(&Constant{&syn.Integer{Inner: big.NewInt(1)}})
+	env = env.Extend(&Constant{&syn.Integer{Inner: big.NewInt(2)}})
+	env = env.Extend(&Constant{&syn.Integer{Inner: big.NewInt(3)}})
+
+	tests := []struct {
+		name         string
+		env          *Env[syn.DeBruijn]
+		idx          int
+		wantIntValue int64 // -1 means expect !ok
+		wantOk       bool
+	}{
+		{"idx=1 returns most recent (3)", env, 1, 3, true},
+		{"idx=3 returns oldest (1)", env, 3, 1, true},
+		{"idx=0 out of bounds", env, 0, -1, false},
+		{"idx=4 out of bounds", env, 4, -1, false},
+		{"nil env", nil, 1, -1, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			value, ok := lookupEnv(tt.env, tt.idx)
+			if ok != tt.wantOk {
+				t.Fatalf("lookupEnv(%d) ok = %v, want %v", tt.idx, ok, tt.wantOk)
+			}
+			if !tt.wantOk {
+				return
+			}
+			intValue, ok := value.(*Constant)
+			if !ok {
+				t.Fatalf("lookupEnv(%d) returned %T, want *Constant", tt.idx, value)
+			}
+			got, ok := intValue.Constant.(*syn.Integer)
+			if !ok {
+				t.Fatalf("lookupEnv(%d) constant = %T, want *syn.Integer", tt.idx, intValue.Constant)
+			}
+			if got.Inner.Int64() != tt.wantIntValue {
+				t.Fatalf("lookupEnv(%d) = %d, want %d", tt.idx, got.Inner.Int64(), tt.wantIntValue)
+			}
+		})
 	}
 }
 

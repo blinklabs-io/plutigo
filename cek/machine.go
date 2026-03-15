@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"math/big"
 	"reflect"
 	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/builtin"
+	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 )
@@ -57,6 +59,7 @@ func getFilteredBuiltins[T syn.Eval](
 
 type Machine[T syn.Eval] struct {
 	costs         CostModel
+	stepCosts     [9]ExBudget
 	builtins      *Builtins[T]
 	builtinValues *[builtin.TotalBuiltinCount]*Builtin[T]
 	twoArgCosts   [builtin.TotalBuiltinCount]twoArgCost
@@ -81,10 +84,29 @@ type Machine[T syn.Eval] struct {
 	freeFrameForce         []*FrameForce[T]
 	freeFrameConstr        []*FrameConstr[T]
 	freeFrameCases         []*FrameCases[T]
+	dynamicIntConstants    map[int64]*Constant
+	constrChunks           [][]Constr[T]
+	constrChunkPos         int
 	delayChunks            [][]Delay[T]
 	delayChunkPos          int
 	lambdaChunks           [][]Lambda[T]
 	lambdaChunkPos         int
+	constantChunks         [][]Constant
+	constantChunkPos       int
+	dataChunks             [][]syn.Data
+	dataChunkPos           int
+	integerChunks          [][]syn.Integer
+	integerChunkPos        int
+	byteStringChunks       [][]syn.ByteString
+	byteStringChunkPos     int
+	protoListChunks        [][]syn.ProtoList
+	protoListChunkPos      int
+	protoPairChunks        [][]syn.ProtoPair
+	protoPairChunkPos      int
+	constantElemChunks     [][]syn.IConstant
+	constantElemChunkPos   int
+	valueElemChunks        [][]Value[T]
+	valueElemChunkPos      int
 	builtinChunks          [][]Builtin[T]
 	builtinChunkPos        int
 	builtinArgChunks       [][]BuiltinArgs[T]
@@ -97,8 +119,11 @@ type Machine[T syn.Eval] struct {
 }
 
 const (
-	envChunkSize   = 256
-	valueChunkSize = 1024
+	envChunkSize          = 8192
+	envRetainChunkCap     = 8
+	valueChunkSize        = 4096
+	constantElemChunkSize = 4096
+	int64ConstantCacheCap = 4096
 )
 
 func (m *Machine[T]) getCompute() *Compute[T] {
@@ -251,43 +276,82 @@ func newBuiltinValueTable[T syn.Eval]() [builtin.TotalBuiltinCount]*Builtin[T] {
 }
 
 func allocArenaSlot[S any](chunks *[][]S, pos *int) *S {
-	var chunk []S
-	if n := len(*chunks); n > 0 {
-		chunk = (*chunks)[n-1]
-	}
-	if chunk == nil || *pos >= len(chunk) {
-		chunk = make([]S, valueChunkSize)
-		*chunks = append(*chunks, chunk)
-		*pos = 0
-	}
-
-	slot := &chunk[*pos]
-	*pos++
-	return slot
-}
-
-func resetArenaChunks[S any](chunks *[][]S, usedLast int) {
-	if len(*chunks) == 0 {
-		return
-	}
-
+	remaining := *pos
 	for i := range *chunks {
 		chunk := (*chunks)[i]
 		if chunk == nil {
 			continue
 		}
-		used := len(chunk)
-		if i == len(*chunks)-1 {
-			used = usedLast
+		if remaining < len(chunk) {
+			slot := &chunk[remaining]
+			*pos += 1
+			return slot
 		}
-		clear(chunk[:used])
+		remaining -= len(chunk)
 	}
 
-	if len(*chunks) > 1 {
-		for i := 1; i < len(*chunks); i++ {
-			(*chunks)[i] = nil
+	chunk := make([]S, valueChunkSize)
+	*chunks = append(*chunks, chunk)
+	slot := &chunk[0]
+	*pos += 1
+	return slot
+}
+
+func allocArenaSlice[S any](chunks *[][]S, pos *int, n int, chunkSize int) []S {
+	if n == 0 {
+		return nil
+	}
+
+	remaining := *pos
+	for i := range *chunks {
+		chunk := (*chunks)[i]
+		if chunk == nil {
+			continue
 		}
-		*chunks = (*chunks)[:1]
+		if remaining < len(chunk) {
+			if remaining+n <= len(chunk) {
+				start := remaining
+				*pos += n
+				return chunk[start : start+n]
+			}
+			// Skip past the unused tail of this chunk so subsequent
+			// allocations don't overlap with the new chunk.
+			*pos += len(chunk) - remaining
+			remaining = 0
+			continue
+		}
+		remaining -= len(chunk)
+	}
+
+	if n > chunkSize {
+		chunkSize = n
+	}
+	chunk := make([]S, chunkSize)
+	*chunks = append(*chunks, chunk)
+	*pos += n
+	return chunk[:n]
+}
+
+func clearArenaChunks[S any](chunks [][]S, usedTotal int) {
+	if len(chunks) == 0 {
+		return
+	}
+
+	remaining := usedTotal
+	for i := range chunks {
+		chunk := chunks[i]
+		if chunk == nil {
+			continue
+		}
+		if remaining <= 0 {
+			break
+		}
+		used := len(chunk)
+		if remaining < used {
+			used = remaining
+		}
+		clear(chunk[:used])
+		remaining -= used
 	}
 }
 
@@ -296,6 +360,13 @@ func (m *Machine[T]) allocDelay(body syn.Term[T], env *Env[T]) *Delay[T] {
 	delay.Body = body
 	delay.Env = env
 	return delay
+}
+
+func (m *Machine[T]) allocConstr(tag uint, fields []Value[T]) *Constr[T] {
+	constr := allocArenaSlot(&m.constrChunks, &m.constrChunkPos)
+	constr.Tag = tag
+	constr.Fields = fields
+	return constr
 }
 
 func (m *Machine[T]) allocLambda(
@@ -308,6 +379,69 @@ func (m *Machine[T]) allocLambda(
 	lambda.Body = body
 	lambda.Env = env
 	return lambda
+}
+
+func (m *Machine[T]) allocConstant(con syn.IConstant) *Constant {
+	constant := allocArenaSlot(&m.constantChunks, &m.constantChunkPos)
+	constant.Constant = con
+	return constant
+}
+
+func (m *Machine[T]) allocDataConstant(inner data.PlutusData) *syn.Data {
+	dataConstant := allocArenaSlot(&m.dataChunks, &m.dataChunkPos)
+	dataConstant.Inner = inner
+	return dataConstant
+}
+
+func (m *Machine[T]) allocIntegerConstant(inner *big.Int) *syn.Integer {
+	integerConstant := allocArenaSlot(&m.integerChunks, &m.integerChunkPos)
+	integerConstant.Inner = inner
+	return integerConstant
+}
+
+func (m *Machine[T]) allocByteStringConstant(inner []byte) *syn.ByteString {
+	byteStringConstant := allocArenaSlot(&m.byteStringChunks, &m.byteStringChunkPos)
+	byteStringConstant.Inner = inner
+	return byteStringConstant
+}
+
+func (m *Machine[T]) allocProtoListConstant(typ syn.Typ, list []syn.IConstant) *syn.ProtoList {
+	listConstant := allocArenaSlot(&m.protoListChunks, &m.protoListChunkPos)
+	listConstant.LTyp = typ
+	listConstant.List = list
+	return listConstant
+}
+
+func (m *Machine[T]) allocProtoPairConstant(
+	firstType syn.Typ,
+	secondType syn.Typ,
+	first syn.IConstant,
+	second syn.IConstant,
+) *syn.ProtoPair {
+	pairConstant := allocArenaSlot(&m.protoPairChunks, &m.protoPairChunkPos)
+	pairConstant.FstType = firstType
+	pairConstant.SndType = secondType
+	pairConstant.First = first
+	pairConstant.Second = second
+	return pairConstant
+}
+
+func (m *Machine[T]) allocConstantElems(n int) []syn.IConstant {
+	return allocArenaSlice(
+		&m.constantElemChunks,
+		&m.constantElemChunkPos,
+		n,
+		constantElemChunkSize,
+	)
+}
+
+func (m *Machine[T]) allocValueElems(n int) []Value[T] {
+	return allocArenaSlice(
+		&m.valueElemChunks,
+		&m.valueElemChunkPos,
+		n,
+		valueChunkSize,
+	)
 }
 
 func (m *Machine[T]) extendBuiltinArgs(
@@ -366,7 +500,18 @@ func NewMachine[T syn.Eval](
 		}
 	}
 	return &Machine[T]{
-		costs:         evalContext.CostModel,
+		costs: evalContext.CostModel,
+		stepCosts: [9]ExBudget{
+			evalContext.CostModel.machineCosts.get(ExConstant),
+			evalContext.CostModel.machineCosts.get(ExVar),
+			evalContext.CostModel.machineCosts.get(ExLambda),
+			evalContext.CostModel.machineCosts.get(ExApply),
+			evalContext.CostModel.machineCosts.get(ExDelay),
+			evalContext.CostModel.machineCosts.get(ExForce),
+			evalContext.CostModel.machineCosts.get(ExBuiltin),
+			evalContext.CostModel.machineCosts.get(ExConstr),
+			evalContext.CostModel.machineCosts.get(ExCase),
+		},
 		builtins:      chooseBuiltins[T](version, evalContext.ProtoMajor),
 		builtinValues: getSharedBuiltinValues[T](),
 		twoArgCosts:   newTwoArgCostCache(evalContext.CostModel.builtinCosts),
@@ -391,10 +536,29 @@ func NewMachine[T syn.Eval](
 		freeFrameForce:         make([]*FrameForce[T], 0, 16),
 		freeFrameConstr:        make([]*FrameConstr[T], 0, 16),
 		freeFrameCases:         make([]*FrameCases[T], 0, 16),
+		dynamicIntConstants:    make(map[int64]*Constant, 512),
+		constrChunks:           make([][]Constr[T], 0, 8),
+		constrChunkPos:         0,
 		delayChunks:            make([][]Delay[T], 0, 8),
 		delayChunkPos:          0,
 		lambdaChunks:           make([][]Lambda[T], 0, 8),
 		lambdaChunkPos:         0,
+		constantChunks:         make([][]Constant, 0, 8),
+		constantChunkPos:       0,
+		dataChunks:             make([][]syn.Data, 0, 8),
+		dataChunkPos:           0,
+		integerChunks:          make([][]syn.Integer, 0, 4),
+		integerChunkPos:        0,
+		byteStringChunks:       make([][]syn.ByteString, 0, 4),
+		byteStringChunkPos:     0,
+		protoListChunks:        make([][]syn.ProtoList, 0, 8),
+		protoListChunkPos:      0,
+		protoPairChunks:        make([][]syn.ProtoPair, 0, 8),
+		protoPairChunkPos:      0,
+		constantElemChunks:     make([][]syn.IConstant, 0, 8),
+		constantElemChunkPos:   0,
+		valueElemChunks:        make([][]Value[T], 0, 8),
+		valueElemChunkPos:      0,
 		builtinChunks:          make([][]Builtin[T], 0, 8),
 		builtinChunkPos:        0,
 		builtinArgChunks:       make([][]BuiltinArgs[T], 0, 8),
@@ -428,36 +592,68 @@ func chooseAvailableBuiltins(
 }
 
 func (m *Machine[T]) extendEnv(parent *Env[T], data Value[T]) *Env[T] {
-	var chunk []Env[T]
-	if len(m.envChunks) > 0 {
-		chunk = m.envChunks[len(m.envChunks)-1]
-	}
-	if chunk == nil || m.envChunkPos >= len(chunk) {
-		chunk = make([]Env[T], envChunkSize)
-		m.envChunks = append(m.envChunks, chunk)
-		m.envChunkPos = 0
+	remaining := m.envChunkPos
+	for i := range m.envChunks {
+		chunk := m.envChunks[i]
+		if chunk == nil {
+			continue
+		}
+		if remaining < len(chunk) {
+			env := &chunk[remaining]
+			m.envChunkPos += 1
+			env.data = data
+			env.next = parent
+			return env
+		}
+		remaining -= len(chunk)
 	}
 
-	env := &chunk[m.envChunkPos]
-	m.envChunkPos++
+	chunk := make([]Env[T], envChunkSize)
+	m.envChunks = append(m.envChunks, chunk)
+	env := &chunk[0]
+	m.envChunkPos += 1
 	env.data = data
 	env.next = parent
 	return env
 }
 
 func (m *Machine[T]) resetEnvArena() {
-	resetArenaChunks(&m.envChunks, m.envChunkPos)
+	clearArenaChunks(m.envChunks, m.envChunkPos)
+	if len(m.envChunks) > envRetainChunkCap {
+		for i := envRetainChunkCap; i < len(m.envChunks); i++ {
+			m.envChunks[i] = nil
+		}
+		m.envChunks = m.envChunks[:envRetainChunkCap]
+	}
 	m.envChunkPos = 0
 }
 
 func (m *Machine[T]) resetValueArenas() {
-	resetArenaChunks(&m.delayChunks, m.delayChunkPos)
+	clearArenaChunks(m.constrChunks, m.constrChunkPos)
+	m.constrChunkPos = 0
+	clearArenaChunks(m.delayChunks, m.delayChunkPos)
 	m.delayChunkPos = 0
-	resetArenaChunks(&m.lambdaChunks, m.lambdaChunkPos)
+	clearArenaChunks(m.lambdaChunks, m.lambdaChunkPos)
 	m.lambdaChunkPos = 0
-	resetArenaChunks(&m.builtinChunks, m.builtinChunkPos)
+	clearArenaChunks(m.constantChunks, m.constantChunkPos)
+	m.constantChunkPos = 0
+	clearArenaChunks(m.dataChunks, m.dataChunkPos)
+	m.dataChunkPos = 0
+	clearArenaChunks(m.integerChunks, m.integerChunkPos)
+	m.integerChunkPos = 0
+	clearArenaChunks(m.byteStringChunks, m.byteStringChunkPos)
+	m.byteStringChunkPos = 0
+	clearArenaChunks(m.protoListChunks, m.protoListChunkPos)
+	m.protoListChunkPos = 0
+	clearArenaChunks(m.protoPairChunks, m.protoPairChunkPos)
+	m.protoPairChunkPos = 0
+	clearArenaChunks(m.constantElemChunks, m.constantElemChunkPos)
+	m.constantElemChunkPos = 0
+	clearArenaChunks(m.valueElemChunks, m.valueElemChunkPos)
+	m.valueElemChunkPos = 0
+	clearArenaChunks(m.builtinChunks, m.builtinChunkPos)
 	m.builtinChunkPos = 0
-	resetArenaChunks(&m.builtinArgChunks, m.builtinArgChunkPos)
+	clearArenaChunks(m.builtinArgChunks, m.builtinArgChunkPos)
 	m.builtinArgChunkPos = 0
 }
 
@@ -588,9 +784,8 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 
-		value, exists := env.Lookup(t.Name.LookupIndex())
-
-		if !exists {
+		value, ok := lookupEnv(env, t.Name.LookupIndex())
+		if !ok {
 			return nil, &TypeError{Code: ErrCodeOpenTerm, Message: "open term evaluated"}
 		}
 
@@ -648,7 +843,7 @@ func (m *Machine[T]) compute(
 
 		ret := m.getReturn()
 		ret.Ctx = context
-		ret.Value = constantValue(t.Con)
+		ret.Value = machineConstantValue(m, t.Con)
 		state = ret
 	case *syn.Force[T]:
 		// Force triggers evaluation of a delayed computation
@@ -693,28 +888,25 @@ func (m *Machine[T]) compute(
 			// No fields to evaluate
 			ret := m.getReturn()
 			ret.Ctx = context
-			ret.Value = &Constr[T]{
-				Tag:    t.Tag,
-				Fields: nil,
-			}
+			ret.Value = m.allocConstr(t.Tag, nil)
 			state = ret
 		} else {
 			// Evaluate fields sequentially using FrameConstr
-			first_field := fields[0]
+			firstField := fields[0]
 
 			rest := fields[1:]
 
 			frame := m.getFrameConstr()
 			frame.Ctx = context
 			frame.Tag = t.Tag
-			frame.Fields = rest                                       // Remaining fields to evaluate
-			frame.ResolvedFields = make([]Value[T], 0, len(t.Fields)) // Pre-allocate for all fields
+			frame.Fields = rest // Remaining fields to evaluate
+			frame.ResolvedFields = m.allocValueElems(len(t.Fields))[:0]
 			frame.Env = env
 
 			comp := m.getCompute()
 			comp.Ctx = frame
 			comp.Env = env
-			comp.Term = first_field
+			comp.Term = firstField
 			state = comp
 		}
 	case *syn.Case[T]:
@@ -810,15 +1002,12 @@ func (m *Machine[T]) returnCompute(
 			// All fields evaluated, create constructor value
 			ret := m.getReturn()
 			ret.Ctx = c.Ctx
-			ret.Value = &Constr[T]{
-				Tag:    c.Tag,
-				Fields: resolvedFields,
-			}
+			ret.Value = m.allocConstr(c.Tag, resolvedFields)
 			m.putFrameConstr(c)
 			state = ret
 		} else {
 			// More fields to evaluate
-			first_field := fields[0]
+			firstField := fields[0]
 			rest := fields[1:]
 			comp := m.getCompute()
 			frame := m.getFrameConstr()
@@ -829,7 +1018,7 @@ func (m *Machine[T]) returnCompute(
 			frame.Env = c.Env
 			comp.Ctx = frame
 			comp.Env = c.Env
-			comp.Term = first_field
+			comp.Term = firstField
 			m.putFrameConstr(c)
 			state = comp
 		}
@@ -907,19 +1096,19 @@ func (m *Machine[T]) returnCompute(
 				} else {
 					tag = 0
 					// head and tail
-					args = make([]Value[T], 2)
-					args[0] = &Constant{cval.List[0]}
-					tail := &syn.ProtoList{LTyp: cval.LTyp, List: cval.List[1:]}
-					args[1] = &Constant{tail}
+					args = m.allocValueElems(2)
+					args[0] = m.allocConstant(cval.List[0])
+					tail := m.allocProtoListConstant(cval.LTyp, cval.List[1:])
+					args[1] = m.allocConstant(tail)
 				}
 			case *syn.ProtoPair:
 				// Pair constants must have exactly 1 branch
 				branchRule = 1
 				// Pass both fields as args
 				tag = 0
-				args = make([]Value[T], 2)
-				args[0] = &Constant{cval.First}
-				args[1] = &Constant{cval.Second}
+				args = m.allocValueElems(2)
+				args[0] = m.allocConstant(cval.First)
+				args[1] = m.allocConstant(cval.Second)
 			default:
 				m.putFrameCases(c)
 				return nil, &TypeError{Code: ErrCodeNonConstrScrutinized, Message: "NonConstrScrutinized"}
@@ -1211,12 +1400,15 @@ func withEnv[T syn.Eval](
 		if lamCnt >= t.Name.LookupIndex() {
 			// Variable is bound by a lambda we haven't discharged yet
 			dischargedTerm = t
-		} else if val, exists := env.Lookup(t.Name.LookupIndex() - lamCnt); exists {
-			// Variable found in environment, discharge its value
-			dischargedTerm = dischargeValue[T](val)
 		} else {
-			// Free variable (shouldn't happen in well-formed terms)
-			dischargedTerm = t
+			value, ok := lookupEnv(env, t.Name.LookupIndex()-lamCnt)
+			if ok {
+				// Variable found in environment, discharge its value
+				dischargedTerm = dischargeValue[T](value)
+			} else {
+				// Free variable (shouldn't happen in well-formed terms)
+				dischargedTerm = t
+			}
 		}
 
 	case *syn.Lambda[T]:
@@ -1277,6 +1469,24 @@ func withEnv[T syn.Eval](
 }
 
 func (m *Machine[T]) stepAndMaybeSpend(step StepKind) error {
+	if m.slippage <= 1 {
+		exBudget := m.stepCosts[step]
+		m.ExBudget.Mem -= exBudget.Mem
+		m.ExBudget.Cpu -= exBudget.Cpu
+		if m.ExBudget.Mem < 0 || m.ExBudget.Cpu < 0 {
+			return &BudgetError{
+				Code:      ErrCodeBudgetExhausted,
+				Requested: exBudget,
+				Available: ExBudget{
+					Cpu: m.ExBudget.Cpu + exBudget.Cpu,
+					Mem: m.ExBudget.Mem + exBudget.Mem,
+				},
+				Message: "out of budget",
+			}
+		}
+		return nil
+	}
+
 	m.unbudgetedSteps[step] += 1
 	m.unbudgetedTotal += 1
 
@@ -1291,11 +1501,11 @@ func (m *Machine[T]) stepAndMaybeSpend(step StepKind) error {
 
 func (m *Machine[T]) spendUnbudgetedSteps() error {
 	for i := range uint8(len(m.unbudgetedSteps)) {
-		unspent_step_budget := m.costs.machineCosts.get(StepKind(i))
+		unspentStepBudget := m.stepCosts[StepKind(i)]
 
-		unspent_step_budget.occurrences(m.unbudgetedSteps[i])
+		unspentStepBudget.occurrences(m.unbudgetedSteps[i])
 
-		if err := m.spendBudget(unspent_step_budget); err != nil {
+		if err := m.spendBudget(unspentStepBudget); err != nil {
 			return err
 		}
 

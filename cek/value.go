@@ -55,11 +55,24 @@ func int64Constant(v int64) *Constant {
 	}
 }
 
-// constantValue may return shared cached *Constant instances for bools, unit,
-// and small integers; callers must treat the returned value and its inner
-// fields as read-only. Callers that need an independent mutable syntax value
-// should use constantTerm, which clones the underlying constant.
-func constantValue(constant syn.IConstant) *Constant {
+func (m *Machine[T]) int64Constant(v int64) *Constant {
+	if v >= cachedIntMin && v <= cachedIntMax {
+		return cachedIntConstants[v-cachedIntMin]
+	}
+	if cached := m.dynamicIntConstants[v]; cached != nil {
+		return cached
+	}
+
+	constant := &Constant{
+		Constant: &syn.Integer{Inner: big.NewInt(v)},
+	}
+	if len(m.dynamicIntConstants) < int64ConstantCacheCap {
+		m.dynamicIntConstants[v] = constant
+	}
+	return constant
+}
+
+func machineConstantValue[T syn.Eval](m *Machine[T], constant syn.IConstant) *Constant {
 	switch c := constant.(type) {
 	case *syn.Bool:
 		return boolConstant(c.Inner)
@@ -67,10 +80,10 @@ func constantValue(constant syn.IConstant) *Constant {
 		return cachedUnitConstant
 	case *syn.Integer:
 		if c.Inner.IsInt64() {
-			return int64Constant(c.Inner.Int64())
+			return m.int64Constant(c.Inner.Int64())
 		}
 	}
-	return &Constant{Constant: constant}
+	return m.allocConstant(constant)
 }
 
 func constantTerm[T syn.Eval](constant syn.IConstant) syn.Term[T] {
