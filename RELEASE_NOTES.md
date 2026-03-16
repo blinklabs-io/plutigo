@@ -13,7 +13,7 @@ Summary: This release includes a Go toolchain requirement update, performance im
 
 ### Performance
 
-- Improved interpreter performance by reducing allocations and adding fast `int64` paths for common integer operations.
+- Improved evaluation performance by reducing allocations and adding fast `int64` paths for common integer operations.
 
 ### Security
 
