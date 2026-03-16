@@ -7,24 +7,22 @@
 
 Summary: This release includes incremental updates across the library.
 
-```json
-{
-  "Additional Changes": [
-    "Release documentation was updated so the current version has explicit release notes and the prior version is referenced for continuity.",
-    "The Go toolchain and supporting dependencies were updated to keep the build aligned with the currently supported ecosystem."
-  ],
-  "Breaking Changes": [
-    "The project now requires a newer Go toolchain so builds and CI runs use a more recent compiler by default."
-  ],
-  "Performance": [
-    "Execution performance was improved by reducing repeated allocations and speeding up common integer operations during evaluation."
-  ],
-  "Security": [
-    "Project cryptography and system dependency baselines were refreshed to pick up upstream fixes and hardening changes."
-  ]
-}
+### Breaking Changes
 
-```
+- Updated the minimum supported Go toolchain version.
+
+### Performance
+
+- Improved evaluation performance by reducing repeated allocations and accelerating common integer operations.
+
+### Security
+
+- Updated cryptography and system module dependencies to pick up upstream fixes.
+
+### Additional Changes
+
+- Updated release documentation to include explicit release notes for the current version.
+- Updated the Go toolchain and supporting dependencies.
 
 ## v0.0.27 - performance and tooling updates
 
