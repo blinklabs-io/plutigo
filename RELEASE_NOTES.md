@@ -1,5 +1,29 @@
 # Release Notes
 
+## v0.0.28 - go toolchain and dependency updates
+
+- Date: 2026-03-16
+- Version: v0.0.28
+
+Summary: This release includes a Go toolchain requirement update, performance improvements, and dependency updates.
+
+### Breaking Changes
+
+- Updated the minimum supported Go version to `1.25.7` and the module toolchain to `go1.25.8`.
+
+### Performance
+
+- Improved evaluation performance by reducing allocations and adding fast `int64` paths for common integer operations.
+
+### Security
+
+- Updated `golang.org/x/crypto` to `v0.49.0` and `golang.org/x/sys` to `v0.42.0`.
+
+### Additional Changes
+
+- Added release notes for `v0.0.27` and referenced `v0.0.26` for continuity.
+- Updated `github.com/consensys/gnark-crypto` to `v0.20.0` and `github.com/bits-and-blooms/bitset` to `v1.24.4`.
+
 ## v0.0.27 - performance and tooling updates
 
 - Date: 2026-03-14
