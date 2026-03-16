@@ -24,6 +24,57 @@ import (
 	legacyripemd160 "golang.org/x/crypto/ripemd160" //nolint:staticcheck,gosec
 )
 
+var (
+	sharedIntegerType  = &syn.TInteger{}
+	sharedDataType     = &syn.TData{}
+	sharedListDataType = &syn.TList{Typ: sharedDataType}
+	sharedPairDataType = &syn.TPair{First: sharedDataType, Second: sharedDataType}
+)
+
+func absUint64(v int64) uint64 {
+	if v < 0 {
+		return uint64(^v) + 1
+	}
+	return uint64(v)
+}
+
+func mulInt64Exact(left, right int64) (int64, bool) {
+	if left == 0 || right == 0 {
+		return 0, true
+	}
+
+	negative := (left < 0) != (right < 0)
+	hi, lo := bits.Mul64(absUint64(left), absUint64(right))
+	if hi != 0 {
+		return 0, false
+	}
+
+	if negative {
+		if lo > 1<<63 {
+			return 0, false
+		}
+		if lo == 1<<63 {
+			return math.MinInt64, true
+		}
+		return -int64(lo), true
+	}
+
+	if lo > math.MaxInt64 {
+		return 0, false
+	}
+	return int64(lo), true
+}
+
+func quoInt64Exact(left, right int64) (int64, bool) {
+	if right == 0 {
+		return 0, false
+	}
+	if left == math.MinInt64 && right == -1 {
+		return 0, false
+	}
+	return left / right, true
+}
+
 // ============================================================================
 // INTEGER OPERATIONS
 // Functions: addInteger, subtractInteger, multiplyInteger, divideInteger,
@@ -59,7 +110,7 @@ func addInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		if (right > 0 && left <= math.MaxInt64-right) ||
 			(right < 0 && left >= math.MinInt64-right) ||
 			right == 0 {
-			return int64Constant(left + right), nil
+			return m.int64Constant(left + right), nil
 		}
 	}
 
@@ -67,11 +118,7 @@ func addInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	newInt.Add(arg1.value, arg2.value)
 
-	value := &Constant{&syn.Integer{
-		Inner: &newInt,
-	}}
-
-	return value, nil
+	return m.allocConstant(m.allocIntegerConstant(&newInt)), nil
 }
 
 func subtractInteger[T syn.Eval](
@@ -105,7 +152,7 @@ func subtractInteger[T syn.Eval](
 		if (right > 0 && left >= math.MinInt64+right) ||
 			(right < 0 && left <= math.MaxInt64+right) ||
 			right == 0 {
-			return int64Constant(left - right), nil
+			return m.int64Constant(left - right), nil
 		}
 	}
 
@@ -113,11 +160,7 @@ func subtractInteger[T syn.Eval](
 
 	newInt.Sub(arg1.value, arg2.value)
 
-	value := &Constant{&syn.Integer{
-		Inner: &newInt,
-	}}
-
-	return value, nil
+	return m.allocConstant(m.allocIntegerConstant(&newInt)), nil
 }
 
 func multiplyInteger[T syn.Eval](
@@ -126,59 +169,61 @@ func multiplyInteger[T syn.Eval](
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	arg1, err := unwrapInteger[T](m.argHolder[0])
+	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](m.argHolder[1])
+	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
 
 	err = m.CostTwoExMem(
 		&b.Func,
-		bigIntExMemValue(arg1),
-		bigIntExMemValue(arg2),
+		arg1.exMem,
+		arg2.exMem,
 	)
 	if err != nil {
 		return nil, err
 	}
 
+	if arg1.isInt64 && arg2.isInt64 {
+		if result, ok := mulInt64Exact(arg1.int64Val, arg2.int64Val); ok {
+			return m.int64Constant(result), nil
+		}
+	}
+
 	var newInt big.Int
 
-	newInt.Mul(arg1, arg2)
+	newInt.Mul(arg1.value, arg2.value)
 
-	value := &Constant{&syn.Integer{
-		Inner: &newInt,
-	}}
-
-	return value, nil
+	return m.allocConstant(m.allocIntegerConstant(&newInt)), nil
 }
 
 func divideInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	arg1, err := unwrapInteger[T](m.argHolder[0])
+	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](m.argHolder[1])
+	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
 
 	err = m.CostTwoExMem(
 		&b.Func,
-		bigIntExMemValue(arg1),
-		bigIntExMemValue(arg2),
+		arg1.exMem,
+		arg2.exMem,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	if arg2.Sign() == 0 {
+	if arg2.value.Sign() == 0 {
 		return nil, &BuiltinError{
 			Code:    ErrCodeDivisionByZero,
 			Builtin: "divideInteger",
@@ -186,23 +231,31 @@ func divideInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 
+	if arg1.isInt64 && arg2.isInt64 {
+		left := arg1.int64Val
+		right := arg2.int64Val
+		if q, ok := quoInt64Exact(left, right); ok {
+			r := left % right
+			if r != 0 && ((left < 0) != (right < 0)) {
+				q--
+			}
+			return m.int64Constant(q), nil
+		}
+	}
+
 	var newInt big.Int
 	var remainder big.Int
 
 	// Perform division
-	newInt.Quo(arg1, arg2)
-	remainder.Rem(arg1, arg2)
+	newInt.Quo(arg1.value, arg2.value)
+	remainder.Rem(arg1.value, arg2.value)
 
 	// Adjust for floor division if remainder exists and signs differ
-	if remainder.Sign() != 0 && arg1.Sign() != arg2.Sign() {
+	if remainder.Sign() != 0 && arg1.value.Sign() != arg2.value.Sign() {
 		newInt.Sub(&newInt, big.NewInt(1))
 	}
 
-	value := &Constant{&syn.Integer{
-		Inner: &newInt,
-	}}
-
-	return value, nil
+	return m.allocConstant(m.allocIntegerConstant(&newInt)), nil
 }
 
 func quotientInteger[T syn.Eval](
@@ -211,26 +264,26 @@ func quotientInteger[T syn.Eval](
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	arg1, err := unwrapInteger[T](m.argHolder[0])
+	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](m.argHolder[1])
+	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
 
 	err = m.CostTwoExMem(
 		&b.Func,
-		bigIntExMemValue(arg1),
-		bigIntExMemValue(arg2),
+		arg1.exMem,
+		arg2.exMem,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	if arg2.Sign() == 0 {
+	if arg2.value.Sign() == 0 {
 		return nil, &BuiltinError{
 			Code:    ErrCodeDivisionByZero,
 			Builtin: "quotientInteger",
@@ -238,18 +291,20 @@ func quotientInteger[T syn.Eval](
 		}
 	}
 
+	if arg1.isInt64 && arg2.isInt64 {
+		if result, ok := quoInt64Exact(arg1.int64Val, arg2.int64Val); ok {
+			return m.int64Constant(result), nil
+		}
+	}
+
 	var newInt big.Int
 
 	newInt.Quo(
-		arg1,
-		arg2,
+		arg1.value,
+		arg2.value,
 	) // Truncated division (rounds toward zero)
 
-	value := &Constant{&syn.Integer{
-		Inner: &newInt,
-	}}
-
-	return value, nil
+	return m.allocConstant(m.allocIntegerConstant(&newInt)), nil
 }
 
 func remainderInteger[T syn.Eval](
@@ -258,26 +313,26 @@ func remainderInteger[T syn.Eval](
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	arg1, err := unwrapInteger[T](m.argHolder[0])
+	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](m.argHolder[1])
+	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
 
 	err = m.CostTwoExMem(
 		&b.Func,
-		bigIntExMemValue(arg1),
-		bigIntExMemValue(arg2),
+		arg1.exMem,
+		arg2.exMem,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	if arg2.Sign() == 0 {
+	if arg2.value.Sign() == 0 {
 		return nil, &BuiltinError{
 			Code:    ErrCodeDivisionByZero,
 			Builtin: "remainderInteger",
@@ -285,43 +340,48 @@ func remainderInteger[T syn.Eval](
 		}
 	}
 
+	if arg1.isInt64 && arg2.isInt64 {
+		left := arg1.int64Val
+		right := arg2.int64Val
+		if left == math.MinInt64 && right == -1 {
+			return m.int64Constant(0), nil
+		}
+		return m.int64Constant(left % right), nil
+	}
+
 	var newInt big.Int
 
 	newInt.Rem(
-		arg1,
-		arg2,
+		arg1.value,
+		arg2.value,
 	) // Remainder (consistent with Div, can be negative)
 
-	value := &Constant{&syn.Integer{
-		Inner: &newInt,
-	}}
-
-	return value, nil
+	return m.allocConstant(m.allocIntegerConstant(&newInt)), nil
 }
 
 func modInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	arg1, err := unwrapInteger[T](m.argHolder[0])
+	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
 
-	arg2, err := unwrapInteger[T](m.argHolder[1])
+	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
 	if err != nil {
 		return nil, err
 	}
 
 	err = m.CostTwoExMem(
 		&b.Func,
-		bigIntExMemValue(arg1),
-		bigIntExMemValue(arg2),
+		arg1.exMem,
+		arg2.exMem,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	if arg2.Sign() == 0 {
+	if arg2.value.Sign() == 0 {
 		return nil, &BuiltinError{
 			Code:    ErrCodeDivisionByZero,
 			Builtin: "modInteger",
@@ -329,22 +389,32 @@ func modInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 
-	var quotient, remainder big.Int
-
-	// Compute quotient and remainder
-	quotient.Quo(arg1, arg2)
-	remainder.Rem(arg1, arg2)
-
-	// Adjust for floored modulo if remainder exists and signs differ
-	if remainder.Sign() != 0 && arg1.Sign() != arg2.Sign() {
-		remainder.Add(&remainder, arg2)
+	if arg1.isInt64 && arg2.isInt64 {
+		left := arg1.int64Val
+		right := arg2.int64Val
+		var remainder int64
+		if left == math.MinInt64 && right == -1 {
+			remainder = 0
+		} else {
+			remainder = left % right
+		}
+		if remainder != 0 && ((left < 0) != (right < 0)) {
+			remainder += right
+		}
+		return m.int64Constant(remainder), nil
 	}
 
-	value := &Constant{&syn.Integer{
-		Inner: &remainder,
-	}}
+	var remainder big.Int
 
-	return value, nil
+	// Compute remainder for the slow path.
+	remainder.Rem(arg1.value, arg2.value)
+
+	// Adjust for floored modulo if remainder exists and signs differ
+	if remainder.Sign() != 0 && arg1.value.Sign() != arg2.value.Sign() {
+		remainder.Add(&remainder, arg2.value)
+	}
+
+	return m.allocConstant(m.allocIntegerConstant(&remainder)), nil
 }
 
 func equalsInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -499,18 +569,18 @@ func consByteString[T syn.Eval](
 		}
 	}
 
-	int_val := arg1.Int64()
+	intVal := arg1.Int64()
 
 	switch m.semantics {
 	case SemanticsVariantA, SemanticsVariantB:
 		// Reduce first argument to single byte positive value using floored modulo
-		int_val = int_val % 256
-		if int_val < 0 {
-			int_val += 256
+		intVal = intVal % 256
+		if intVal < 0 {
+			intVal += 256
 		}
 	default:
 		// consByteString requires the integer to be in the range 0-255 in V3+
-		if int_val < 0 || int_val > 255 {
+		if intVal < 0 || intVal > 255 {
 			return nil, &BuiltinError{
 				Code:    ErrCodeOverflow,
 				Builtin: "consByteString",
@@ -519,7 +589,7 @@ func consByteString[T syn.Eval](
 		}
 	}
 
-	res := append([]byte{byte(int_val)}, arg2...)
+	res := append([]byte{byte(intVal)}, arg2...)
 
 	value := &Constant{&syn.ByteString{
 		Inner: res,
@@ -621,12 +691,7 @@ func lengthOfByteString[T syn.Eval](
 	}
 
 	res := len(arg1)
-
-	value := &Constant{&syn.Integer{
-		Inner: big.NewInt(int64(res)),
-	}}
-
-	return value, nil
+	return m.int64Constant(int64(res)), nil
 }
 
 func indexByteString[T syn.Eval](
@@ -669,14 +734,7 @@ func indexByteString[T syn.Eval](
 	}
 
 	res := int64(arg1[index])
-
-	value := &Constant{
-		Constant: &syn.Integer{
-			Inner: big.NewInt(res),
-		},
-	}
-
-	return value, nil
+	return m.int64Constant(res), nil
 }
 
 func equalsByteString[T syn.Eval](
@@ -1462,9 +1520,7 @@ func fstPair[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	value := &Constant{fstPair}
-
-	return value, nil
+	return m.allocConstant(fstPair), nil
 }
 
 func sndPair[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1480,9 +1536,7 @@ func sndPair[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	value := &Constant{sndPair}
-
-	return value, nil
+	return m.allocConstant(sndPair), nil
 }
 
 func chooseList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1534,14 +1588,11 @@ func mkCons[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	consList := append([]syn.IConstant{arg1.Constant}, arg2.List...)
+	consList := m.allocConstantElems(len(arg2.List) + 1)
+	consList[0] = arg1.Constant
+	copy(consList[1:], arg2.List)
 
-	value := &Constant{&syn.ProtoList{
-		LTyp: typ,
-		List: consList,
-	}}
-
-	return value, nil
+	return m.allocConstant(m.allocProtoListConstant(typ, consList)), nil
 }
 
 func headList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1565,9 +1616,7 @@ func headList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 
-	value := &Constant{arg1.List[0]}
-
-	return value, nil
+	return m.allocConstant(arg1.List[0]), nil
 }
 
 func tailList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1593,12 +1642,7 @@ func tailList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	tailList := arg1.List[1:]
 
-	value := &Constant{&syn.ProtoList{
-		LTyp: arg1.LTyp,
-		List: tailList,
-	}}
-
-	return value, nil
+	return m.allocConstant(m.allocProtoListConstant(arg1.LTyp, tailList)), nil
 }
 
 func nullList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1701,11 +1745,10 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	dataList := []data.PlutusData{}
-
-	for _, item := range arg2.List {
+	dataList := make([]data.PlutusData, len(arg2.List))
+	for i, item := range arg2.List {
 		itemData := item.(*syn.Data)
-		dataList = append(dataList, itemData.Inner)
+		dataList[i] = itemData.Inner
 	}
 
 	if arg1.BitLen() > 64 {
@@ -1725,14 +1768,10 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 	tag := uint(tag64)
 
-	value := &Constant{&syn.Data{
-		Inner: &data.Constr{
-			Tag:    tag,
-			Fields: dataList,
-		},
-	}}
-
-	return value, nil
+	return m.allocConstant(m.allocDataConstant(&data.Constr{
+		Tag:    tag,
+		Fields: dataList,
+	})), nil
 }
 
 func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1753,23 +1792,17 @@ func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	dataList := [][2]data.PlutusData{}
-
-	for _, item := range arg1.List {
+	dataList := make([][2]data.PlutusData, len(arg1.List))
+	for i, item := range arg1.List {
 		pair := item.(*syn.ProtoPair)
 		fst := pair.First.(*syn.Data)
 		snd := pair.Second.(*syn.Data)
-
-		dataList = append(dataList, [2]data.PlutusData{fst.Inner, snd.Inner})
+		dataList[i] = [2]data.PlutusData{fst.Inner, snd.Inner}
 	}
 
-	value := &Constant{&syn.Data{
-		Inner: &data.Map{
-			Pairs: dataList,
-		},
-	}}
-
-	return value, nil
+	return m.allocConstant(m.allocDataConstant(&data.Map{
+		Pairs: dataList,
+	})), nil
 }
 
 func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1785,20 +1818,15 @@ func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	dataList := []data.PlutusData{}
-
-	for _, item := range arg1.List {
+	dataList := make([]data.PlutusData, len(arg1.List))
+	for i, item := range arg1.List {
 		itemData := item.(*syn.Data)
-		dataList = append(dataList, itemData.Inner)
+		dataList[i] = itemData.Inner
 	}
 
-	value := &Constant{&syn.Data{
-		Inner: &data.List{
-			Items: dataList,
-		},
-	}}
-
-	return value, nil
+	return m.allocConstant(m.allocDataConstant(&data.List{
+		Items: dataList,
+	})), nil
 }
 
 func iData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1814,11 +1842,7 @@ func iData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	value := &Constant{&syn.Data{
-		Inner: &data.Integer{Inner: arg1},
-	}}
-
-	return value, nil
+	return m.allocConstant(m.allocDataConstant(&data.Integer{Inner: arg1})), nil
 }
 
 func bData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1834,11 +1858,7 @@ func bData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	value := &Constant{&syn.Data{
-		Inner: &data.ByteString{Inner: arg1},
-	}}
-
-	return value, nil
+	return m.allocConstant(m.allocDataConstant(&data.ByteString{Inner: arg1})), nil
 }
 
 func unConstrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1861,36 +1881,22 @@ func unConstrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "unConstrData", Message: "constructor tag too large for integer conversion"}
 		}
 
-		var fields []syn.IConstant
-
-		for _, field := range constr.Fields {
-			con := &syn.Data{
-				Inner: field,
-			}
-
-			fields = append(fields, con)
+		fields := m.allocConstantElems(len(constr.Fields))
+		for i, field := range constr.Fields {
+			fields[i] = m.allocDataConstant(field)
 		}
 
-		pair = &syn.ProtoPair{
-			FstType: &syn.TInteger{},
-			SndType: &syn.TList{
-				Typ: &syn.TData{},
-			},
-			First: &syn.Integer{
-				Inner: big.NewInt(int64(constr.Tag)),
-			},
-			Second: &syn.ProtoList{
-				LTyp: &syn.TData{},
-				List: fields,
-			},
-		}
+		pair = m.allocProtoPairConstant(
+			sharedIntegerType,
+			sharedListDataType,
+			m.int64Constant(int64(constr.Tag)).Constant,
+			m.allocProtoListConstant(sharedDataType, fields),
+		)
 	default:
 		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unConstrData", Message: "data is not a constr"}
 	}
 
-	value := &Constant{pair}
-
-	return value, nil
+	return m.allocConstant(pair), nil
 }
 
 func unMapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1909,37 +1915,22 @@ func unMapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	var dataMap *syn.ProtoList
 	switch l := arg1.(type) {
 	case *data.Map:
-		var items []syn.IConstant
-
-		for _, item := range l.Pairs {
-			pair := &syn.ProtoPair{
-				FstType: &syn.TData{},
-				SndType: &syn.TData{},
-				First: &syn.Data{
-					Inner: item[0],
-				},
-				Second: &syn.Data{
-					Inner: item[1],
-				},
-			}
-
-			items = append(items, pair)
+		items := m.allocConstantElems(len(l.Pairs))
+		for i, item := range l.Pairs {
+			items[i] = m.allocProtoPairConstant(
+				sharedDataType,
+				sharedDataType,
+				m.allocDataConstant(item[0]),
+				m.allocDataConstant(item[1]),
+			)
 		}
 
-		dataMap = &syn.ProtoList{
-			LTyp: &syn.TPair{
-				First:  &syn.TData{},
-				Second: &syn.TData{},
-			},
-			List: items,
-		}
+		dataMap = m.allocProtoListConstant(sharedPairDataType, items)
 	default:
 		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unMapData", Message: "data is not a map"}
 	}
 
-	value := &Constant{dataMap}
-
-	return value, nil
+	return m.allocConstant(dataMap), nil
 }
 
 func unListData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1958,27 +1949,17 @@ func unListData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	var list *syn.ProtoList
 	switch l := arg1.(type) {
 	case *data.List:
-		var items []syn.IConstant
-
-		for _, item := range l.Items {
-			dataList := &syn.Data{
-				Inner: item,
-			}
-
-			items = append(items, dataList)
+		items := m.allocConstantElems(len(l.Items))
+		for i, item := range l.Items {
+			items[i] = m.allocDataConstant(item)
 		}
 
-		list = &syn.ProtoList{
-			LTyp: &syn.TData{},
-			List: items,
-		}
+		list = m.allocProtoListConstant(sharedDataType, items)
 	default:
 		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unListData", Message: "data is not a list"}
 	}
 
-	value := &Constant{list}
-
-	return value, nil
+	return m.allocConstant(list), nil
 }
 
 func unIData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1998,17 +1979,16 @@ func unIData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	switch b := arg1.(type) {
 	case *data.Integer:
-		integer = &syn.Integer{
-			Inner: b.Inner,
+		if b.Inner.IsInt64() {
+			return m.int64Constant(b.Inner.Int64()), nil
 		}
+		integer = m.allocIntegerConstant(b.Inner)
 
 	default:
 		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unIData", Message: "data is not a integer"}
 	}
 
-	value := &Constant{integer}
-
-	return value, nil
+	return m.allocConstant(integer), nil
 }
 
 func unBData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -2028,17 +2008,13 @@ func unBData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	switch b := arg1.(type) {
 	case *data.ByteString:
-		bytes = &syn.ByteString{
-			Inner: b.Inner,
-		}
+		bytes = m.allocByteStringConstant(b.Inner)
 
 	default:
 		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unBData", Message: "data is not a bytearray"}
 	}
 
-	value := &Constant{bytes}
-
-	return value, nil
+	return m.allocConstant(bytes), nil
 }
 
 func equalsData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -3757,11 +3733,7 @@ func countSetBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		count += bits.OnesCount8(b)
 	}
 
-	value := &Constant{&syn.Integer{
-		Inner: big.NewInt(int64(count)),
-	}}
-
-	return value, nil
+	return m.int64Constant(int64(count)), nil
 }
 
 func findFirstSetBit[T syn.Eval](
@@ -3804,12 +3776,8 @@ func findFirstSetBit[T syn.Eval](
 		}
 	}
 
-	value := &Constant{&syn.Integer{
-		Inner: big.NewInt(int64(bitIndex)),
-	}}
-
 	// No bits set
-	return value, nil
+	return m.int64Constant(int64(bitIndex)), nil
 }
 
 // ============================================================================
