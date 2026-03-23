@@ -7,13 +7,15 @@
 
 Summary: This release includes the changes listed below.
 
+Summary: This release includes ECDSA verification behavior changes, flat encoding fixes, and dependency updates.
+
 ### New Features
 
 - Updated `RELEASE_NOTES.md` to document `v0.0.28` with a consolidated changelog entry covering toolchain updates, performance changes, security-related changes, and dependency updates.
 
 ### Breaking Changes
 
-- Removed BIP-146 low-S enforcement from secp256k1 ECDSA verification, wrapping public key parse failures as `BuiltinError` and updating conformance tests to accept high-S signatures.
+- Removed `BIP-146` low-S enforcement from `secp256k1` ECDSA verification, wrapping public key parse failures as `BuiltinError` and updating conformance tests to accept high-S signatures.
 
 ### Bug Fixes
 
@@ -21,7 +23,7 @@ Summary: This release includes the changes listed below.
 
 ### Additional Changes
 
-- Updated dependencies by bumping `github.com/consensys/gnark-crypto` from `v0.20.0` to `v0.20.1` and updating the Codecov GitHub Action from `v5.5.2` to `v5.5.3`.
+- Updated `github.com/consensys/gnark-crypto` from `v0.20.0` to `v0.20.1` and updated the Codecov GitHub Action from `v5.5.2` to `v5.5.3`.
 
 ## v0.0.28 - go toolchain and dependency updates
 
