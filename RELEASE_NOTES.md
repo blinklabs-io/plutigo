@@ -7,23 +7,21 @@
 
 Summary: This release includes the changes listed below.
 
-```json
-{
-  "Additional Changes": [
-    "Project dependencies were refreshed to incorporate upstream fixes and keep CI tooling current, updating the `gnark-crypto` Go module from v0.20.0 to v0.20.1 and bumping the Codecov GitHub Action used in the Go test workflow from v5.5.2 to v5.5.3."
-  ],
-  "Breaking Changes": [
-    "ECDSA signature verification no longer enforces the low-S requirement, so some previously rejected signatures may now validate, removing BIP-146 low-s enforcement from secp256k1 verification, wrapping public key parse failures as `BuiltinError`, and updating conformance tests to accept high-s signatures."
-  ],
-  "Bug Fixes": [
-    "Flat encoding roundtrip coverage was expanded and several correctness issues in the encoder were fixed to improve reliability of serialized programs and constants, strengthening tests for constants/programs and fixing flat-encoder bit packing along with constant type list markers to ensure correct roundtrip behavior."
-  ],
-  "New Features": [
-    "The release notes were updated to document the v0.0.28 release, adding a consolidated v0.0.28 changelog entry that summarizes toolchain updates, performance work, security-related changes, and dependency bumps for downstream consumers."
-  ]
-}
+### New Features
 
-```
+- Updated `RELEASE_NOTES.md` to document `v0.0.28` with a consolidated changelog entry covering toolchain updates, performance work, security-related changes, and dependency bumps.
+
+### Breaking Changes
+
+- Removed BIP-146 low-S enforcement from secp256k1 ECDSA verification, wrapping public key parse failures as `BuiltinError` and updating conformance tests to accept high-S signatures.
+
+### Bug Fixes
+
+- Fixed flat encoding roundtrip issues by expanding test coverage and correcting encoder bit packing and constant type list markers.
+
+### Additional Changes
+
+- Updated dependencies by bumping `github.com/consensys/gnark-crypto` from `v0.20.0` to `v0.20.1` and the Codecov GitHub Action from `v5.5.2` to `v5.5.3`.
 
 ## v0.0.28 - go toolchain and dependency updates
 
