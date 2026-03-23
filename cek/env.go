@@ -12,6 +12,12 @@ func lookupEnv[T syn.Eval](env *Env[T], idx int) (Value[T], bool) {
 	if idx <= 0 {
 		return zero, false
 	}
+	if env == nil {
+		return zero, false
+	}
+	if idx == 1 {
+		return env.data, true
+	}
 
 	current := env
 	for remaining := idx; current != nil; remaining-- {

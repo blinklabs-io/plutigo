@@ -776,6 +776,7 @@ func (m *Machine[T]) compute(
 	term syn.Term[T],
 ) (MachineState[T], error) {
 	var state MachineState[T]
+	var err error
 
 	switch t := term.(type) {
 	case *syn.Var[T]:
@@ -789,11 +790,10 @@ func (m *Machine[T]) compute(
 			return nil, &TypeError{Code: ErrCodeOpenTerm, Message: "open term evaluated"}
 		}
 
-		// Transition to Return state with the looked-up value
-		ret := m.getReturn()
-		ret.Ctx = context
-		ret.Value = value
-		state = ret
+		state, err = m.returnValueState(context, value)
+		if err != nil {
+			return nil, err
+		}
 	case *syn.Delay[T]:
 		// Delay creates a suspended computation that can be forced later
 		if err := m.stepAndMaybeSpend(ExDelay); err != nil {
@@ -802,10 +802,10 @@ func (m *Machine[T]) compute(
 
 		value := m.allocDelay(t.Term, env)
 
-		ret := m.getReturn()
-		ret.Ctx = context
-		ret.Value = value
-		state = ret
+		state, err = m.returnValueState(context, value)
+		if err != nil {
+			return nil, err
+		}
 	case *syn.Lambda[T]:
 		// Lambda creates a closure capturing the current environment
 		if err := m.stepAndMaybeSpend(ExLambda); err != nil {
@@ -814,15 +814,40 @@ func (m *Machine[T]) compute(
 
 		value := m.allocLambda(t.ParameterName, t.Body, env)
 
-		ret := m.getReturn()
-		ret.Ctx = context
-		ret.Value = value
-		state = ret
+		state, err = m.returnValueState(context, value)
+		if err != nil {
+			return nil, err
+		}
 	case *syn.Apply[T]:
 		// Application: evaluate function term first, then argument
 		// Uses FrameAwaitFunTerm to remember argument for later evaluation
 		if err := m.stepAndMaybeSpend(ExApply); err != nil {
 			return nil, err
+		}
+
+		funValue, ok, err := m.computeImmediateValue(env, t.Function)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			argValue, argImmediate, err := m.computeImmediateValue(env, t.Argument)
+			if err != nil {
+				return nil, err
+			}
+			if argImmediate {
+				return m.applyEvaluate(context, funValue, argValue)
+			}
+
+			frame := m.getFrameAwaitArg()
+			frame.Ctx = context
+			frame.Value = funValue
+
+			comp := m.getCompute()
+			comp.Ctx = frame
+			comp.Env = env
+			comp.Term = t.Argument
+			state = comp
+			break
 		}
 
 		frame := m.getFrameAwaitFunTerm()
@@ -841,15 +866,23 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 
-		ret := m.getReturn()
-		ret.Ctx = context
-		ret.Value = machineConstantValue(m, t.Con)
-		state = ret
+		state, err = m.returnValueState(context, machineConstantValue(m, t.Con))
+		if err != nil {
+			return nil, err
+		}
 	case *syn.Force[T]:
 		// Force triggers evaluation of a delayed computation
 		// Uses FrameForce to handle the result
 		if err := m.stepAndMaybeSpend(ExForce); err != nil {
 			return nil, err
+		}
+
+		forcedValue, ok, err := m.computeImmediateValue(env, t.Term)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			return m.forceEvaluate(context, forcedValue)
 		}
 
 		frame := m.getFrameForce()
@@ -870,10 +903,10 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 
-		ret := m.getReturn()
-		ret.Ctx = context
-		ret.Value = m.builtinValues[t.DefaultFunction]
-		state = ret
+		state, err = m.returnValueState(context, m.builtinValues[t.DefaultFunction])
+		if err != nil {
+			return nil, err
+		}
 	case *syn.Constr[T]:
 		// Constructor: evaluate all fields sequentially
 		// If no fields, create constructor value immediately
@@ -886,10 +919,10 @@ func (m *Machine[T]) compute(
 
 		if len(fields) == 0 {
 			// No fields to evaluate
-			ret := m.getReturn()
-			ret.Ctx = context
-			ret.Value = m.allocConstr(t.Tag, nil)
-			state = ret
+			state, err = m.returnValueState(context, m.allocConstr(t.Tag, nil))
+			if err != nil {
+				return nil, err
+			}
 		} else {
 			// Evaluate fields sequentially using FrameConstr
 			firstField := fields[0]
@@ -916,6 +949,14 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 
+		scrutinee, ok, err := m.computeImmediateValue(env, t.Constr)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			return m.caseEvaluate(env, t.Branches, context, scrutinee)
+		}
+
 		frame := m.getFrameCases()
 		frame.Env = env
 		frame.Ctx = context
@@ -938,6 +979,166 @@ func (m *Machine[T]) compute(
 	}
 
 	return state, nil
+}
+
+func (m *Machine[T]) returnValueState(
+	context MachineContext[T],
+	value Value[T],
+) (MachineState[T], error) {
+	if _, ok := context.(*NoFrame); ok {
+		ret := m.getReturn()
+		ret.Ctx = context
+		ret.Value = value
+		return ret, nil
+	}
+	return m.returnCompute(context, value)
+}
+
+func (m *Machine[T]) computeImmediateValue(
+	env *Env[T],
+	term syn.Term[T],
+) (Value[T], bool, error) {
+	switch t := term.(type) {
+	case *syn.Var[T]:
+		if err := m.stepAndMaybeSpend(ExVar); err != nil {
+			return nil, true, err
+		}
+		value, ok := lookupEnv(env, t.Name.LookupIndex())
+		if !ok {
+			return nil, true, &TypeError{Code: ErrCodeOpenTerm, Message: "open term evaluated"}
+		}
+		return value, true, nil
+	case *syn.Delay[T]:
+		if err := m.stepAndMaybeSpend(ExDelay); err != nil {
+			return nil, true, err
+		}
+		return m.allocDelay(t.Term, env), true, nil
+	case *syn.Lambda[T]:
+		if err := m.stepAndMaybeSpend(ExLambda); err != nil {
+			return nil, true, err
+		}
+		return m.allocLambda(t.ParameterName, t.Body, env), true, nil
+	case *syn.Constant:
+		if err := m.stepAndMaybeSpend(ExConstant); err != nil {
+			return nil, true, err
+		}
+		return machineConstantValue(m, t.Con), true, nil
+	case *syn.Error:
+		return nil, true, &ScriptError{Code: ErrCodeExplicitError, Message: "error explicitly called"}
+	case *syn.Builtin:
+		if err := m.stepAndMaybeSpend(ExBuiltin); err != nil {
+			return nil, true, err
+		}
+		return m.builtinValues[t.DefaultFunction], true, nil
+	case *syn.Constr[T]:
+		if len(t.Fields) != 0 {
+			return nil, false, nil
+		}
+		if err := m.stepAndMaybeSpend(ExConstr); err != nil {
+			return nil, true, err
+		}
+		return m.allocConstr(t.Tag, nil), true, nil
+	default:
+		return nil, false, nil
+	}
+}
+
+func (m *Machine[T]) caseEvaluate(
+	env *Env[T],
+	branches []syn.Term[T],
+	context MachineContext[T],
+	value Value[T],
+) (MachineState[T], error) {
+	switch v := value.(type) {
+	case *Constr[T]:
+		if v.Tag > math.MaxInt {
+			return nil, &ScriptError{Code: ErrCodeMaxIntExceeded, Message: "MaxIntExceeded"}
+		}
+		if indexExists(branches, int(v.Tag)) {
+			comp := m.getCompute()
+			comp.Ctx = m.transferArgStack(v.Fields, context)
+			comp.Env = env
+			comp.Term = branches[v.Tag]
+			return comp, nil
+		}
+		return nil, &ScriptError{Code: ErrCodeMissingCaseBranch, Message: "MissingCaseBranch"}
+	case *Constant:
+		var tag int
+		var args []Value[T]
+		branchRule := 0
+
+		switch cval := v.Constant.(type) {
+		case *syn.Bool:
+			branchRule = 2
+			if cval.Inner {
+				tag = 1
+			} else {
+				tag = 0
+			}
+		case *syn.Unit:
+			branchRule = 1
+			tag = 0
+		case *syn.Integer:
+			if cval.Inner.Sign() < 0 {
+				return nil, &ScriptError{Code: ErrCodeCaseOnNegativeInt, Message: "case on negative integer"}
+			}
+			if !cval.Inner.IsInt64() {
+				return nil, &ScriptError{Code: ErrCodeCaseIntOutOfRange, Message: "case on integer out of range"}
+			}
+			ival := cval.Inner.Int64()
+			if ival > int64(math.MaxInt) {
+				return nil, &ScriptError{Code: ErrCodeCaseIntOutOfRange, Message: "case on integer out of range"}
+			}
+			tag = int(ival)
+		case *syn.ByteString:
+			return nil, &ScriptError{Code: ErrCodeCaseOnByteString, Message: "case on bytestring constant not allowed"}
+		case *syn.ProtoList:
+			branchRule = 2
+			if len(cval.List) == 0 {
+				tag = 1
+			} else {
+				tag = 0
+				args = m.allocValueElems(2)
+				args[0] = m.allocConstant(cval.List[0])
+				tail := m.allocProtoListConstant(cval.LTyp, cval.List[1:])
+				args[1] = m.allocConstant(tail)
+			}
+		case *syn.ProtoPair:
+			branchRule = 1
+			tag = 0
+			args = m.allocValueElems(2)
+			args[0] = m.allocConstant(cval.First)
+			args[1] = m.allocConstant(cval.Second)
+		default:
+			return nil, &TypeError{Code: ErrCodeNonConstrScrutinized, Message: "NonConstrScrutinized"}
+		}
+
+		switch branchRule {
+		case 1:
+			if len(branches) != 1 {
+				return nil, &ScriptError{Code: ErrCodeInvalidBranchCount, Message: "InvalidCaseBranchCount"}
+			}
+		case 2:
+			if len(branches) < 1 || len(branches) > 2 {
+				return nil, &ScriptError{Code: ErrCodeInvalidBranchCount, Message: "InvalidCaseBranchCount"}
+			}
+		}
+
+		if indexExists(branches, tag) {
+			comp := m.getCompute()
+			if args != nil {
+				comp.Ctx = m.transferArgStack(args, context)
+			} else {
+				comp.Ctx = context
+			}
+			comp.Env = env
+			comp.Term = branches[tag]
+			return comp, nil
+		}
+		return nil, &ScriptError{Code: ErrCodeMissingCaseBranch, Message: "MissingCaseBranch"}
+	default:
+		return nil, &TypeError{Code: ErrCodeNonConstrScrutinized, Message: "NonConstrScrutinized"}
+	}
 }
 
 // returnCompute handles the Return state of the CEK machine.
@@ -969,6 +1170,19 @@ func (m *Machine[T]) returnCompute(
 		}
 	case *FrameAwaitFunTerm[T]:
 		// Function evaluated to a value, now evaluate argument term
+		argValue, ok, err := m.computeImmediateValue(c.Env, c.Term)
+		if err != nil {
+			m.putFrameAwaitFunTerm(c)
+			return nil, err
+		}
+		if ok {
+			state, err = m.applyEvaluate(c.Ctx, value, argValue)
+			m.putFrameAwaitFunTerm(c)
+			if err != nil {
+				return nil, err
+			}
+			break
+		}
 		comp := m.getCompute()
 		frame := m.getFrameAwaitArg()
 		frame.Ctx = c.Ctx
@@ -1024,130 +1238,10 @@ func (m *Machine[T]) returnCompute(
 		}
 	case *FrameCases[T]:
 		// Pattern match on constructor or constant values
-		switch v := value.(type) {
-		case *Constr[T]:
-			if v.Tag > math.MaxInt {
-				m.putFrameCases(c)
-				return nil, &ScriptError{Code: ErrCodeMaxIntExceeded, Message: "MaxIntExceeded"}
-			}
-			if indexExists(c.Branches, int(v.Tag)) {
-				// Matching branch found, evaluate it with arguments on stack
-				comp := m.getCompute()
-				comp.Ctx = m.transferArgStack(v.Fields, c.Ctx)
-				comp.Env = c.Env
-				comp.Term = c.Branches[v.Tag]
-				m.putFrameCases(c)
-				state = comp
-			} else {
-				m.putFrameCases(c)
-				return nil, &ScriptError{Code: ErrCodeMissingCaseBranch, Message: "MissingCaseBranch"}
-			}
-		case *Constant:
-			// Handle case on constants: Bool, Unit, Integer, List, Pair
-			var tag int
-			var args []Value[T] // Only allocate when needed (ProtoList, ProtoPair)
-			// branchRule semantics:
-			// 0: allow any number of branches (Integer)
-			// 1: require exactly 1 branch (Unit/Pair)
-			// 2: allow up to 2 branches (1 or 2) but disallow >2 (Bool/List)
-			branchRule := 0
-
-			switch cval := v.Constant.(type) {
-			case *syn.Bool:
-				// Bool: allow 1 or 2 branches; >2 invalid
-				branchRule = 2
-				// False=0, True=1
-				if cval.Inner {
-					tag = 1
-				} else {
-					tag = 0
-				}
-			case *syn.Unit:
-				// Unit constants must have exactly 1 branch
-				branchRule = 1
-				// ()=0
-				tag = 0
-			case *syn.Integer:
-				// Integer: use value as branch index
-				if cval.Inner.Sign() < 0 {
-					m.putFrameCases(c)
-					return nil, &ScriptError{Code: ErrCodeCaseOnNegativeInt, Message: "case on negative integer"}
-				}
-				if !cval.Inner.IsInt64() {
-					m.putFrameCases(c)
-					return nil, &ScriptError{Code: ErrCodeCaseIntOutOfRange, Message: "case on integer out of range"}
-				}
-				ival := cval.Inner.Int64()
-				if ival > int64(math.MaxInt) {
-					m.putFrameCases(c)
-					return nil, &ScriptError{Code: ErrCodeCaseIntOutOfRange, Message: "case on integer out of range"}
-				}
-				tag = int(ival)
-			case *syn.ByteString:
-				// ByteString constant not valid in case according to conformance
-				m.putFrameCases(c)
-				return nil, &ScriptError{Code: ErrCodeCaseOnByteString, Message: "case on bytestring constant not allowed"}
-			case *syn.ProtoList:
-				// List: allow 1 or 2 branches; >2 invalid
-				branchRule = 2
-				// cons=0 (with [head, tail] args), nil=1 (no args)
-				if len(cval.List) == 0 {
-					tag = 1
-				} else {
-					tag = 0
-					// head and tail
-					args = m.allocValueElems(2)
-					args[0] = m.allocConstant(cval.List[0])
-					tail := m.allocProtoListConstant(cval.LTyp, cval.List[1:])
-					args[1] = m.allocConstant(tail)
-				}
-			case *syn.ProtoPair:
-				// Pair constants must have exactly 1 branch
-				branchRule = 1
-				// Pass both fields as args
-				tag = 0
-				args = m.allocValueElems(2)
-				args[0] = m.allocConstant(cval.First)
-				args[1] = m.allocConstant(cval.Second)
-			default:
-				m.putFrameCases(c)
-				return nil, &TypeError{Code: ErrCodeNonConstrScrutinized, Message: "NonConstrScrutinized"}
-			}
-
-			// Enforce branch count rules for constant cases
-			switch branchRule {
-			case 1:
-				// exact 1
-				if len(c.Branches) != 1 {
-					m.putFrameCases(c)
-					return nil, &ScriptError{Code: ErrCodeInvalidBranchCount, Message: "InvalidCaseBranchCount"}
-				}
-			case 2:
-				// 1 or 2
-				if len(c.Branches) < 1 || len(c.Branches) > 2 {
-					m.putFrameCases(c)
-					return nil, &ScriptError{Code: ErrCodeInvalidBranchCount, Message: "InvalidCaseBranchCount"}
-				}
-			}
-
-			if indexExists(c.Branches, tag) {
-				comp := m.getCompute()
-				if args != nil {
-					comp.Ctx = m.transferArgStack(args, c.Ctx)
-				} else {
-					comp.Ctx = c.Ctx
-				}
-				comp.Env = c.Env
-				comp.Term = c.Branches[tag]
-				m.putFrameCases(c)
-				state = comp
-			} else {
-				m.putFrameCases(c)
-				return nil, &ScriptError{Code: ErrCodeMissingCaseBranch, Message: "MissingCaseBranch"}
-			}
-		default:
-			m.putFrameCases(c)
-			return nil, &TypeError{Code: ErrCodeNonConstrScrutinized, Message: "NonConstrScrutinized"}
+		state, err = m.caseEvaluate(c.Env, c.Branches, c.Ctx, value)
+		m.putFrameCases(c)
+		if err != nil {
+			return nil, err
 		}
 	case *NoFrame:
 		return nil, &InternalError{
@@ -1178,6 +1272,7 @@ func (m *Machine[T]) forceEvaluate(
 	value Value[T],
 ) (MachineState[T], error) {
 	var state MachineState[T]
+	var err error
 
 	switch v := value.(type) {
 	case *Delay[T]:
@@ -1207,10 +1302,10 @@ func (m *Machine[T]) forceEvaluate(
 				resolved = m.allocBuiltin(v.Func, nextForces, v.ArgCount, v.Args)
 			}
 
-			ret := m.getReturn()
-			ret.Ctx = context
-			ret.Value = resolved
-			state = ret
+			state, err = m.returnValueState(context, resolved)
+			if err != nil {
+				return nil, err
+			}
 		} else {
 			return nil, &TypeError{Code: ErrCodeBuiltinForceExpected, Message: "BuiltinTermArgumentExpected"}
 		}
@@ -1232,6 +1327,7 @@ func (m *Machine[T]) applyEvaluate(
 	arg Value[T],
 ) (MachineState[T], error) {
 	var state MachineState[T]
+	var err error
 
 	switch f := function.(type) {
 	case *Lambda[T]:
@@ -1273,10 +1369,10 @@ func (m *Machine[T]) applyEvaluate(
 				)
 			}
 
-			ret := m.getReturn()
-			ret.Ctx = context
-			ret.Value = resolved
-			state = ret
+			state, err = m.returnValueState(context, resolved)
+			if err != nil {
+				return nil, err
+			}
 		} else {
 			return nil, &TypeError{Code: ErrCodeUnexpectedBuiltinArg, Message: "UnexpectedBuiltinTermArgument"}
 		}
