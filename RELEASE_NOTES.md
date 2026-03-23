@@ -5,8 +5,6 @@
 - Date: 2026-03-23
 - Version: v0.0.29
 
-Summary: This release includes the changes listed below.
-
 Summary: This release includes ECDSA verification behavior changes, flat encoding fixes, and dependency updates.
 
 ### New Features
