@@ -10,16 +10,16 @@ Summary: This release includes the changes listed below.
 ```json
 {
   "Additional Changes": [
-    "Project dependencies were refreshed to incorporate upstream fixes and keep CI tooling current. This updates the `gnark-crypto` Go module from v0.20.0 to v0.20.1 and bumps the Codecov GitHub Action used in the Go test workflow from v5.5.2 to v5.5.3."
+    "Project dependencies were refreshed to incorporate upstream fixes and keep CI tooling current, updating the `gnark-crypto` Go module from v0.20.0 to v0.20.1 and bumping the Codecov GitHub Action used in the Go test workflow from v5.5.2 to v5.5.3."
   ],
   "Breaking Changes": [
-    "ECDSA signature verification no longer enforces the low-S requirement, so some previously rejected signatures may now validate. Specifically, BIP-146 low-s enforcement was removed from secp256k1 verification, public key parse failures are now wrapped as `BuiltinError`, and conformance tests were updated to accept high-s signatures."
+    "ECDSA signature verification no longer enforces the low-S requirement, so some previously rejected signatures may now validate, removing BIP-146 low-s enforcement from secp256k1 verification, wrapping public key parse failures as `BuiltinError`, and updating conformance tests to accept high-s signatures."
   ],
   "Bug Fixes": [
-    "Flat encoding roundtrip coverage was expanded and several correctness issues in the encoder were fixed to improve reliability of serialized programs and constants. This strengthens tests for constants/programs and fixes flat-encoder bit packing along with constant type list markers to ensure correct roundtrip behavior."
+    "Flat encoding roundtrip coverage was expanded and several correctness issues in the encoder were fixed to improve reliability of serialized programs and constants, strengthening tests for constants/programs and fixing flat-encoder bit packing along with constant type list markers to ensure correct roundtrip behavior."
   ],
   "New Features": [
-    "The release notes were updated to document the v0.0.28 release, covering toolchain, performance, security, and dependency changes in one place. This adds a consolidated v0.0.28 changelog entry intended to summarize toolchain updates, performance work, security-related changes, and dependency bumps for downstream consumers."
+    "The release notes were updated to document the v0.0.28 release, adding a consolidated v0.0.28 changelog entry that summarizes toolchain updates, performance work, security-related changes, and dependency bumps for downstream consumers."
   ]
 }
 
