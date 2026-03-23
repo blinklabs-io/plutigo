@@ -12,6 +12,8 @@ import (
 	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
+	"github.com/btcsuite/btcd/btcec/v2"
+	btcecdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
 
@@ -3959,5 +3961,87 @@ func TestBuiltinArgsExtract(t *testing.T) {
 		if got.Inner.Cmp(wantInt.Inner) != 0 {
 			t.Fatalf("at index %d, expected %v, got %v", i, wantInt.Inner, got.Inner)
 		}
+	}
+}
+
+// TestVerifyEcdsaSecp256k1HighS verifies that ECDSA signatures with high-s
+// values are accepted. Cardano's CIP-0049 uses libsecp256k1's
+// secp256k1_ecdsa_verify which does NOT enforce BIP-146 low-s. Rejecting
+// high-s signatures causes disagreement with cardano-node on blocks
+// containing cross-chain bridge scripts (e.g. preview TX
+// 7e32983975bd529484ac5d4f2e930d5e8e98a5dcc2dabbc64880da60d294081d).
+func TestVerifyEcdsaSecp256k1HighS(t *testing.T) {
+	// Generate a secp256k1 key pair and sign a message, then negate s
+	// to produce a valid high-s signature.
+	privKey, err := btcec.NewPrivateKey()
+	if err != nil {
+		t.Fatalf("failed to generate key: %v", err)
+	}
+	pubKeyBytes := privKey.PubKey().SerializeCompressed() // 33 bytes
+
+	message := make([]byte, 32)
+	copy(message, []byte("CIP-0049 high-s test"))
+
+	sig := btcecdsa.Sign(privKey, message)
+
+	// Extract r and s from the signature
+	r := new(btcec.ModNScalar)
+	s := new(btcec.ModNScalar)
+	sigBytes := sig.Serialize()
+	// DER decode: 30 <len> 02 <rlen> <r> 02 <slen> <s>
+	rLen := int(sigBytes[3])
+	rBytes := sigBytes[4 : 4+rLen]
+	sBytes := sigBytes[4+rLen+2:]
+
+	var rBuf, sBuf [32]byte
+	copy(rBuf[32-len(rBytes):], rBytes)
+	copy(sBuf[32-len(sBytes):], sBytes)
+	r.SetByteSlice(rBuf[:])
+	s.SetByteSlice(sBuf[:])
+
+	// Negate s to get high-s (s' = N - s). If s was already high, this
+	// makes it low — either way one of them is high-s.
+	sNeg := new(btcec.ModNScalar).NegateVal(s)
+
+	// Pick whichever s is high (over half order)
+	highS := s
+	if !s.IsOverHalfOrder() {
+		highS = sNeg
+	}
+
+	// Rebuild the 64-byte raw signature [r || highS]
+	var rawSig [64]byte
+	rScalarBytes := r.Bytes()
+	sScalarBytes := highS.Bytes()
+	copy(rawSig[0:32], rScalarBytes[:])
+	copy(rawSig[32:64], sScalarBytes[:])
+
+	// Verify the high-s signature is cryptographically valid
+	highSig := btcecdsa.NewSignature(r, highS)
+	if !highSig.Verify(message, privKey.PubKey()) {
+		t.Fatal("high-s signature should be cryptographically valid")
+	}
+
+	// Now test through the builtin — must return true
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.VerifyEcdsaSecp256k1Signature)
+
+	v1 := &Constant{&syn.ByteString{Inner: pubKeyBytes}}
+	v2 := &Constant{&syn.ByteString{Inner: message}}
+	v3 := &Constant{&syn.ByteString{Inner: rawSig[:]}}
+
+	b = b.ApplyArg(v1)
+	b = b.ApplyArg(v2)
+	b = b.ApplyArg(v3)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	boolVal := expectBool(t, constVal)
+
+	if !boolVal.Inner {
+		t.Errorf(
+			"high-s ECDSA signature must be accepted per CIP-0049; " +
+				"BIP-146 low-s enforcement is Bitcoin-specific and must not apply",
+		)
 	}
 }

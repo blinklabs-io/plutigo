@@ -1,7 +1,8 @@
 -- Generated using OpenSSL 3.0.14.4
 -- Signing key a1adc24fc72eeb3ca032f68134a21c83dbebed4d7088a3794dbe65b4570604fd
 -- Same keypair and message as test-vector-01, alternative signature (low r, high s)
--- Expect False (we don't accept signatures with high s components)
+-- Cardano uses libsecp256k1's secp256k1_ecdsa_verify which does NOT enforce
+-- BIP-146 low-s. High-s signatures are cryptographically valid and accepted.
 (program 1.0.0
  [
   [
