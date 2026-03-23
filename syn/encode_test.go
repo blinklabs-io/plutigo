@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"math/big"
+	"reflect"
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -405,6 +406,24 @@ func TestFlatRoundtripConstantTypes(t *testing.T) {
 	}
 }
 
+// typsEqual performs deep equality on Typ values, including nested TList/TPair.
+func typsEqual(a, b Typ) bool {
+	switch va := a.(type) {
+	case *TList:
+		if vb, ok := b.(*TList); ok {
+			return typsEqual(va.Typ, vb.Typ)
+		}
+		return false
+	case *TPair:
+		if vb, ok := b.(*TPair); ok {
+			return typsEqual(va.First, vb.First) && typsEqual(va.Second, vb.Second)
+		}
+		return false
+	default:
+		return reflect.TypeOf(a) == reflect.TypeOf(b)
+	}
+}
+
 // Helper function to compare constants for equality
 func constantsEqual(a, b IConstant) bool {
 	switch va := a.(type) {
@@ -438,6 +457,9 @@ func constantsEqual(a, b IConstant) bool {
 		}
 	case *ProtoList:
 		if vb, ok := b.(*ProtoList); ok {
+			if !typsEqual(va.LTyp, vb.LTyp) {
+				return false
+			}
 			if len(va.List) != len(vb.List) {
 				return false
 			}
@@ -450,6 +472,10 @@ func constantsEqual(a, b IConstant) bool {
 		}
 	case *ProtoPair:
 		if vb, ok := b.(*ProtoPair); ok {
+			if !typsEqual(va.FstType, vb.FstType) ||
+				!typsEqual(va.SndType, vb.SndType) {
+				return false
+			}
 			return constantsEqual(va.First, vb.First) && constantsEqual(va.Second, vb.Second)
 		}
 	}
