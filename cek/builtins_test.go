@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/hex"
 	"math"
 	"math/big"
 	"testing"
@@ -12,8 +13,18 @@ import (
 	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
+	"github.com/btcsuite/btcd/btcec/v2"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
+
+func hexDecode(t *testing.T, s string) []byte {
+	t.Helper()
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		t.Fatalf("hex decode %q: %v", s, err)
+	}
+	return b
+}
 
 // Helper functions to reduce test code duplication
 
@@ -3959,5 +3970,51 @@ func TestBuiltinArgsExtract(t *testing.T) {
 		if got.Inner.Cmp(wantInt.Inner) != 0 {
 			t.Fatalf("at index %d, expected %v, got %v", i, wantInt.Inner, got.Inner)
 		}
+	}
+}
+
+// TestVerifyEcdsaSecp256k1HighS verifies that ECDSA signatures with high-s
+// values are accepted. Cardano's CIP-0049 uses libsecp256k1's
+// secp256k1_ecdsa_verify which does NOT enforce BIP-146 low-s. Rejecting
+// high-s signatures causes disagreement with cardano-node on blocks
+// containing cross-chain bridge scripts (e.g. preview TX
+// 7e32983975bd529484ac5d4f2e930d5e8e98a5dcc2dabbc64880da60d294081d).
+func TestVerifyEcdsaSecp256k1HighS(t *testing.T) {
+	// Static test vector from conformance test-vector-03 (OpenSSL-generated).
+	// Same keypair and message as test-vector-01, but with high-s.
+	pubKeyBytes := hexDecode(t, "032e433589dce61863199171f4d1e3fa946a5832621fcd29559940a0950f96fb6f")
+	rawSig := hexDecode(t, "603e6e7bf67152188204f76f6274d38c477bdbc3954cdaa44e4ef49691a517de"+
+		"d5eaad30c2e69e3e9b124bcc48fa0e4d0aa0dfdb4ca9d537ea1dcd46c94b8f56")
+	// The message is sha2_256("") = e3b0c442...
+	message := hexDecode(t, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+
+	// Verify s is actually high (over half the curve order)
+	s := new(btcec.ModNScalar)
+	s.SetByteSlice(rawSig[32:])
+	if !s.IsOverHalfOrder() {
+		t.Fatal("test vector s should be over half order (high-s)")
+	}
+
+	// Now test through the builtin — must return true
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.VerifyEcdsaSecp256k1Signature)
+
+	v1 := &Constant{&syn.ByteString{Inner: pubKeyBytes}}
+	v2 := &Constant{&syn.ByteString{Inner: message}}
+	v3 := &Constant{&syn.ByteString{Inner: rawSig}}
+
+	b = b.ApplyArg(v1)
+	b = b.ApplyArg(v2)
+	b = b.ApplyArg(v3)
+
+	val := evalBuiltin(t, m, b)
+	constVal := expectConstant(t, val)
+	boolVal := expectBool(t, constVal)
+
+	if !boolVal.Inner {
+		t.Errorf(
+			"high-s ECDSA signature must be accepted per CIP-0049; " +
+				"BIP-146 low-s enforcement is Bitcoin-specific and must not apply",
+		)
 	}
 }

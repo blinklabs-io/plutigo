@@ -1062,7 +1062,11 @@ func verifyEcdsaSecp256K1Signature[T syn.Eval](
 
 	key, err := btcec.ParsePubKey(publicKey)
 	if err != nil {
-		return nil, err
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "verifyEcdsaSecp256k1Signature",
+			Message: fmt.Sprintf("invalid public key: %v", err),
+		}
 	}
 
 	r := new(btcec.ModNScalar)
@@ -1088,8 +1092,7 @@ func verifyEcdsaSecp256K1Signature[T syn.Eval](
 
 	sig := ecdsa.NewSignature(r, s)
 
-	// Check s is less then half the field prime (BIP-146)
-	res := sig.Verify(message, key) && !s.IsOverHalfOrder()
+	res := sig.Verify(message, key)
 
 	con := &syn.Bool{
 		Inner: res,
