@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/hex"
 	"math"
 	"math/big"
 	"testing"
@@ -13,9 +14,17 @@ import (
 	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 	"github.com/btcsuite/btcd/btcec/v2"
-	btcecdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
+
+func hexDecode(t *testing.T, s string) []byte {
+	t.Helper()
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		t.Fatalf("hex decode %q: %v", s, err)
+	}
+	return b
+}
 
 // Helper functions to reduce test code duplication
 
@@ -3971,55 +3980,19 @@ func TestBuiltinArgsExtract(t *testing.T) {
 // containing cross-chain bridge scripts (e.g. preview TX
 // 7e32983975bd529484ac5d4f2e930d5e8e98a5dcc2dabbc64880da60d294081d).
 func TestVerifyEcdsaSecp256k1HighS(t *testing.T) {
-	// Generate a secp256k1 key pair and sign a message, then negate s
-	// to produce a valid high-s signature.
-	privKey, err := btcec.NewPrivateKey()
-	if err != nil {
-		t.Fatalf("failed to generate key: %v", err)
-	}
-	pubKeyBytes := privKey.PubKey().SerializeCompressed() // 33 bytes
+	// Static test vector from conformance test-vector-03 (OpenSSL-generated).
+	// Same keypair and message as test-vector-01, but with high-s.
+	pubKeyBytes := hexDecode(t, "032e433589dce61863199171f4d1e3fa946a5832621fcd29559940a0950f96fb6f")
+	rawSig := hexDecode(t, "603e6e7bf67152188204f76f6274d38c477bdbc3954cdaa44e4ef49691a517de"+
+		"d5eaad30c2e69e3e9b124bcc48fa0e4d0aa0dfdb4ca9d537ea1dcd46c94b8f56")
+	// The message is sha2_256("") = e3b0c442...
+	message := hexDecode(t, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
 
-	message := make([]byte, 32)
-	copy(message, []byte("CIP-0049 high-s test"))
-
-	sig := btcecdsa.Sign(privKey, message)
-
-	// Extract r and s from the signature
-	r := new(btcec.ModNScalar)
+	// Verify s is actually high (over half the curve order)
 	s := new(btcec.ModNScalar)
-	sigBytes := sig.Serialize()
-	// DER decode: 30 <len> 02 <rlen> <r> 02 <slen> <s>
-	rLen := int(sigBytes[3])
-	rBytes := sigBytes[4 : 4+rLen]
-	sBytes := sigBytes[4+rLen+2:]
-
-	var rBuf, sBuf [32]byte
-	copy(rBuf[32-len(rBytes):], rBytes)
-	copy(sBuf[32-len(sBytes):], sBytes)
-	r.SetByteSlice(rBuf[:])
-	s.SetByteSlice(sBuf[:])
-
-	// Negate s to get high-s (s' = N - s). If s was already high, this
-	// makes it low — either way one of them is high-s.
-	sNeg := new(btcec.ModNScalar).NegateVal(s)
-
-	// Pick whichever s is high (over half order)
-	highS := s
+	s.SetByteSlice(rawSig[32:])
 	if !s.IsOverHalfOrder() {
-		highS = sNeg
-	}
-
-	// Rebuild the 64-byte raw signature [r || highS]
-	var rawSig [64]byte
-	rScalarBytes := r.Bytes()
-	sScalarBytes := highS.Bytes()
-	copy(rawSig[0:32], rScalarBytes[:])
-	copy(rawSig[32:64], sScalarBytes[:])
-
-	// Verify the high-s signature is cryptographically valid
-	highSig := btcecdsa.NewSignature(r, highS)
-	if !highSig.Verify(message, privKey.PubKey()) {
-		t.Fatal("high-s signature should be cryptographically valid")
+		t.Fatal("test vector s should be over half order (high-s)")
 	}
 
 	// Now test through the builtin — must return true
@@ -4028,7 +4001,7 @@ func TestVerifyEcdsaSecp256k1HighS(t *testing.T) {
 
 	v1 := &Constant{&syn.ByteString{Inner: pubKeyBytes}}
 	v2 := &Constant{&syn.ByteString{Inner: message}}
-	v3 := &Constant{&syn.ByteString{Inner: rawSig[:]}}
+	v3 := &Constant{&syn.ByteString{Inner: rawSig}}
 
 	b = b.ApplyArg(v1)
 	b = b.ApplyArg(v2)
