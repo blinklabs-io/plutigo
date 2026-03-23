@@ -9,7 +9,7 @@ Summary: This release includes the changes listed below.
 
 ### New Features
 
-- Updated `RELEASE_NOTES.md` to document `v0.0.28` with a consolidated changelog entry covering toolchain updates, performance work, security-related changes, and dependency bumps.
+- Updated `RELEASE_NOTES.md` to document `v0.0.28` with a consolidated changelog entry covering toolchain updates, performance changes, security-related changes, and dependency updates.
 
 ### Breaking Changes
 
@@ -21,7 +21,7 @@ Summary: This release includes the changes listed below.
 
 ### Additional Changes
 
-- Updated dependencies by bumping `github.com/consensys/gnark-crypto` from `v0.20.0` to `v0.20.1` and the Codecov GitHub Action from `v5.5.2` to `v5.5.3`.
+- Updated dependencies by bumping `github.com/consensys/gnark-crypto` from `v0.20.0` to `v0.20.1` and updating the Codecov GitHub Action from `v5.5.2` to `v5.5.3`.
 
 ## v0.0.28 - go toolchain and dependency updates
 
