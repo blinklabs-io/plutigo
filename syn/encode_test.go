@@ -1,10 +1,13 @@
 package syn
 
 import (
+	"bytes"
+	"encoding/hex"
 	"math/big"
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/builtin"
+	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/lang"
 )
 
@@ -125,6 +128,49 @@ func TestEncodeDecodeConstantTerm(t *testing.T) {
 			name:     "constant_bool_false",
 			constant: &Bool{Inner: false},
 		},
+		{
+			name: "constant_list_integer",
+			constant: &ProtoList{
+				LTyp: &TInteger{},
+				List: []IConstant{
+					&Integer{Inner: big.NewInt(1)},
+					&Integer{Inner: big.NewInt(2)},
+					&Integer{Inner: big.NewInt(3)},
+				},
+			},
+		},
+		{
+			name: "constant_pair_integer_bytestring",
+			constant: &ProtoPair{
+				FstType: &TInteger{},
+				SndType: &TByteString{},
+				First:   &Integer{Inner: big.NewInt(42)},
+				Second:  &ByteString{Inner: []byte{0xca, 0xfe}},
+			},
+		},
+		{
+			name: "constant_list_of_pairs",
+			constant: &ProtoList{
+				LTyp: &TPair{First: &TInteger{}, Second: &TByteString{}},
+				List: []IConstant{
+					&ProtoPair{
+						FstType: &TInteger{},
+						SndType: &TByteString{},
+						First:   &Integer{Inner: big.NewInt(1)},
+						Second:  &ByteString{Inner: []byte{0xab}},
+					},
+				},
+			},
+		},
+		{
+			name: "constant_pair_of_lists",
+			constant: &ProtoPair{
+				FstType: &TList{Typ: &TInteger{}},
+				SndType: &TList{Typ: &TByteString{}},
+				First:   &ProtoList{LTyp: &TInteger{}, List: []IConstant{&Integer{Inner: big.NewInt(1)}}},
+				Second:  &ProtoList{LTyp: &TByteString{}, List: []IConstant{&ByteString{Inner: []byte{0xff}}}},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -157,6 +203,203 @@ func TestEncodeDecodeConstantTerm(t *testing.T) {
 				t.Errorf("Constants not equal after encode/decode")
 				t.Errorf("Original: %+v", tt.constant)
 				t.Errorf("Decoded: %+v", constantTerm.Con)
+			}
+		})
+	}
+}
+
+func TestFlatRoundtrip(t *testing.T) {
+	// Build a synthetic UPLC program that exercises all term types and
+	// encoding paths: Lambda, Apply, Var, Constant (Integer, ByteString,
+	// Data, Bool), Force, Delay, Builtin, Constr, Case, Error.
+	// This ensures the encoder and decoder are inverses for non-trivial ASTs.
+	program := &Program[DeBruijn]{
+		Version: lang.LanguageVersionV3,
+		Term: &Lambda[DeBruijn]{
+			ParameterName: DeBruijn(0),
+			Body: &Lambda[DeBruijn]{
+				ParameterName: DeBruijn(0),
+				Body: &Lambda[DeBruijn]{
+					ParameterName: DeBruijn(0),
+					Body: &Case[DeBruijn]{
+						Constr: &Apply[DeBruijn]{
+							Function: &Apply[DeBruijn]{
+								Function: &Force[DeBruijn]{
+									Term: &Builtin{DefaultFunction: builtin.IfThenElse},
+								},
+								Argument: &Apply[DeBruijn]{
+									Function: &Apply[DeBruijn]{
+										Function: &Builtin{DefaultFunction: builtin.EqualsInteger},
+										Argument: &Constant{Con: &Integer{Inner: big.NewInt(42)}},
+									},
+									Argument: &Constant{Con: &Integer{Inner: big.NewInt(42)}},
+								},
+							},
+							Argument: &Constr[DeBruijn]{
+								Tag:    0,
+								Fields: []Term[DeBruijn]{},
+							},
+						},
+						Branches: []Term[DeBruijn]{
+							&Constr[DeBruijn]{
+								Tag: 1,
+								Fields: []Term[DeBruijn]{
+									&Constant{Con: &Data{Inner: &data.Constr{Tag: 0, Fields: []data.PlutusData{}}}},
+									&Constant{Con: &ByteString{Inner: []byte{0xca, 0xfe}}},
+									&Constant{Con: &Bool{Inner: true}},
+								},
+							},
+							&Delay[DeBruijn]{
+								Term: &Apply[DeBruijn]{
+									Function: &Var[DeBruijn]{Name: DeBruijn(3)},
+									Argument: &Var[DeBruijn]{Name: DeBruijn(1)},
+								},
+							},
+							&Error{},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	encoded, err := Encode(program)
+	if err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	decoded, err := Decode[DeBruijn](encoded)
+	if err != nil {
+		t.Fatalf("Decode failed: %v", err)
+	}
+
+	reencoded, err := Encode(decoded)
+	if err != nil {
+		t.Fatalf("Re-encode failed: %v", err)
+	}
+
+	if !bytes.Equal(encoded, reencoded) {
+		t.Errorf("roundtrip mismatch: %d bytes -> %d bytes", len(encoded), len(reencoded))
+		origHex := hex.EncodeToString(encoded)
+		reHex := hex.EncodeToString(reencoded)
+		for i := 0; i < len(origHex) && i < len(reHex); i++ {
+			if origHex[i] != reHex[i] {
+				t.Logf("first diff at hex pos %d (byte %d)", i, i/2)
+				start := max(0, i-20)
+				t.Logf("  orig: ...%s...", origHex[start:min(len(origHex), i+40)])
+				t.Logf("  ours: ...%s...", reHex[start:min(len(reHex), i+40)])
+				break
+			}
+		}
+	}
+}
+
+func TestFlatRoundtripConstantTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		constant IConstant
+	}{
+		{
+			name: "list_of_integers",
+			constant: &ProtoList{
+				LTyp: &TInteger{},
+				List: []IConstant{
+					&Integer{Inner: big.NewInt(1)},
+					&Integer{Inner: big.NewInt(2)},
+					&Integer{Inner: big.NewInt(3)},
+				},
+			},
+		},
+		{
+			name:     "empty_list_of_integers",
+			constant: &ProtoList{LTyp: &TInteger{}, List: []IConstant{}},
+		},
+		{
+			name: "list_of_bytestrings",
+			constant: &ProtoList{
+				LTyp: &TByteString{},
+				List: []IConstant{
+					&ByteString{Inner: []byte{0xca, 0xfe}},
+					&ByteString{Inner: []byte{0xde, 0xad}},
+				},
+			},
+		},
+		{
+			name: "pair_integer_bytestring",
+			constant: &ProtoPair{
+				FstType: &TInteger{},
+				SndType: &TByteString{},
+				First:   &Integer{Inner: big.NewInt(42)},
+				Second:  &ByteString{Inner: []byte{0xca, 0xfe}},
+			},
+		},
+		{
+			name: "pair_of_lists",
+			constant: &ProtoPair{
+				FstType: &TList{Typ: &TInteger{}},
+				SndType: &TList{Typ: &TByteString{}},
+				First:   &ProtoList{LTyp: &TInteger{}, List: []IConstant{&Integer{Inner: big.NewInt(1)}}},
+				Second:  &ProtoList{LTyp: &TByteString{}, List: []IConstant{&ByteString{Inner: []byte{0xff}}}},
+			},
+		},
+		{
+			name: "list_of_pairs",
+			constant: &ProtoList{
+				LTyp: &TPair{First: &TInteger{}, Second: &TByteString{}},
+				List: []IConstant{
+					&ProtoPair{
+						FstType: &TInteger{},
+						SndType: &TByteString{},
+						First:   &Integer{Inner: big.NewInt(10)},
+						Second:  &ByteString{Inner: []byte{0xab}},
+					},
+					&ProtoPair{
+						FstType: &TInteger{},
+						SndType: &TByteString{},
+						First:   &Integer{Inner: big.NewInt(20)},
+						Second:  &ByteString{Inner: []byte{0xcd}},
+					},
+				},
+			},
+		},
+		{
+			name: "nested_list_of_lists",
+			constant: &ProtoList{
+				LTyp: &TList{Typ: &TInteger{}},
+				List: []IConstant{
+					&ProtoList{LTyp: &TInteger{}, List: []IConstant{&Integer{Inner: big.NewInt(1)}, &Integer{Inner: big.NewInt(2)}}},
+					&ProtoList{LTyp: &TInteger{}, List: []IConstant{&Integer{Inner: big.NewInt(3)}}},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			program := &Program[DeBruijn]{
+				Version: lang.LanguageVersionV1,
+				Term:    &Constant{Con: tt.constant},
+			}
+
+			encoded, err := Encode(program)
+			if err != nil {
+				t.Fatalf("Encode failed: %v", err)
+			}
+
+			decoded, err := Decode[DeBruijn](encoded)
+			if err != nil {
+				t.Fatalf("Decode failed: %v", err)
+			}
+
+			reencoded, err := Encode(decoded)
+			if err != nil {
+				t.Fatalf("Re-encode failed: %v", err)
+			}
+
+			if !bytes.Equal(encoded, reencoded) {
+				t.Errorf("roundtrip mismatch: %d bytes -> %d bytes", len(encoded), len(reencoded))
+				t.Errorf("  encoded:    %x", encoded)
+				t.Errorf("  re-encoded: %x", reencoded)
 			}
 		})
 	}

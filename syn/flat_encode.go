@@ -231,37 +231,11 @@ func (e *encoder) word(c uint) *encoder {
 // number of bits to use is greater than or equal to required bits by the
 // value. The param num_bits is i64 to match unused_bits type.
 func (e *encoder) bits(numBits byte, val byte) {
-	if numBits == 1 && val == 0 {
-		e.zero()
-	} else if numBits == 1 && val == 1 {
-		e.one()
-	} else if numBits == 2 && val == 0 {
-		e.zero().zero()
-	} else if numBits == 2 && val == 1 {
-		e.zero().one()
-	} else if numBits == 2 && val == 2 {
-		e.one().zero()
-	} else if numBits == 2 && val == 3 {
-		e.one().one()
-	} else {
-		e.usedBits += int64(numBits)
-		unusedBits := 8 - e.usedBits
-		if unusedBits == 0 {
-			e.currentByte |= val
-
-			e.nextWord()
-		} else if unusedBits > 0 {
-			e.currentByte |= val << byte(unusedBits)
+	for i := int(numBits) - 1; i >= 0; i-- {
+		if (val>>i)&1 == 1 {
+			e.one()
 		} else {
-			used := -unusedBits
-
-			e.currentByte |= val >> used
-
-			e.nextWord()
-
-			e.currentByte = val << (8 - used)
-
-			e.usedBits = used
+			e.zero()
 		}
 	}
 }
@@ -423,45 +397,54 @@ func EncodeConstant(e *encoder, constant IConstant) error {
 }
 
 func encodeConstantType(e *encoder, typ Typ) error {
+	if err := encodeConstantTypeTags(e, typ); err != nil {
+		return err
+	}
+	e.zero() // terminate the type-tag list
+	return nil
+}
+
+// encodeConstantTypeTags emits the type tags without the list terminator.
+// The terminator is emitted once by encodeConstantType.
+func encodeConstantTypeTags(e *encoder, typ Typ) error {
 	switch t := typ.(type) {
 	case *TInteger:
 		e.one()
 		e.bits(ConstTagWidth, IntegerTag)
-		e.zero()
 	case *TByteString:
 		e.one()
 		e.bits(ConstTagWidth, ByteStringTag)
-		e.zero()
 	case *TString:
 		e.one()
 		e.bits(ConstTagWidth, StringTag)
-		e.zero()
 	case *TUnit:
 		e.one()
 		e.bits(ConstTagWidth, UnitTag)
-		e.zero()
 	case *TBool:
 		e.one()
 		e.bits(ConstTagWidth, BoolTag)
-		e.zero()
 	case *TData:
 		e.one()
 		e.bits(ConstTagWidth, DataTag)
-		e.zero()
 	case *TList:
+		e.one()
 		e.bits(ConstTagWidth, ProtoListOneTag)
+		e.one()
 		e.bits(ConstTagWidth, ProtoListTwoTag)
-		if err := encodeConstantType(e, t.Typ); err != nil {
+		if err := encodeConstantTypeTags(e, t.Typ); err != nil {
 			return err
 		}
 	case *TPair:
+		e.one()
 		e.bits(ConstTagWidth, ProtoPairOneTag)
+		e.one()
 		e.bits(ConstTagWidth, ProtoPairTwoTag)
+		e.one()
 		e.bits(ConstTagWidth, ProtoPairThreeTag)
-		if err := encodeConstantType(e, t.First); err != nil {
+		if err := encodeConstantTypeTags(e, t.First); err != nil {
 			return err
 		}
-		if err := encodeConstantType(e, t.Second); err != nil {
+		if err := encodeConstantTypeTags(e, t.Second); err != nil {
 			return err
 		}
 	default:
