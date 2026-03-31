@@ -9,7 +9,7 @@ Summary: This release includes CEK evaluation hot-path improvements, cached inte
 
 ### New Features
 
-- Added cached `ex_mem` and `int64` metadata to `syn.Integer` and updated CEK runtime paths to consume it.
+- Added cached `ex_mem` and `int64` metadata to `syn.Integer` and updated CEK runtime paths to use it.
 
 ### Performance
 
