@@ -50,8 +50,10 @@ func int64Constant(v int64) *Constant {
 	if v >= cachedIntMin && v <= cachedIntMax {
 		return cachedIntConstants[v-cachedIntMin]
 	}
+	integer := &syn.Integer{}
+	integer.SetInner(big.NewInt(v))
 	return &Constant{
-		Constant: &syn.Integer{Inner: big.NewInt(v)},
+		Constant: integer,
 	}
 }
 
@@ -63,8 +65,10 @@ func (m *Machine[T]) int64Constant(v int64) *Constant {
 		return cached
 	}
 
+	integer := &syn.Integer{}
+	integer.SetInner(big.NewInt(v))
 	constant := &Constant{
-		Constant: &syn.Integer{Inner: big.NewInt(v)},
+		Constant: integer,
 	}
 	if len(m.dynamicIntConstants) < int64ConstantCacheCap {
 		m.dynamicIntConstants[v] = constant
@@ -79,8 +83,8 @@ func machineConstantValue[T syn.Eval](m *Machine[T], constant syn.IConstant) *Co
 	case *syn.Unit:
 		return cachedUnitConstant
 	case *syn.Integer:
-		if c.Inner.IsInt64() {
-			return m.int64Constant(c.Inner.Int64())
+		if v, ok := c.CachedInt64(); ok {
+			return m.int64Constant(v)
 		}
 	}
 	return m.allocConstant(constant)
@@ -97,14 +101,19 @@ func (c Constant) String() string {
 func (Constant) isValue() {}
 
 func (c Constant) toExMem() ExMem {
+	if integer, ok := c.Constant.(*syn.Integer); ok {
+		return ExMem(integer.ExMemWords())
+	}
 	return iconstantExMem(c.Constant)()
 }
 
 func buildCachedIntConstants() []*Constant {
 	ret := make([]*Constant, cachedIntMax-cachedIntMin+1)
 	for i := int64(cachedIntMin); i <= cachedIntMax; i++ {
+		integer := &syn.Integer{}
+		integer.SetInner(big.NewInt(i))
 		ret[i-cachedIntMin] = &Constant{
-			Constant: &syn.Integer{Inner: big.NewInt(i)},
+			Constant: integer,
 		}
 	}
 	return ret
@@ -113,7 +122,13 @@ func buildCachedIntConstants() []*Constant {
 func cloneConstant(constant syn.IConstant) syn.IConstant {
 	switch c := constant.(type) {
 	case *syn.Integer:
-		return &syn.Integer{Inner: new(big.Int).Set(c.Inner)}
+		ret := &syn.Integer{}
+		if c.Inner == nil {
+			ret.SetInner(nil)
+			return ret
+		}
+		ret.SetInner(new(big.Int).Set(c.Inner))
+		return ret
 	case *syn.ByteString:
 		return &syn.ByteString{Inner: bytes.Clone(c.Inner)}
 	case *syn.String:

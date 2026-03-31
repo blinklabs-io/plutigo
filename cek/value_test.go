@@ -1,6 +1,7 @@
 package cek
 
 import (
+	"math/big"
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/syn"
@@ -30,5 +31,34 @@ func TestBoolConstantReturnsDistinctValues(t *testing.T) {
 	}
 	if falseFirst != falseSecond {
 		t.Fatal("boolConstant(false) should reuse the cached constant")
+	}
+}
+
+func TestCloneConstantPreservesNilInteger(t *testing.T) {
+	cloned, ok := cloneConstant(&syn.Integer{}).(*syn.Integer)
+	if !ok {
+		t.Fatalf("cloneConstant returned %T, want *syn.Integer", cloned)
+	}
+	if cloned.Inner != nil {
+		t.Fatalf("cloned integer Inner = %v, want nil", cloned.Inner)
+	}
+	if got := cloned.ExMemWords(); got != 1 {
+		t.Fatalf("cloned integer ExMemWords() = %d, want 1", got)
+	}
+}
+
+func TestCloneConstantCopiesIntegerValue(t *testing.T) {
+	original := &syn.Integer{}
+	original.SetInner(big.NewInt(7))
+
+	cloned, ok := cloneConstant(original).(*syn.Integer)
+	if !ok {
+		t.Fatalf("cloneConstant returned %T, want *syn.Integer", cloned)
+	}
+	if cloned.Inner == nil || cloned.Inner.Cmp(big.NewInt(7)) != 0 {
+		t.Fatalf("cloned integer Inner = %v, want 7", cloned.Inner)
+	}
+	if cloned.Inner == original.Inner {
+		t.Fatal("cloneConstant reused the original big.Int pointer")
 	}
 }

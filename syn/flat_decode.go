@@ -408,7 +408,7 @@ func decodeConstantValue(d *decoder, typ Typ) (IConstant, error) {
 			return nil, err
 		}
 
-		constant = &Integer{i}
+		constant = newInteger(i)
 
 	// ByteString
 	case *TByteString:

@@ -450,18 +450,11 @@ func unwrapIntegerInfo[T syn.Eval](value Value[T]) (integerInfo, error) {
 	}
 
 	info.value = i.Inner
-	if i.Inner.IsInt64() {
+	info.exMem = ExMem(i.ExMemWords())
+	if int64Val, ok := i.CachedInt64(); ok {
 		info.isInt64 = true
-		info.int64Val = i.Inner.Int64()
-		info.exMem = ExMem(1)
-		return info, nil
+		info.int64Val = int64Val
 	}
-	if i.Inner.IsUint64() {
-		info.exMem = ExMem(1)
-		return info, nil
-	}
-
-	info.exMem = bigIntExMemValue(i.Inner)
 	return info, nil
 }
 
