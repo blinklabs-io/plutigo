@@ -395,7 +395,7 @@ func (m *Machine[T]) allocDataConstant(inner data.PlutusData) *syn.Data {
 
 func (m *Machine[T]) allocIntegerConstant(inner *big.Int) *syn.Integer {
 	integerConstant := allocArenaSlot(&m.integerChunks, &m.integerChunkPos)
-	integerConstant.Inner = inner
+	integerConstant.SetInner(inner)
 	return integerConstant
 }
 

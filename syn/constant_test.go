@@ -18,6 +18,44 @@ func TestIntegerTyp(t *testing.T) {
 	}
 }
 
+func TestIntegerCachedMetadata(t *testing.T) {
+	integer := newInteger(big.NewInt(42))
+
+	got, ok := integer.CachedInt64()
+	if !ok || got != 42 {
+		t.Fatalf("CachedInt64() = (%d, %t), want (42, true)", got, ok)
+	}
+	if got := integer.ExMemWords(); got != 1 {
+		t.Fatalf("ExMemWords() = %d, want 1", got)
+	}
+}
+
+func TestIntegerSetInnerRefreshesMetadata(t *testing.T) {
+	integer := &Integer{}
+	integer.SetInner(new(big.Int).Lsh(big.NewInt(1), 130))
+
+	if got := integer.ExMemWords(); got != 3 {
+		t.Fatalf("ExMemWords() = %d, want 3", got)
+	}
+	if _, ok := integer.CachedInt64(); ok {
+		t.Fatal("CachedInt64() unexpectedly reported a large integer as int64")
+	}
+
+	integer.SetInner(big.NewInt(-7))
+	got, ok := integer.CachedInt64()
+	if !ok || got != -7 {
+		t.Fatalf("CachedInt64() after reset = (%d, %t), want (-7, true)", got, ok)
+	}
+}
+
+func TestIntegerExMemWordsNilReceiver(t *testing.T) {
+	var integer *Integer
+
+	if got := integer.ExMemWords(); got != 1 {
+		t.Fatalf("ExMemWords() on nil receiver = %d, want 1", got)
+	}
+}
+
 func TestByteStringTyp(t *testing.T) {
 	bs := ByteString{Inner: []byte{1, 2, 3}}
 

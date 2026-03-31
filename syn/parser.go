@@ -397,7 +397,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			return nil, err
 		}
 
-		return &Constant{Con: &Integer{Inner: n}}, nil
+		return &Constant{Con: newInteger(n)}, nil
 	case *TByteString:
 		if p.curToken.Type != lex.TokenByteString {
 			return nil, fmt.Errorf("expected bytestring value, got %v at position %d", p.curToken.Type, p.curToken.Position)
@@ -707,7 +707,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 					return nil, err
 				}
 
-				innerItems = append(innerItems, &ProtoPair{FstType: &TByteString{}, SndType: &TInteger{}, First: &ByteString{Inner: ib}, Second: &Integer{Inner: n}})
+				innerItems = append(innerItems, &ProtoPair{FstType: &TByteString{}, SndType: &TInteger{}, First: &ByteString{Inner: ib}, Second: newInteger(n)})
 
 				if p.curToken.Type != lex.TokenRBracket {
 					if err := p.expect(lex.TokenComma); err != nil {
@@ -831,7 +831,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			sort.Strings(keys)
 			inner := make([]IConstant, 0, len(keys))
 			for _, k := range keys {
-				inner = append(inner, &ProtoPair{FstType: &TByteString{}, SndType: &TInteger{}, First: &ByteString{Inner: []byte(k)}, Second: &Integer{Inner: tokens[k]}})
+				inner = append(inner, &ProtoPair{FstType: &TByteString{}, SndType: &TInteger{}, First: &ByteString{Inner: []byte(k)}, Second: newInteger(tokens[k])})
 			}
 			res = append(res, &ProtoPair{FstType: &TByteString{}, SndType: &TList{Typ: &TPair{First: &TByteString{}, Second: &TInteger{}}}, First: &ByteString{Inner: []byte(pol)}, Second: &ProtoList{LTyp: &TPair{First: &TByteString{}, Second: &TInteger{}}, List: inner}})
 		}
@@ -858,7 +858,7 @@ func (p *Parser) parseConstantValue(typ Typ) (IConstant, error) {
 
 		p.nextToken()
 
-		return &Integer{Inner: n}, nil
+		return newInteger(n), nil
 	case *TByteString:
 		if p.curToken.Type != lex.TokenByteString {
 			return nil, fmt.Errorf("expected bytestring value, got %v at position %d", p.curToken.Type, p.curToken.Position)

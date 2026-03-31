@@ -15,7 +15,64 @@ type IConstant interface {
 
 // (con integer 1)
 type Integer struct {
-	Inner *big.Int
+	Inner       *big.Int
+	cachedExMem int64
+	cachedInt64 int64
+	cachedMeta  uint8
+}
+
+const (
+	integerMetaCached uint8 = 1 << iota
+	integerMetaInt64
+)
+
+func newInteger(inner *big.Int) *Integer {
+	ret := &Integer{}
+	ret.SetInner(inner)
+	return ret
+}
+
+// SetInner replaces the integer payload and refreshes the cached metadata used
+// by the evaluator hot path.
+func (i *Integer) SetInner(inner *big.Int) {
+	i.Inner = inner
+	i.cachedExMem = integerExMemWords(inner)
+	i.cachedInt64 = 0
+	i.cachedMeta = integerMetaCached
+	if inner != nil && inner.IsInt64() {
+		i.cachedMeta |= integerMetaInt64
+		i.cachedInt64 = inner.Int64()
+	}
+}
+
+func (i *Integer) CachedInt64() (int64, bool) {
+	if i != nil && i.cachedMeta&integerMetaCached != 0 {
+		return i.cachedInt64, i.cachedMeta&integerMetaInt64 != 0
+	}
+	if i == nil || i.Inner == nil || !i.Inner.IsInt64() {
+		return 0, false
+	}
+	return i.Inner.Int64(), true
+}
+
+func (i *Integer) ExMemWords() int64 {
+	if i != nil && i.cachedMeta&integerMetaCached != 0 {
+		return i.cachedExMem
+	}
+	if i == nil {
+		return integerExMemWords(nil)
+	}
+	return integerExMemWords(i.Inner)
+}
+
+func integerExMemWords(inner *big.Int) int64 {
+	if inner == nil || inner.Sign() == 0 {
+		return 1
+	}
+	if inner.IsInt64() || inner.IsUint64() {
+		return 1
+	}
+	return int64((inner.BitLen()-1)/64 + 1)
 }
 
 func (Integer) isConstant() {}

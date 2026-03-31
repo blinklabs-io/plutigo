@@ -135,15 +135,11 @@ func NewConstant(con IConstant) Term[Name] {
 }
 
 func NewSimpleInteger(value int) Term[Name] {
-	return NewConstant(&Integer{
-		Inner: big.NewInt(int64(value)),
-	})
+	return NewConstant(newInteger(big.NewInt(int64(value))))
 }
 
 func NewInteger(value *big.Int) Term[Name] {
-	return NewConstant(&Integer{
-		Inner: value,
-	})
+	return NewConstant(newInteger(value))
 }
 
 func NewBool(value bool) Term[Name] {

@@ -108,7 +108,9 @@ func iconstantExMem(c syn.IConstant) func() ExMem {
 
 		switch x := c.(type) {
 		case *syn.Integer:
-			ex = bigIntExMem(x.Inner)
+			ex = func() ExMem {
+				return ExMem(x.ExMemWords())
+			}
 		case *syn.ByteString:
 			ex = byteArrayExMem(x.Inner)
 		case *syn.Bool:
