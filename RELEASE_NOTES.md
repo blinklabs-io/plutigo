@@ -1,11 +1,11 @@
 # Release Notes
 
-## v0.1.0 - library updates
+## v0.1.0 - cek performance and tooling updates
 
 - Date: 2026-03-31
 - Version: v0.1.0
 
-Summary: This release includes updates across the library.
+Summary: This release includes CEK evaluation hot-path improvements, cached integer metadata, and CI and documentation updates.
 
 ### New Features
 
@@ -13,7 +13,7 @@ Summary: This release includes updates across the library.
 
 ### Performance
 
-- Improved CEK hot paths by adding helpers for environment lookup, immediate value computation, and value return, and refactoring case evaluation to use them.
+- Added CEK hot-path helpers for environment lookup, immediate value computation, and value return, and refactored case evaluation to use them.
 
 ### Additional Changes
 
