@@ -1,6 +1,6 @@
 # Release Notes
 
-## v0.1.0 - cek performance and tooling updates
+## v0.1.0 - CEK performance and tooling updates
 
 - Date: 2026-03-31
 - Version: v0.1.0
@@ -9,7 +9,7 @@ Summary: This release includes CEK evaluation hot-path improvements, cached inte
 
 ### New Features
 
-- Added cached `ex_mem` and `int64` metadata to `syn.Integer` and updated CEK runtime paths to use it.
+- Added cached `ex_mem` and `int64` fields to `syn.Integer` and updated CEK runtime paths to use them.
 
 ### Performance
 
