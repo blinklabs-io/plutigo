@@ -1,5 +1,30 @@
 # Release Notes
 
+## v0.1.0 - library updates
+
+- Date: 2026-03-31
+- Version: v0.1.0
+
+Summary: This release includes updates across the library.
+
+### Release Notes Data
+
+```json
+{
+  "Additional Changes": [
+    "The project documentation now includes an updated release-notes entry for the v0.0.29 maintenance work. The v0.0.29 notes describe maintenance updates spanning ECDSA handling, encoding behavior, and dependency upgrades.",
+    "Continuous integration now uses a newer Codecov GitHub Actions integration. The Codecov step in GitHub Actions was upgraded from v5.5.3 to v6.0.0."
+  ],
+  "New Features": [
+    "The runtime now keeps extra information on integer values so repeated operations can run with less overhead. Specifically, `syn.Integer` now carries cached `ex_mem` and `int64` metadata, and the CEK runtime/value handling paths were updated to consume this cached metadata with added test coverage."
+  ],
+  "Performance": [
+    "Execution has been optimized in frequently used evaluation paths to reduce per-step overhead. The CEK machine gained hot-path helpers for environment lookup, immediate value computation, and value-return, and case-evaluation is being refactored to take advantage of these helpers."
+  ]
+}
+
+```
+
 ## v0.0.29 - maintenance updates
 
 - Date: 2026-03-23
