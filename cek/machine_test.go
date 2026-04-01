@@ -263,3 +263,62 @@ func TestRunUsesUpdatedBudgetOverrideOnReuse(t *testing.T) {
 		t.Fatalf("ExBudget after override run = %+v, want remaining budget below %+v", m.ExBudget, secondBudget)
 	}
 }
+
+func TestRunResetsFrameStackAcrossInvocations(t *testing.T) {
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+
+	identity := &syn.Lambda[syn.DeBruijn]{
+		ParameterName: syn.DeBruijn(0),
+		Body:          &syn.Var[syn.DeBruijn]{Name: syn.DeBruijn(1)},
+	}
+	nestedApply := &syn.Apply[syn.DeBruijn]{
+		Function: identity,
+		Argument: &syn.Apply[syn.DeBruijn]{
+			Function: identity,
+			Argument: &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(7)}},
+		},
+	}
+
+	if _, err := m.Run(nestedApply); err != nil {
+		t.Fatalf("first Run returned error: %v", err)
+	}
+	if len(m.frameStack) != 0 {
+		t.Fatalf("frameStack len after first Run = %d, want 0", len(m.frameStack))
+	}
+	if m.frameStackUsed != 0 {
+		t.Fatalf("frameStackUsed after first Run = %d, want 0", m.frameStackUsed)
+	}
+	hiddenAfterFirst := m.frameStack[:cap(m.frameStack)]
+	for i := range hiddenAfterFirst {
+		if hiddenAfterFirst[i].value != nil || hiddenAfterFirst[i].env != nil || hiddenAfterFirst[i].term != nil {
+			t.Fatalf("frameStack[%d] retained stale data after first Run: %+v", i, hiddenAfterFirst[i])
+		}
+	}
+
+	staleValue := &Constant{Constant: &syn.Integer{Inner: big.NewInt(99)}}
+	m.frameStack = append(m.frameStack, stackFrame[syn.DeBruijn]{
+		kind:  frameAwaitArg,
+		value: staleValue,
+		env:   &Env[syn.DeBruijn]{data: staleValue},
+		term:  &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(99)}},
+	})
+	m.frameStackUsed = len(m.frameStack)
+
+	if _, err := m.Run(&syn.Constant{Con: &syn.Integer{Inner: big.NewInt(42)}}); err != nil {
+		t.Fatalf("second Run returned error: %v", err)
+	}
+	if len(m.frameStack) != 0 {
+		t.Fatalf("frameStack len after second Run = %d, want 0", len(m.frameStack))
+	}
+	if m.frameStackUsed != 0 {
+		t.Fatalf("frameStackUsed after second Run = %d, want 0", m.frameStackUsed)
+	}
+
+	hidden := m.frameStack[:cap(m.frameStack)]
+	if len(hidden) == 0 {
+		t.Fatal("expected frameStack storage to be retained")
+	}
+	if hidden[0].value != nil || hidden[0].env != nil || hidden[0].term != nil {
+		t.Fatalf("frameStack[0] retained stale data: %+v", hidden[0])
+	}
+}
