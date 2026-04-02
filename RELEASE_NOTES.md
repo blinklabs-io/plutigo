@@ -1,5 +1,25 @@
 # Release Notes
 
+## v0.1.0 - CEK performance and tooling updates
+
+- Date: 2026-03-31
+- Version: v0.1.0
+
+Summary: This release includes CEK evaluation hot-path improvements, cached integer metadata, and CI and documentation updates.
+
+### New Features
+
+- Added cached `ex_mem` and `int64` fields to `syn.Integer` and updated CEK runtime paths to use them.
+
+### Performance
+
+- Added CEK hot-path helpers for environment lookup, immediate value computation, and value return, and refactored case evaluation to use them.
+
+### Additional Changes
+
+- Updated `RELEASE_NOTES.md` with a consolidated entry for `v0.0.29` covering ECDSA handling, encoding behavior, and dependency upgrades.
+- Updated the Codecov GitHub Action from `v5.5.3` to `v6.0.0`.
+
 ## v0.0.29 - maintenance updates
 
 - Date: 2026-03-23
