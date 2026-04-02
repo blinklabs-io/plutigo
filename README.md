@@ -43,16 +43,18 @@ All implemented CIPs include comprehensive conformance tests ensuring correct be
 
 plutigo is optimized for high-performance Plutus script evaluation:
 
-### Cryptographic Operations (Go 1.24, ARM64)
-- SHA256: 96 ns/op
-- Blake2b-256: 331 ns/op
-- Ed25519 Verify: 251 μs/op
-- ECDSA Verify: 379 μs/op
-- BLS12-381 G1 Add: 3.5 μs/op
-- BLS12-381 Pairing: 3.3 ms/op
+### Cryptographic Operations (Go 1.26, ARM64)
+- SHA256: 100 ns/op
+- Blake2b-256: 325 ns/op
+- Keccak-256: 814 ns/op
+- Ed25519 Verify: 204 μs/op
+- ECDSA Verify: 365 μs/op
+- BLS12-381 G1 Add: 3.4 μs/op
+- BLS12-381 Pairing: 3.4 ms/op
 
-### Plutus Script Evaluation
-Evaluates complex smart contracts (Uniswap, vesting, etc.) in milliseconds with accurate cost modeling.
+### Plutus Script Evaluation (Go 1.26, ARM64)
+Evaluates complex smart contracts in milliseconds with accurate cost modeling.
+Go 1.26 delivers ~10% faster full-script execution vs Go 1.25 across all Plutus test scripts.
 
 ## Architecture
 
@@ -134,7 +136,7 @@ The library automatically selects appropriate cost models and builtin behavior b
 
 ### Prerequisites
 
-- Go 1.24+
+- Go 1.25+ (Go 1.26+ recommended for ~10% better performance)
 - make
 
 ### Setup

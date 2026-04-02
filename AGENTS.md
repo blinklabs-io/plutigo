@@ -6,7 +6,7 @@ This document provides comprehensive guidance for AI agents working on the pluti
 
 ```bash
 # Verify environment
-go version          # Must be 1.24+
+go version          # Must be 1.25+ (1.26+ recommended)
 make test           # Run all tests
 golangci-lint run   # Lint check
 ```

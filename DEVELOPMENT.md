@@ -28,7 +28,7 @@ For organization-wide contributing guidelines (conventional commits, DCO sign-of
 
 ### Prerequisites
 
-- **Go 1.24+** - Required for generics and toolchain features
+- **Go 1.25+** (Go 1.26+ recommended for ~10% better performance)
 - **make** - Build automation
 - **git** - Version control
 
