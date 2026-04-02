@@ -106,6 +106,72 @@ func TestConstrCase(t *testing.T) {
 	}
 }
 
+func TestBuiltinPartialApplicationDischargesAppliedTerm(t *testing.T) {
+	m := newTestMachineFlow()
+
+	term := &syn.Apply[syn.DeBruijn]{
+		Function: &syn.Builtin{DefaultFunction: builtin.AddInteger},
+		Argument: &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(2)}},
+	}
+
+	out := runTerm(t, m, term)
+
+	app, ok := out.(*syn.Apply[syn.DeBruijn])
+	if !ok {
+		t.Fatalf("expected partial builtin application, got %T", out)
+	}
+	if _, ok := app.Function.(*syn.Builtin); !ok {
+		t.Fatalf("expected builtin function in discharged term, got %T", app.Function)
+	}
+	constant, ok := app.Argument.(*syn.Constant)
+	if !ok {
+		t.Fatalf("expected constant argument in discharged term, got %T", app.Argument)
+	}
+	integer, ok := constant.Con.(*syn.Integer)
+	if !ok {
+		t.Fatalf("expected integer argument in discharged term, got %T", constant.Con)
+	}
+	if got := integer.Inner.Int64(); got != 2 {
+		t.Fatalf("partial builtin argument = %d, want 2", got)
+	}
+}
+
+func TestCaseOnPairPreservesArgumentOrder(t *testing.T) {
+	m := newTestMachineFlow()
+
+	branch := &syn.Lambda[syn.DeBruijn]{
+		ParameterName: syn.DeBruijn(0),
+		Body: &syn.Lambda[syn.DeBruijn]{
+			ParameterName: syn.DeBruijn(0),
+			Body:          &syn.Var[syn.DeBruijn]{Name: syn.DeBruijn(2)},
+		},
+	}
+	pair := &syn.ProtoPair{
+		FstType: &syn.TInteger{},
+		SndType: &syn.TInteger{},
+		First:   &syn.Integer{Inner: big.NewInt(1)},
+		Second:  &syn.Integer{Inner: big.NewInt(2)},
+	}
+	caseTerm := &syn.Case[syn.DeBruijn]{
+		Constr:   &syn.Constant{Con: pair},
+		Branches: []syn.Term[syn.DeBruijn]{branch},
+	}
+
+	out := runTerm(t, m, caseTerm)
+
+	constant, ok := out.(*syn.Constant)
+	if !ok {
+		t.Fatalf("expected constant result, got %T", out)
+	}
+	integer, ok := constant.Con.(*syn.Integer)
+	if !ok {
+		t.Fatalf("expected integer result, got %T", constant.Con)
+	}
+	if got := integer.Inner.Int64(); got != 1 {
+		t.Fatalf("case result = %d, want 1", got)
+	}
+}
+
 func TestBudgetExhaustion(t *testing.T) {
 	// Use a machine with very small budget to provoke exhaustion
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)

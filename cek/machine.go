@@ -72,6 +72,8 @@ type Machine[T syn.Eval] struct {
 	Logs          []string
 
 	argHolder       argHolder[T]
+	frameStack      []stackFrame[T]
+	frameStackUsed  int
 	unbudgetedSteps [9]uint32
 	unbudgetedTotal uint32
 
@@ -524,6 +526,8 @@ func NewMachine[T syn.Eval](
 		Logs:          make([]string, 0),
 
 		argHolder:       newArgHolder[T](),
+		frameStack:      make([]stackFrame[T], 0, 32),
+		frameStackUsed:  0,
 		unbudgetedSteps: [9]uint32{0, 0, 0, 0, 0, 0, 0, 0, 0},
 		unbudgetedTotal: 0,
 
@@ -658,30 +662,24 @@ func (m *Machine[T]) resetValueArenas() {
 }
 
 func (m *Machine[T]) finishReturn(ret *Return[T]) (syn.Term[T], error) {
+	term, err := m.finishValue(ret.Value)
+	m.putReturn(ret)
+	return term, err
+}
+
+func (m *Machine[T]) finishValue(value Value[T]) (syn.Term[T], error) {
 	if m.unbudgetedTotal > 0 {
 		if err := m.spendUnbudgetedSteps(); err != nil {
-			m.putReturn(ret)
 			return nil, err
 		}
 	}
-	term := dischargeValue[T](ret.Value)
-	m.putReturn(ret)
-	return term, nil
+	return dischargeValue[T](value), nil
 }
 
 // Run executes a Plutus term using the CEK (Control, Environment, Kontinuation) abstract machine.
-// The CEK machine is a small-step operational semantics for evaluating functional programs.
-// It maintains three components:
-// - Control (C): the current term being evaluated
-// - Environment (E): mapping from variables to values
-// - Kontinuation (K): represents the evaluation context/stack
-//
-// The algorithm proceeds by repeatedly transitioning between machine states:
-// - Compute: evaluate the current term in the current environment and context
-// - Return: handle a computed value in the current context
-//
-// This implementation uses object pooling for performance optimization, reusing
-// Compute/Return state objects to minimize garbage collection pressure.
+// This implementation now uses an explicit machine-owned frame stack on the hot
+// path while preserving the existing setup, teardown, budget, and discharge
+// behavior.
 func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 	if m.hasRun {
 		if m.ExBudget != m.lastRunRemaining {
@@ -693,11 +691,13 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 		m.budgetTemplate = m.ExBudget
 	}
 	m.Logs = m.Logs[:0]
+	m.resetFrameStack()
 	clear(m.unbudgetedSteps[:])
 	m.unbudgetedTotal = 0
 	defer func() {
 		m.lastRunRemaining = m.ExBudget
 		m.hasRun = true
+		m.resetFrameStack()
 		m.resetValueArenas()
 		m.resetEnvArena()
 	}()
@@ -707,53 +707,7 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 	if err := m.spendBudget(startupBudget); err != nil {
 		return nil, err
 	}
-
-	var state MachineState[T]
-
-	// Initialize with a Compute state: evaluate the input term with empty environment
-	// and no continuation context (NoFrame)
-	comp := m.getCompute()
-	comp.Ctx = &NoFrame{}
-	comp.Env = nil
-	comp.Term = term
-	state = comp
-
-	// Main CEK evaluation loop: continue until we reach Done state
-	for {
-		switch v := state.(type) {
-		case *Compute[T]:
-			// Compute state: evaluate the current term
-			newState, err := m.compute(v.Ctx, v.Env, v.Term)
-			if err != nil {
-				m.putCompute(v)
-				return nil, err
-			}
-			if newState == nil {
-				m.putCompute(v)
-				return nil, &InternalError{Code: ErrCodeInternalError, Message: "compute returned nil state"}
-			}
-			m.putCompute(v)
-			state = newState
-		case *Return[T]:
-			if _, ok := v.Ctx.(*NoFrame); ok {
-				return m.finishReturn(v)
-			}
-			// Return state: handle a computed value in current context
-			newState, err := m.returnCompute(v.Ctx, v.Value)
-			if err != nil {
-				m.putReturn(v)
-				return nil, err
-			}
-			if newState == nil {
-				m.putReturn(v)
-				return nil, &InternalError{Code: ErrCodeInternalError, Message: "returnCompute returned nil state"}
-			}
-			m.putReturn(v)
-			state = newState
-		default:
-			panic(fmt.Sprintf("unknown machine state: %T", state))
-		}
-	}
+	return m.runStack(term)
 }
 
 // compute handles the Compute state of the CEK machine.
