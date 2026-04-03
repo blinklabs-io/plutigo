@@ -1,6 +1,6 @@
 # Release Notes
 
-## v0.1.1 - Go toolchain and CEK interpreter updates
+## v0.1.1 - go toolchain and cek interpreter updates
 
 - Date: 2026-04-03
 - Version: v0.1.1
