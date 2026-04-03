@@ -10,14 +10,14 @@ Summary: This release includes incremental updates and fixes across the library.
 ```json
 {
   "Breaking Changes": [
-    "Updated the minimum supported Go toolchain to a newer baseline to align with current compiler and runtime behavior. The project now requires Go 1.25+ (Go 1.26+ recommended), and benchmarks were refreshed against Go 1.26 to reflect the updated toolchain."
+    "Updated the minimum supported Go toolchain to a newer baseline to align with current compiler and runtime behavior."
   ],
   "New Features": [
-    "Added v0.1.0 release notes that summarize earlier functional updates and continuous integration improvements. The v0.1.0 notes consolidate pre-v0.1.0 changes and CI pipeline updates into a single documented history entry.",
-    "Replaced the previous evaluation loop with a clearer execution model and added coverage for tricky language behaviors. The CEK state-pool loop was replaced by an explicit stack-based interpreter, with new tests covering frame stack reuse, builtin partial-application discharge, and case-on-pair semantics."
+    "Added v0.1.0 release notes that summarize earlier functional updates and continuous integration improvements.",
+    "Replaced the previous evaluation loop with a clearer execution model and added coverage for tricky language behaviors."
   ],
   "Performance": [
-    "Improved runtime efficiency by reducing overhead in common execution paths and simplifying how values are allocated. Environment lookup was optimized, chunked value allocation and cost handling were refactored, and stack frame management was restructured with specialized await-arg handling for lambdas and builtins."
+    "Improved runtime efficiency by reducing overhead in common execution paths and simplifying how values are allocated."
   ]
 }
 
