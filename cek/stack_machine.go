@@ -10,6 +10,8 @@ type stackFrameKind uint8
 
 const (
 	frameAwaitArg stackFrameKind = iota
+	frameAwaitArgLambda
+	frameAwaitArgBuiltin
 	frameAwaitFunTerm
 	frameAwaitFunValue
 	frameForce
@@ -20,9 +22,10 @@ const (
 type stackFrame[T syn.Eval] struct {
 	kind stackFrameKind
 
-	value Value[T]
-	env   *Env[T]
-	term  syn.Term[T]
+	value   Value[T]
+	builtin *Builtin[T]
+	env     *Env[T]
+	term    syn.Term[T]
 
 	tag            uint
 	fields         []syn.Term[T]
@@ -45,6 +48,20 @@ func (m *Machine[T]) pushFrame(frame stackFrame[T]) {
 	}
 }
 
+func (m *Machine[T]) pushFrameSlot() *stackFrame[T] {
+	frameIdx := len(m.frameStack)
+	if frameIdx < cap(m.frameStack) {
+		m.frameStack = m.frameStack[:frameIdx+1]
+		m.frameStack[frameIdx] = stackFrame[T]{} // zero stale references
+	} else {
+		m.frameStack = append(m.frameStack, stackFrame[T]{})
+	}
+	if len(m.frameStack) > m.frameStackUsed {
+		m.frameStackUsed = len(m.frameStack)
+	}
+	return &m.frameStack[frameIdx]
+}
+
 func (m *Machine[T]) peekFrame() (*stackFrame[T], bool) {
 	if len(m.frameStack) == 0 {
 		return nil, false
@@ -58,10 +75,25 @@ func (m *Machine[T]) dropFrame() {
 
 func (m *Machine[T]) pushApplyFrames(args []Value[T]) {
 	for i := len(args) - 1; i >= 0; i-- {
-		m.pushFrame(stackFrame[T]{
-			kind:  frameAwaitFunValue,
-			value: args[i],
-		})
+		frame := m.pushFrameSlot()
+		frame.kind = frameAwaitFunValue
+		frame.value = args[i]
+	}
+}
+
+func (m *Machine[T]) pushAwaitArgFrame(funValue Value[T]) {
+	frame := m.pushFrameSlot()
+	switch f := funValue.(type) {
+	case *Lambda[T]:
+		frame.kind = frameAwaitArgLambda
+		frame.env = f.Env
+		frame.term = f.Body
+	case *Builtin[T]:
+		frame.kind = frameAwaitArgBuiltin
+		frame.builtin = f
+	default:
+		frame.kind = frameAwaitArg
+		frame.value = funValue
 	}
 }
 
@@ -105,11 +137,11 @@ func (m *Machine[T]) runStack(term syn.Term[T]) (syn.Term[T], error) {
 					return nil, err
 				}
 
-				funValue, ok, err := m.computeImmediateValue(currentEnv, t.Function)
+				funValue, funImmediate, err := m.computeImmediateValue(currentEnv, t.Function)
 				if err != nil {
 					return nil, err
 				}
-				if ok {
+				if funImmediate {
 					argValue, argImmediate, err := m.computeImmediateValue(currentEnv, t.Argument)
 					if err != nil {
 						return nil, err
@@ -125,19 +157,15 @@ func (m *Machine[T]) runStack(term syn.Term[T]) (syn.Term[T], error) {
 						continue
 					}
 
-					m.pushFrame(stackFrame[T]{
-						kind:  frameAwaitArg,
-						value: funValue,
-					})
+					m.pushAwaitArgFrame(funValue)
 					currentTerm = t.Argument
 					continue
 				}
 
-				m.pushFrame(stackFrame[T]{
-					kind: frameAwaitFunTerm,
-					env:  currentEnv,
-					term: t.Argument,
-				})
+				frame := m.pushFrameSlot()
+				frame.kind = frameAwaitFunTerm
+				frame.env = currentEnv
+				frame.term = t.Argument
 				currentTerm = t.Function
 			case *syn.Constant:
 				if err := m.stepAndMaybeSpend(ExConstant); err != nil {
@@ -151,11 +179,12 @@ func (m *Machine[T]) runStack(term syn.Term[T]) (syn.Term[T], error) {
 					return nil, err
 				}
 
-				forcedValue, ok, err := m.computeImmediateValue(currentEnv, t.Term)
+				forcedValue, forcedImmediate, err := m.computeImmediateValue(currentEnv, t.Term)
 				if err != nil {
 					return nil, err
 				}
-				if ok {
+				if forcedImmediate {
+					var err error
 					currentTerm, currentEnv, currentValue, returning, err = m.forceEvaluateStack(
 						forcedValue,
 					)
@@ -165,7 +194,8 @@ func (m *Machine[T]) runStack(term syn.Term[T]) (syn.Term[T], error) {
 					continue
 				}
 
-				m.pushFrame(stackFrame[T]{kind: frameForce})
+				frame := m.pushFrameSlot()
+				frame.kind = frameForce
 				currentTerm = t.Term
 			case *syn.Error:
 				return nil, &ScriptError{Code: ErrCodeExplicitError, Message: "error explicitly called"}
@@ -187,24 +217,24 @@ func (m *Machine[T]) runStack(term syn.Term[T]) (syn.Term[T], error) {
 					continue
 				}
 
-				m.pushFrame(stackFrame[T]{
-					kind:           frameConstr,
-					env:            currentEnv,
-					tag:            t.Tag,
-					fields:         t.Fields[1:],
-					resolvedFields: m.allocValueElems(len(t.Fields))[:0],
-				})
+				frame := m.pushFrameSlot()
+				frame.kind = frameConstr
+				frame.env = currentEnv
+				frame.tag = t.Tag
+				frame.fields = t.Fields[1:]
+				frame.resolvedFields = m.allocValueElems(len(t.Fields))[:0]
 				currentTerm = t.Fields[0]
 			case *syn.Case[T]:
 				if err := m.stepAndMaybeSpend(ExCase); err != nil {
 					return nil, err
 				}
 
-				scrutinee, ok, err := m.computeImmediateValue(currentEnv, t.Constr)
+				scrutinee, scrutineeImmediate, err := m.computeImmediateValue(currentEnv, t.Constr)
 				if err != nil {
 					return nil, err
 				}
-				if ok {
+				if scrutineeImmediate {
+					var err error
 					currentTerm, currentEnv, currentValue, returning, err = m.caseEvaluateStack(
 						currentEnv,
 						t.Branches,
@@ -216,11 +246,10 @@ func (m *Machine[T]) runStack(term syn.Term[T]) (syn.Term[T], error) {
 					continue
 				}
 
-				m.pushFrame(stackFrame[T]{
-					kind:     frameCases,
-					env:      currentEnv,
-					branches: t.Branches,
-				})
+				frame := m.pushFrameSlot()
+				frame.kind = frameCases
+				frame.env = currentEnv
+				frame.branches = t.Branches
 				currentTerm = t.Constr
 			default:
 				panic("unknown term")
@@ -229,15 +258,16 @@ func (m *Machine[T]) runStack(term syn.Term[T]) (syn.Term[T], error) {
 			continue
 		}
 
-		frame, ok := m.peekFrame()
-		if !ok {
+		if len(m.frameStack) == 0 {
 			return m.finishValue(currentValue)
 		}
+		frameIdx := len(m.frameStack) - 1
+		frame := &m.frameStack[frameIdx]
 
 		switch frame.kind {
 		case frameAwaitArg:
 			function := frame.value
-			m.dropFrame()
+			m.frameStack = m.frameStack[:frameIdx]
 
 			var err error
 			currentTerm, currentEnv, currentValue, returning, err = m.applyEvaluateStack(
@@ -247,16 +277,34 @@ func (m *Machine[T]) runStack(term syn.Term[T]) (syn.Term[T], error) {
 			if err != nil {
 				return nil, err
 			}
-		case frameAwaitFunTerm:
+		case frameAwaitArgLambda:
 			env := frame.env
-			term := frame.term
-			m.dropFrame()
+			body := frame.term
+			m.frameStack = m.frameStack[:frameIdx]
 
-			argValue, ok, err := m.computeImmediateValue(env, term)
+			currentTerm = body
+			currentEnv = m.extendEnv(env, currentValue)
+			currentValue = nil
+			returning = false
+		case frameAwaitArgBuiltin:
+			builtinValue := frame.builtin
+			m.frameStack = m.frameStack[:frameIdx]
+
+			var err error
+			currentTerm, currentEnv, currentValue, returning, err = m.applyEvaluateStack(builtinValue, currentValue)
 			if err != nil {
 				return nil, err
 			}
-			if ok {
+		case frameAwaitFunTerm:
+			env := frame.env
+			term := frame.term
+			m.frameStack = m.frameStack[:frameIdx]
+
+			argValue, argImmediate, err := m.computeImmediateValue(env, term)
+			if err != nil {
+				return nil, err
+			}
+			if argImmediate {
 				currentTerm, currentEnv, currentValue, returning, err = m.applyEvaluateStack(
 					currentValue,
 					argValue,
@@ -267,16 +315,13 @@ func (m *Machine[T]) runStack(term syn.Term[T]) (syn.Term[T], error) {
 				continue
 			}
 
-			m.pushFrame(stackFrame[T]{
-				kind:  frameAwaitArg,
-				value: currentValue,
-			})
+			m.pushAwaitArgFrame(currentValue)
 			currentEnv = env
 			currentTerm = term
 			returning = false
 		case frameAwaitFunValue:
 			arg := frame.value
-			m.dropFrame()
+			m.frameStack = m.frameStack[:frameIdx]
 
 			var err error
 			currentTerm, currentEnv, currentValue, returning, err = m.applyEvaluateStack(
@@ -287,7 +332,7 @@ func (m *Machine[T]) runStack(term syn.Term[T]) (syn.Term[T], error) {
 				return nil, err
 			}
 		case frameForce:
-			m.dropFrame()
+			m.frameStack = m.frameStack[:frameIdx]
 
 			var err error
 			currentTerm, currentEnv, currentValue, returning, err = m.forceEvaluateStack(
@@ -301,7 +346,7 @@ func (m *Machine[T]) runStack(term syn.Term[T]) (syn.Term[T], error) {
 			if len(frame.fields) == 0 {
 				resolvedFields := frame.resolvedFields
 				tag := frame.tag
-				m.dropFrame()
+				m.frameStack = m.frameStack[:frameIdx]
 
 				currentValue = m.allocConstr(tag, resolvedFields)
 				returning = true
@@ -316,7 +361,7 @@ func (m *Machine[T]) runStack(term syn.Term[T]) (syn.Term[T], error) {
 		case frameCases:
 			env := frame.env
 			branches := frame.branches
-			m.dropFrame()
+			m.frameStack = m.frameStack[:frameIdx]
 
 			var err error
 			currentTerm, currentEnv, currentValue, returning, err = m.caseEvaluateStack(

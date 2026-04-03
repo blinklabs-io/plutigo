@@ -60,6 +60,8 @@ func getFilteredBuiltins[T syn.Eval](
 type Machine[T syn.Eval] struct {
 	costs         CostModel
 	stepCosts     [9]ExBudget
+	stepCostCpu   [9]int64
+	stepCostMem   [9]int64
 	builtins      *Builtins[T]
 	builtinValues *[builtin.TotalBuiltinCount]*Builtin[T]
 	twoArgCosts   [builtin.TotalBuiltinCount]twoArgCost
@@ -278,23 +280,11 @@ func newBuiltinValueTable[T syn.Eval]() [builtin.TotalBuiltinCount]*Builtin[T] {
 }
 
 func allocArenaSlot[S any](chunks *[][]S, pos *int) *S {
-	remaining := *pos
-	for i := range *chunks {
-		chunk := (*chunks)[i]
-		if chunk == nil {
-			continue
-		}
-		if remaining < len(chunk) {
-			slot := &chunk[remaining]
-			*pos += 1
-			return slot
-		}
-		remaining -= len(chunk)
+	chunkIdx := *pos / valueChunkSize
+	if chunkIdx == len(*chunks) {
+		*chunks = append(*chunks, make([]S, valueChunkSize))
 	}
-
-	chunk := make([]S, valueChunkSize)
-	*chunks = append(*chunks, chunk)
-	slot := &chunk[0]
+	slot := &(*chunks)[chunkIdx][*pos%valueChunkSize]
 	*pos += 1
 	return slot
 }
@@ -501,19 +491,28 @@ func NewMachine[T syn.Eval](
 			SemanticsVariant: SemanticsVariantC,
 		}
 	}
+	stepCosts := [9]ExBudget{
+		evalContext.CostModel.machineCosts.get(ExConstant),
+		evalContext.CostModel.machineCosts.get(ExVar),
+		evalContext.CostModel.machineCosts.get(ExLambda),
+		evalContext.CostModel.machineCosts.get(ExApply),
+		evalContext.CostModel.machineCosts.get(ExDelay),
+		evalContext.CostModel.machineCosts.get(ExForce),
+		evalContext.CostModel.machineCosts.get(ExBuiltin),
+		evalContext.CostModel.machineCosts.get(ExConstr),
+		evalContext.CostModel.machineCosts.get(ExCase),
+	}
+	var stepCostCpu [9]int64
+	var stepCostMem [9]int64
+	for i, s := range stepCosts {
+		stepCostCpu[i] = s.Cpu
+		stepCostMem[i] = s.Mem
+	}
 	return &Machine[T]{
-		costs: evalContext.CostModel,
-		stepCosts: [9]ExBudget{
-			evalContext.CostModel.machineCosts.get(ExConstant),
-			evalContext.CostModel.machineCosts.get(ExVar),
-			evalContext.CostModel.machineCosts.get(ExLambda),
-			evalContext.CostModel.machineCosts.get(ExApply),
-			evalContext.CostModel.machineCosts.get(ExDelay),
-			evalContext.CostModel.machineCosts.get(ExForce),
-			evalContext.CostModel.machineCosts.get(ExBuiltin),
-			evalContext.CostModel.machineCosts.get(ExConstr),
-			evalContext.CostModel.machineCosts.get(ExCase),
-		},
+		costs:         evalContext.CostModel,
+		stepCosts:     stepCosts,
+		stepCostCpu:   stepCostCpu,
+		stepCostMem:   stepCostMem,
 		builtins:      chooseBuiltins[T](version, evalContext.ProtoMajor),
 		builtinValues: getSharedBuiltinValues[T](),
 		twoArgCosts:   newTwoArgCostCache(evalContext.CostModel.builtinCosts),
@@ -1520,16 +1519,20 @@ func withEnv[T syn.Eval](
 
 func (m *Machine[T]) stepAndMaybeSpend(step StepKind) error {
 	if m.slippage <= 1 {
-		exBudget := m.stepCosts[step]
-		m.ExBudget.Mem -= exBudget.Mem
-		m.ExBudget.Cpu -= exBudget.Cpu
+		memCost := m.stepCostMem[step]
+		cpuCost := m.stepCostCpu[step]
+		m.ExBudget.Mem -= memCost
+		m.ExBudget.Cpu -= cpuCost
 		if m.ExBudget.Mem < 0 || m.ExBudget.Cpu < 0 {
 			return &BudgetError{
-				Code:      ErrCodeBudgetExhausted,
-				Requested: exBudget,
+				Code: ErrCodeBudgetExhausted,
+				Requested: ExBudget{
+					Cpu: cpuCost,
+					Mem: memCost,
+				},
 				Available: ExBudget{
-					Cpu: m.ExBudget.Cpu + exBudget.Cpu,
-					Mem: m.ExBudget.Mem + exBudget.Mem,
+					Cpu: m.ExBudget.Cpu + cpuCost,
+					Mem: m.ExBudget.Mem + memCost,
 				},
 				Message: "out of budget",
 			}

@@ -164,6 +164,12 @@ func TestLookupEnvUsesOneIndexedDepth(t *testing.T) {
 	env = env.Extend(&Constant{&syn.Integer{Inner: big.NewInt(2)}})
 	env = env.Extend(&Constant{&syn.Integer{Inner: big.NewInt(3)}})
 
+	// Deep env for testing the general-loop fallback path (idx >= 5)
+	var deepEnv *Env[syn.DeBruijn]
+	for i := int64(1); i <= 7; i++ {
+		deepEnv = deepEnv.Extend(&Constant{&syn.Integer{Inner: big.NewInt(i)}})
+	}
+
 	tests := []struct {
 		name         string
 		env          *Env[syn.DeBruijn]
@@ -176,6 +182,11 @@ func TestLookupEnvUsesOneIndexedDepth(t *testing.T) {
 		{"idx=0 out of bounds", env, 0, -1, false},
 		{"idx=4 out of bounds", env, 4, -1, false},
 		{"nil env", nil, 1, -1, false},
+		// Deep-env fallback loop (idx >= 5)
+		{"deep idx=5 traverses loop", deepEnv, 5, 3, true},
+		{"deep idx=6 traverses loop", deepEnv, 6, 2, true},
+		{"deep idx=7 returns oldest", deepEnv, 7, 1, true},
+		{"deep idx=8 out of bounds", deepEnv, 8, -1, false},
 	}
 
 	for _, tt := range tests {
