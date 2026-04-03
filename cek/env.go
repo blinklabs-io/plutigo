@@ -15,19 +15,50 @@ func lookupEnv[T syn.Eval](env *Env[T], idx int) (Value[T], bool) {
 	if env == nil {
 		return zero, false
 	}
-	if idx == 1 {
+	switch idx {
+	case 1:
+		return env.data, true
+	case 2:
+		env = env.next
+		if env == nil {
+			return zero, false
+		}
+		return env.data, true
+	case 3:
+		env = env.next
+		if env == nil {
+			return zero, false
+		}
+		env = env.next
+		if env == nil {
+			return zero, false
+		}
+		return env.data, true
+	case 4:
+		env = env.next
+		if env == nil {
+			return zero, false
+		}
+		env = env.next
+		if env == nil {
+			return zero, false
+		}
+		env = env.next
+		if env == nil {
+			return zero, false
+		}
 		return env.data, true
 	}
 
-	current := env
-	for remaining := idx; current != nil; remaining-- {
-		if remaining == 1 {
-			return current.data, true
-		}
+	current := env.next
+	for remaining := idx - 1; remaining > 1 && current != nil; remaining-- {
 		current = current.next
 	}
+	if current == nil {
+		return zero, false
+	}
 
-	return zero, false
+	return current.data, true
 }
 
 func (e *Env[T]) Extend(data Value[T]) *Env[T] {
