@@ -1,16 +1,16 @@
 # Release Notes
 
-## v0.1.1 - maintenance updates
+## v0.1.1 - Go toolchain and CEK interpreter updates
 
 - Date: 2026-04-03
 - Version: v0.1.1
 
-Summary: This release includes incremental updates and fixes across the library.
+Summary: This release includes Go toolchain baseline updates, a CEK interpreter refactor, and runtime performance improvements.
 
 ### New Features
 
-- Added `v0.1.0` release notes consolidating pre-`v0.1.0` changes and CI pipeline updates.
-- Replaced the CEK state-pool evaluation loop with an explicit stack-based interpreter and added tests for frame stack reuse, builtin partial-application discharge, and case-on-pair semantics.
+- Added release notes for `v0.1.0` consolidating pre-`v0.1.0` changes and CI pipeline updates.
+- Updated the CEK evaluator to use an explicit stack-based interpreter and added tests for frame stack reuse, builtin partial-application discharge, and case-on-pair semantics.
 
 ### Breaking Changes
 
