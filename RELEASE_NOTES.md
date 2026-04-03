@@ -18,7 +18,7 @@ Summary: This release includes Go toolchain baseline updates, a CEK interpreter 
 
 ### Performance
 
-- Improved CEK runtime efficiency by optimizing environment lookup, refactoring chunked value allocation and cost handling, and restructuring stack frame management with specialized await-arg handling for lambdas and builtins.
+- Improved CEK runtime efficiency by optimizing environment lookup, refining chunked value allocation and cost handling, and restructuring stack frame management with specialized await-arg handling for lambdas and builtins.
 
 ## v0.1.0 - CEK performance and tooling updates
 
