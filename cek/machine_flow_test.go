@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/builtin"
+	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 )
@@ -76,6 +77,90 @@ func TestBuiltinAddInteger(t *testing.T) {
 	out := runTerm(t, m, app2)
 	if out == nil {
 		t.Fatal("expected non-nil output for builtin addInteger")
+	}
+}
+
+func TestBuiltinIfThenElseSelectsBranch(t *testing.T) {
+	m := newTestMachineFlow()
+
+	term := &syn.Apply[syn.DeBruijn]{
+		Function: &syn.Apply[syn.DeBruijn]{
+			Function: &syn.Apply[syn.DeBruijn]{
+				Function: &syn.Force[syn.DeBruijn]{
+					Term: &syn.Builtin{DefaultFunction: builtin.IfThenElse},
+				},
+				Argument: &syn.Constant{Con: &syn.Bool{Inner: true}},
+			},
+			Argument: &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(11)}},
+		},
+		Argument: &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(22)}},
+	}
+
+	out := runTerm(t, m, term)
+	constant, ok := out.(*syn.Constant)
+	if !ok {
+		t.Fatalf("expected constant result, got %T", out)
+	}
+	integer, ok := constant.Con.(*syn.Integer)
+	if !ok {
+		t.Fatalf("expected integer result, got %T", constant.Con)
+	}
+	if got := integer.Inner.Int64(); got != 11 {
+		t.Fatalf("ifThenElse result = %d, want 11", got)
+	}
+}
+
+func TestBuiltinTraceReturnsValueAndLogs(t *testing.T) {
+	m := newTestMachineFlow()
+
+	term := &syn.Apply[syn.DeBruijn]{
+		Function: &syn.Apply[syn.DeBruijn]{
+			Function: &syn.Force[syn.DeBruijn]{
+				Term: &syn.Builtin{DefaultFunction: builtin.Trace},
+			},
+			Argument: &syn.Constant{Con: &syn.String{Inner: "hot path"}},
+		},
+		Argument: &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(7)}},
+	}
+
+	out := runTerm(t, m, term)
+	constant, ok := out.(*syn.Constant)
+	if !ok {
+		t.Fatalf("expected constant result, got %T", out)
+	}
+	integer, ok := constant.Con.(*syn.Integer)
+	if !ok {
+		t.Fatalf("expected integer result, got %T", constant.Con)
+	}
+	if got := integer.Inner.Int64(); got != 7 {
+		t.Fatalf("trace result = %d, want 7", got)
+	}
+	if len(m.Logs) != 1 || m.Logs[0] != "hot path" {
+		t.Fatalf("trace logs = %v, want [hot path]", m.Logs)
+	}
+}
+
+func TestBuiltinUnIDataReturnsInnerInteger(t *testing.T) {
+	m := newTestMachineFlow()
+
+	term := &syn.Apply[syn.DeBruijn]{
+		Function: &syn.Builtin{DefaultFunction: builtin.UnIData},
+		Argument: &syn.Constant{
+			Con: &syn.Data{Inner: &data.Integer{Inner: big.NewInt(17)}},
+		},
+	}
+
+	out := runTerm(t, m, term)
+	constant, ok := out.(*syn.Constant)
+	if !ok {
+		t.Fatalf("expected constant result, got %T", out)
+	}
+	integer, ok := constant.Con.(*syn.Integer)
+	if !ok {
+		t.Fatalf("expected integer result, got %T", constant.Con)
+	}
+	if got := integer.Inner.Int64(); got != 17 {
+		t.Fatalf("unIData result = %d, want 17", got)
 	}
 }
 

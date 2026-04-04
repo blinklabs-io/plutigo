@@ -269,13 +269,17 @@ func buildDischargeValue(depth int) Value[syn.DeBruijn] {
 		Tag: 0,
 		Fields: []Value[syn.DeBruijn]{
 			&Lambda[syn.DeBruijn]{
-				ParameterName: syn.DeBruijn(0),
-				Body:          body,
-				Env:           env,
+				AST: &syn.Lambda[syn.DeBruijn]{
+					ParameterName: syn.DeBruijn(0),
+					Body:          body,
+				},
+				Env: env,
 			},
 			&Delay[syn.DeBruijn]{
-				Body: bodyDelay,
-				Env:  env,
+				AST: &syn.Delay[syn.DeBruijn]{
+					Term: bodyDelay,
+				},
+				Env: env,
 			},
 			&Builtin[syn.DeBruijn]{
 				Func:     builtin.AddInteger,

@@ -347,9 +347,9 @@ func clearArenaChunks[S any](chunks [][]S, usedTotal int) {
 	}
 }
 
-func (m *Machine[T]) allocDelay(body syn.Term[T], env *Env[T]) *Delay[T] {
+func (m *Machine[T]) allocDelay(term *syn.Delay[T], env *Env[T]) *Delay[T] {
 	delay := allocArenaSlot(&m.delayChunks, &m.delayChunkPos)
-	delay.Body = body
+	delay.AST = term
 	delay.Env = env
 	return delay
 }
@@ -361,14 +361,9 @@ func (m *Machine[T]) allocConstr(tag uint, fields []Value[T]) *Constr[T] {
 	return constr
 }
 
-func (m *Machine[T]) allocLambda(
-	parameterName T,
-	body syn.Term[T],
-	env *Env[T],
-) *Lambda[T] {
+func (m *Machine[T]) allocLambda(term *syn.Lambda[T], env *Env[T]) *Lambda[T] {
 	lambda := allocArenaSlot(&m.lambdaChunks, &m.lambdaChunkPos)
-	lambda.ParameterName = parameterName
-	lambda.Body = body
+	lambda.AST = term
 	lambda.Env = env
 	return lambda
 }
@@ -595,25 +590,12 @@ func chooseAvailableBuiltins(
 }
 
 func (m *Machine[T]) extendEnv(parent *Env[T], data Value[T]) *Env[T] {
-	remaining := m.envChunkPos
-	for i := range m.envChunks {
-		chunk := m.envChunks[i]
-		if chunk == nil {
-			continue
-		}
-		if remaining < len(chunk) {
-			env := &chunk[remaining]
-			m.envChunkPos += 1
-			env.data = data
-			env.next = parent
-			return env
-		}
-		remaining -= len(chunk)
+	chunkIdx := m.envChunkPos / envChunkSize
+	if chunkIdx == len(m.envChunks) {
+		m.envChunks = append(m.envChunks, make([]Env[T], envChunkSize))
 	}
-
-	chunk := make([]Env[T], envChunkSize)
-	m.envChunks = append(m.envChunks, chunk)
-	env := &chunk[0]
+	chunk := m.envChunks[chunkIdx]
+	env := &chunk[m.envChunkPos%envChunkSize]
 	m.envChunkPos += 1
 	env.data = data
 	env.next = parent
@@ -623,10 +605,9 @@ func (m *Machine[T]) extendEnv(parent *Env[T], data Value[T]) *Env[T] {
 func (m *Machine[T]) resetEnvArena() {
 	clearArenaChunks(m.envChunks, m.envChunkPos)
 	if len(m.envChunks) > envRetainChunkCap {
-		for i := envRetainChunkCap; i < len(m.envChunks); i++ {
-			m.envChunks[i] = nil
-		}
-		m.envChunks = m.envChunks[:envRetainChunkCap]
+		retained := make([][]Env[T], envRetainChunkCap)
+		copy(retained, m.envChunks[:envRetainChunkCap])
+		m.envChunks = retained
 	}
 	m.envChunkPos = 0
 }
@@ -706,6 +687,9 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 	if err := m.spendBudget(startupBudget); err != nil {
 		return nil, err
 	}
+	if m.slippage <= 1 {
+		return m.runStackNoSlippage(term)
+	}
 	return m.runStack(term)
 }
 
@@ -753,7 +737,7 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 
-		value := m.allocDelay(t.Term, env)
+		value := m.allocDelay(t, env)
 
 		state, err = m.returnValueState(context, value)
 		if err != nil {
@@ -765,7 +749,7 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 
-		value := m.allocLambda(t.ParameterName, t.Body, env)
+		value := m.allocLambda(t, env)
 
 		state, err = m.returnValueState(context, value)
 		if err != nil {
@@ -965,12 +949,12 @@ func (m *Machine[T]) computeImmediateValue(
 		if err := m.stepAndMaybeSpend(ExDelay); err != nil {
 			return nil, true, err
 		}
-		return m.allocDelay(t.Term, env), true, nil
+		return m.allocDelay(t, env), true, nil
 	case *syn.Lambda[T]:
 		if err := m.stepAndMaybeSpend(ExLambda); err != nil {
 			return nil, true, err
 		}
-		return m.allocLambda(t.ParameterName, t.Body, env), true, nil
+		return m.allocLambda(t, env), true, nil
 	case *syn.Constant:
 		if err := m.stepAndMaybeSpend(ExConstant); err != nil {
 			return nil, true, err
@@ -1233,7 +1217,7 @@ func (m *Machine[T]) forceEvaluate(
 		comp := m.getCompute()
 		comp.Ctx = context
 		comp.Env = v.Env
-		comp.Term = v.Body
+		comp.Term = v.AST.Term
 		state = comp
 	case *Builtin[T]:
 		// Force a builtin function application
@@ -1244,8 +1228,11 @@ func (m *Machine[T]) forceEvaluate(
 				// Builtin has all arguments, evaluate it
 				var err error
 
-				resolved, err = m.evalBuiltinApp(
-					m.allocBuiltin(v.Func, nextForces, v.ArgCount, v.Args),
+				resolved, err = m.evalBuiltinAppReady(
+					v.Func,
+					nextForces,
+					v.ArgCount,
+					v.Args,
 				)
 				if err != nil {
 					return nil, err
@@ -1290,7 +1277,7 @@ func (m *Machine[T]) applyEvaluate(
 		comp := m.getCompute()
 		comp.Ctx = context
 		comp.Env = env
-		comp.Term = f.Body
+		comp.Term = f.AST.Body
 		state = comp
 	case *Builtin[T]:
 		// Apply builtin function
@@ -1301,13 +1288,12 @@ func (m *Machine[T]) applyEvaluate(
 				// Builtin has all arguments, evaluate it
 				var err error
 
-				resolved, err = m.evalBuiltinApp(
-					m.allocBuiltin(
-						f.Func,
-						f.Forces,
-						nextArgCount,
-						m.extendBuiltinArgs(f.Args, arg),
-					),
+				resolved, err = m.evalBuiltinAppWithArg(
+					f.Func,
+					f.Forces,
+					nextArgCount,
+					f.Args,
+					arg,
 				)
 				if err != nil {
 					return nil, err
@@ -1398,14 +1384,14 @@ func dischargeValue[T syn.Eval](value Value[T]) syn.Term[T] {
 	case *Delay[T]:
 		// Discharge delayed computation with environment
 		dischargedTerm = &syn.Delay[T]{
-			Term: withEnv(0, v.Env, v.Body),
+			Term: withEnv(0, v.Env, v.AST.Term),
 		}
 
 	case *Lambda[T]:
 		// Discharge lambda with environment (lamCnt=1 to account for parameter)
 		dischargedTerm = &syn.Lambda[T]{
-			ParameterName: v.ParameterName,
-			Body:          withEnv(1, v.Env, v.Body),
+			ParameterName: v.AST.ParameterName,
+			Body:          withEnv(1, v.Env, v.AST.Body),
 		}
 
 	case *Constr[T]:

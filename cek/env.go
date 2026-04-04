@@ -51,11 +51,24 @@ func lookupEnv[T syn.Eval](env *Env[T], idx int) (Value[T], bool) {
 	}
 
 	current := env.next
-	for remaining := idx - 1; remaining > 1 && current != nil; remaining-- {
-		current = current.next
+	remaining := idx - 1
+	for remaining > 2 && current != nil {
+		next := current.next
+		if next == nil {
+			current = nil
+			break
+		}
+		current = next.next
+		remaining -= 2
 	}
 	if current == nil {
 		return zero, false
+	}
+	if remaining > 1 {
+		current = current.next
+		if current == nil {
+			return zero, false
+		}
 	}
 
 	return current.data, true

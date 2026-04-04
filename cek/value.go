@@ -179,12 +179,15 @@ func cloneConstant(constant syn.IConstant) syn.IConstant {
 }
 
 type Delay[T syn.Eval] struct {
-	Body syn.Term[T]
-	Env  *Env[T]
+	AST *syn.Delay[T]
+	Env *Env[T]
 }
 
 func (d Delay[T]) String() string {
-	return fmt.Sprintf("Delay[%T]", d.Body)
+	if d.AST == nil || d.AST.Term == nil {
+		return "Delay[<nil>]"
+	}
+	return fmt.Sprintf("Delay[%T]", d.AST.Term)
 }
 
 func (Delay[T]) isValue() {}
@@ -194,13 +197,15 @@ func (Delay[T]) toExMem() ExMem {
 }
 
 type Lambda[T syn.Eval] struct {
-	ParameterName T
-	Body          syn.Term[T]
-	Env           *Env[T]
+	AST *syn.Lambda[T]
+	Env *Env[T]
 }
 
 func (l Lambda[T]) String() string {
-	return fmt.Sprintf("Lambda[%v]", l.ParameterName)
+	if l.AST == nil {
+		return "Lambda[<nil>]"
+	}
+	return fmt.Sprintf("Lambda[%v]", l.AST.ParameterName)
 }
 
 func (l Lambda[T]) isValue() {}

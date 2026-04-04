@@ -11,6 +11,7 @@ import (
 	"sort"
 	"unicode/utf8"
 
+	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/syn"
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -82,43 +83,551 @@ func quoInt64Exact(left, right int64) (int64, bool) {
 //            lessThanInteger, lessThanEqualsInteger
 // ============================================================================
 
+func integerBuiltinName(fn builtin.DefaultFunction) string {
+	switch fn {
+	case builtin.AddInteger:
+		return "addInteger"
+	case builtin.SubtractInteger:
+		return "subtractInteger"
+	case builtin.MultiplyInteger:
+		return "multiplyInteger"
+	case builtin.DivideInteger:
+		return "divideInteger"
+	case builtin.QuotientInteger:
+		return "quotientInteger"
+	case builtin.RemainderInteger:
+		return "remainderInteger"
+	case builtin.ModInteger:
+		return "modInteger"
+	case builtin.EqualsInteger:
+		return "equalsInteger"
+	case builtin.LessThanInteger:
+		return "lessThanInteger"
+	case builtin.LessThanEqualsInteger:
+		return "lessThanEqualsInteger"
+	default:
+		return fn.String()
+	}
+}
+
+func (m *Machine[T]) evalBinaryIntegerBuiltin(
+	fn builtin.DefaultFunction,
+	leftVal Value[T],
+	rightVal Value[T],
+) (Value[T], bool, error) {
+	switch fn {
+	case builtin.AddInteger,
+		builtin.SubtractInteger,
+		builtin.MultiplyInteger,
+		builtin.DivideInteger,
+		builtin.QuotientInteger,
+		builtin.RemainderInteger,
+		builtin.ModInteger,
+		builtin.EqualsInteger,
+		builtin.LessThanInteger,
+		builtin.LessThanEqualsInteger:
+	default:
+		return nil, false, nil
+	}
+
+	arg1, err := unwrapIntegerInfo[T](leftVal)
+	if err != nil {
+		return nil, true, err
+	}
+
+	arg2, err := unwrapIntegerInfo[T](rightVal)
+	if err != nil {
+		return nil, true, err
+	}
+
+	if err := m.CostTwoExMem(&fn, arg1.exMem, arg2.exMem); err != nil {
+		return nil, true, err
+	}
+
+	switch fn {
+	case builtin.AddInteger:
+		if arg1.isInt64 && arg2.isInt64 {
+			left := arg1.int64Val
+			right := arg2.int64Val
+			if (right > 0 && left <= math.MaxInt64-right) ||
+				(right < 0 && left >= math.MinInt64-right) ||
+				right == 0 {
+				return m.int64Constant(left + right), true, nil
+			}
+		}
+
+		var newInt big.Int
+		newInt.Add(arg1.value, arg2.value)
+		return m.allocConstant(m.allocIntegerConstant(&newInt)), true, nil
+	case builtin.SubtractInteger:
+		if arg1.isInt64 && arg2.isInt64 {
+			left := arg1.int64Val
+			right := arg2.int64Val
+			if (right > 0 && left >= math.MinInt64+right) ||
+				(right < 0 && left <= math.MaxInt64+right) ||
+				right == 0 {
+				return m.int64Constant(left - right), true, nil
+			}
+		}
+
+		var newInt big.Int
+		newInt.Sub(arg1.value, arg2.value)
+		return m.allocConstant(m.allocIntegerConstant(&newInt)), true, nil
+	case builtin.MultiplyInteger:
+		if arg1.isInt64 && arg2.isInt64 {
+			if result, ok := mulInt64Exact(arg1.int64Val, arg2.int64Val); ok {
+				return m.int64Constant(result), true, nil
+			}
+		}
+
+		var newInt big.Int
+		newInt.Mul(arg1.value, arg2.value)
+		return m.allocConstant(m.allocIntegerConstant(&newInt)), true, nil
+	case builtin.DivideInteger:
+		if arg2.value.Sign() == 0 {
+			return nil, true, &BuiltinError{
+				Code:    ErrCodeDivisionByZero,
+				Builtin: integerBuiltinName(fn),
+				Message: "division by zero",
+			}
+		}
+
+		if arg1.isInt64 && arg2.isInt64 {
+			left := arg1.int64Val
+			right := arg2.int64Val
+			if q, ok := quoInt64Exact(left, right); ok {
+				r := left % right
+				if r != 0 && ((left < 0) != (right < 0)) {
+					q--
+				}
+				return m.int64Constant(q), true, nil
+			}
+		}
+
+		var quotient big.Int
+		var remainder big.Int
+		quotient.Quo(arg1.value, arg2.value)
+		remainder.Rem(arg1.value, arg2.value)
+		if remainder.Sign() != 0 && arg1.value.Sign() != arg2.value.Sign() {
+			quotient.Sub(&quotient, big.NewInt(1))
+		}
+		return m.allocConstant(m.allocIntegerConstant(&quotient)), true, nil
+	case builtin.QuotientInteger:
+		if arg2.value.Sign() == 0 {
+			return nil, true, &BuiltinError{
+				Code:    ErrCodeDivisionByZero,
+				Builtin: integerBuiltinName(fn),
+				Message: "division by zero",
+			}
+		}
+
+		if arg1.isInt64 && arg2.isInt64 {
+			if result, ok := quoInt64Exact(arg1.int64Val, arg2.int64Val); ok {
+				return m.int64Constant(result), true, nil
+			}
+		}
+
+		var quotient big.Int
+		quotient.Quo(arg1.value, arg2.value)
+		return m.allocConstant(m.allocIntegerConstant(&quotient)), true, nil
+	case builtin.RemainderInteger:
+		if arg2.value.Sign() == 0 {
+			return nil, true, &BuiltinError{
+				Code:    ErrCodeDivisionByZero,
+				Builtin: integerBuiltinName(fn),
+				Message: "division by zero",
+			}
+		}
+
+		if arg1.isInt64 && arg2.isInt64 {
+			left := arg1.int64Val
+			right := arg2.int64Val
+			if left == math.MinInt64 && right == -1 {
+				return m.int64Constant(0), true, nil
+			}
+			return m.int64Constant(left % right), true, nil
+		}
+
+		var remainder big.Int
+		remainder.Rem(arg1.value, arg2.value)
+		return m.allocConstant(m.allocIntegerConstant(&remainder)), true, nil
+	case builtin.ModInteger:
+		if arg2.value.Sign() == 0 {
+			return nil, true, &BuiltinError{
+				Code:    ErrCodeDivisionByZero,
+				Builtin: integerBuiltinName(fn),
+				Message: "division by zero",
+			}
+		}
+
+		if arg1.isInt64 && arg2.isInt64 {
+			left := arg1.int64Val
+			right := arg2.int64Val
+			var remainder int64
+			if left == math.MinInt64 && right == -1 {
+				remainder = 0
+			} else {
+				remainder = left % right
+			}
+			if remainder != 0 && ((left < 0) != (right < 0)) {
+				remainder += right
+			}
+			return m.int64Constant(remainder), true, nil
+		}
+
+		var remainder big.Int
+		remainder.Rem(arg1.value, arg2.value)
+		if remainder.Sign() != 0 && arg1.value.Sign() != arg2.value.Sign() {
+			remainder.Add(&remainder, arg2.value)
+		}
+		return m.allocConstant(m.allocIntegerConstant(&remainder)), true, nil
+	case builtin.EqualsInteger:
+		return boolConstant(arg1.value.Cmp(arg2.value) == 0), true, nil
+	case builtin.LessThanInteger:
+		return boolConstant(arg1.value.Cmp(arg2.value) == -1), true, nil
+	case builtin.LessThanEqualsInteger:
+		res := arg1.value.Cmp(arg2.value)
+		return boolConstant(res == -1 || res == 0), true, nil
+	default:
+		return nil, false, nil
+	}
+}
+
+func (m *Machine[T]) evalUnaryBuiltinFast(
+	fn builtin.DefaultFunction,
+	arg Value[T],
+) (Value[T], bool, error) {
+	switch fn {
+	case builtin.FstPair:
+		fstPair, sndPair, err := unwrapPair[T](arg)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := m.CostOne(&fn, pairExMem(fstPair, sndPair)); err != nil {
+			return nil, true, err
+		}
+		if fstPair == nil {
+			return nil, true, &InternalError{
+				Code:    ErrCodeInternalError,
+				Message: "fstPair returned nil constant",
+			}
+		}
+		return machineConstantValue(m, fstPair), true, nil
+	case builtin.SndPair:
+		fstPair, sndPair, err := unwrapPair[T](arg)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := m.CostOne(&fn, pairExMem(fstPair, sndPair)); err != nil {
+			return nil, true, err
+		}
+		if sndPair == nil {
+			return nil, true, &InternalError{
+				Code:    ErrCodeInternalError,
+				Message: "sndPair returned nil constant",
+			}
+		}
+		return machineConstantValue(m, sndPair), true, nil
+	case builtin.HeadList:
+		list, err := unwrapList[T](nil, arg)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := m.CostOne(&fn, listExMem(list.List)); err != nil {
+			return nil, true, err
+		}
+		if len(list.List) == 0 {
+			return nil, true, &BuiltinError{
+				Code:    ErrCodeOutOfBounds,
+				Builtin: "headList",
+				Message: "headList on an empty list",
+			}
+		}
+		if list.List[0] == nil {
+			return nil, true, &InternalError{
+				Code:    ErrCodeInternalError,
+				Message: "headList returned nil constant",
+			}
+		}
+		return machineConstantValue(m, list.List[0]), true, nil
+	case builtin.TailList:
+		list, err := unwrapList[T](nil, arg)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := m.CostOne(&fn, listExMem(list.List)); err != nil {
+			return nil, true, err
+		}
+		if len(list.List) == 0 {
+			return nil, true, &BuiltinError{
+				Code:    ErrCodeOutOfBounds,
+				Builtin: "tailList",
+				Message: "tailList on an empty list",
+			}
+		}
+		return m.allocConstant(m.allocProtoListConstant(list.LTyp, list.List[1:])), true, nil
+	case builtin.NullList:
+		list, err := unwrapList[T](nil, arg)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := m.CostOne(&fn, listExMem(list.List)); err != nil {
+			return nil, true, err
+		}
+		return boolConstant(len(list.List) == 0), true, nil
+	case builtin.UnConstrData:
+		datum, err := unwrapData[T](arg)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := m.CostOne(&fn, dataExMem(datum)); err != nil {
+			return nil, true, err
+		}
+		constr, ok := datum.(*data.Constr)
+		if !ok {
+			return nil, true, &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: "unConstrData",
+				Message: "data is not a constr",
+			}
+		}
+		if constr.Tag > math.MaxInt64 {
+			return nil, true, &BuiltinError{
+				Code:    ErrCodeOverflow,
+				Builtin: "unConstrData",
+				Message: "constructor tag too large for integer conversion",
+			}
+		}
+		fields := m.allocConstantElems(len(constr.Fields))
+		for i, field := range constr.Fields {
+			fields[i] = m.allocDataConstant(field)
+		}
+		pair := m.allocProtoPairConstant(
+			sharedIntegerType,
+			sharedListDataType,
+			m.int64Constant(int64(constr.Tag)).Constant,
+			m.allocProtoListConstant(sharedDataType, fields),
+		)
+		return m.allocConstant(pair), true, nil
+	case builtin.UnMapData:
+		datum, err := unwrapData[T](arg)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := m.CostOne(&fn, dataExMem(datum)); err != nil {
+			return nil, true, err
+		}
+		dataMap, ok := datum.(*data.Map)
+		if !ok {
+			return nil, true, &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: "unMapData",
+				Message: "data is not a map",
+			}
+		}
+		items := m.allocConstantElems(len(dataMap.Pairs))
+		for i, item := range dataMap.Pairs {
+			items[i] = m.allocProtoPairConstant(
+				sharedDataType,
+				sharedDataType,
+				m.allocDataConstant(item[0]),
+				m.allocDataConstant(item[1]),
+			)
+		}
+		return m.allocConstant(m.allocProtoListConstant(sharedPairDataType, items)), true, nil
+	case builtin.UnListData:
+		datum, err := unwrapData[T](arg)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := m.CostOne(&fn, dataExMem(datum)); err != nil {
+			return nil, true, err
+		}
+		dataList, ok := datum.(*data.List)
+		if !ok {
+			return nil, true, &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: "unListData",
+				Message: "data is not a list",
+			}
+		}
+		items := m.allocConstantElems(len(dataList.Items))
+		for i, item := range dataList.Items {
+			items[i] = m.allocDataConstant(item)
+		}
+		return m.allocConstant(m.allocProtoListConstant(sharedDataType, items)), true, nil
+	case builtin.UnIData:
+		datum, err := unwrapData[T](arg)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := m.CostOne(&fn, dataExMem(datum)); err != nil {
+			return nil, true, err
+		}
+		integer, ok := datum.(*data.Integer)
+		if !ok {
+			return nil, true, &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: "unIData",
+				Message: "data is not a integer",
+			}
+		}
+		if integer.Inner.IsInt64() {
+			return m.int64Constant(integer.Inner.Int64()), true, nil
+		}
+		return m.allocConstant(m.allocIntegerConstant(integer.Inner)), true, nil
+	case builtin.UnBData:
+		datum, err := unwrapData[T](arg)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := m.CostOne(&fn, dataExMem(datum)); err != nil {
+			return nil, true, err
+		}
+		bytesData, ok := datum.(*data.ByteString)
+		if !ok {
+			return nil, true, &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: "unBData",
+				Message: "data is not a bytearray",
+			}
+		}
+		return m.allocConstant(m.allocByteStringConstant(bytesData.Inner)), true, nil
+	default:
+		return nil, false, nil
+	}
+}
+
+func (m *Machine[T]) evalBinaryBuiltinFast(
+	fn builtin.DefaultFunction,
+	leftVal Value[T],
+	rightVal Value[T],
+) (Value[T], bool, error) {
+	if resolved, handled, err := m.evalBinaryIntegerBuiltin(fn, leftVal, rightVal); handled {
+		return resolved, true, err
+	}
+
+	switch fn {
+	case builtin.EqualsByteString:
+		arg1, err := unwrapByteString[T](leftVal)
+		if err != nil {
+			return nil, true, err
+		}
+		arg2, err := unwrapByteString[T](rightVal)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := m.CostTwo(&fn, byteArrayExMem(arg1), byteArrayExMem(arg2)); err != nil {
+			return nil, true, err
+		}
+		return boolConstant(bytes.Equal(arg1, arg2)), true, nil
+	case builtin.LessThanByteString:
+		arg1, err := unwrapByteString[T](leftVal)
+		if err != nil {
+			return nil, true, err
+		}
+		arg2, err := unwrapByteString[T](rightVal)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := m.CostTwo(&fn, byteArrayExMem(arg1), byteArrayExMem(arg2)); err != nil {
+			return nil, true, err
+		}
+		return boolConstant(bytes.Compare(arg1, arg2) == -1), true, nil
+	case builtin.LessThanEqualsByteString:
+		arg1, err := unwrapByteString[T](leftVal)
+		if err != nil {
+			return nil, true, err
+		}
+		arg2, err := unwrapByteString[T](rightVal)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := m.CostTwo(&fn, byteArrayExMem(arg1), byteArrayExMem(arg2)); err != nil {
+			return nil, true, err
+		}
+		res := bytes.Compare(arg1, arg2)
+		return boolConstant(res == -1 || res == 0), true, nil
+	case builtin.ChooseUnit:
+		if err := unwrapUnit[T](leftVal); err != nil {
+			return nil, true, err
+		}
+		if err := m.CostTwo(&fn, unitExMem(), valueExMem[T](rightVal)); err != nil {
+			return nil, true, err
+		}
+		return rightVal, true, nil
+	case builtin.Trace:
+		msg, err := unwrapString[T](leftVal)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := m.CostTwo(&fn, stringExMem(msg), valueExMem[T](rightVal)); err != nil {
+			return nil, true, err
+		}
+		m.Logs = append(m.Logs, msg)
+		return rightVal, true, nil
+	case builtin.MkCons:
+		head, err := unwrapConstant[T](leftVal)
+		if err != nil {
+			return nil, true, err
+		}
+		typ := head.Constant.Typ()
+		tail, err := unwrapList[T](typ, rightVal)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := m.CostTwo(&fn, valueExMem[T](head), listExMem(tail.List)); err != nil {
+			return nil, true, err
+		}
+		consList := m.allocConstantElems(len(tail.List) + 1)
+		consList[0] = head.Constant
+		copy(consList[1:], tail.List)
+		return m.allocConstant(m.allocProtoListConstant(typ, consList)), true, nil
+	default:
+		return nil, false, nil
+	}
+}
+
+func (m *Machine[T]) evalTernaryBuiltinFast(
+	fn builtin.DefaultFunction,
+	firstVal Value[T],
+	secondVal Value[T],
+	thirdVal Value[T],
+) (Value[T], bool, error) {
+	switch fn {
+	case builtin.IfThenElse:
+		cond, err := unwrapBool[T](firstVal)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := m.CostThree(&fn, boolExMem(cond), valueExMem[T](secondVal), valueExMem[T](thirdVal)); err != nil {
+			return nil, true, err
+		}
+		if cond {
+			return secondVal, true, nil
+		}
+		return thirdVal, true, nil
+	case builtin.ChooseList:
+		list, err := unwrapList[T](nil, firstVal)
+		if err != nil {
+			return nil, true, err
+		}
+		if err := m.CostThree(&fn, listExMem(list.List), valueExMem[T](secondVal), valueExMem[T](thirdVal)); err != nil {
+			return nil, true, err
+		}
+		if len(list.List) == 0 {
+			return secondVal, true, nil
+		}
+		return thirdVal, true, nil
+	default:
+		return nil, false, nil
+	}
+}
+
 func addInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostTwoExMem(
-		&b.Func,
-		arg1.exMem,
-		arg2.exMem,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if arg1.isInt64 && arg2.isInt64 {
-		left := arg1.int64Val
-		right := arg2.int64Val
-		if (right > 0 && left <= math.MaxInt64-right) ||
-			(right < 0 && left >= math.MinInt64-right) ||
-			right == 0 {
-			return m.int64Constant(left + right), nil
-		}
-	}
-
-	var newInt big.Int
-
-	newInt.Add(arg1.value, arg2.value)
-
-	return m.allocConstant(m.allocIntegerConstant(&newInt)), nil
+	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	return value, err
 }
 
 func subtractInteger[T syn.Eval](
@@ -126,41 +635,8 @@ func subtractInteger[T syn.Eval](
 	b *Builtin[T],
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostTwoExMem(
-		&b.Func,
-		arg1.exMem,
-		arg2.exMem,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if arg1.isInt64 && arg2.isInt64 {
-		left := arg1.int64Val
-		right := arg2.int64Val
-		if (right > 0 && left >= math.MinInt64+right) ||
-			(right < 0 && left <= math.MaxInt64+right) ||
-			right == 0 {
-			return m.int64Constant(left - right), nil
-		}
-	}
-
-	var newInt big.Int
-
-	newInt.Sub(arg1.value, arg2.value)
-
-	return m.allocConstant(m.allocIntegerConstant(&newInt)), nil
+	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	return value, err
 }
 
 func multiplyInteger[T syn.Eval](
@@ -168,94 +644,14 @@ func multiplyInteger[T syn.Eval](
 	b *Builtin[T],
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostTwoExMem(
-		&b.Func,
-		arg1.exMem,
-		arg2.exMem,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if arg1.isInt64 && arg2.isInt64 {
-		if result, ok := mulInt64Exact(arg1.int64Val, arg2.int64Val); ok {
-			return m.int64Constant(result), nil
-		}
-	}
-
-	var newInt big.Int
-
-	newInt.Mul(arg1.value, arg2.value)
-
-	return m.allocConstant(m.allocIntegerConstant(&newInt)), nil
+	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	return value, err
 }
 
 func divideInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostTwoExMem(
-		&b.Func,
-		arg1.exMem,
-		arg2.exMem,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if arg2.value.Sign() == 0 {
-		return nil, &BuiltinError{
-			Code:    ErrCodeDivisionByZero,
-			Builtin: "divideInteger",
-			Message: "division by zero",
-		}
-	}
-
-	if arg1.isInt64 && arg2.isInt64 {
-		left := arg1.int64Val
-		right := arg2.int64Val
-		if q, ok := quoInt64Exact(left, right); ok {
-			r := left % right
-			if r != 0 && ((left < 0) != (right < 0)) {
-				q--
-			}
-			return m.int64Constant(q), nil
-		}
-	}
-
-	var newInt big.Int
-	var remainder big.Int
-
-	// Perform division
-	newInt.Quo(arg1.value, arg2.value)
-	remainder.Rem(arg1.value, arg2.value)
-
-	// Adjust for floor division if remainder exists and signs differ
-	if remainder.Sign() != 0 && arg1.value.Sign() != arg2.value.Sign() {
-		newInt.Sub(&newInt, big.NewInt(1))
-	}
-
-	return m.allocConstant(m.allocIntegerConstant(&newInt)), nil
+	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	return value, err
 }
 
 func quotientInteger[T syn.Eval](
@@ -263,48 +659,8 @@ func quotientInteger[T syn.Eval](
 	b *Builtin[T],
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostTwoExMem(
-		&b.Func,
-		arg1.exMem,
-		arg2.exMem,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if arg2.value.Sign() == 0 {
-		return nil, &BuiltinError{
-			Code:    ErrCodeDivisionByZero,
-			Builtin: "quotientInteger",
-			Message: "division by zero",
-		}
-	}
-
-	if arg1.isInt64 && arg2.isInt64 {
-		if result, ok := quoInt64Exact(arg1.int64Val, arg2.int64Val); ok {
-			return m.int64Constant(result), nil
-		}
-	}
-
-	var newInt big.Int
-
-	newInt.Quo(
-		arg1.value,
-		arg2.value,
-	) // Truncated division (rounds toward zero)
-
-	return m.allocConstant(m.allocIntegerConstant(&newInt)), nil
+	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	return value, err
 }
 
 func remainderInteger[T syn.Eval](
@@ -312,135 +668,20 @@ func remainderInteger[T syn.Eval](
 	b *Builtin[T],
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostTwoExMem(
-		&b.Func,
-		arg1.exMem,
-		arg2.exMem,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if arg2.value.Sign() == 0 {
-		return nil, &BuiltinError{
-			Code:    ErrCodeDivisionByZero,
-			Builtin: "remainderInteger",
-			Message: "division by zero",
-		}
-	}
-
-	if arg1.isInt64 && arg2.isInt64 {
-		left := arg1.int64Val
-		right := arg2.int64Val
-		if left == math.MinInt64 && right == -1 {
-			return m.int64Constant(0), nil
-		}
-		return m.int64Constant(left % right), nil
-	}
-
-	var newInt big.Int
-
-	newInt.Rem(
-		arg1.value,
-		arg2.value,
-	) // Remainder (consistent with Div, can be negative)
-
-	return m.allocConstant(m.allocIntegerConstant(&newInt)), nil
+	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	return value, err
 }
 
 func modInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostTwoExMem(
-		&b.Func,
-		arg1.exMem,
-		arg2.exMem,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if arg2.value.Sign() == 0 {
-		return nil, &BuiltinError{
-			Code:    ErrCodeDivisionByZero,
-			Builtin: "modInteger",
-			Message: "division by zero",
-		}
-	}
-
-	if arg1.isInt64 && arg2.isInt64 {
-		left := arg1.int64Val
-		right := arg2.int64Val
-		var remainder int64
-		if left == math.MinInt64 && right == -1 {
-			remainder = 0
-		} else {
-			remainder = left % right
-		}
-		if remainder != 0 && ((left < 0) != (right < 0)) {
-			remainder += right
-		}
-		return m.int64Constant(remainder), nil
-	}
-
-	var remainder big.Int
-
-	// Compute remainder for the slow path.
-	remainder.Rem(arg1.value, arg2.value)
-
-	// Adjust for floored modulo if remainder exists and signs differ
-	if remainder.Sign() != 0 && arg1.value.Sign() != arg2.value.Sign() {
-		remainder.Add(&remainder, arg2.value)
-	}
-
-	return m.allocConstant(m.allocIntegerConstant(&remainder)), nil
+	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	return value, err
 }
 
 func equalsInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
-	if err != nil {
-		return nil, err
-	}
-
-	// Charge budget for integer comparison
-	err = m.CostTwoExMem(
-		&b.Func,
-		arg1.exMem,
-		arg2.exMem,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return boolConstant(arg1.value.Cmp(arg2.value) == 0), nil
+	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	return value, err
 }
 
 func lessThanInteger[T syn.Eval](
@@ -448,27 +689,8 @@ func lessThanInteger[T syn.Eval](
 	b *Builtin[T],
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostTwoExMem(
-		&b.Func,
-		arg1.exMem,
-		arg2.exMem,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return boolConstant(arg1.value.Cmp(arg2.value) == -1), nil
+	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	return value, err
 }
 
 func lessThanEqualsInteger[T syn.Eval](
@@ -476,28 +698,8 @@ func lessThanEqualsInteger[T syn.Eval](
 	b *Builtin[T],
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapIntegerInfo[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	arg2, err := unwrapIntegerInfo[T](m.argHolder[1])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostTwoExMem(
-		&b.Func,
-		arg1.exMem,
-		arg2.exMem,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	res := arg1.value.Cmp(arg2.value)
-	return boolConstant(res == -1 || res == 0), nil
+	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	return value, err
 }
 
 // ============================================================================
@@ -742,23 +944,8 @@ func equalsByteString[T syn.Eval](
 	b *Builtin[T],
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapByteString[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	arg2, err := unwrapByteString[T](m.argHolder[1])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostTwo(&b.Func, byteArrayExMem(arg1), byteArrayExMem(arg2))
-	if err != nil {
-		return nil, err
-	}
-
-	return boolConstant(bytes.Equal(arg1, arg2)), nil
+	value, _, err := m.evalBinaryBuiltinFast(b.Func, m.argHolder[0], m.argHolder[1])
+	return value, err
 }
 
 func lessThanByteString[T syn.Eval](
@@ -766,23 +953,8 @@ func lessThanByteString[T syn.Eval](
 	b *Builtin[T],
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapByteString[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	arg2, err := unwrapByteString[T](m.argHolder[1])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostTwo(&b.Func, byteArrayExMem(arg1), byteArrayExMem(arg2))
-	if err != nil {
-		return nil, err
-	}
-
-	return boolConstant(bytes.Compare(arg1, arg2) == -1), nil
+	value, _, err := m.evalBinaryBuiltinFast(b.Func, m.argHolder[0], m.argHolder[1])
+	return value, err
 }
 
 func lessThanEqualsByteString[T syn.Eval](
@@ -790,24 +962,8 @@ func lessThanEqualsByteString[T syn.Eval](
 	b *Builtin[T],
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapByteString[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	arg2, err := unwrapByteString[T](m.argHolder[1])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostTwo(&b.Func, byteArrayExMem(arg1), byteArrayExMem(arg2))
-	if err != nil {
-		return nil, err
-	}
-
-	res := bytes.Compare(arg1, arg2)
-	return boolConstant(res == -1 || res == 0), nil
+	value, _, err := m.evalBinaryBuiltinFast(b.Func, m.argHolder[0], m.argHolder[1])
+	return value, err
 }
 
 // ============================================================================
@@ -1438,71 +1594,25 @@ func decodeUtf8[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 func ifThenElse[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapBool[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	arg2 := m.argHolder[1]
-	arg3 := m.argHolder[2]
-
-	err = m.CostThree(
-		&b.Func,
-		boolExMem(arg1),
-		valueExMem[T](arg2),
-		valueExMem[T](arg3),
+	value, _, err := m.evalTernaryBuiltinFast(
+		b.Func,
+		m.argHolder[0],
+		m.argHolder[1],
+		m.argHolder[2],
 	)
-	if err != nil {
-		return nil, err
-	}
-
-	if arg1 {
-		return arg2, nil
-	} else {
-		return arg3, nil
-	}
+	return value, err
 }
 
 func chooseUnit[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	if err := unwrapUnit[T](m.argHolder[0]); err != nil {
-		return nil, err
-	}
-
-	arg2 := m.argHolder[1]
-
-	err := m.CostTwo(&b.Func, unitExMem(), valueExMem[T](arg2))
-	if err != nil {
-		return nil, err
-	}
-
-	value := arg2
-
-	return value, nil
+	value, _, err := m.evalBinaryBuiltinFast(b.Func, m.argHolder[0], m.argHolder[1])
+	return value, err
 }
 
 func trace[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapString[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	arg2 := m.argHolder[1]
-
-	err = m.CostTwo(&b.Func, stringExMem(arg1), valueExMem[T](arg2))
-	if err != nil {
-		return nil, err
-	}
-
-	m.Logs = append(m.Logs, arg1)
-
-	value := arg2
-
-	return value, nil
+	value, _, err := m.evalBinaryBuiltinFast(b.Func, m.argHolder[0], m.argHolder[1])
+	return value, err
 }
 
 // ============================================================================
@@ -1512,160 +1622,49 @@ func trace[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 func fstPair[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	fstPair, sndPair, err := unwrapPair[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostOne(&b.Func, pairExMem(fstPair, sndPair))
-	if err != nil {
-		return nil, err
-	}
-
-	return m.allocConstant(fstPair), nil
+	value, _, err := m.evalUnaryBuiltinFast(b.Func, m.argHolder[0])
+	return value, err
 }
 
 func sndPair[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	fstPair, sndPair, err := unwrapPair[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostOne(&b.Func, pairExMem(fstPair, sndPair))
-	if err != nil {
-		return nil, err
-	}
-
-	return m.allocConstant(sndPair), nil
+	value, _, err := m.evalUnaryBuiltinFast(b.Func, m.argHolder[0])
+	return value, err
 }
 
 func chooseList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	l, err := unwrapList[T](nil, m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	branchEmpty := m.argHolder[1]
-
-	branchOtherwise := m.argHolder[2]
-
-	err = m.CostThree(
-		&b.Func,
-		listExMem(l.List),
-		valueExMem[T](branchEmpty),
-		valueExMem[T](branchOtherwise),
+	value, _, err := m.evalTernaryBuiltinFast(
+		b.Func,
+		m.argHolder[0],
+		m.argHolder[1],
+		m.argHolder[2],
 	)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(l.List) == 0 {
-		return branchEmpty, nil
-	} else {
-		return branchOtherwise, nil
-	}
+	return value, err
 }
 
 func mkCons[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapConstant[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	typ := arg1.Constant.Typ()
-
-	arg2, err := unwrapList[T](typ, m.argHolder[1])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostTwo(&b.Func, valueExMem[T](arg1), listExMem(arg2.List))
-	if err != nil {
-		return nil, err
-	}
-
-	consList := m.allocConstantElems(len(arg2.List) + 1)
-	consList[0] = arg1.Constant
-	copy(consList[1:], arg2.List)
-
-	return m.allocConstant(m.allocProtoListConstant(typ, consList)), nil
+	value, _, err := m.evalBinaryBuiltinFast(b.Func, m.argHolder[0], m.argHolder[1])
+	return value, err
 }
 
 func headList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapList[T](nil, m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostOne(&b.Func, listExMem(arg1.List))
-	if err != nil {
-		return nil, err
-	}
-
-	if len(arg1.List) == 0 {
-		return nil, &BuiltinError{
-			Code:    ErrCodeOutOfBounds,
-			Builtin: "headList",
-			Message: "headList on an empty list",
-		}
-	}
-
-	return m.allocConstant(arg1.List[0]), nil
+	value, _, err := m.evalUnaryBuiltinFast(b.Func, m.argHolder[0])
+	return value, err
 }
 
 func tailList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapList[T](nil, m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostOne(&b.Func, listExMem(arg1.List))
-	if err != nil {
-		return nil, err
-	}
-
-	if len(arg1.List) == 0 {
-		return nil, &BuiltinError{
-			Code:    ErrCodeOutOfBounds,
-			Builtin: "tailList",
-			Message: "tailList on an empty list",
-		}
-	}
-
-	tailList := arg1.List[1:]
-
-	return m.allocConstant(m.allocProtoListConstant(arg1.LTyp, tailList)), nil
+	value, _, err := m.evalUnaryBuiltinFast(b.Func, m.argHolder[0])
+	return value, err
 }
 
 func nullList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapList[T](nil, m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostOne(&b.Func, listExMem(arg1.List))
-	if err != nil {
-		return nil, err
-	}
-
-	value := &Constant{&syn.Bool{
-		Inner: len(arg1.List) == 0,
-	}}
-
-	return value, nil
+	value, _, err := m.evalUnaryBuiltinFast(b.Func, m.argHolder[0])
+	return value, err
 }
 
 // ============================================================================
@@ -1866,158 +1865,32 @@ func bData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 func unConstrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapData[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostOne(&b.Func, dataExMem(arg1))
-	if err != nil {
-		return nil, err
-	}
-
-	var pair *syn.ProtoPair
-	switch constr := arg1.(type) {
-	case *data.Constr:
-		if constr.Tag > math.MaxInt64 {
-			return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "unConstrData", Message: "constructor tag too large for integer conversion"}
-		}
-
-		fields := m.allocConstantElems(len(constr.Fields))
-		for i, field := range constr.Fields {
-			fields[i] = m.allocDataConstant(field)
-		}
-
-		pair = m.allocProtoPairConstant(
-			sharedIntegerType,
-			sharedListDataType,
-			m.int64Constant(int64(constr.Tag)).Constant,
-			m.allocProtoListConstant(sharedDataType, fields),
-		)
-	default:
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unConstrData", Message: "data is not a constr"}
-	}
-
-	return m.allocConstant(pair), nil
+	value, _, err := m.evalUnaryBuiltinFast(b.Func, m.argHolder[0])
+	return value, err
 }
 
 func unMapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapData[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostOne(&b.Func, dataExMem(arg1))
-	if err != nil {
-		return nil, err
-	}
-
-	var dataMap *syn.ProtoList
-	switch l := arg1.(type) {
-	case *data.Map:
-		items := m.allocConstantElems(len(l.Pairs))
-		for i, item := range l.Pairs {
-			items[i] = m.allocProtoPairConstant(
-				sharedDataType,
-				sharedDataType,
-				m.allocDataConstant(item[0]),
-				m.allocDataConstant(item[1]),
-			)
-		}
-
-		dataMap = m.allocProtoListConstant(sharedPairDataType, items)
-	default:
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unMapData", Message: "data is not a map"}
-	}
-
-	return m.allocConstant(dataMap), nil
+	value, _, err := m.evalUnaryBuiltinFast(b.Func, m.argHolder[0])
+	return value, err
 }
 
 func unListData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapData[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostOne(&b.Func, dataExMem(arg1))
-	if err != nil {
-		return nil, err
-	}
-
-	var list *syn.ProtoList
-	switch l := arg1.(type) {
-	case *data.List:
-		items := m.allocConstantElems(len(l.Items))
-		for i, item := range l.Items {
-			items[i] = m.allocDataConstant(item)
-		}
-
-		list = m.allocProtoListConstant(sharedDataType, items)
-	default:
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unListData", Message: "data is not a list"}
-	}
-
-	return m.allocConstant(list), nil
+	value, _, err := m.evalUnaryBuiltinFast(b.Func, m.argHolder[0])
+	return value, err
 }
 
 func unIData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapData[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostOne(&b.Func, dataExMem(arg1))
-	if err != nil {
-		return nil, err
-	}
-
-	var integer syn.IConstant
-
-	switch b := arg1.(type) {
-	case *data.Integer:
-		if b.Inner.IsInt64() {
-			return m.int64Constant(b.Inner.Int64()), nil
-		}
-		integer = m.allocIntegerConstant(b.Inner)
-
-	default:
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unIData", Message: "data is not a integer"}
-	}
-
-	return m.allocConstant(integer), nil
+	value, _, err := m.evalUnaryBuiltinFast(b.Func, m.argHolder[0])
+	return value, err
 }
 
 func unBData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-
-	arg1, err := unwrapData[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.CostOne(&b.Func, dataExMem(arg1))
-	if err != nil {
-		return nil, err
-	}
-
-	var bytes syn.IConstant
-
-	switch b := arg1.(type) {
-	case *data.ByteString:
-		bytes = m.allocByteStringConstant(b.Inner)
-
-	default:
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "unBData", Message: "data is not a bytearray"}
-	}
-
-	return m.allocConstant(bytes), nil
+	value, _, err := m.evalUnaryBuiltinFast(b.Func, m.argHolder[0])
+	return value, err
 }
 
 func equalsData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
