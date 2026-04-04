@@ -719,7 +719,10 @@ func TestValueString(t *testing.T) {
 	// Test Delay String
 	env := &Env[syn.DeBruijn]{}
 	term := &syn.Var[syn.DeBruijn]{Name: 1}
-	delay := Delay[syn.DeBruijn]{Body: term, Env: env}
+	delay := Delay[syn.DeBruijn]{
+		AST: &syn.Delay[syn.DeBruijn]{Term: term},
+		Env: env,
+	}
 	str = delay.String()
 	if !contains(str, "Delay") {
 		t.Errorf("Delay String should contain Delay: %s", str)

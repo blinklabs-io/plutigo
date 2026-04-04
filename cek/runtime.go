@@ -209,6 +209,35 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 	return fn(m, b)
 }
 
+func (m *Machine[T]) evalBuiltinAppReady(
+	fn builtin.DefaultFunction,
+	forces uint,
+	argCount uint,
+	args *BuiltinArgs[T],
+) (Value[T], error) {
+	ready := Builtin[T]{
+		Func:     fn,
+		Forces:   forces,
+		ArgCount: argCount,
+		Args:     args,
+	}
+	return m.evalBuiltinApp(&ready)
+}
+
+func (m *Machine[T]) evalBuiltinAppWithArg(
+	fn builtin.DefaultFunction,
+	forces uint,
+	argCount uint,
+	args *BuiltinArgs[T],
+	arg Value[T],
+) (Value[T], error) {
+	finalArgs := BuiltinArgs[T]{
+		data: arg,
+		next: args,
+	}
+	return m.evalBuiltinAppReady(fn, forces, argCount, &finalArgs)
+}
+
 type twoArgCost struct {
 	mem       TwoArgument
 	cpu       TwoArgument

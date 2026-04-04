@@ -110,7 +110,7 @@ func TestRunResetsEnvArena(t *testing.T) {
 	}
 }
 
-func TestResetEnvArenaClearsDroppedChunkHeaders(t *testing.T) {
+func TestResetEnvArenaRetainsOnlyTrackedChunkHeaders(t *testing.T) {
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
 	usedChunks := envRetainChunkCap + 2
@@ -126,15 +126,11 @@ func TestResetEnvArenaClearsDroppedChunkHeaders(t *testing.T) {
 	if len(m.envChunks) != envRetainChunkCap {
 		t.Fatalf("len(envChunks) after reset = %d, want %d", len(m.envChunks), envRetainChunkCap)
 	}
+	if cap(m.envChunks) != envRetainChunkCap {
+		t.Fatalf("cap(envChunks) after reset = %d, want %d", cap(m.envChunks), envRetainChunkCap)
+	}
 	if m.envChunkPos != 0 {
 		t.Fatalf("envChunkPos after reset = %d, want 0", m.envChunkPos)
-	}
-
-	hidden := m.envChunks[:cap(m.envChunks)]
-	for i := envRetainChunkCap; i < len(hidden); i++ {
-		if hidden[i] != nil {
-			t.Fatalf("envChunks[%d] still references a dropped chunk", i)
-		}
 	}
 }
 
