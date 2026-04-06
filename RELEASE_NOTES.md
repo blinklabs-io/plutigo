@@ -13,7 +13,7 @@ Summary: This release includes the changes listed below.
 
 ### Performance
 
-- Improved build and interpretation throughput while keeping behavior consistent in frequently used cases.
+- Improved build and interpretation performance while keeping behavior consistent in frequently used cases.
 
 ### Additional Changes
 
