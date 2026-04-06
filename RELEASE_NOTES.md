@@ -1,5 +1,26 @@
 # Release Notes
 
+## v0.1.2 - maintenance updates
+
+- Date: 2026-04-06
+- Version: v0.1.2
+
+Summary: This release includes interpreter reliability improvements, performance refinements, and dependency updates.
+
+### New Features
+
+- Updated the interpreter to return from calls more reliably and behave consistently across common execution paths.
+
+### Performance
+
+- Improved build and interpretation performance while keeping behavior consistent in frequently used cases.
+
+### Additional Changes
+
+- Updated project dependencies to incorporate upstream fixes and keep the toolchain current.
+- Updated the `nilaway` GitHub Actions workflow to run only when explicitly triggered.
+- Updated `RELEASE_NOTES.md` to reflect the current published build.
+
 ## v0.1.1 - go toolchain and cek interpreter updates
 
 - Date: 2026-04-03
