@@ -5,7 +5,7 @@
 - Date: 2026-04-06
 - Version: v0.1.2
 
-Summary: This release includes the changes listed below.
+Summary: This release includes interpreter reliability improvements, performance refinements, and dependency updates.
 
 ### New Features
 
