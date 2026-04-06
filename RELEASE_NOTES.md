@@ -12,15 +12,15 @@ Summary: This release includes the changes listed below.
 ```json
 {
   "Additional Changes": [
-    "The project dependencies were updated to incorporate upstream fixes and keep the toolchain current. This includes upgrading go-ethereum from v1.17.1 to v1.17.2, bumping fxamacker/cbor from v2.9.0 to v2.9.1 (with checksum updates), and updating GitHub Actions to use actions/setup-go v6.4.0.",
-    "Automated analysis for nilaway now runs only when explicitly triggered rather than on every change. Concretely, the nilaway GitHub Actions workflow was changed to run only on workflow_dispatch instead of on pushes to main or pull requests.",
-    "The release documentation was updated to reflect the current published build. Specifically, a release notes entry was added for version v0.1.1."
+    "The project dependencies were updated to incorporate upstream fixes and keep the toolchain current.",
+    "Automated analysis for nilaway now runs only when explicitly triggered rather than on every change.",
+    "The release documentation was updated to reflect the current published build."
   ],
   "New Features": [
-    "The interpreter now returns from calls more reliably and behaves consistently across common execution paths. Specifically, the stack interpreter refines return-frame handling for normal and no-slippage paths, adds immediate-term shortcuts and builtin fast paths, improves frame cleanup, and completes delay/lambda closure representation using an AST-based model."
+    "The interpreter now returns from calls more reliably and behaves consistently across common execution paths."
   ],
   "Performance": [
-    "Builds and interpretation run faster while keeping behavior consistent in frequently used cases. In particular, the interpreter introduces builtin fast paths and immediate-term shortcuts to reduce overhead in hot execution paths."
+    "Builds and interpretation run faster while keeping behavior consistent in frequently used cases."
   ]
 }
 
