@@ -7,24 +7,19 @@
 
 Summary: This release includes the changes listed below.
 
-### Changes
+### New Features
 
-```json
-{
-  "Additional Changes": [
-    "The project dependencies were updated to incorporate upstream fixes and keep the toolchain current.",
-    "Automated analysis for nilaway now runs only when explicitly triggered rather than on every change.",
-    "The release documentation was updated to reflect the current published build."
-  ],
-  "New Features": [
-    "The interpreter now returns from calls more reliably and behaves consistently across common execution paths."
-  ],
-  "Performance": [
-    "Builds and interpretation run faster while keeping behavior consistent in frequently used cases."
-  ]
-}
+- Updated the interpreter to return from calls more reliably and behave consistently across common execution paths.
 
-```
+### Performance
+
+- Improved build and interpretation throughput while keeping behavior consistent in frequently used cases.
+
+### Additional Changes
+
+- Updated project dependencies to incorporate upstream fixes and keep the toolchain current.
+- Updated the `nilaway` GitHub Actions workflow to run only when explicitly triggered.
+- Updated `RELEASE_NOTES.md` to reflect the current published build.
 
 ## v0.1.1 - go toolchain and cek interpreter updates
 
