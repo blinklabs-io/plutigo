@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"reflect"
 	"sort"
 	"strconv"
 
@@ -495,7 +494,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				return nil, err
 			}
 
-			if reflect.TypeOf(item.Typ()) != reflect.TypeOf(ts.Typ) {
+			if !EqualType(item.Typ(), ts.Typ) {
 				return nil, fmt.Errorf("list element of type %T does not match expected type %T at position %d", item.Typ(), ts.Typ, p.curToken.Position)
 			}
 
@@ -527,7 +526,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			return nil, err
 		}
 
-		if reflect.TypeOf(first.Typ()) != reflect.TypeOf(ts.First) {
+		if !EqualType(first.Typ(), ts.First) {
 			return nil, fmt.Errorf("pair first element of type %T does not match expected type %T at position %d", first.Typ(), ts.First, p.curToken.Position)
 		}
 
@@ -540,7 +539,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			return nil, err
 		}
 
-		if reflect.TypeOf(second.Typ()) != reflect.TypeOf(ts.Second) {
+		if !EqualType(second.Typ(), ts.Second) {
 			return nil, fmt.Errorf("pair second element of type %T does not match expected type %T at position %d", second.Typ(), ts.Second, p.curToken.Position)
 		}
 
@@ -980,7 +979,7 @@ func (p *Parser) parseConstantValue(typ Typ) (IConstant, error) {
 				return nil, err
 			}
 
-			if reflect.TypeOf(item.Typ()) != reflect.TypeOf(t.Typ) {
+			if !EqualType(item.Typ(), t.Typ) {
 				return nil, fmt.Errorf("list element of type %T does not match expected type %T at position %d", item.Typ(), t.Typ, p.curToken.Position)
 			}
 
@@ -1008,7 +1007,7 @@ func (p *Parser) parseConstantValue(typ Typ) (IConstant, error) {
 			return nil, err
 		}
 
-		if reflect.TypeOf(first.Typ()) != reflect.TypeOf(t.First) {
+		if !EqualType(first.Typ(), t.First) {
 			return nil, fmt.Errorf("pair first element of type %T does not match expected type %T at position %d", first.Typ(), t.First, p.curToken.Position)
 		}
 
@@ -1021,7 +1020,7 @@ func (p *Parser) parseConstantValue(typ Typ) (IConstant, error) {
 			return nil, err
 		}
 
-		if reflect.TypeOf(second.Typ()) != reflect.TypeOf(t.Second) {
+		if !EqualType(second.Typ(), t.Second) {
 			return nil, fmt.Errorf("pair second element of type %T does not match expected type %T at position %d", second.Typ(), t.Second, p.curToken.Position)
 		}
 

@@ -3,7 +3,6 @@ package cek
 import (
 	"fmt"
 	"math/big"
-	"reflect"
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
@@ -565,7 +564,7 @@ func unwrapList[T syn.Eval](
 	case *Constant:
 		switch c := v.Constant.(type) {
 		case *syn.ProtoList:
-			if typ != nil && !reflect.DeepEqual(typ, c.LTyp) {
+			if typ != nil && !syn.EqualType(typ, c.LTyp) {
 				return nil, fmt.Errorf("Value not a List of type %T", typ)
 			}
 
