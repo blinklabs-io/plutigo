@@ -5,7 +5,6 @@ import (
 	"log"
 	"math"
 	"math/big"
-	"reflect"
 	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -23,7 +22,6 @@ const DebugBudget = false
 var (
 	sharedBuiltinTable      = newBuiltins[syn.DeBruijn]()
 	sharedBuiltinValueTable = newBuiltinValueTable[syn.DeBruijn]()
-	deBruijnEvalType        = reflect.TypeFor[syn.DeBruijn]()
 )
 
 // Machine is only instantiated with syn.DeBruijn in this codebase. These
@@ -471,11 +469,12 @@ func NewMachine[T syn.Eval](
 	slippage uint32,
 	evalContext *EvalContext,
 ) *Machine[T] {
-	if reflect.TypeFor[T]() != deBruijnEvalType {
+	var zero T
+	if _, ok := any(zero).(syn.DeBruijn); !ok {
 		panic(
 			fmt.Sprintf(
-				"cek.NewMachine requires T == syn.DeBruijn, got %v",
-				reflect.TypeFor[T](),
+				"cek.NewMachine requires T == syn.DeBruijn, got %T",
+				any(zero),
 			),
 		)
 	}
@@ -603,7 +602,12 @@ func (m *Machine[T]) extendEnv(parent *Env[T], data Value[T]) *Env[T] {
 }
 
 func (m *Machine[T]) resetEnvArena() {
-	clearArenaChunks(m.envChunks, m.envChunkPos)
+	retainedUsed := m.envChunkPos
+	maxRetained := envRetainChunkCap * envChunkSize
+	if retainedUsed > maxRetained {
+		retainedUsed = maxRetained
+	}
+	clearArenaChunks(m.envChunks, retainedUsed)
 	if len(m.envChunks) > envRetainChunkCap {
 		retained := make([][]Env[T], envRetainChunkCap)
 		copy(retained, m.envChunks[:envRetainChunkCap])
