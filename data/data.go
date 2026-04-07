@@ -2,6 +2,7 @@ package data
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -36,6 +37,18 @@ type PlutusData interface {
 	fmt.Stringer
 }
 
+var (
+	sharedUseIndefFalse = false
+	sharedUseIndefTrue  = true
+)
+
+func useIndefPtr(useIndef bool) *bool {
+	if useIndef {
+		return &sharedUseIndefTrue
+	}
+	return &sharedUseIndefFalse
+}
+
 // Constr
 
 type Constr struct {
@@ -47,50 +60,16 @@ type Constr struct {
 func (Constr) isPlutusData() {}
 
 func (c *Constr) UnmarshalCBOR(data []byte) error {
-	var tmpTag cbor.RawTag
-	if err := cborUnmarshal(data, &tmpTag); err != nil {
+	tmpConstr, rest, err := decodeConstrFromData(data)
+	if err != nil {
 		return err
 	}
-	switch {
-	// Constr with tag 0..6.
-	case tmpTag.Number >= 121 && tmpTag.Number <= 127:
-		c.Tag = uint(tmpTag.Number) - 121
-		var tmpList List
-		if err := cborUnmarshal(tmpTag.Content, &tmpList); err != nil {
-			return err
-		}
-		c.Fields = tmpList.Items
-		c.useIndef = tmpList.useIndef
-	case tmpTag.Number >= 1280 && tmpTag.Number <= 1400:
-		c.Tag = uint(tmpTag.Number) - 1280 + 7
-		var tmpList List
-		if err := cborUnmarshal(tmpTag.Content, &tmpList); err != nil {
-			return err
-		}
-		c.Fields = tmpList.Items
-		c.useIndef = tmpList.useIndef
-	case tmpTag.Number == 102:
-		var tmpData struct {
-			_           struct{} `cbor:",toarray"`
-			Alternative uint64
-			FieldsRaw   cbor.RawMessage
-		}
-		if err := cborUnmarshal(tmpTag.Content, &tmpData); err != nil {
-			return err
-		}
-		c.Tag = uint(tmpData.Alternative)
-		var tmpList List
-		if err := cborUnmarshal(tmpData.FieldsRaw, &tmpList); err != nil {
-			return err
-		}
-		c.Fields = tmpList.Items
-		c.useIndef = tmpList.useIndef
-	default:
-		return fmt.Errorf(
-			"unknown CBOR tag for PlutusData constructor: %d",
-			tmpTag.Number,
-		)
+	if len(rest) > 0 {
+		return fmt.Errorf("unexpected %d trailing bytes", len(rest))
 	}
+	c.Tag = tmpConstr.Tag
+	c.Fields = tmpConstr.Fields
+	c.useIndef = tmpConstr.useIndef
 	return nil
 }
 
@@ -135,11 +114,7 @@ func (c Constr) Clone() PlutusData {
 	for i, field := range c.Fields {
 		tmpFields[i] = field.Clone()
 	}
-	var tmpIndef *bool
-	if c.useIndef != nil {
-		tmpIndef = new(bool)
-		*tmpIndef = *c.useIndef
-	}
+	tmpIndef := cloneUseIndef(c.useIndef)
 	return &Constr{Tag: c.Tag, Fields: tmpFields, useIndef: tmpIndef}
 }
 
@@ -181,7 +156,7 @@ func NewConstrDefIndef(
 ) PlutusData {
 	tmpFields := make([]PlutusData, len(fields))
 	copy(tmpFields, fields)
-	return &Constr{Tag: tag, Fields: tmpFields, useIndef: &useIndef}
+	return &Constr{Tag: tag, Fields: tmpFields, useIndef: useIndefPtr(useIndef)}
 }
 
 // encodeCBORArray encodes a slice of PlutusData items as a CBOR array.
@@ -240,67 +215,15 @@ type Map struct {
 func (Map) isPlutusData() {}
 
 func (m *Map) UnmarshalCBOR(data []byte) error {
-	// The below is a hack to work around our CBOR library not supporting preserving key
-	// order when decoding a map. We decode our map to determine its length, create a dummy
-	// list the same length as our map to determine the header size, and then decode each
-	// key/value pair individually. We use a pointer for the key to keep duplicates to get
-	// an accurate count for decoding
-	useIndef := (data[0] & CborIndefFlag) == CborIndefFlag
-	var tmpData map[*cbor.RawMessage]cbor.RawMessage
-	if err := cborUnmarshal(data, &tmpData); err != nil {
+	tmpMap, rest, err := decodeMapNext(data)
+	if err != nil {
 		return err
 	}
-	if useIndef {
-		// Strip off indef-length map header byte
-		data = data[1:]
-	} else {
-		// Create dummy list of same length to determine map header length
-		tmpList := make([]bool, len(tmpData))
-		tmpListRaw, err := cborMarshal(tmpList)
-		if err != nil {
-			return err
-		}
-		tmpListHeader := tmpListRaw[0 : len(tmpListRaw)-len(tmpData)]
-		// Strip off map header bytes
-		data = data[len(tmpListHeader):]
+	if len(rest) > 0 {
+		return fmt.Errorf("unexpected %d trailing bytes", len(rest))
 	}
-	pairs := make([][2]PlutusData, 0, len(tmpData))
-	var rawKey, rawVal cbor.RawMessage
-	// Read key/value pairs until we have no data left
-	var err error
-	for len(data) > 0 {
-		// Check for "break" at end of indefinite-length map
-		if data[0] == 0xFF {
-			break
-		}
-		// Read raw key/value bytes
-		data, err = cbor.UnmarshalFirst(data, &rawKey)
-		if err != nil {
-			return err
-		}
-		data, err = cbor.UnmarshalFirst(data, &rawVal)
-		if err != nil {
-			return err
-		}
-		// Decode key/value
-		tmpKey, err := decode(rawKey)
-		if err != nil {
-			return err
-		}
-		tmpVal, err := decode(rawVal)
-		if err != nil {
-			return err
-		}
-		pairs = append(
-			pairs,
-			[2]PlutusData{
-				tmpKey,
-				tmpVal,
-			},
-		)
-	}
-	m.Pairs = pairs
-	m.useIndef = &useIndef
+	m.Pairs = tmpMap.Pairs
+	m.useIndef = tmpMap.useIndef
 	return nil
 }
 
@@ -362,11 +285,7 @@ func (m Map) Clone() PlutusData {
 			pair[1].Clone(),
 		}
 	}
-	var tmpIndef *bool
-	if m.useIndef != nil {
-		tmpIndef = new(bool)
-		*tmpIndef = *m.useIndef
-	}
+	tmpIndef := cloneUseIndef(m.useIndef)
 	return &Map{Pairs: tmpPairs, useIndef: tmpIndef}
 }
 
@@ -404,7 +323,7 @@ func NewMap(pairs [][2]PlutusData) PlutusData {
 func NewMapDefIndef(useIndef bool, pairs [][2]PlutusData) PlutusData {
 	tmpPairs := make([][2]PlutusData, len(pairs))
 	copy(tmpPairs, pairs)
-	return &Map{Pairs: tmpPairs, useIndef: &useIndef}
+	return &Map{Pairs: tmpPairs, useIndef: useIndefPtr(useIndef)}
 }
 
 // Integer
@@ -526,22 +445,216 @@ type List struct {
 func (List) isPlutusData() {}
 
 func (l *List) UnmarshalCBOR(data []byte) error {
-	useIndef := (data[0] & CborIndefFlag) == CborIndefFlag
-	var tmpData []cbor.RawMessage
-	if err := cborUnmarshal(data, &tmpData); err != nil {
+	tmpList, rest, err := decodeListNext(data)
+	if err != nil {
 		return err
 	}
-	tmpItems := make([]PlutusData, len(tmpData))
-	for i, item := range tmpData {
-		tmp, err := decode(item)
+	if len(rest) > 0 {
+		return fmt.Errorf("unexpected %d trailing bytes", len(rest))
+	}
+	l.Items = tmpList.Items
+	l.useIndef = tmpList.useIndef
+	return nil
+}
+
+func decodeConstrFromData(data []byte) (*Constr, []byte, error) {
+	tagNumber, tagContent, err := decodeCBORTag(data)
+	if err != nil {
+		return nil, nil, err
+	}
+	return decodeConstrNext(tagNumber, tagContent)
+}
+
+func decodeConstrNext(tagNumber uint64, data []byte) (*Constr, []byte, error) {
+	switch {
+	case tagNumber >= 121 && tagNumber <= 127:
+		tmpFields, tmpUseIndef, rest, err := decodeListItemsNext(data)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
+		return &Constr{
+			Tag:      uint(tagNumber) - 121,
+			Fields:   tmpFields,
+			useIndef: tmpUseIndef,
+		}, rest, nil
+	case tagNumber >= 1280 && tagNumber <= 1400:
+		tmpFields, tmpUseIndef, rest, err := decodeListItemsNext(data)
+		if err != nil {
+			return nil, nil, err
+		}
+		return &Constr{
+			Tag:      uint(tagNumber) - 1280 + 7,
+			Fields:   tmpFields,
+			useIndef: tmpUseIndef,
+		}, rest, nil
+	case tagNumber == 102:
+		fieldCount, rest, useIndef, err := decodeCBORArray(data)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !useIndef && fieldCount != 2 {
+			return nil, nil, fmt.Errorf("constructor 102 outer array has %d items, want 2", fieldCount)
+		}
+
+		alternative, next, err := decodeCBORUint(rest)
+		if err != nil {
+			return nil, nil, err
+		}
+		rest = next
+
+		tmpFields, tmpUseIndef, next, err := decodeListItemsNext(rest)
+		if err != nil {
+			return nil, nil, err
+		}
+		rest = next
+
+		if useIndef {
+			if len(rest) == 0 || rest[0] != 0xff {
+				return nil, nil, errors.New("unterminated indefinite-length CBOR array")
+			}
+			rest = rest[1:]
+		}
+
+		return &Constr{
+			Tag:      uint(alternative),
+			Fields:   tmpFields,
+			useIndef: tmpUseIndef,
+		}, rest, nil
+	default:
+		return nil, nil, fmt.Errorf(
+			"unknown CBOR tag for PlutusData constructor: %d",
+			tagNumber,
+		)
+	}
+}
+
+func decodeMapNext(data []byte) (*Map, []byte, error) {
+	pairCount, rest, useIndef, err := decodeCBORMap(data)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var pairs [][2]PlutusData
+	if useIndef {
+		pairs = make([][2]PlutusData, 0, 4)
+	} else {
+		pairs = make([][2]PlutusData, pairCount)
+	}
+
+	for i := 0; useIndef || i < pairCount; i++ {
+		if useIndef {
+			if len(rest) == 0 {
+				return nil, nil, errors.New("unterminated indefinite-length CBOR map")
+			}
+			if rest[0] == 0xff {
+				rest = rest[1:]
+				break
+			}
+		}
+
+		tmpKey, next, err := decodeNextPlutusData(rest)
+		if err != nil {
+			return nil, nil, err
+		}
+		rest = next
+
+		tmpVal, next, err := decodeNextPlutusData(rest)
+		if err != nil {
+			return nil, nil, err
+		}
+		rest = next
+
+		if useIndef {
+			pairs = append(pairs, [2]PlutusData{tmpKey, tmpVal})
+		} else {
+			pairs[i] = [2]PlutusData{tmpKey, tmpVal}
+		}
+	}
+
+	return &Map{Pairs: pairs, useIndef: useIndefPtr(useIndef)}, rest, nil
+}
+
+func decodeListNext(data []byte) (*List, []byte, error) {
+	tmpItems, tmpUseIndef, rest, err := decodeListItemsNext(data)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &List{Items: tmpItems, useIndef: tmpUseIndef}, rest, nil
+}
+
+func decodeListItemsNext(data []byte) ([]PlutusData, *bool, []byte, error) {
+	itemCount, rest, useIndef, err := decodeCBORArray(data)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	if !useIndef {
+		tmpItems, rest, err := decodeListItemsDefinite(itemCount, rest)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return tmpItems, useIndefPtr(false), rest, nil
+	}
+
+	var smallItems [4]PlutusData
+	var tmpItems []PlutusData
+	tmpLen := 0
+	for {
+		if len(rest) == 0 {
+			return nil, nil, nil, errors.New("unterminated indefinite-length CBOR array")
+		}
+		if rest[0] == 0xff {
+			rest = rest[1:]
+			break
+		}
+
+		tmp, next, err := decodeNextPlutusData(rest)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		rest = next
+
+		if tmpItems != nil {
+			if tmpLen == len(tmpItems) {
+				tmpItems = append(tmpItems, tmp)
+				tmpLen++
+				continue
+			}
+			tmpItems[tmpLen] = tmp
+			tmpLen++
+			continue
+		}
+		if tmpLen < len(smallItems) {
+			smallItems[tmpLen] = tmp
+			tmpLen++
+			continue
+		}
+		tmpItems = make([]PlutusData, tmpLen+1, tmpLen*2)
+		copy(tmpItems, smallItems[:tmpLen])
+		tmpItems[tmpLen] = tmp
+		tmpLen++
+	}
+
+	if tmpItems == nil {
+		tmpItems = make([]PlutusData, tmpLen)
+		copy(tmpItems, smallItems[:tmpLen])
+	} else {
+		tmpItems = tmpItems[:tmpLen]
+	}
+	return tmpItems, useIndefPtr(true), rest, nil
+}
+
+func decodeListItemsDefinite(itemCount int, rest []byte) ([]PlutusData, []byte, error) {
+	tmpItems := make([]PlutusData, itemCount)
+	for i := range itemCount {
+		tmp, next, err := decodeNextPlutusData(rest)
+		if err != nil {
+			return nil, nil, err
+		}
+		rest = next
 		tmpItems[i] = tmp
 	}
-	l.Items = tmpItems
-	l.useIndef = &useIndef
-	return nil
+	return tmpItems, rest, nil
 }
 
 func (l List) MarshalCBOR() ([]byte, error) {
@@ -565,11 +678,7 @@ func (l List) Clone() PlutusData {
 	for i, item := range l.Items {
 		tmpItems[i] = item.Clone()
 	}
-	var tmpIndef *bool
-	if l.useIndef != nil {
-		tmpIndef = new(bool)
-		*tmpIndef = *l.useIndef
-	}
+	tmpIndef := cloneUseIndef(l.useIndef)
 	return &List{Items: tmpItems, useIndef: tmpIndef}
 }
 
@@ -604,5 +713,12 @@ func NewList(items ...PlutusData) PlutusData {
 func NewListDefIndef(useIndef bool, items ...PlutusData) PlutusData {
 	tmpItems := make([]PlutusData, len(items))
 	copy(tmpItems, items)
-	return &List{Items: tmpItems, useIndef: &useIndef}
+	return &List{Items: tmpItems, useIndef: useIndefPtr(useIndef)}
+}
+
+func cloneUseIndef(useIndef *bool) *bool {
+	if useIndef == nil {
+		return nil
+	}
+	return useIndefPtr(*useIndef)
 }

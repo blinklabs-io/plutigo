@@ -85,6 +85,7 @@ func benchFlatFiles(b *testing.B, includeDecode, includeEval bool) {
 		// Register a sub-benchmark for this file.
 		b.Run(benchmarkName, func(b *testing.B) {
 			var machine *cek.Machine[syn.DeBruijn]
+			var decoder *syn.DeBruijnDecoder
 			if includeEval {
 				// Reuse one machine per file so eval benchmarks measure steady-state
 				// execution, while decode benchmarks still decode inside the loop.
@@ -94,12 +95,15 @@ func benchFlatFiles(b *testing.B, includeDecode, includeEval bool) {
 					evalContext,
 				)
 			}
+			if includeDecode {
+				decoder = syn.NewDeBruijnDecoder()
+			}
 
 			for b.Loop() {
 				program := decodedProgram
 				if includeDecode {
 					var decodeErr error
-					program, decodeErr = syn.Decode[syn.DeBruijn](content)
+					program, decodeErr = decoder.Decode(content)
 					if decodeErr != nil {
 						b.Fatalf("decode error: %v", decodeErr)
 					}
