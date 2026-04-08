@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"math/big"
+	"sync"
 
 	"github.com/blinklabs-io/plutigo/builtin"
+	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
@@ -35,6 +37,8 @@ var (
 		Constant: &syn.Unit{},
 	}
 	cachedIntConstants = buildCachedIntConstants()
+	sharedDynamicIntMu sync.RWMutex
+	sharedDynamicInts  = make(map[int64]*Constant, int64ConstantCacheCap)
 )
 
 func boolConstant(v bool) *Constant {
@@ -50,6 +54,10 @@ func int64Constant(v int64) *Constant {
 	if v >= cachedIntMin && v <= cachedIntMax {
 		return cachedIntConstants[v-cachedIntMin]
 	}
+	return newDynamicIntConstant(v)
+}
+
+func newDynamicIntConstant(v int64) *Constant {
 	integer := &syn.Integer{}
 	integer.SetInner(big.NewInt(v))
 	return &Constant{
@@ -57,18 +65,45 @@ func int64Constant(v int64) *Constant {
 	}
 }
 
+func loadSharedDynamicIntConstant(v int64) *Constant {
+	sharedDynamicIntMu.RLock()
+	cached := sharedDynamicInts[v]
+	sharedDynamicIntMu.RUnlock()
+	return cached
+}
+
+func storeSharedDynamicIntConstant(v int64, constant *Constant) *Constant {
+	sharedDynamicIntMu.Lock()
+	defer sharedDynamicIntMu.Unlock()
+	if cached := sharedDynamicInts[v]; cached != nil {
+		return cached
+	}
+	if len(sharedDynamicInts) >= int64ConstantCacheCap {
+		return nil
+	}
+	sharedDynamicInts[v] = constant
+	return constant
+}
+
 func (m *Machine[T]) int64Constant(v int64) *Constant {
 	if v >= cachedIntMin && v <= cachedIntMax {
 		return cachedIntConstants[v-cachedIntMin]
 	}
-	if cached := m.dynamicIntConstants[v]; cached != nil {
+	if cached := loadSharedDynamicIntConstant(v); cached != nil {
 		return cached
 	}
+	if m.dynamicIntConstants != nil {
+		if cached := m.dynamicIntConstants[v]; cached != nil {
+			return cached
+		}
+	}
 
-	integer := &syn.Integer{}
-	integer.SetInner(big.NewInt(v))
-	constant := &Constant{
-		Constant: integer,
+	constant := newDynamicIntConstant(v)
+	if shared := storeSharedDynamicIntConstant(v, constant); shared != nil {
+		return shared
+	}
+	if m.dynamicIntConstants == nil {
+		m.dynamicIntConstants = make(map[int64]*Constant, 64)
 	}
 	if len(m.dynamicIntConstants) < int64ConstantCacheCap {
 		m.dynamicIntConstants[v] = constant
@@ -76,7 +111,7 @@ func (m *Machine[T]) int64Constant(v int64) *Constant {
 	return constant
 }
 
-func machineConstantValue[T syn.Eval](m *Machine[T], constant syn.IConstant) *Constant {
+func machineConstantValue[T syn.Eval](m *Machine[T], constant syn.IConstant) Value[T] {
 	switch c := constant.(type) {
 	case *syn.Bool:
 		return boolConstant(c.Inner)
@@ -107,6 +142,71 @@ func (c Constant) toExMem() ExMem {
 	return iconstantExMem(c.Constant)()
 }
 
+type dataListValue[T syn.Eval] struct {
+	items []data.PlutusData
+}
+
+func (d dataListValue[T]) String() string {
+	return fmt.Sprintf("DataList[%d]", len(d.items))
+}
+
+func (dataListValue[T]) isValue() {}
+
+func (d dataListValue[T]) toExMem() ExMem {
+	acc := ExMem(NilCost)
+	for _, item := range d.items {
+		acc += dataExMem(item)() + ConsCost
+	}
+	return acc
+}
+
+type dataValue[T syn.Eval] struct {
+	item data.PlutusData
+}
+
+func (d dataValue[T]) String() string {
+	return fmt.Sprintf("%v", d.item)
+}
+
+func (dataValue[T]) isValue() {}
+
+func (d dataValue[T]) toExMem() ExMem {
+	return dataExMem(d.item)()
+}
+
+type dataMapValue[T syn.Eval] struct {
+	items [][2]data.PlutusData
+}
+
+func (d dataMapValue[T]) String() string {
+	return fmt.Sprintf("DataMapList[%d]", len(d.items))
+}
+
+func (dataMapValue[T]) isValue() {}
+
+func (d dataMapValue[T]) toExMem() ExMem {
+	acc := ExMem(NilCost)
+	for _, item := range d.items {
+		acc += ExMem(PairCost) + dataExMem(item[0])() + dataExMem(item[1])() + ConsCost
+	}
+	return acc
+}
+
+type pairValue[T syn.Eval] struct {
+	first  Value[T]
+	second Value[T]
+}
+
+func (p pairValue[T]) String() string {
+	return fmt.Sprintf("Pair[%T,%T]", p.first, p.second)
+}
+
+func (pairValue[T]) isValue() {}
+
+func (p pairValue[T]) toExMem() ExMem {
+	return ExMem(PairCost) + p.first.toExMem() + p.second.toExMem()
+}
+
 func buildCachedIntConstants() []*Constant {
 	ret := make([]*Constant, cachedIntMax-cachedIntMin+1)
 	for i := int64(cachedIntMin); i <= cachedIntMax; i++ {
@@ -117,6 +217,63 @@ func buildCachedIntConstants() []*Constant {
 		}
 	}
 	return ret
+}
+
+func materializeDataListConstant(items []data.PlutusData) *syn.ProtoList {
+	list := make([]syn.IConstant, len(items))
+	for i, item := range items {
+		list[i] = &syn.Data{Inner: item}
+	}
+	return &syn.ProtoList{
+		LTyp: sharedDataType,
+		List: list,
+	}
+}
+
+func materializeDataMapConstant(items [][2]data.PlutusData) *syn.ProtoList {
+	list := make([]syn.IConstant, len(items))
+	for i, item := range items {
+		list[i] = &syn.ProtoPair{
+			FstType: sharedDataType,
+			SndType: sharedDataType,
+			First:   &syn.Data{Inner: item[0]},
+			Second:  &syn.Data{Inner: item[1]},
+		}
+	}
+	return &syn.ProtoList{
+		LTyp: sharedPairDataType,
+		List: list,
+	}
+}
+
+func materializeConstantValue[T syn.Eval](value Value[T]) (syn.IConstant, bool) {
+	switch v := value.(type) {
+	case *Constant:
+		return v.Constant, true
+	case *dataValue[T]:
+		return &syn.Data{Inner: v.item}, true
+	case *dataListValue[T]:
+		return materializeDataListConstant(v.items), true
+	case *dataMapValue[T]:
+		return materializeDataMapConstant(v.items), true
+	case *pairValue[T]:
+		first, ok := materializeConstantValue[T](v.first)
+		if !ok {
+			return nil, false
+		}
+		second, ok := materializeConstantValue[T](v.second)
+		if !ok {
+			return nil, false
+		}
+		return &syn.ProtoPair{
+			FstType: first.Typ(),
+			SndType: second.Typ(),
+			First:   first,
+			Second:  second,
+		}, true
+	default:
+		return nil, false
+	}
 }
 
 func cloneConstant(constant syn.IConstant) syn.IConstant {

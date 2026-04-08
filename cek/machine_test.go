@@ -2,12 +2,21 @@ package cek
 
 import (
 	"math/big"
+	"strings"
 	"testing"
 	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 )
+
+type unsupportedDischargeValue struct{}
+
+func (unsupportedDischargeValue) String() string { return "unsupportedDischargeValue" }
+
+func (unsupportedDischargeValue) toExMem() ExMem { return 0 }
+
+func (unsupportedDischargeValue) isValue() {}
 
 func TestSmokeBuild(t *testing.T) {
 	// Ensure the package builds and a CEK machine can be allocated.
@@ -327,5 +336,18 @@ func TestRunResetsFrameStackAcrossInvocations(t *testing.T) {
 	}
 	if hidden[0].value != nil || hidden[0].env != nil || hidden[0].term != nil {
 		t.Fatalf("frameStack[0] retained stale data: %+v", hidden[0])
+	}
+}
+
+func TestDischargeValueUnsupportedValueReturnsInternalError(t *testing.T) {
+	_, err := dischargeValue[syn.DeBruijn](unsupportedDischargeValue{})
+	if err == nil {
+		t.Fatal("expected internal error for unsupported value kind")
+	}
+	if !IsInternalError(err) {
+		t.Fatalf("expected InternalError, got %T", err)
+	}
+	if !strings.Contains(err.Error(), "unsupportedDischargeValue") {
+		t.Fatalf("expected error to mention unsupported value type, got %q", err.Error())
 	}
 }

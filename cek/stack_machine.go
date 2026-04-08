@@ -1035,6 +1035,60 @@ func (m *Machine[T]) caseEvaluateStack(
 
 		m.pushApplyFrames(args)
 		return branches[tag], env, nil, false, nil
+	case *dataListValue[T]:
+		if len(branches) < 1 || len(branches) > 2 {
+			return nil, nil, nil, false, &ScriptError{
+				Code:    ErrCodeInvalidBranchCount,
+				Message: "InvalidCaseBranchCount",
+			}
+		}
+		if len(v.items) == 0 {
+			if !indexExists(branches, 1) {
+				return nil, nil, nil, false, &ScriptError{
+					Code:    ErrCodeMissingCaseBranch,
+					Message: "MissingCaseBranch",
+				}
+			}
+			return branches[1], env, nil, false, nil
+		}
+		args := m.allocValueElems(2)
+		args[0] = m.allocDataValue(v.items[0])
+		args[1] = m.allocDataListValue(v.items[1:])
+		m.pushApplyFrames(args)
+		return branches[0], env, nil, false, nil
+	case *dataMapValue[T]:
+		if len(branches) < 1 || len(branches) > 2 {
+			return nil, nil, nil, false, &ScriptError{
+				Code:    ErrCodeInvalidBranchCount,
+				Message: "InvalidCaseBranchCount",
+			}
+		}
+		if len(v.items) == 0 {
+			if !indexExists(branches, 1) {
+				return nil, nil, nil, false, &ScriptError{
+					Code:    ErrCodeMissingCaseBranch,
+					Message: "MissingCaseBranch",
+				}
+			}
+			return branches[1], env, nil, false, nil
+		}
+		args := m.allocValueElems(2)
+		args[0] = m.allocDataPairValue(v.items[0][0], v.items[0][1])
+		args[1] = m.allocDataMapValue(v.items[1:])
+		m.pushApplyFrames(args)
+		return branches[0], env, nil, false, nil
+	case *pairValue[T]:
+		if len(branches) != 1 {
+			return nil, nil, nil, false, &ScriptError{
+				Code:    ErrCodeInvalidBranchCount,
+				Message: "InvalidCaseBranchCount",
+			}
+		}
+		args := m.allocValueElems(2)
+		args[0] = v.first
+		args[1] = v.second
+		m.pushApplyFrames(args)
+		return branches[0], env, nil, false, nil
 	default:
 		return nil, nil, nil, false, &TypeError{
 			Code:    ErrCodeNonConstrScrutinized,
