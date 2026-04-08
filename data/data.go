@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 
 	"github.com/fxamacker/cbor/v2"
@@ -500,6 +501,9 @@ func decodeConstrNext(tagNumber uint64, data []byte) (*Constr, []byte, error) {
 		if err != nil {
 			return nil, nil, err
 		}
+		if alternative > math.MaxUint {
+			return nil, nil, fmt.Errorf("constructor alternative too large: %d", alternative)
+		}
 		rest = next
 
 		tmpFields, tmpUseIndef, next, err := decodeListItemsNext(rest)
@@ -538,6 +542,10 @@ func decodeMapNext(data []byte) (*Map, []byte, error) {
 	if useIndef {
 		pairs = make([][2]PlutusData, 0, 4)
 	} else {
+		// Each pair needs at least 2 bytes (one per key/value CBOR head).
+		if pairCount > len(rest)/2 {
+			return nil, nil, fmt.Errorf("CBOR map claims %d pairs but only %d bytes remain", pairCount, len(rest))
+		}
 		pairs = make([][2]PlutusData, pairCount)
 	}
 
@@ -645,6 +653,10 @@ func decodeListItemsNext(data []byte) ([]PlutusData, *bool, []byte, error) {
 }
 
 func decodeListItemsDefinite(itemCount int, rest []byte) ([]PlutusData, []byte, error) {
+	// Each item needs at least 1 byte for a CBOR head.
+	if itemCount > len(rest) {
+		return nil, nil, fmt.Errorf("CBOR array claims %d items but only %d bytes remain", itemCount, len(rest))
+	}
 	tmpItems := make([]PlutusData, itemCount)
 	for i := range itemCount {
 		tmp, next, err := decodeNextPlutusData(rest)
