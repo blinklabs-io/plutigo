@@ -5,7 +5,7 @@
 - Date: 2026-04-08
 - Version: v0.1.3
 
-Summary: This release includes streaming `CBOR` decoding utilities, improved `CBOR` parsing validation, and improved `DeBruijn` decoding performance and type-checking correctness.
+Summary: This release includes streaming CBOR decoding utilities, improved CBOR parsing validation, and refined DeBruijn decoding performance and type checking correctness.
 
 ### New Features
 
@@ -13,12 +13,12 @@ Summary: This release includes streaming `CBOR` decoding utilities, improved `CB
 
 ### Bug Fixes
 
-- Fixed `CBOR` constructor, `map`, and `array` parsing to reject invalid inputs earlier and prevent out-of-bounds behavior.
-- Fixed type equality and `DeBruijn` type checking behavior to avoid incorrect comparisons and excessive environment clearing.
+- Fixed CBOR constructor, `map`, and `array` parsing to reject invalid inputs earlier and prevent out-of-bounds behavior.
+- Fixed type equality and DeBruijn type checking behavior to avoid incorrect comparisons and excessive environment clearing.
 
 ### Performance
 
-- Improved `DeBruijn` decoding throughput and reduced allocation pressure by reusing an arena-backed decoder.
+- Improved DeBruijn decoding throughput and reduced allocation pressure by reusing an arena-backed decoder.
 
 ### Additional Changes
 
