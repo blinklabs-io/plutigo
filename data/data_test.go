@@ -1,6 +1,7 @@
 package data
 
 import (
+	"bytes"
 	"encoding/hex"
 	"math/big"
 	"reflect"
@@ -30,6 +31,24 @@ var testDefs = []struct {
 	{
 		Data:    NewInteger(big.NewInt(-9223372036854775808)),
 		CborHex: "3b7fffffffffffffff",
+	},
+	{
+		Data: func() PlutusData {
+			v := big.NewInt(1)
+			v.Lsh(v, 64)
+			return NewInteger(v)
+		}(),
+		CborHex: "c249010000000000000000",
+	},
+	{
+		Data: func() PlutusData {
+			v := big.NewInt(1)
+			v.Lsh(v, 64)
+			v.Add(v, big.NewInt(1))
+			v.Neg(v)
+			return NewInteger(v)
+		}(),
+		CborHex: "c349010000000000000000",
 	},
 	{
 		Data: NewListDefIndef(
@@ -267,11 +286,11 @@ var testDefs = []struct {
 
 func TestUseIndefHonored(t *testing.T) {
 	tests := []struct {
-		name      string
-		data      PlutusData
-		byteIdx   int
-		wantByte  byte
-		minLen    int
+		name     string
+		data     PlutusData
+		byteIdx  int
+		wantByte byte
+		minLen   int
 	}{
 		{
 			name:     "list definite non-empty",
@@ -413,6 +432,173 @@ func TestPlutusDataDecode(t *testing.T) {
 				testDef.Data,
 			)
 		}
+	}
+}
+
+func TestDecodeCBORTag(t *testing.T) {
+	tests := []struct {
+		name        string
+		hexInput    string
+		wantTag     uint64
+		wantContent string
+	}{
+		{
+			name:        "small tag",
+			hexInput:    "d87980",
+			wantTag:     121,
+			wantContent: "80",
+		},
+		{
+			name:        "two-byte tag",
+			hexInput:    "d9050080",
+			wantTag:     1280,
+			wantContent: "80",
+		},
+		{
+			name:        "tag 102 array payload",
+			hexInput:    "d866821903e780",
+			wantTag:     102,
+			wantContent: "821903e780",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input, err := hex.DecodeString(tt.hexInput)
+			if err != nil {
+				t.Fatalf("decode hex: %v", err)
+			}
+
+			gotTag, gotContent, err := decodeCBORTag(input)
+			if err != nil {
+				t.Fatalf("decodeCBORTag() error = %v", err)
+			}
+			if gotTag != tt.wantTag {
+				t.Fatalf("decodeCBORTag() tag = %d, want %d", gotTag, tt.wantTag)
+			}
+			if hex.EncodeToString(gotContent) != tt.wantContent {
+				t.Fatalf(
+					"decodeCBORTag() content = %x, want %s",
+					gotContent,
+					tt.wantContent,
+				)
+			}
+		})
+	}
+}
+
+func TestDecodeCBORArray(t *testing.T) {
+	tests := []struct {
+		name      string
+		hexInput  string
+		wantCount int
+		wantRest  string
+		wantIndef bool
+	}{
+		{
+			name:      "definite array",
+			hexInput:  "820102",
+			wantCount: 2,
+			wantRest:  "0102",
+		},
+		{
+			name:      "indefinite array",
+			hexInput:  "9f0102ff",
+			wantRest:  "0102ff",
+			wantIndef: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input, err := hex.DecodeString(tt.hexInput)
+			if err != nil {
+				t.Fatalf("decode hex: %v", err)
+			}
+
+			gotCount, gotRest, gotIndef, err := decodeCBORArray(input)
+			if err != nil {
+				t.Fatalf("decodeCBORArray() error = %v", err)
+			}
+			if gotCount != tt.wantCount {
+				t.Fatalf("decodeCBORArray() count = %d, want %d", gotCount, tt.wantCount)
+			}
+			if hex.EncodeToString(gotRest) != tt.wantRest {
+				t.Fatalf("decodeCBORArray() rest = %x, want %s", gotRest, tt.wantRest)
+			}
+			if gotIndef != tt.wantIndef {
+				t.Fatalf(
+					"decodeCBORArray() indef = %v, want %v",
+					gotIndef,
+					tt.wantIndef,
+				)
+			}
+		})
+	}
+}
+
+func TestSplitCBORItem(t *testing.T) {
+	tests := []struct {
+		name     string
+		hexInput string
+		wantItem string
+		wantRest string
+	}{
+		{
+			name:     "small integer",
+			hexInput: "0102",
+			wantItem: "01",
+			wantRest: "02",
+		},
+		{
+			name:     "constructor tag with fields",
+			hexInput: "d8799f0102ff03",
+			wantItem: "d8799f0102ff",
+			wantRest: "03",
+		},
+		{
+			name:     "indefinite bytestring",
+			hexInput: "5f4201024103ff04",
+			wantItem: "5f4201024103ff",
+			wantRest: "04",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input, err := hex.DecodeString(tt.hexInput)
+			if err != nil {
+				t.Fatalf("decode hex: %v", err)
+			}
+
+			gotItem, gotRest, err := splitCBORItem(input)
+			if err != nil {
+				t.Fatalf("splitCBORItem() error = %v", err)
+			}
+			if hex.EncodeToString(gotItem) != tt.wantItem {
+				t.Fatalf("splitCBORItem() item = %x, want %s", gotItem, tt.wantItem)
+			}
+			if hex.EncodeToString(gotRest) != tt.wantRest {
+				t.Fatalf("splitCBORItem() rest = %x, want %s", gotRest, tt.wantRest)
+			}
+		})
+	}
+}
+
+func TestByteStringUnmarshalCBORIndefinite(t *testing.T) {
+	original := bytes.Repeat([]byte{0xab}, 65)
+	encoded, err := ByteString{Inner: original}.MarshalCBOR()
+	if err != nil {
+		t.Fatalf("marshal bytestring: %v", err)
+	}
+
+	var decoded ByteString
+	if err := decoded.UnmarshalCBOR(encoded); err != nil {
+		t.Fatalf("unmarshal bytestring: %v", err)
+	}
+
+	if !bytes.Equal(decoded.Inner, original) {
+		t.Fatalf("decoded bytes mismatch")
 	}
 }
 

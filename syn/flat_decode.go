@@ -12,7 +12,30 @@ import (
 	"github.com/blinklabs-io/plutigo/lang"
 )
 
-const decodeTermChunkSize = 384
+const (
+	decodeTermChunkSize  = 384
+	decodeRetainVarCap   = 2
+	decodeRetainApplyCap = 2
+)
+
+type DeBruijnDecoder struct {
+	decoder decoder
+	arena   termArena[DeBruijn]
+}
+
+func NewDeBruijnDecoder() *DeBruijnDecoder {
+	return &DeBruijnDecoder{}
+}
+
+func DecodeDeBruijn(bytes []byte) (*Program[DeBruijn], error) {
+	return NewDeBruijnDecoder().Decode(bytes)
+}
+
+func (d *DeBruijnDecoder) Decode(bytes []byte) (*Program[DeBruijn], error) {
+	d.decoder.reset(bytes)
+	d.arena.reset()
+	return decodeDeBruijnProgram(&d.decoder, &d.arena)
+}
 
 func Decode[T Binder](bytes []byte) (*Program[T], error) {
 	d := newDecoder(bytes)
@@ -57,12 +80,140 @@ func Decode[T Binder](bytes []byte) (*Program[T], error) {
 	return program, nil
 }
 
+func decodeDeBruijnProgram(
+	d *decoder,
+	arena *termArena[DeBruijn],
+) (*Program[DeBruijn], error) {
+	major, err := d.word()
+	if err != nil {
+		return nil, err
+	}
+
+	minor, err := d.word()
+	if err != nil {
+		return nil, err
+	}
+
+	patch, err := d.word()
+	if err != nil {
+		return nil, err
+	}
+
+	terms, err := decodeTermDeBruijnWithArena(d, arena)
+	if err != nil {
+		return nil, err
+	}
+
+	if major > math.MaxUint32 || minor > math.MaxUint32 ||
+		patch > math.MaxUint32 {
+		return nil, errors.New("version numbers too large")
+	}
+
+	program := &Program[DeBruijn]{
+		Version: lang.LanguageVersion{uint32(major), uint32(minor), uint32(patch)},
+		Term:    terms,
+	}
+
+	if err := d.filler(); err != nil {
+		return nil, err
+	}
+
+	return program, nil
+}
+
 func DecodeTerm[T Binder](d *decoder) (Term[T], error) {
 	return decodeTermWithArena(d, newTermArena[T]())
 }
 
+func decodeTermDeBruijnWithArena(
+	d *decoder,
+	arena *termArena[DeBruijn],
+) (Term[DeBruijn], error) {
+	tag, err := d.bits4()
+	if err != nil {
+		return nil, err
+	}
+
+	switch tag {
+	case VarTag:
+		name, err := decodeDeBruijnBinder(d)
+		if err != nil {
+			return nil, err
+		}
+		return arena.allocVar(name), nil
+	case DelayTag:
+		t, err := decodeTermDeBruijnWithArena(d, arena)
+		if err != nil {
+			return nil, err
+		}
+		return arena.allocDelay(t), nil
+	case LambdaTag:
+		t, err := decodeTermDeBruijnWithArena(d, arena)
+		if err != nil {
+			return nil, err
+		}
+		return arena.allocLambda(DeBruijn(0), t), nil
+	case ApplyTag:
+		function, err := decodeTermDeBruijnWithArena(d, arena)
+		if err != nil {
+			return nil, err
+		}
+		argument, err := decodeTermDeBruijnWithArena(d, arena)
+		if err != nil {
+			return nil, err
+		}
+		return arena.allocApply(function, argument), nil
+	case ConstantTag:
+		constant, err := DecodeConstant(d)
+		if err != nil {
+			return nil, err
+		}
+		return arena.allocConstant(constant), nil
+	case ForceTag:
+		t, err := decodeTermDeBruijnWithArena(d, arena)
+		if err != nil {
+			return nil, err
+		}
+		return arena.allocForce(t), nil
+	case ErrorTag:
+		return arena.allocError(), nil
+	case BuiltinTag:
+		builtinTag, err := d.bits7()
+		if err != nil {
+			return nil, err
+		}
+		fn, err := builtin.FromByte(builtinTag)
+		if err != nil {
+			return nil, err
+		}
+		return arena.allocBuiltin(fn), nil
+	case ConstrTag:
+		constrTag, err := d.word()
+		if err != nil {
+			return nil, err
+		}
+		fields, err := decodeTermListDeBruijnWithArena(d, arena)
+		if err != nil {
+			return nil, err
+		}
+		return arena.allocConstr(constrTag, fields), nil
+	case CaseTag:
+		constr, err := decodeTermDeBruijnWithArena(d, arena)
+		if err != nil {
+			return nil, err
+		}
+		branches, err := decodeTermListDeBruijnWithArena(d, arena)
+		if err != nil {
+			return nil, err
+		}
+		return arena.allocCase(constr, branches), nil
+	default:
+		return nil, fmt.Errorf("invalid term tag: %d", tag)
+	}
+}
+
 func decodeTermWithArena[T Binder](d *decoder, arena *termArena[T]) (Term[T], error) {
-	tag, e := d.bits8(TermTagWidth)
+	tag, e := d.bits4()
 	if e != nil {
 		return nil, e
 	}
@@ -125,7 +276,7 @@ func decodeTermWithArena[T Binder](d *decoder, arena *termArena[T]) (Term[T], er
 	case ErrorTag:
 		term = arena.allocError()
 	case BuiltinTag:
-		builtinTag, err := d.bits8(BuiltinTagWidth)
+		builtinTag, err := d.bits7()
 		if err != nil {
 			return nil, err
 		}
@@ -142,9 +293,7 @@ func decodeTermWithArena[T Binder](d *decoder, arena *termArena[T]) (Term[T], er
 			return nil, err
 		}
 
-		fields, err := DecodeList(d, func(d *decoder) (Term[T], error) {
-			return decodeTermWithArena[T](d, arena)
-		})
+		fields, err := decodeTermListWithArena(d, arena)
 		if err != nil {
 			return nil, err
 		}
@@ -156,9 +305,7 @@ func decodeTermWithArena[T Binder](d *decoder, arena *termArena[T]) (Term[T], er
 			return nil, err
 		}
 
-		branches, err := DecodeList(d, func(d *decoder) (Term[T], error) {
-			return decodeTermWithArena[T](d, arena)
-		})
+		branches, err := decodeTermListWithArena(d, arena)
 		if err != nil {
 			return nil, err
 		}
@@ -171,10 +318,62 @@ func decodeTermWithArena[T Binder](d *decoder, arena *termArena[T]) (Term[T], er
 	return term, nil
 }
 
+func decodeTermListWithArena[T Binder](d *decoder, arena *termArena[T]) ([]Term[T], error) {
+	result := make([]Term[T], 0, 4)
+
+	for {
+		bit, err := d.bit()
+		if err != nil {
+			return nil, err
+		}
+		if !bit {
+			break
+		}
+		item, err := decodeTermWithArena(d, arena)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+
+	return result, nil
+}
+
+func decodeTermListDeBruijnWithArena(
+	d *decoder,
+	arena *termArena[DeBruijn],
+) ([]Term[DeBruijn], error) {
+	result := make([]Term[DeBruijn], 0, 4)
+
+	for {
+		bit, err := d.bit()
+		if err != nil {
+			return nil, err
+		}
+		if !bit {
+			break
+		}
+		item, err := decodeTermDeBruijnWithArena(d, arena)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+
+	return result, nil
+}
+
 type arenaChunks[S any] struct {
 	chunks   [][]S
 	chunkIdx int
 	offset   int
+}
+
+func (a *arenaChunks[S]) used() int {
+	if len(a.chunks) == 0 {
+		return 0
+	}
+	return a.chunkIdx*decodeTermChunkSize + a.offset
 }
 
 func (a *arenaChunks[S]) alloc() *S {
@@ -194,6 +393,41 @@ func (a *arenaChunks[S]) alloc() *S {
 	return &chunk[0]
 }
 
+func (a *arenaChunks[S]) reset(retainCap int) {
+	used := a.used()
+	retained := len(a.chunks)
+	if retained > retainCap {
+		retained = retainCap
+	}
+	if used > 0 && retained > 0 {
+		remaining := used
+		maxRetained := retained * decodeTermChunkSize
+		if remaining > maxRetained {
+			remaining = maxRetained
+		}
+		for i := 0; i < retained && remaining > 0; i++ {
+			chunk := a.chunks[i]
+			if chunk == nil {
+				continue
+			}
+			clearCount := len(chunk)
+			if remaining < clearCount {
+				clearCount = remaining
+			}
+			clear(chunk[:clearCount])
+			remaining -= clearCount
+		}
+	}
+	if len(a.chunks) > retainCap {
+		for i := retainCap; i < len(a.chunks); i++ {
+			a.chunks[i] = nil
+		}
+		a.chunks = a.chunks[:retainCap]
+	}
+	a.chunkIdx = 0
+	a.offset = 0
+}
+
 type termArena[T Binder] struct {
 	vars      arenaChunks[Var[T]]
 	delays    arenaChunks[Delay[T]]
@@ -209,6 +443,19 @@ type termArena[T Binder] struct {
 
 func newTermArena[T Binder]() *termArena[T] {
 	return &termArena[T]{}
+}
+
+func (a *termArena[T]) reset() {
+	a.vars.reset(decodeRetainVarCap)
+	a.delays.reset(decodeRetainVarCap)
+	a.forces.reset(decodeRetainVarCap)
+	a.lambdas.reset(decodeRetainVarCap)
+	a.applies.reset(decodeRetainApplyCap)
+	a.constrs.reset(decodeRetainVarCap)
+	a.cases.reset(decodeRetainVarCap)
+	a.errors.reset(decodeRetainVarCap)
+	a.constants.reset(decodeRetainVarCap)
+	a.builtins.reset(decodeRetainVarCap)
 }
 
 func (a *termArena[T]) allocVar(name T) *Var[T] {
@@ -271,6 +518,17 @@ func (a *termArena[T]) allocBuiltin(fn builtin.DefaultFunction) *Builtin {
 	term := a.builtins.alloc()
 	term.DefaultFunction = fn
 	return term
+}
+
+func decodeDeBruijnBinder(d *decoder) (DeBruijn, error) {
+	i, err := d.word()
+	if err != nil {
+		return 0, err
+	}
+	if i > math.MaxInt {
+		return 0, fmt.Errorf("DeBruijn index too large: %d", i)
+	}
+	return DeBruijn(i), nil
 }
 
 func decodeVarBinder[T Binder](d *decoder) (T, error) {
@@ -600,7 +858,7 @@ func decodeConstantTags(d *decoder, tags *constantTagSeq) error {
 		if !bit {
 			return nil
 		}
-		tag, err := d.bits8(ConstTagWidth)
+		tag, err := d.bits4()
 		if err != nil {
 			return err
 		}
@@ -651,6 +909,12 @@ func newDecoder(bytes []byte) *decoder {
 		usedBits: 0,
 		pos:      0,
 	}
+}
+
+func (d *decoder) reset(bytes []byte) {
+	d.buffer = bytes
+	d.usedBits = 0
+	d.pos = 0
 }
 
 // Decodes a filler of max one byte size.
@@ -804,6 +1068,59 @@ func (d *decoder) bits8(numBits byte) (byte, error) {
 	return x, nil
 }
 
+func (d *decoder) bits4() (byte, error) {
+	if d.pos >= len(d.buffer) {
+		return 0, errors.New("end of buffer")
+	}
+
+	b0 := d.buffer[d.pos]
+	if d.usedBits == 0 {
+		d.usedBits = 4
+		return b0 >> 4, nil
+	}
+
+	unusedBits := 8 - d.usedBits
+	if unusedBits < 4 && d.pos+1 >= len(d.buffer) {
+		return 0, fmt.Errorf("NotEnoughBits(%d)", 4)
+	}
+
+	x := (b0 << byte(d.usedBits)) >> 4
+	if unusedBits < 4 {
+		x |= d.buffer[d.pos+1] >> (unusedBits + 4)
+	}
+
+	allUsedBits := d.usedBits + 4
+	d.usedBits = allUsedBits % 8
+	d.pos += int(allUsedBits / 8)
+	return x, nil
+}
+
+func (d *decoder) bits7() (byte, error) {
+	if d.pos >= len(d.buffer) {
+		return 0, errors.New("end of buffer")
+	}
+
+	b0 := d.buffer[d.pos]
+	if d.usedBits == 0 {
+		d.usedBits = 7
+		return b0 >> 1, nil
+	}
+
+	unusedBits := 8 - d.usedBits
+	if unusedBits < 7 && d.pos+1 >= len(d.buffer) {
+		return 0, fmt.Errorf("NotEnoughBits(%d)", 7)
+	}
+	x := (b0 << byte(d.usedBits)) >> 1
+	if unusedBits < 7 {
+		x |= d.buffer[d.pos+1] >> (unusedBits + 1)
+	}
+
+	allUsedBits := d.usedBits + 7
+	d.usedBits = allUsedBits % 8
+	d.pos += int(allUsedBits / 8)
+	return x, nil
+}
+
 func (d *decoder) dropBits(numBits uint) {
 	allUsedBits := int64(numBits) + d.usedBits //nolint:gosec
 
@@ -892,12 +1209,98 @@ func (d *decoder) byteArray() ([]byte, error) {
 // significant bits for the unsigned integer, continuing if the MSB is 1,
 // stopping if 0, then applies zigzag decoding to get the signed integer.
 func (d *decoder) integer() (*big.Int, error) {
-	word, err := d.bigWord()
+	small, word, err := d.bigWordSmall()
 	if err != nil {
 		return nil, err
 	}
 
+	if word == nil {
+		if smallInt, ok := unzigzagUint64(small); ok {
+			return big.NewInt(smallInt), nil
+		}
+		word = new(big.Int).SetUint64(small)
+	}
+
 	return unzigzag(word), nil
+}
+
+func (d *decoder) bigWordSmall() (uint64, *big.Int, error) {
+	var small uint64
+	var bigWord *big.Int
+	shift := uint(0)
+
+	if d.usedBits == 0 {
+		for {
+			if d.pos >= len(d.buffer) {
+				return 0, nil, errors.New("end of buffer")
+			}
+			word8 := d.buffer[d.pos]
+			d.pos++
+
+			chunk := uint64(word8 & 0x7F)
+			if bigWord == nil {
+				if canAccumulateUint64(chunk, shift) {
+					small |= chunk << shift
+				} else {
+					bigWord = new(big.Int).SetUint64(small)
+					if chunk != 0 {
+						part := new(big.Int).SetUint64(chunk)
+						part.Lsh(part, shift)
+						bigWord.Or(bigWord, part)
+					}
+				}
+			} else if chunk != 0 {
+				part := new(big.Int).SetUint64(chunk)
+				part.Lsh(part, shift)
+				bigWord.Or(bigWord, part)
+			}
+
+			shift += 7
+			if word8&0x80 == 0 {
+				return small, bigWord, nil
+			}
+		}
+	}
+
+	for {
+		word8, err := d.bits8(8)
+		if err != nil {
+			return 0, nil, err
+		}
+
+		chunk := uint64(word8 & 0x7F)
+		if bigWord == nil {
+			if canAccumulateUint64(chunk, shift) {
+				small |= chunk << shift
+			} else {
+				bigWord = new(big.Int).SetUint64(small)
+				if chunk != 0 {
+					part := new(big.Int).SetUint64(chunk)
+					part.Lsh(part, shift)
+					bigWord.Or(bigWord, part)
+				}
+			}
+		} else if chunk != 0 {
+			part := new(big.Int).SetUint64(chunk)
+			part.Lsh(part, shift)
+			bigWord.Or(bigWord, part)
+		}
+
+		shift += 7
+		if word8&0x80 == 0 {
+			return small, bigWord, nil
+		}
+	}
+}
+
+func canAccumulateUint64(chunk uint64, shift uint) bool {
+	if chunk == 0 {
+		return true
+	}
+	if shift >= 64 {
+		return false
+	}
+	return chunk <= (math.MaxUint64 >> shift)
 }
 
 // bigWord decodes a variable-length unsigned integer from the buffer.
@@ -947,6 +1350,17 @@ func (d *decoder) bigWord() (*big.Int, error) {
 	}
 
 	return finalWord, nil
+}
+
+func unzigzagUint64(n uint64) (int64, bool) {
+	shifted := n >> 1
+	if shifted > math.MaxInt64 {
+		return 0, false
+	}
+	if n&1 == 0 {
+		return int64(shifted), true
+	}
+	return -1 - int64(shifted), true
 }
 
 // Increment used bits by 1.

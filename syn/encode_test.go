@@ -110,6 +110,30 @@ func TestEncodeDecodeConstantTerm(t *testing.T) {
 			constant: &Integer{Inner: big.NewInt(99)},
 		},
 		{
+			name:     "constant_integer_max_int64",
+			constant: &Integer{Inner: big.NewInt(1<<63 - 1)},
+		},
+		{
+			name:     "constant_integer_min_int64",
+			constant: &Integer{Inner: big.NewInt(-1 << 63)},
+		},
+		{
+			name: "constant_integer_above_int64",
+			constant: &Integer{Inner: func() *big.Int {
+				v := big.NewInt(1)
+				return v.Lsh(v, 63)
+			}()},
+		},
+		{
+			name: "constant_integer_below_int64",
+			constant: &Integer{Inner: func() *big.Int {
+				v := big.NewInt(1)
+				v.Lsh(v, 63)
+				v.Neg(v)
+				return v.Sub(v, big.NewInt(1))
+			}()},
+		},
+		{
 			name:     "constant_string",
 			constant: &String{Inner: "hello"},
 		},
@@ -274,6 +298,15 @@ func TestFlatRoundtrip(t *testing.T) {
 		t.Fatalf("Decode failed: %v", err)
 	}
 
+	decodedFast, err := DecodeDeBruijn(encoded)
+	if err != nil {
+		t.Fatalf("DecodeDeBruijn failed: %v", err)
+	}
+
+	if !reflect.DeepEqual(decoded, decodedFast) {
+		t.Fatalf("DecodeDeBruijn mismatch.\nDecode: %+v\nFast: %+v", decoded, decodedFast)
+	}
+
 	reencoded, err := Encode(decoded)
 	if err != nil {
 		t.Fatalf("Re-encode failed: %v", err)
@@ -291,6 +324,54 @@ func TestFlatRoundtrip(t *testing.T) {
 				t.Logf("  ours: ...%s...", reHex[start:min(len(reHex), i+40)])
 				break
 			}
+		}
+	}
+}
+
+func TestDeBruijnDecoderReuse(t *testing.T) {
+	program := &Program[DeBruijn]{
+		Version: lang.LanguageVersionV3,
+		Term: &Apply[DeBruijn]{
+			Function: &Lambda[DeBruijn]{
+				ParameterName: DeBruijn(0),
+				Body: &Constr[DeBruijn]{
+					Tag: 1,
+					Fields: []Term[DeBruijn]{
+						&Var[DeBruijn]{Name: DeBruijn(1)},
+						&Constant{Con: &Data{Inner: &data.List{
+							Items: []data.PlutusData{
+								&data.Integer{Inner: big.NewInt(1)},
+								&data.ByteString{Inner: []byte{0xca, 0xfe}},
+							},
+						}}},
+					},
+				},
+			},
+			Argument: &Force[DeBruijn]{
+				Term: &Delay[DeBruijn]{
+					Term: &Builtin{DefaultFunction: builtin.IfThenElse},
+				},
+			},
+		},
+	}
+
+	encoded, err := Encode(program)
+	if err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	decoder := NewDeBruijnDecoder()
+	for i := 0; i < 2; i++ {
+		decoded, err := decoder.Decode(encoded)
+		if err != nil {
+			t.Fatalf("Decode %d failed: %v", i, err)
+		}
+		reencoded, err := Encode(decoded)
+		if err != nil {
+			t.Fatalf("Re-encode %d failed: %v", i, err)
+		}
+		if !bytes.Equal(encoded, reencoded) {
+			t.Fatalf("Decode %d roundtrip mismatch", i)
 		}
 	}
 }
