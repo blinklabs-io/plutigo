@@ -1,30 +1,28 @@
 # Release Notes
 
-## v0.1.3 - updates
+## v0.1.3 - cbor decoding and debruijn updates
 
 - Date: 2026-04-08
 - Version: v0.1.3
 
-Summary: This release includes the changes listed below.
+Summary: This release added streaming CBOR decoding helpers, tightened CBOR parsing validation, and improved DeBruijn decoding performance and type-checking correctness.
 
-```json
-{
-  "Additional Changes": [
-    "Updated release notes to include the `v0.1.2` entry for documentation completeness. The release notes were amended to add the `v0.1.2` section as part of the project’s changelog maintenance."
-  ],
-  "Bug Fixes": [
-    "Fixed CBOR constructor, map, and array parsing to reject invalid inputs earlier and prevent out-of-bounds behavior. The parser now enforces explicit size and bounds checks when decoding CBOR constructors and container types (`map`/`array`).",
-    "Fixed type equality and DeBruijn type checking behavior to avoid incorrect comparisons and overly aggressive environment clearing. The implementation replaced `reflect`-based type comparisons with a custom `EqualType` helper, capped environment chunk clearing, and updated the DeBruijn type check logic accordingly."
-  ],
-  "New Features": [
-    "Added streaming CBOR decoding utilities to support incremental parsing and container-aware `PlutusData` decoding. The update introduced helper APIs for streaming decode paths and implemented container-aware decoding behavior for `PlutusData`, with expanded test coverage for CBOR primitives and bytestrings."
-  ],
-  "Performance": [
-    "Improved DeBruijn decoding throughput and reduced allocation pressure by reusing an arena-backed decoder. The release added a reusable arena-based DeBruijn decoder with finer-grained bit and integer handling, and updated benchmarks/tests to exercise the new decoder."
-  ]
-}
+### New Features
 
-```
+- Added streaming CBOR decoding utilities to support incremental parsing and container-aware `PlutusData` decoding. The update introduced helper APIs for streaming decode paths and implemented container-aware decoding behavior for `PlutusData`, with expanded test coverage for CBOR primitives and bytestrings.
+
+### Bug Fixes
+
+- Fixed CBOR constructor, map, and array parsing to reject invalid inputs earlier and prevent out-of-bounds behavior. The parser now enforces explicit size and bounds checks when decoding CBOR constructors and container types (`map`/`array`).
+- Fixed type equality and DeBruijn type checking behavior to avoid incorrect comparisons and overly aggressive environment clearing. The implementation replaced `reflect`-based type comparisons with a custom `EqualType` helper, capped environment chunk clearing, and updated the DeBruijn type check logic accordingly.
+
+### Performance
+
+- Improved DeBruijn decoding throughput and reduced allocation pressure by reusing an arena-backed decoder. The release added a reusable arena-based DeBruijn decoder with finer-grained bit and integer handling, and updated benchmarks/tests to exercise the new decoder.
+
+### Additional Changes
+
+- Updated release notes to include the `v0.1.2` entry for documentation completeness. The release notes were amended to add the `v0.1.2` section as part of the project’s changelog maintenance.
 
 ## v0.1.2 - maintenance updates
 
