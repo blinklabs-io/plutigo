@@ -14,7 +14,7 @@ Summary: This release includes streaming `CBOR` decoding utilities, improved `CB
 ### Bug Fixes
 
 - Fixed `CBOR` constructor, `map`, and `array` parsing to reject invalid inputs earlier and prevent out-of-bounds behavior.
-- Fixed type equality and `DeBruijn` type checking behavior to avoid incorrect comparisons and overly aggressive environment clearing.
+- Fixed type equality and `DeBruijn` type checking behavior to avoid incorrect comparisons and excessive environment clearing.
 
 ### Performance
 
