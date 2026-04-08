@@ -1,24 +1,24 @@
 # Release Notes
 
-## v0.1.3 - cbor decoding and debruijn updates
+## v0.1.3 - CBOR decoding and DeBruijn updates
 
 - Date: 2026-04-08
 - Version: v0.1.3
 
-Summary: This release added streaming CBOR decoding helpers, tightened CBOR parsing validation, and improved DeBruijn decoding performance and type-checking correctness.
+Summary: This release includes streaming `CBOR` decoding utilities, improved `CBOR` parsing validation, and improved `DeBruijn` decoding performance and type-checking correctness.
 
 ### New Features
 
-- Added streaming CBOR decoding utilities to support incremental parsing and container-aware `PlutusData` decoding.
+- Added streaming `CBOR` decoding utilities to support incremental parsing and container-aware `PlutusData` decoding.
 
 ### Bug Fixes
 
-- Fixed CBOR constructor, map, and array parsing to reject invalid inputs earlier and prevent out-of-bounds behavior.
-- Fixed type equality and DeBruijn type checking behavior to avoid incorrect comparisons and overly aggressive environment clearing.
+- Fixed `CBOR` constructor, `map`, and `array` parsing to reject invalid inputs earlier and prevent out-of-bounds behavior.
+- Fixed type equality and `DeBruijn` type checking behavior to avoid incorrect comparisons and overly aggressive environment clearing.
 
 ### Performance
 
-- Improved DeBruijn decoding throughput and reduced allocation pressure by reusing an arena-backed decoder.
+- Improved `DeBruijn` decoding throughput and reduced allocation pressure by reusing an arena-backed decoder.
 
 ### Additional Changes
 
