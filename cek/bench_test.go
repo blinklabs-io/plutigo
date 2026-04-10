@@ -93,7 +93,11 @@ func BenchmarkDischarge(b *testing.B) {
 			b.ReportAllocs()
 
 			for b.Loop() {
-				benchmarkTermSink = dischargeValue[syn.DeBruijn](value)
+				discharged, err := dischargeValue[syn.DeBruijn](value)
+				if err != nil {
+					b.Fatalf("dischargeValue failed: %v", err)
+				}
+				benchmarkTermSink = discharged
 			}
 		})
 	}

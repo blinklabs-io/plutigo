@@ -2,6 +2,8 @@ package syn
 
 import "math/big"
 
+var bigOne = big.NewInt(1)
+
 // zigzag encodes a signed big.Int into an unsigned big.Int using zigzag encoding.
 func zigzag(n *big.Int) *big.Int {
 	result := new(big.Int)
@@ -22,7 +24,7 @@ func zigzag(n *big.Int) *big.Int {
 // unzigzag decodes an unsigned big.Int back to a signed big.Int using zigzag decoding.
 func unzigzag(n *big.Int) *big.Int {
 	// temp = n & 1
-	temp := new(big.Int).And(n, big.NewInt(1))
+	temp := new(big.Int).And(n, bigOne)
 
 	// (n >> 1) ^ (-temp)
 	result := new(big.Int).Rsh(n, 1)

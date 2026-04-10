@@ -17,56 +17,31 @@ func BenchmarkFlatFiles(b *testing.B) {
 	benchFlatFiles(b, true, true)
 }
 
+func BenchmarkFlatFilesFresh(b *testing.B) {
+	benchFlatFilesFresh(b, true, true)
+}
+
 func BenchmarkFlatFilesDecode(b *testing.B) {
 	benchFlatFiles(b, true, false)
+}
+
+func BenchmarkFlatFilesDecodeFresh(b *testing.B) {
+	benchFlatFilesFresh(b, true, false)
 }
 
 func BenchmarkFlatFilesEval(b *testing.B) {
 	benchFlatFiles(b, false, true)
 }
 
+func BenchmarkFlatFilesEvalFresh(b *testing.B) {
+	benchFlatFilesFresh(b, false, true)
+}
+
 func benchFlatFiles(b *testing.B, includeDecode, includeEval bool) {
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		b.Fatal("Could not get caller information")
-	}
-
-	testRoot := filepath.Join(filepath.Dir(filename), "bench")
-	testRoot = filepath.Clean(testRoot)
-
-	if _, err := os.Stat(testRoot); os.IsNotExist(err) {
-		b.Fatalf("Test directory not found: %s", testRoot)
-	}
-
-	// Get list of files in dataDir.
-	files, err := os.ReadDir(testRoot)
-	if err != nil {
-		b.Fatalf("failed to read directory %s: %v", testRoot, err)
-	}
-
-	for _, file := range files {
-		// Skip directories, only process files.
-		if file.IsDir() {
-			continue
-		}
-
-		// Get file path and name.
-		filePath := filepath.Join(testRoot, file.Name())
-
-		// Use file name (without extension) as benchmark name.
-		benchmarkName := strings.TrimSuffix(
-			file.Name(),
-			filepath.Ext(file.Name()),
-		)
-
-		// Load file contents before benchmark.
-		content, err := loadFile(filePath)
-		if err != nil {
-			b.Fatalf("failed to load file %s: %v", filePath, err)
-		}
-
+	forEachBenchFile(b, func(b *testing.B, benchmarkName string, content []byte) {
 		var decodedProgram *syn.Program[syn.DeBruijn]
 		if !includeDecode || includeEval {
+			var err error
 			decodedProgram, err = syn.Decode[syn.DeBruijn](content)
 			if err != nil {
 				b.Fatalf("decode error: %v", err)
@@ -112,13 +87,97 @@ func benchFlatFiles(b *testing.B, includeDecode, includeEval bool) {
 				if includeEval {
 					// Use an eval context with protocol major 200 so benchmark
 					// coverage includes every builtin without availability gating.
-					_, err = machine.Run(program.Term)
+					_, err := machine.Run(program.Term)
 					if err != nil {
 						b.Fatalf("eval error: %v", err)
 					}
 				}
 			}
 		})
+	})
+}
+
+func benchFlatFilesFresh(b *testing.B, includeDecode, includeEval bool) {
+	forEachBenchFile(b, func(b *testing.B, benchmarkName string, content []byte) {
+		var (
+			decodedProgram *syn.Program[syn.DeBruijn]
+			programVersion lang.LanguageVersion
+			evalContext    *cek.EvalContext
+		)
+		if includeEval {
+			var err error
+			decodedProgram, err = syn.Decode[syn.DeBruijn](content)
+			if err != nil {
+				b.Fatalf("decode error: %v", err)
+			}
+			programVersion = benchmarkProgramVersion(b, decodedProgram)
+			evalContext = benchmarkEvalContext(programVersion)
+		}
+
+		b.Run(benchmarkName, func(b *testing.B) {
+			for b.Loop() {
+				program := decodedProgram
+				if includeDecode {
+					var decodeErr error
+					program, decodeErr = syn.Decode[syn.DeBruijn](content)
+					if decodeErr != nil {
+						b.Fatalf("decode error: %v", decodeErr)
+					}
+				}
+
+				if includeEval {
+					machine := cek.NewMachine[syn.DeBruijn](
+						programVersion,
+						0,
+						evalContext,
+					)
+					_, err := machine.Run(program.Term)
+					if err != nil {
+						b.Fatalf("eval error: %v", err)
+					}
+				}
+			}
+		})
+	})
+}
+
+func forEachBenchFile(
+	b *testing.B,
+	fn func(b *testing.B, benchmarkName string, content []byte),
+) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		b.Fatal("Could not get caller information")
+	}
+
+	testRoot := filepath.Join(filepath.Dir(filename), "bench")
+	testRoot = filepath.Clean(testRoot)
+
+	if _, err := os.Stat(testRoot); os.IsNotExist(err) {
+		b.Fatalf("Test directory not found: %s", testRoot)
+	}
+
+	files, err := os.ReadDir(testRoot)
+	if err != nil {
+		b.Fatalf("failed to read directory %s: %v", testRoot, err)
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+
+		filePath := filepath.Join(testRoot, file.Name())
+		benchmarkName := strings.TrimSuffix(
+			file.Name(),
+			filepath.Ext(file.Name()),
+		)
+
+		content, err := loadFile(filePath)
+		if err != nil {
+			b.Fatalf("failed to load file %s: %v", filePath, err)
+		}
+		fn(b, benchmarkName, content)
 	}
 }
 

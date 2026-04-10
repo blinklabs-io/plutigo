@@ -129,6 +129,57 @@ func expectProtoPair(t *testing.T, constVal *Constant) *syn.ProtoPair {
 	return pair
 }
 
+func expectMaterializedConstant(
+	t *testing.T,
+	val Value[syn.DeBruijn],
+) syn.IConstant {
+	t.Helper()
+	constVal, ok := materializeConstantValue[syn.DeBruijn](val)
+	if !ok {
+		t.Fatalf("expected materializable constant result, got %T", val)
+	}
+	return constVal
+}
+
+func expectMaterializedData(
+	t *testing.T,
+	val Value[syn.DeBruijn],
+) *syn.Data {
+	t.Helper()
+	constant := expectMaterializedConstant(t, val)
+	dataConst, ok := constant.(*syn.Data)
+	if !ok {
+		t.Fatalf("expected Data constant, got %T", constant)
+	}
+	return dataConst
+}
+
+func expectMaterializedProtoList(
+	t *testing.T,
+	val Value[syn.DeBruijn],
+) *syn.ProtoList {
+	t.Helper()
+	constant := expectMaterializedConstant(t, val)
+	list, ok := constant.(*syn.ProtoList)
+	if !ok {
+		t.Fatalf("expected ProtoList constant, got %T", constant)
+	}
+	return list
+}
+
+func expectMaterializedProtoPair(
+	t *testing.T,
+	val Value[syn.DeBruijn],
+) *syn.ProtoPair {
+	t.Helper()
+	constant := expectMaterializedConstant(t, val)
+	pair, ok := constant.(*syn.ProtoPair)
+	if !ok {
+		t.Fatalf("expected ProtoPair constant, got %T", constant)
+	}
+	return pair
+}
+
 func TestAddIntegerBuiltin(t *testing.T) {
 	m := newTestMachine()
 	b := newTestBuiltin(builtin.AddInteger)
@@ -698,19 +749,48 @@ func TestUnConstrDataBuiltin(t *testing.T) {
 		t.Fatalf("evalBuiltinApp returned error: %v", err)
 	}
 
-	// UnConstrData returns a ProtoPair constant
-	constVal, ok := val.(*Constant)
+	// UnConstrData may use a lazy runtime pair, but it must materialize to the
+	// same ProtoPair constant shape.
+	constVal, ok := materializeConstantValue[syn.DeBruijn](val)
 	if !ok {
-		t.Fatalf("expected Constant result, got %T", val)
+		t.Fatalf("expected pair-like constant result, got %T", val)
 	}
 
-	pair, ok := constVal.Constant.(*syn.ProtoPair)
+	pair, ok := constVal.(*syn.ProtoPair)
 	if !ok {
-		t.Fatalf("expected ProtoPair constant, got %T", constVal.Constant)
+		t.Fatalf("expected ProtoPair constant, got %T", constVal)
 	}
 
 	if pair.FstType == nil || pair.SndType == nil {
 		t.Fatal("expected non-nil types in pair")
+	}
+
+	tagConst, ok := pair.First.(*syn.Integer)
+	if !ok {
+		t.Fatalf("expected Integer tag, got %T", pair.First)
+	}
+	if tagConst.Inner.Cmp(big.NewInt(1)) != 0 {
+		t.Fatalf("expected constructor tag 1, got %v", tagConst.Inner)
+	}
+
+	fieldsConst, ok := pair.Second.(*syn.ProtoList)
+	if !ok {
+		t.Fatalf("expected ProtoList fields, got %T", pair.Second)
+	}
+	if len(fieldsConst.List) != 1 {
+		t.Fatalf("expected 1 field, got %d", len(fieldsConst.List))
+	}
+
+	fieldData, ok := fieldsConst.List[0].(*syn.Data)
+	if !ok {
+		t.Fatalf("expected Data field, got %T", fieldsConst.List[0])
+	}
+	fieldInt, ok := fieldData.Inner.(*data.Integer)
+	if !ok {
+		t.Fatalf("expected Integer field payload, got %T", fieldData.Inner)
+	}
+	if fieldInt.Inner.Cmp(big.NewInt(99)) != 0 {
+		t.Fatalf("expected field payload 99, got %v", fieldInt.Inner)
 	}
 }
 
@@ -921,6 +1001,31 @@ func TestHeadListBuiltin(t *testing.T) {
 
 	if intConst.Inner.Int64() != 1 {
 		t.Fatalf("expected 1, got %v", intConst.Inner)
+	}
+}
+
+func TestHeadListBuiltinOnConstantDataList(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.HeadList)
+
+	list := &syn.ProtoList{
+		LTyp: &syn.TData{},
+		List: []syn.IConstant{
+			&syn.Data{Inner: &data.Integer{Inner: big.NewInt(1)}},
+			&syn.Data{Inner: &data.Integer{Inner: big.NewInt(2)}},
+		},
+	}
+
+	b = b.ApplyArg(&Constant{list})
+
+	val := evalBuiltin(t, m, b)
+	dataConst := expectMaterializedData(t, val)
+	intData, ok := dataConst.Inner.(*data.Integer)
+	if !ok {
+		t.Fatalf("expected Integer data, got %T", dataConst.Inner)
+	}
+	if intData.Inner.Cmp(big.NewInt(1)) != 0 {
+		t.Fatalf("expected 1, got %v", intData.Inner)
 	}
 }
 
@@ -1237,6 +1342,30 @@ func TestFstPairBuiltin(t *testing.T) {
 	}
 }
 
+func TestFstPairBuiltinOnConstantDataPair(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.FstPair)
+
+	pair := &syn.ProtoPair{
+		FstType: &syn.TData{},
+		SndType: &syn.TData{},
+		First:   &syn.Data{Inner: &data.Integer{Inner: big.NewInt(1)}},
+		Second:  &syn.Data{Inner: &data.ByteString{Inner: []byte("two")}},
+	}
+
+	b = b.ApplyArg(&Constant{pair})
+
+	val := evalBuiltin(t, m, b)
+	dataConst := expectMaterializedData(t, val)
+	intData, ok := dataConst.Inner.(*data.Integer)
+	if !ok {
+		t.Fatalf("expected Integer data, got %T", dataConst.Inner)
+	}
+	if intData.Inner.Cmp(big.NewInt(1)) != 0 {
+		t.Fatalf("expected 1, got %v", intData.Inner)
+	}
+}
+
 func TestSndPairBuiltin(t *testing.T) {
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
@@ -1275,6 +1404,30 @@ func TestSndPairBuiltin(t *testing.T) {
 	}
 }
 
+func TestSndPairBuiltinOnConstantDataPair(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.SndPair)
+
+	pair := &syn.ProtoPair{
+		FstType: &syn.TData{},
+		SndType: &syn.TData{},
+		First:   &syn.Data{Inner: &data.Integer{Inner: big.NewInt(1)}},
+		Second:  &syn.Data{Inner: &data.ByteString{Inner: []byte("two")}},
+	}
+
+	b = b.ApplyArg(&Constant{pair})
+
+	val := evalBuiltin(t, m, b)
+	dataConst := expectMaterializedData(t, val)
+	bytesData, ok := dataConst.Inner.(*data.ByteString)
+	if !ok {
+		t.Fatalf("expected ByteString data, got %T", dataConst.Inner)
+	}
+	if string(bytesData.Inner) != "two" {
+		t.Fatalf("expected two, got %q", string(bytesData.Inner))
+	}
+}
+
 func TestConstrDataBuiltin(t *testing.T) {
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
@@ -1302,15 +1455,7 @@ func TestConstrDataBuiltin(t *testing.T) {
 		t.Fatalf("evalBuiltinApp returned error: %v", err)
 	}
 
-	constVal, ok := val.(*Constant)
-	if !ok {
-		t.Fatalf("expected Constant result, got %T", val)
-	}
-
-	dataConst, ok := constVal.Constant.(*syn.Data)
-	if !ok {
-		t.Fatalf("expected Data constant, got %T", constVal.Constant)
-	}
+	dataConst := expectMaterializedData(t, val)
 
 	// Should be a constructor data type
 	constrData, ok := dataConst.Inner.(*data.Constr)
@@ -1320,6 +1465,30 @@ func TestConstrDataBuiltin(t *testing.T) {
 
 	if constrData.Tag != 0 {
 		t.Fatalf("expected constructor 0, got %d", constrData.Tag)
+	}
+}
+
+func TestConstrDataBuiltinRejectsTagAboveMaxInt64(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.ConstrData)
+
+	tooLarge := new(big.Int).Add(big.NewInt(math.MaxInt64), big.NewInt(1))
+	list := &syn.ProtoList{LTyp: &syn.TData{}}
+
+	b = b.ApplyArg(&Constant{&syn.Integer{Inner: tooLarge}})
+	b = b.ApplyArg(&Constant{list})
+
+	_, err := evalBuiltinWithError(t, m, b)
+	if err == nil {
+		t.Fatal("expected overflow error for constructor tag above MaxInt64")
+	}
+
+	builtinErr, ok := err.(*BuiltinError)
+	if !ok {
+		t.Fatalf("expected BuiltinError, got %T", err)
+	}
+	if builtinErr.Code != ErrCodeOverflow {
+		t.Fatalf("expected overflow code, got %v", builtinErr.Code)
 	}
 }
 
@@ -1340,15 +1509,7 @@ func TestIDataBuiltin(t *testing.T) {
 		t.Fatalf("evalBuiltinApp returned error: %v", err)
 	}
 
-	constVal, ok := val.(*Constant)
-	if !ok {
-		t.Fatalf("expected Constant result, got %T", val)
-	}
-
-	dataConst, ok := constVal.Constant.(*syn.Data)
-	if !ok {
-		t.Fatalf("expected Data constant, got %T", constVal.Constant)
-	}
+	dataConst := expectMaterializedData(t, val)
 
 	// Should be an integer data type
 	intData, ok := dataConst.Inner.(*data.Integer)
@@ -1378,15 +1539,7 @@ func TestBDataBuiltin(t *testing.T) {
 		t.Fatalf("evalBuiltinApp returned error: %v", err)
 	}
 
-	constVal, ok := val.(*Constant)
-	if !ok {
-		t.Fatalf("expected Constant result, got %T", val)
-	}
-
-	dataConst, ok := constVal.Constant.(*syn.Data)
-	if !ok {
-		t.Fatalf("expected Data constant, got %T", constVal.Constant)
-	}
+	dataConst := expectMaterializedData(t, val)
 
 	// Should be a byte string data type
 	bsData, ok := dataConst.Inner.(*data.ByteString)
@@ -1425,15 +1578,7 @@ func TestListDataBuiltin(t *testing.T) {
 		t.Fatalf("evalBuiltinApp returned error: %v", err)
 	}
 
-	constVal, ok := val.(*Constant)
-	if !ok {
-		t.Fatalf("expected Constant result, got %T", val)
-	}
-
-	dataConst, ok := constVal.Constant.(*syn.Data)
-	if !ok {
-		t.Fatalf("expected Data constant, got %T", constVal.Constant)
-	}
+	dataConst := expectMaterializedData(t, val)
 
 	// Should be a list data type
 	listData, ok := dataConst.Inner.(*data.List)
@@ -2758,8 +2903,7 @@ func TestMkNilDataBuiltin(t *testing.T) {
 	b = b.ApplyArg(unit)
 
 	val := evalBuiltin(t, m, b)
-	constVal := expectConstant(t, val)
-	list := expectProtoList(t, constVal)
+	list := expectMaterializedProtoList(t, val)
 
 	if len(list.List) != 0 {
 		t.Errorf("expected empty list, got %d elements", len(list.List))
@@ -2780,8 +2924,7 @@ func TestMkNilPairDataBuiltin(t *testing.T) {
 	b = b.ApplyArg(unit)
 
 	val := evalBuiltin(t, m, b)
-	constVal := expectConstant(t, val)
-	list := expectProtoList(t, constVal)
+	list := expectMaterializedProtoList(t, val)
 
 	if len(list.List) != 0 {
 		t.Errorf("expected empty list, got %d elements", len(list.List))
@@ -2815,8 +2958,7 @@ func TestMkPairDataBuiltin(t *testing.T) {
 	b = b.ApplyArg(v2)
 
 	val := evalBuiltin(t, m, b)
-	constVal := expectConstant(t, val)
-	pair := expectProtoPair(t, constVal)
+	pair := expectMaterializedProtoPair(t, val)
 
 	// Check the values
 	fstData, ok := pair.First.(*syn.Data)
@@ -2945,8 +3087,14 @@ func TestUnListDataBuiltin(t *testing.T) {
 	b = b.ApplyArg(v1)
 
 	val := evalBuiltin(t, m, b)
-	constVal := expectConstant(t, val)
-	protoList := expectProtoList(t, constVal)
+	constVal, ok := materializeConstantValue[syn.DeBruijn](val)
+	if !ok {
+		t.Fatalf("expected list-like constant result, got %T", val)
+	}
+	protoList, ok := constVal.(*syn.ProtoList)
+	if !ok {
+		t.Fatalf("expected ProtoList constant, got %T", constVal)
+	}
 
 	if len(protoList.List) != 3 {
 		t.Errorf("expected list of length 3, got %d", len(protoList.List))
@@ -2990,8 +3138,14 @@ func TestUnMapDataBuiltin(t *testing.T) {
 	b = b.ApplyArg(v1)
 
 	val := evalBuiltin(t, m, b)
-	constVal := expectConstant(t, val)
-	protoList := expectProtoList(t, constVal)
+	constVal, ok := materializeConstantValue[syn.DeBruijn](val)
+	if !ok {
+		t.Fatalf("expected list-like constant result, got %T", val)
+	}
+	protoList, ok := constVal.(*syn.ProtoList)
+	if !ok {
+		t.Fatalf("expected ProtoList constant, got %T", constVal)
+	}
 
 	if len(protoList.List) != 2 {
 		t.Errorf("expected list of length 2, got %d", len(protoList.List))
@@ -3030,6 +3184,158 @@ func TestUnMapDataBuiltin(t *testing.T) {
 	}
 }
 
+func TestMkConsBuiltinOnDataListValue(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.MkCons)
+
+	head := m.allocDataValue(&data.Integer{Inner: big.NewInt(0)})
+	tail := m.allocDataListValue([]data.PlutusData{
+		&data.Integer{Inner: big.NewInt(1)},
+		&data.Integer{Inner: big.NewInt(2)},
+	})
+
+	b = b.ApplyArg(head)
+	b = b.ApplyArg(tail)
+
+	val := evalBuiltin(t, m, b)
+	protoList := expectMaterializedProtoList(t, val)
+	if len(protoList.List) != 3 {
+		t.Fatalf("expected list with 3 elements, got %d", len(protoList.List))
+	}
+	first, ok := protoList.List[0].(*syn.Data)
+	if !ok {
+		t.Fatalf("expected first element Data, got %T", protoList.List[0])
+	}
+	firstInt, ok := first.Inner.(*data.Integer)
+	if !ok {
+		t.Fatalf("expected first inner Integer, got %T", first.Inner)
+	}
+	if firstInt.Inner.Cmp(big.NewInt(0)) != 0 {
+		t.Fatalf("expected first value 0, got %v", firstInt.Inner)
+	}
+}
+
+func TestHeadListBuiltinOnDataMapValue(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.HeadList)
+
+	mapList := m.allocDataMapValue([][2]data.PlutusData{
+		{
+			&data.Integer{Inner: big.NewInt(1)},
+			&data.ByteString{Inner: []byte("one")},
+		},
+		{
+			&data.Integer{Inner: big.NewInt(2)},
+			&data.ByteString{Inner: []byte("two")},
+		},
+	})
+
+	b = b.ApplyArg(mapList)
+
+	val := evalBuiltin(t, m, b)
+	pair := expectMaterializedProtoPair(t, val)
+
+	keyData, ok := pair.First.(*syn.Data)
+	if !ok {
+		t.Fatalf("expected first to be Data, got %T", pair.First)
+	}
+	keyInt, ok := keyData.Inner.(*data.Integer)
+	if !ok {
+		t.Fatalf("expected key to be Integer, got %T", keyData.Inner)
+	}
+	if keyInt.Inner.Cmp(big.NewInt(1)) != 0 {
+		t.Fatalf("expected key 1, got %v", keyInt.Inner)
+	}
+
+	valData, ok := pair.Second.(*syn.Data)
+	if !ok {
+		t.Fatalf("expected second to be Data, got %T", pair.Second)
+	}
+	valBS, ok := valData.Inner.(*data.ByteString)
+	if !ok {
+		t.Fatalf("expected value to be ByteString, got %T", valData.Inner)
+	}
+	if string(valBS.Inner) != "one" {
+		t.Fatalf("expected value 'one', got %q", string(valBS.Inner))
+	}
+}
+
+func TestTailListBuiltinOnDataMapValue(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.TailList)
+
+	mapList := m.allocDataMapValue([][2]data.PlutusData{
+		{
+			&data.Integer{Inner: big.NewInt(1)},
+			&data.ByteString{Inner: []byte("one")},
+		},
+		{
+			&data.Integer{Inner: big.NewInt(2)},
+			&data.ByteString{Inner: []byte("two")},
+		},
+	})
+
+	b = b.ApplyArg(mapList)
+
+	val := evalBuiltin(t, m, b)
+	protoList := expectMaterializedProtoList(t, val)
+	if len(protoList.List) != 1 {
+		t.Fatalf("expected tail list of length 1, got %d", len(protoList.List))
+	}
+
+	pair, ok := protoList.List[0].(*syn.ProtoPair)
+	if !ok {
+		t.Fatalf("expected pair element, got %T", protoList.List[0])
+	}
+	keyData, ok := pair.First.(*syn.Data)
+	if !ok {
+		t.Fatalf("expected first to be Data, got %T", pair.First)
+	}
+	keyInt, ok := keyData.Inner.(*data.Integer)
+	if !ok {
+		t.Fatalf("expected key to be Integer, got %T", keyData.Inner)
+	}
+	if keyInt.Inner.Cmp(big.NewInt(2)) != 0 {
+		t.Fatalf("expected key 2, got %v", keyInt.Inner)
+	}
+}
+
+func TestMapDataBuiltinOnDataMapValue(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.MapData)
+
+	mapList := m.allocDataMapValue([][2]data.PlutusData{
+		{
+			&data.Integer{Inner: big.NewInt(1)},
+			&data.ByteString{Inner: []byte("one")},
+		},
+		{
+			&data.Integer{Inner: big.NewInt(2)},
+			&data.ByteString{Inner: []byte("two")},
+		},
+	})
+
+	b = b.ApplyArg(mapList)
+
+	val := evalBuiltin(t, m, b)
+	dataConst := expectMaterializedData(t, val)
+	dataMap, ok := dataConst.Inner.(*data.Map)
+	if !ok {
+		t.Fatalf("expected Data Map, got %T", dataConst.Inner)
+	}
+	if len(dataMap.Pairs) != 2 {
+		t.Fatalf("expected map with 2 pairs, got %d", len(dataMap.Pairs))
+	}
+
+	keyInt, ok := dataMap.Pairs[0][0].(*data.Integer)
+	if !ok {
+		t.Fatalf("expected first key Integer, got %T", dataMap.Pairs[0][0])
+	}
+	if keyInt.Inner.Cmp(big.NewInt(1)) != 0 {
+		t.Fatalf("expected first key 1, got %v", keyInt.Inner)
+	}
+}
+
 func TestMapDataBuiltin(t *testing.T) {
 	m := newTestMachine()
 	b := newTestBuiltin(builtin.MapData)
@@ -3061,8 +3367,7 @@ func TestMapDataBuiltin(t *testing.T) {
 	b = b.ApplyArg(v1)
 
 	val := evalBuiltin(t, m, b)
-	constVal := expectConstant(t, val)
-	resultData := expectData(t, constVal)
+	resultData := expectMaterializedData(t, val)
 	resultMap, ok := resultData.Inner.(*data.Map)
 	if !ok {
 		t.Fatalf("expected Map, got %T", resultData.Inner)

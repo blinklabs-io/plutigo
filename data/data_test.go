@@ -435,6 +435,58 @@ func TestPlutusDataDecode(t *testing.T) {
 	}
 }
 
+func TestDecoderReuseMatchesDecode(t *testing.T) {
+	decoder := NewDecoder()
+	decoded := make([]PlutusData, 0, len(testDefs))
+
+	t.Run("before-reset", func(t *testing.T) {
+		for _, testDef := range testDefs {
+			testDef := testDef
+			t.Run(testDef.CborHex, func(t *testing.T) {
+				tmpData, err := hex.DecodeString(testDef.CborHex)
+				if err != nil {
+					t.Fatalf("failed to decode hex %s: %v", testDef.CborHex, err)
+				}
+
+				got, err := decoder.Decode(tmpData)
+				if err != nil {
+					t.Fatalf("decoder.Decode() failed for %s: %v", testDef.CborHex, err)
+				}
+				if !got.Equal(testDef.Data) {
+					t.Fatalf("decoder.Decode() mismatch for %s: got %s, want %s", testDef.CborHex, got, testDef.Data)
+				}
+				decoded = append(decoded, got)
+			})
+		}
+	})
+
+	for i, got := range decoded {
+		if !got.Equal(testDefs[i].Data) {
+			t.Fatalf("decoded value %d changed before reset: got %s, want %s", i, got, testDefs[i].Data)
+		}
+	}
+
+	decoder.Reset()
+	t.Run("after-reset", func(t *testing.T) {
+		for _, testDef := range testDefs {
+			testDef := testDef
+			t.Run(testDef.CborHex, func(t *testing.T) {
+				tmpData, err := hex.DecodeString(testDef.CborHex)
+				if err != nil {
+					t.Fatalf("failed to decode hex %s after reset: %v", testDef.CborHex, err)
+				}
+				got, err := decoder.Decode(tmpData)
+				if err != nil {
+					t.Fatalf("decoder.Decode() after reset failed for %s: %v", testDef.CborHex, err)
+				}
+				if !got.Equal(testDef.Data) {
+					t.Fatalf("decoder.Decode() after reset mismatch for %s: got %s, want %s", testDef.CborHex, got, testDef.Data)
+				}
+			})
+		}
+	})
+}
+
 func TestDecodeCBORTag(t *testing.T) {
 	tests := []struct {
 		name        string

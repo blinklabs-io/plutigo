@@ -105,6 +105,14 @@ type Machine[T syn.Eval] struct {
 	protoListChunkPos      int
 	protoPairChunks        [][]syn.ProtoPair
 	protoPairChunkPos      int
+	dataValueChunks        [][]dataValue[T]
+	dataValueChunkPos      int
+	dataListValueChunks    [][]dataListValue[T]
+	dataListValueChunkPos  int
+	dataMapValueChunks     [][]dataMapValue[T]
+	dataMapValueChunkPos   int
+	pairValueChunks        [][]pairValue[T]
+	pairValueChunkPos      int
 	constantElemChunks     [][]syn.IConstant
 	constantElemChunkPos   int
 	valueElemChunks        [][]Value[T]
@@ -121,9 +129,11 @@ type Machine[T syn.Eval] struct {
 }
 
 const (
-	envChunkSize          = 8192
+	envChunkSize          = 2048
 	envRetainChunkCap     = 8
-	valueChunkSize        = 4096
+	valueChunkSize        = 512
+	valueElemChunkSize    = 1024
+	valueRetainChunkCap   = 8
 	constantElemChunkSize = 4096
 	int64ConstantCacheCap = 4096
 )
@@ -345,6 +355,30 @@ func clearArenaChunks[S any](chunks [][]S, usedTotal int) {
 	}
 }
 
+func resetArenaChunks[S any](
+	chunks *[][]S,
+	pos *int,
+	retainCap int,
+) {
+	retainedUsed := *pos
+	if len(*chunks) > retainCap {
+		maxRetained := 0
+		for i := range retainCap {
+			maxRetained += len((*chunks)[i])
+		}
+		if retainedUsed > maxRetained {
+			retainedUsed = maxRetained
+		}
+	}
+	clearArenaChunks(*chunks, retainedUsed)
+	if len(*chunks) > retainCap {
+		retained := make([][]S, retainCap)
+		copy(retained, (*chunks)[:retainCap])
+		*chunks = retained
+	}
+	*pos = 0
+}
+
 func (m *Machine[T]) allocDelay(term *syn.Delay[T], env *Env[T]) *Delay[T] {
 	delay := allocArenaSlot(&m.delayChunks, &m.delayChunkPos)
 	delay.AST = term
@@ -411,6 +445,48 @@ func (m *Machine[T]) allocProtoPairConstant(
 	return pairConstant
 }
 
+func (m *Machine[T]) allocDataListValue(
+	items []data.PlutusData,
+) *dataListValue[T] {
+	listValue := allocArenaSlot(&m.dataListValueChunks, &m.dataListValueChunkPos)
+	listValue.items = items
+	return listValue
+}
+
+func (m *Machine[T]) allocDataValue(item data.PlutusData) *dataValue[T] {
+	dataVal := allocArenaSlot(&m.dataValueChunks, &m.dataValueChunkPos)
+	dataVal.item = item
+	return dataVal
+}
+
+func (m *Machine[T]) allocDataMapValue(
+	items [][2]data.PlutusData,
+) *dataMapValue[T] {
+	listValue := allocArenaSlot(&m.dataMapValueChunks, &m.dataMapValueChunkPos)
+	listValue.items = items
+	return listValue
+}
+
+func (m *Machine[T]) allocDataPairValue(
+	first data.PlutusData,
+	second data.PlutusData,
+) *pairValue[T] {
+	return m.allocPairValue(
+		m.allocDataValue(first),
+		m.allocDataValue(second),
+	)
+}
+
+func (m *Machine[T]) allocPairValue(
+	first Value[T],
+	second Value[T],
+) *pairValue[T] {
+	pair := allocArenaSlot(&m.pairValueChunks, &m.pairValueChunkPos)
+	pair.first = first
+	pair.second = second
+	return pair
+}
+
 func (m *Machine[T]) allocConstantElems(n int) []syn.IConstant {
 	return allocArenaSlice(
 		&m.constantElemChunks,
@@ -425,7 +501,7 @@ func (m *Machine[T]) allocValueElems(n int) []Value[T] {
 		&m.valueElemChunks,
 		&m.valueElemChunkPos,
 		n,
-		valueChunkSize,
+		valueElemChunkSize,
 	)
 }
 
@@ -533,7 +609,6 @@ func NewMachine[T syn.Eval](
 		freeFrameForce:         make([]*FrameForce[T], 0, 16),
 		freeFrameConstr:        make([]*FrameConstr[T], 0, 16),
 		freeFrameCases:         make([]*FrameCases[T], 0, 16),
-		dynamicIntConstants:    make(map[int64]*Constant, 512),
 		constrChunks:           make([][]Constr[T], 0, 8),
 		constrChunkPos:         0,
 		delayChunks:            make([][]Delay[T], 0, 8),
@@ -552,6 +627,14 @@ func NewMachine[T syn.Eval](
 		protoListChunkPos:      0,
 		protoPairChunks:        make([][]syn.ProtoPair, 0, 8),
 		protoPairChunkPos:      0,
+		dataValueChunks:        make([][]dataValue[T], 0, 8),
+		dataValueChunkPos:      0,
+		dataListValueChunks:    make([][]dataListValue[T], 0, 8),
+		dataListValueChunkPos:  0,
+		dataMapValueChunks:     make([][]dataMapValue[T], 0, 8),
+		dataMapValueChunkPos:   0,
+		pairValueChunks:        make([][]pairValue[T], 0, 8),
+		pairValueChunkPos:      0,
 		constantElemChunks:     make([][]syn.IConstant, 0, 8),
 		constantElemChunkPos:   0,
 		valueElemChunks:        make([][]Value[T], 0, 8),
@@ -617,32 +700,23 @@ func (m *Machine[T]) resetEnvArena() {
 }
 
 func (m *Machine[T]) resetValueArenas() {
-	clearArenaChunks(m.constrChunks, m.constrChunkPos)
-	m.constrChunkPos = 0
-	clearArenaChunks(m.delayChunks, m.delayChunkPos)
-	m.delayChunkPos = 0
-	clearArenaChunks(m.lambdaChunks, m.lambdaChunkPos)
-	m.lambdaChunkPos = 0
-	clearArenaChunks(m.constantChunks, m.constantChunkPos)
-	m.constantChunkPos = 0
-	clearArenaChunks(m.dataChunks, m.dataChunkPos)
-	m.dataChunkPos = 0
-	clearArenaChunks(m.integerChunks, m.integerChunkPos)
-	m.integerChunkPos = 0
-	clearArenaChunks(m.byteStringChunks, m.byteStringChunkPos)
-	m.byteStringChunkPos = 0
-	clearArenaChunks(m.protoListChunks, m.protoListChunkPos)
-	m.protoListChunkPos = 0
-	clearArenaChunks(m.protoPairChunks, m.protoPairChunkPos)
-	m.protoPairChunkPos = 0
-	clearArenaChunks(m.constantElemChunks, m.constantElemChunkPos)
-	m.constantElemChunkPos = 0
-	clearArenaChunks(m.valueElemChunks, m.valueElemChunkPos)
-	m.valueElemChunkPos = 0
-	clearArenaChunks(m.builtinChunks, m.builtinChunkPos)
-	m.builtinChunkPos = 0
-	clearArenaChunks(m.builtinArgChunks, m.builtinArgChunkPos)
-	m.builtinArgChunkPos = 0
+	resetArenaChunks(&m.constrChunks, &m.constrChunkPos, valueRetainChunkCap)
+	resetArenaChunks(&m.delayChunks, &m.delayChunkPos, valueRetainChunkCap)
+	resetArenaChunks(&m.lambdaChunks, &m.lambdaChunkPos, valueRetainChunkCap)
+	resetArenaChunks(&m.constantChunks, &m.constantChunkPos, valueRetainChunkCap)
+	resetArenaChunks(&m.dataChunks, &m.dataChunkPos, valueRetainChunkCap)
+	resetArenaChunks(&m.integerChunks, &m.integerChunkPos, valueRetainChunkCap)
+	resetArenaChunks(&m.byteStringChunks, &m.byteStringChunkPos, valueRetainChunkCap)
+	resetArenaChunks(&m.protoListChunks, &m.protoListChunkPos, valueRetainChunkCap)
+	resetArenaChunks(&m.protoPairChunks, &m.protoPairChunkPos, valueRetainChunkCap)
+	resetArenaChunks(&m.dataValueChunks, &m.dataValueChunkPos, valueRetainChunkCap)
+	resetArenaChunks(&m.dataListValueChunks, &m.dataListValueChunkPos, valueRetainChunkCap)
+	resetArenaChunks(&m.dataMapValueChunks, &m.dataMapValueChunkPos, valueRetainChunkCap)
+	resetArenaChunks(&m.pairValueChunks, &m.pairValueChunkPos, valueRetainChunkCap)
+	resetArenaChunks(&m.constantElemChunks, &m.constantElemChunkPos, valueRetainChunkCap)
+	resetArenaChunks(&m.valueElemChunks, &m.valueElemChunkPos, valueRetainChunkCap)
+	resetArenaChunks(&m.builtinChunks, &m.builtinChunkPos, valueRetainChunkCap)
+	resetArenaChunks(&m.builtinArgChunks, &m.builtinArgChunkPos, valueRetainChunkCap)
 }
 
 func (m *Machine[T]) finishReturn(ret *Return[T]) (syn.Term[T], error) {
@@ -657,7 +731,7 @@ func (m *Machine[T]) finishValue(value Value[T]) (syn.Term[T], error) {
 			return nil, err
 		}
 	}
-	return dischargeValue[T](value), nil
+	return dischargeValue[T](value)
 }
 
 // Run executes a Plutus term using the CEK (Control, Environment, Kontinuation) abstract machine.
@@ -1077,6 +1151,72 @@ func (m *Machine[T]) caseEvaluate(
 			return comp, nil
 		}
 		return nil, &ScriptError{Code: ErrCodeMissingCaseBranch, Message: "MissingCaseBranch"}
+	case *dataListValue[T]:
+		if len(v.items) == 0 {
+			if len(branches) != 2 && len(branches) != 1 {
+				return nil, &ScriptError{Code: ErrCodeInvalidBranchCount, Message: "InvalidCaseBranchCount"}
+			}
+			if !indexExists(branches, 1) {
+				return nil, &ScriptError{Code: ErrCodeMissingCaseBranch, Message: "MissingCaseBranch"}
+			}
+			comp := m.getCompute()
+			comp.Ctx = context
+			comp.Env = env
+			comp.Term = branches[1]
+			return comp, nil
+		}
+
+		if len(branches) < 1 || len(branches) > 2 {
+			return nil, &ScriptError{Code: ErrCodeInvalidBranchCount, Message: "InvalidCaseBranchCount"}
+		}
+
+		args := m.allocValueElems(2)
+		args[0] = m.allocDataValue(v.items[0])
+		args[1] = m.allocDataListValue(v.items[1:])
+		comp := m.getCompute()
+		comp.Ctx = m.transferArgStack(args, context)
+		comp.Env = env
+		comp.Term = branches[0]
+		return comp, nil
+	case *dataMapValue[T]:
+		if len(v.items) == 0 {
+			if len(branches) != 2 && len(branches) != 1 {
+				return nil, &ScriptError{Code: ErrCodeInvalidBranchCount, Message: "InvalidCaseBranchCount"}
+			}
+			if !indexExists(branches, 1) {
+				return nil, &ScriptError{Code: ErrCodeMissingCaseBranch, Message: "MissingCaseBranch"}
+			}
+			comp := m.getCompute()
+			comp.Ctx = context
+			comp.Env = env
+			comp.Term = branches[1]
+			return comp, nil
+		}
+
+		if len(branches) < 1 || len(branches) > 2 {
+			return nil, &ScriptError{Code: ErrCodeInvalidBranchCount, Message: "InvalidCaseBranchCount"}
+		}
+
+		args := m.allocValueElems(2)
+		args[0] = m.allocDataPairValue(v.items[0][0], v.items[0][1])
+		args[1] = m.allocDataMapValue(v.items[1:])
+		comp := m.getCompute()
+		comp.Ctx = m.transferArgStack(args, context)
+		comp.Env = env
+		comp.Term = branches[0]
+		return comp, nil
+	case *pairValue[T]:
+		if len(branches) != 1 {
+			return nil, &ScriptError{Code: ErrCodeInvalidBranchCount, Message: "InvalidCaseBranchCount"}
+		}
+		args := m.allocValueElems(2)
+		args[0] = v.first
+		args[1] = v.second
+		comp := m.getCompute()
+		comp.Ctx = m.transferArgStack(args, context)
+		comp.Env = env
+		comp.Term = branches[0]
+		return comp, nil
 	default:
 		return nil, &TypeError{Code: ErrCodeNonConstrScrutinized, Message: "NonConstrScrutinized"}
 	}
@@ -1355,12 +1495,25 @@ func (m *Machine[T]) transferArgStack(
 //
 // This function is crucial for producing the final result when evaluation
 // reaches the Done state, ensuring the output is a valid Plutus term.
-func dischargeValue[T syn.Eval](value Value[T]) syn.Term[T] {
-	var dischargedTerm syn.Term[T]
-
+func dischargeValue[T syn.Eval](value Value[T]) (syn.Term[T], error) {
 	switch v := value.(type) {
 	case *Constant:
-		dischargedTerm = constantTerm[T](v.Constant)
+		return constantTerm[T](v.Constant), nil
+	case *dataValue[T]:
+		return constantTerm[T](&syn.Data{Inner: v.item}), nil
+	case *dataListValue[T]:
+		return constantTerm[T](materializeDataListConstant(v.items)), nil
+	case *dataMapValue[T]:
+		return constantTerm[T](materializeDataMapConstant(v.items)), nil
+	case *pairValue[T]:
+		constant, ok := materializeConstantValue[T](v)
+		if !ok {
+			return nil, &InternalError{
+				Code:    ErrCodeInternalError,
+				Message: fmt.Sprintf("cannot discharge non-constant pair value: %T", v),
+			}
+		}
+		return constantTerm[T](constant), nil
 	case *Builtin[T]:
 		// Reconstruct the term that represents this builtin application
 		var forcedTerm syn.Term[T]
@@ -1378,41 +1531,61 @@ func dischargeValue[T syn.Eval](value Value[T]) syn.Term[T] {
 
 		// Add applications for each argument
 		for arg := range v.Args.Iter() {
+			discharged, err := dischargeValue[T](arg)
+			if err != nil {
+				return nil, err
+			}
 			forcedTerm = &syn.Apply[T]{
 				Function: forcedTerm,
-				Argument: dischargeValue[T](arg),
+				Argument: discharged,
 			}
 		}
 
-		dischargedTerm = forcedTerm
+		return forcedTerm, nil
 	case *Delay[T]:
 		// Discharge delayed computation with environment
-		dischargedTerm = &syn.Delay[T]{
-			Term: withEnv(0, v.Env, v.AST.Term),
+		body, err := withEnv(0, v.Env, v.AST.Term)
+		if err != nil {
+			return nil, err
 		}
+		return &syn.Delay[T]{Term: body}, nil
 
 	case *Lambda[T]:
 		// Discharge lambda with environment (lamCnt=1 to account for parameter)
-		dischargedTerm = &syn.Lambda[T]{
-			ParameterName: v.AST.ParameterName,
-			Body:          withEnv(1, v.Env, v.AST.Body),
+		body, err := withEnv(1, v.Env, v.AST.Body)
+		if err != nil {
+			return nil, err
 		}
+		return &syn.Lambda[T]{
+			ParameterName: v.AST.ParameterName,
+			Body:          body,
+		}, nil
 
 	case *Constr[T]:
 		// Recursively discharge all constructor fields
 		fields := make([]syn.Term[T], len(v.Fields))
 
 		for i, f := range v.Fields {
-			fields[i] = dischargeValue[T](f)
+			discharged, err := dischargeValue[T](f)
+			if err != nil {
+				return nil, err
+			}
+			fields[i] = discharged
 		}
 
-		dischargedTerm = &syn.Constr[T]{
+		return &syn.Constr[T]{
 			Tag:    v.Tag,
 			Fields: fields,
-		}
+		}, nil
 	}
 
-	return dischargedTerm
+	return nil, &InternalError{
+		Code: ErrCodeInternalError,
+		Message: fmt.Sprintf(
+			"unsupported value kind in dischargeValue: %T",
+			value,
+		),
+	}
 }
 
 // withEnv discharges a term while substituting values from an environment.
@@ -1430,81 +1603,102 @@ func withEnv[T syn.Eval](
 	lamCnt int,
 	env *Env[T],
 	term syn.Term[T],
-) syn.Term[T] {
-	var dischargedTerm syn.Term[T]
-
+) (syn.Term[T], error) {
 	switch t := term.(type) {
 	case *syn.Var[T]:
 		// Variable resolution with de Bruijn index adjustment
 		if lamCnt >= t.Name.LookupIndex() {
 			// Variable is bound by a lambda we haven't discharged yet
-			dischargedTerm = t
-		} else {
-			value, ok := lookupEnv(env, t.Name.LookupIndex()-lamCnt)
-			if ok {
-				// Variable found in environment, discharge its value
-				dischargedTerm = dischargeValue[T](value)
-			} else {
-				// Free variable (shouldn't happen in well-formed terms)
-				dischargedTerm = t
-			}
+			return t, nil
 		}
+		value, ok := lookupEnv(env, t.Name.LookupIndex()-lamCnt)
+		if ok {
+			// Variable found in environment, discharge its value
+			return dischargeValue[T](value)
+		}
+		// Free variable (shouldn't happen in well-formed terms)
+		return t, nil
 
 	case *syn.Lambda[T]:
 		// Lambda: increase lambda count for body processing
-		dischargedTerm = &syn.Lambda[T]{
-			ParameterName: t.ParameterName,
-			Body:          withEnv(lamCnt+1, env, t.Body),
+		body, err := withEnv(lamCnt+1, env, t.Body)
+		if err != nil {
+			return nil, err
 		}
+		return &syn.Lambda[T]{
+			ParameterName: t.ParameterName,
+			Body:          body,
+		}, nil
 
 	case *syn.Apply[T]:
 		// Application: process both function and argument
-		dischargedTerm = &syn.Apply[T]{
-			Function: withEnv(lamCnt, env, t.Function),
-			Argument: withEnv(lamCnt, env, t.Argument),
+		fn, err := withEnv(lamCnt, env, t.Function)
+		if err != nil {
+			return nil, err
 		}
+		arg, err := withEnv(lamCnt, env, t.Argument)
+		if err != nil {
+			return nil, err
+		}
+		return &syn.Apply[T]{
+			Function: fn,
+			Argument: arg,
+		}, nil
+
 	case *syn.Delay[T]:
 		// Delay: process delayed term
-		dischargedTerm = &syn.Delay[T]{
-			Term: withEnv(lamCnt, env, t.Term),
+		inner, err := withEnv(lamCnt, env, t.Term)
+		if err != nil {
+			return nil, err
 		}
+		return &syn.Delay[T]{Term: inner}, nil
 
 	case *syn.Force[T]:
 		// Force: process term to be forced
-		dischargedTerm = &syn.Force[T]{
-			Term: withEnv(lamCnt, env, t.Term),
+		inner, err := withEnv(lamCnt, env, t.Term)
+		if err != nil {
+			return nil, err
 		}
+		return &syn.Force[T]{Term: inner}, nil
 
 	case *syn.Constr[T]:
 		// Constructor: recursively process all fields
 		fields := make([]syn.Term[T], len(t.Fields))
-
 		for i, f := range t.Fields {
-			fields[i] = withEnv(lamCnt, env, f)
+			d, err := withEnv(lamCnt, env, f)
+			if err != nil {
+				return nil, err
+			}
+			fields[i] = d
 		}
-
-		dischargedTerm = &syn.Constr[T]{
+		return &syn.Constr[T]{
 			Tag:    t.Tag,
 			Fields: fields,
-		}
+		}, nil
+
 	case *syn.Case[T]:
 		// Case expression: process scrutinee and all branches
 		branches := make([]syn.Term[T], len(t.Branches))
-
 		for i, b := range t.Branches {
-			branches[i] = withEnv(lamCnt, env, b)
+			d, err := withEnv(lamCnt, env, b)
+			if err != nil {
+				return nil, err
+			}
+			branches[i] = d
 		}
-
-		dischargedTerm = &syn.Case[T]{
-			Constr:   withEnv(lamCnt, env, t.Constr),
+		constr, err := withEnv(lamCnt, env, t.Constr)
+		if err != nil {
+			return nil, err
+		}
+		return &syn.Case[T]{
+			Constr:   constr,
 			Branches: branches,
-		}
+		}, nil
+
 	default:
 		// Constants, builtins, errors: no environment processing needed
-		dischargedTerm = t
+		return t, nil
 	}
-
-	return dischargedTerm
 }
 
 func (m *Machine[T]) stepAndMaybeSpend(step StepKind) error {

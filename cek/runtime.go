@@ -572,33 +572,74 @@ func unwrapList[T syn.Eval](
 		default:
 			return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "List", Got: fmt.Sprintf("%T", v.Constant), Message: "type mismatch"}
 		}
+	case *dataListValue[T]:
+		if typ != nil && !syn.EqualType(typ, sharedDataType) {
+			return nil, &TypeError{
+				Code:    ErrCodeTypeMismatch,
+				Message: fmt.Sprintf("Value not a List of type %T", typ),
+			}
+		}
+		i = materializeDataListConstant(v.items)
+	case *dataMapValue[T]:
+		if typ != nil && !syn.EqualType(typ, sharedPairDataType) {
+			return nil, &TypeError{
+				Code:    ErrCodeTypeMismatch,
+				Message: fmt.Sprintf("Value not a List of type %T", typ),
+			}
+		}
+		i = materializeDataMapConstant(v.items)
 	default:
-		return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant List", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
+		return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "List", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
 	}
 
 	return i, nil
 }
 
-func unwrapPair[T syn.Eval](
+func splitPairValue[T syn.Eval](
+	m *Machine[T],
 	value Value[T],
-) (syn.IConstant, syn.IConstant, error) {
-	var i syn.IConstant
-	var j syn.IConstant
+) (Value[T], Value[T], error) {
+	var i Value[T]
+	var j Value[T]
 
 	switch v := value.(type) {
 	case *Constant:
 		switch c := v.Constant.(type) {
 		case *syn.ProtoPair:
-			i = c.First
-			j = c.Second
+			i = dataAwareConstantValue(m, c.First)
+			j = dataAwareConstantValue(m, c.Second)
 		default:
 			return nil, nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Pair", Got: fmt.Sprintf("%T", v.Constant), Message: "type mismatch"}
 		}
+	case *pairValue[T]:
+		i = v.first
+		j = v.second
 	default:
-		return nil, nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant Pair", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
+		return nil, nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Pair", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
 	}
 
 	return i, j, nil
+}
+
+func dataAwareConstantValue[T syn.Eval](
+	m *Machine[T],
+	constant syn.IConstant,
+) Value[T] {
+	switch c := constant.(type) {
+	case *syn.Data:
+		return m.allocDataValue(c.Inner)
+	case *syn.ProtoPair:
+		first, ok := c.First.(*syn.Data)
+		if !ok {
+			break
+		}
+		second, ok := c.Second.(*syn.Data)
+		if !ok {
+			break
+		}
+		return m.allocDataPairValue(first.Inner, second.Inner)
+	}
+	return machineConstantValue(m, constant)
 }
 
 func unwrapData[T syn.Eval](value Value[T]) (data.PlutusData, error) {
@@ -612,8 +653,10 @@ func unwrapData[T syn.Eval](value Value[T]) (data.PlutusData, error) {
 		default:
 			return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Data", Got: fmt.Sprintf("%T", v.Constant), Message: "type mismatch"}
 		}
+	case *dataValue[T]:
+		i = v.item
 	default:
-		return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant Data", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
+		return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Data", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
 	}
 
 	return i, nil

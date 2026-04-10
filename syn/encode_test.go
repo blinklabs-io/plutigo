@@ -329,50 +329,100 @@ func TestFlatRoundtrip(t *testing.T) {
 }
 
 func TestDeBruijnDecoderReuse(t *testing.T) {
-	program := &Program[DeBruijn]{
-		Version: lang.LanguageVersionV3,
-		Term: &Apply[DeBruijn]{
-			Function: &Lambda[DeBruijn]{
-				ParameterName: DeBruijn(0),
-				Body: &Constr[DeBruijn]{
-					Tag: 1,
-					Fields: []Term[DeBruijn]{
-						&Var[DeBruijn]{Name: DeBruijn(1)},
-						&Constant{Con: &Data{Inner: &data.List{
-							Items: []data.PlutusData{
-								&data.Integer{Inner: big.NewInt(1)},
-								&data.ByteString{Inner: []byte{0xca, 0xfe}},
+	decoder := NewDeBruijnDecoder()
+	tests := []struct {
+		name    string
+		program *Program[DeBruijn]
+	}{
+		{
+			name: "nested_data_program",
+			program: &Program[DeBruijn]{
+				Version: lang.LanguageVersionV3,
+				Term: &Apply[DeBruijn]{
+					Function: &Lambda[DeBruijn]{
+						ParameterName: DeBruijn(0),
+						Body: &Constr[DeBruijn]{
+							Tag: 1,
+							Fields: []Term[DeBruijn]{
+								&Var[DeBruijn]{Name: DeBruijn(1)},
+								&Constant{Con: &Data{Inner: &data.List{
+									Items: []data.PlutusData{
+										&data.Integer{Inner: big.NewInt(1)},
+										&data.ByteString{Inner: []byte{0xca, 0xfe}},
+									},
+								}}},
 							},
-						}}},
+						},
+					},
+					Argument: &Force[DeBruijn]{
+						Term: &Delay[DeBruijn]{
+							Term: &Builtin{DefaultFunction: builtin.IfThenElse},
+						},
 					},
 				},
 			},
-			Argument: &Force[DeBruijn]{
-				Term: &Delay[DeBruijn]{
-					Term: &Builtin{DefaultFunction: builtin.IfThenElse},
-				},
+		},
+		{
+			name: "constant_heavy_program",
+			program: &Program[DeBruijn]{
+				Version: lang.LanguageVersionV3,
+				Term: &Constant{Con: &ProtoList{
+					LTyp: &TPair{First: &TInteger{}, Second: &TData{}},
+					List: []IConstant{
+						&ProtoPair{
+							FstType: &TInteger{},
+							SndType: &TData{},
+							First:   &Integer{Inner: big.NewInt(42)},
+							Second: &Data{Inner: &data.Map{
+								Pairs: [][2]data.PlutusData{
+									{
+										&data.Integer{Inner: big.NewInt(7)},
+										&data.ByteString{Inner: []byte{0xde, 0xad}},
+									},
+								},
+							}},
+						},
+						&ProtoPair{
+							FstType: &TInteger{},
+							SndType: &TData{},
+							First:   &Integer{Inner: big.NewInt(-5)},
+							Second: &Data{Inner: &data.Constr{
+								Tag: 2,
+								Fields: []data.PlutusData{
+									&data.Integer{Inner: big.NewInt(9)},
+									&data.List{Items: []data.PlutusData{
+										&data.ByteString{Inner: []byte{0xaa}},
+									}},
+								},
+							}},
+						},
+					},
+				}},
 			},
 		},
 	}
 
-	encoded, err := Encode(program)
-	if err != nil {
-		t.Fatalf("Encode failed: %v", err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encoded, err := Encode(tt.program)
+			if err != nil {
+				t.Fatalf("Encode failed: %v", err)
+			}
 
-	decoder := NewDeBruijnDecoder()
-	for i := 0; i < 2; i++ {
-		decoded, err := decoder.Decode(encoded)
-		if err != nil {
-			t.Fatalf("Decode %d failed: %v", i, err)
-		}
-		reencoded, err := Encode(decoded)
-		if err != nil {
-			t.Fatalf("Re-encode %d failed: %v", i, err)
-		}
-		if !bytes.Equal(encoded, reencoded) {
-			t.Fatalf("Decode %d roundtrip mismatch", i)
-		}
+			for i := 0; i < 2; i++ {
+				decoded, err := decoder.Decode(encoded)
+				if err != nil {
+					t.Fatalf("Decode %d failed: %v", i, err)
+				}
+				reencoded, err := Encode(decoded)
+				if err != nil {
+					t.Fatalf("Re-encode %d failed: %v", i, err)
+				}
+				if !bytes.Equal(encoded, reencoded) {
+					t.Fatalf("Decode %d roundtrip mismatch", i)
+				}
+			}
+		})
 	}
 }
 

@@ -21,6 +21,7 @@ const (
 type DeBruijnDecoder struct {
 	decoder decoder
 	arena   termArena[DeBruijn]
+	consts  constantArena
 }
 
 func NewDeBruijnDecoder() *DeBruijnDecoder {
@@ -31,13 +32,31 @@ func DecodeDeBruijn(bytes []byte) (*Program[DeBruijn], error) {
 	return NewDeBruijnDecoder().Decode(bytes)
 }
 
+func decodeDeBruijn(bytes []byte) (*Program[DeBruijn], error) {
+	d := newDecoder(bytes)
+	arena := newTermArena[DeBruijn]()
+	consts := &constantArena{}
+	return decodeDeBruijnProgram(d, arena, consts)
+}
+
 func (d *DeBruijnDecoder) Decode(bytes []byte) (*Program[DeBruijn], error) {
 	d.decoder.reset(bytes)
 	d.arena.reset()
-	return decodeDeBruijnProgram(&d.decoder, &d.arena)
+	d.consts.reset()
+	return decodeDeBruijnProgram(&d.decoder, &d.arena, &d.consts)
 }
 
 func Decode[T Binder](bytes []byte) (*Program[T], error) {
+	var zero T
+	switch any(zero).(type) {
+	case DeBruijn:
+		program, err := decodeDeBruijn(bytes)
+		if err != nil {
+			return nil, err
+		}
+		return any(program).(*Program[T]), nil
+	}
+
 	d := newDecoder(bytes)
 	arena := newTermArena[T]()
 
@@ -83,6 +102,7 @@ func Decode[T Binder](bytes []byte) (*Program[T], error) {
 func decodeDeBruijnProgram(
 	d *decoder,
 	arena *termArena[DeBruijn],
+	consts *constantArena,
 ) (*Program[DeBruijn], error) {
 	major, err := d.word()
 	if err != nil {
@@ -99,7 +119,7 @@ func decodeDeBruijnProgram(
 		return nil, err
 	}
 
-	terms, err := decodeTermDeBruijnWithArena(d, arena)
+	terms, err := decodeTermDeBruijnWithArena(d, arena, consts)
 	if err != nil {
 		return nil, err
 	}
@@ -128,6 +148,7 @@ func DecodeTerm[T Binder](d *decoder) (Term[T], error) {
 func decodeTermDeBruijnWithArena(
 	d *decoder,
 	arena *termArena[DeBruijn],
+	consts *constantArena,
 ) (Term[DeBruijn], error) {
 	tag, err := d.bits4()
 	if err != nil {
@@ -142,35 +163,35 @@ func decodeTermDeBruijnWithArena(
 		}
 		return arena.allocVar(name), nil
 	case DelayTag:
-		t, err := decodeTermDeBruijnWithArena(d, arena)
+		t, err := decodeTermDeBruijnWithArena(d, arena, consts)
 		if err != nil {
 			return nil, err
 		}
 		return arena.allocDelay(t), nil
 	case LambdaTag:
-		t, err := decodeTermDeBruijnWithArena(d, arena)
+		t, err := decodeTermDeBruijnWithArena(d, arena, consts)
 		if err != nil {
 			return nil, err
 		}
 		return arena.allocLambda(DeBruijn(0), t), nil
 	case ApplyTag:
-		function, err := decodeTermDeBruijnWithArena(d, arena)
+		function, err := decodeTermDeBruijnWithArena(d, arena, consts)
 		if err != nil {
 			return nil, err
 		}
-		argument, err := decodeTermDeBruijnWithArena(d, arena)
+		argument, err := decodeTermDeBruijnWithArena(d, arena, consts)
 		if err != nil {
 			return nil, err
 		}
 		return arena.allocApply(function, argument), nil
 	case ConstantTag:
-		constant, err := DecodeConstant(d)
+		constant, err := decodeConstantWithArena(d, consts)
 		if err != nil {
 			return nil, err
 		}
 		return arena.allocConstant(constant), nil
 	case ForceTag:
-		t, err := decodeTermDeBruijnWithArena(d, arena)
+		t, err := decodeTermDeBruijnWithArena(d, arena, consts)
 		if err != nil {
 			return nil, err
 		}
@@ -192,17 +213,17 @@ func decodeTermDeBruijnWithArena(
 		if err != nil {
 			return nil, err
 		}
-		fields, err := decodeTermListDeBruijnWithArena(d, arena)
+		fields, err := decodeTermListDeBruijnWithArena(d, arena, consts)
 		if err != nil {
 			return nil, err
 		}
 		return arena.allocConstr(constrTag, fields), nil
 	case CaseTag:
-		constr, err := decodeTermDeBruijnWithArena(d, arena)
+		constr, err := decodeTermDeBruijnWithArena(d, arena, consts)
 		if err != nil {
 			return nil, err
 		}
-		branches, err := decodeTermListDeBruijnWithArena(d, arena)
+		branches, err := decodeTermListDeBruijnWithArena(d, arena, consts)
 		if err != nil {
 			return nil, err
 		}
@@ -342,6 +363,7 @@ func decodeTermListWithArena[T Binder](d *decoder, arena *termArena[T]) ([]Term[
 func decodeTermListDeBruijnWithArena(
 	d *decoder,
 	arena *termArena[DeBruijn],
+	consts *constantArena,
 ) ([]Term[DeBruijn], error) {
 	result := make([]Term[DeBruijn], 0, 4)
 
@@ -353,7 +375,7 @@ func decodeTermListDeBruijnWithArena(
 		if !bit {
 			break
 		}
-		item, err := decodeTermDeBruijnWithArena(d, arena)
+		item, err := decodeTermDeBruijnWithArena(d, arena, consts)
 		if err != nil {
 			return nil, err
 		}
@@ -377,13 +399,14 @@ func (a *arenaChunks[S]) used() int {
 }
 
 func (a *arenaChunks[S]) alloc() *S {
-	if a.chunkIdx < len(a.chunks) {
-		chunk := a.chunks[a.chunkIdx]
-		if a.offset < len(chunk) {
-			slot := &chunk[a.offset]
+	for a.chunkIdx < len(a.chunks) {
+		if a.offset < len(a.chunks[a.chunkIdx]) {
+			slot := &a.chunks[a.chunkIdx][a.offset]
 			a.offset++
 			return slot
 		}
+		a.chunkIdx++
+		a.offset = 0
 	}
 
 	chunk := make([]S, decodeTermChunkSize)
@@ -520,6 +543,91 @@ func (a *termArena[T]) allocBuiltin(fn builtin.DefaultFunction) *Builtin {
 	return term
 }
 
+type constantArena struct {
+	bigInts     arenaChunks[big.Int]
+	integers    arenaChunks[Integer]
+	byteStrings arenaChunks[ByteString]
+	strings     arenaChunks[String]
+	units       arenaChunks[Unit]
+	bools       arenaChunks[Bool]
+	protoLists  arenaChunks[ProtoList]
+	protoPairs  arenaChunks[ProtoPair]
+	datas       arenaChunks[Data]
+	dataDecoder data.Decoder
+}
+
+func (a *constantArena) reset() {
+	a.bigInts.reset(decodeRetainVarCap)
+	a.integers.reset(decodeRetainVarCap)
+	a.byteStrings.reset(decodeRetainVarCap)
+	a.strings.reset(decodeRetainVarCap)
+	a.units.reset(1)
+	a.bools.reset(1)
+	a.protoLists.reset(decodeRetainVarCap)
+	a.protoPairs.reset(decodeRetainVarCap)
+	a.datas.reset(decodeRetainVarCap)
+	a.dataDecoder.Reset()
+}
+
+func (a *constantArena) allocBigInt() *big.Int {
+	return a.bigInts.alloc()
+}
+
+func (a *constantArena) allocInteger(inner *big.Int) *Integer {
+	integer := a.integers.alloc()
+	integer.SetInner(inner)
+	return integer
+}
+
+func (a *constantArena) allocByteString(inner []byte) *ByteString {
+	value := a.byteStrings.alloc()
+	value.Inner = inner
+	return value
+}
+
+func (a *constantArena) allocString(inner string) *String {
+	value := a.strings.alloc()
+	value.Inner = inner
+	return value
+}
+
+func (a *constantArena) allocUnit() *Unit {
+	return a.units.alloc()
+}
+
+func (a *constantArena) allocBool(inner bool) *Bool {
+	value := a.bools.alloc()
+	value.Inner = inner
+	return value
+}
+
+func (a *constantArena) allocProtoList(typ Typ, items []IConstant) *ProtoList {
+	value := a.protoLists.alloc()
+	value.LTyp = typ
+	value.List = items
+	return value
+}
+
+func (a *constantArena) allocProtoPair(
+	firstType Typ,
+	secondType Typ,
+	first IConstant,
+	second IConstant,
+) *ProtoPair {
+	value := a.protoPairs.alloc()
+	value.FstType = firstType
+	value.SndType = secondType
+	value.First = first
+	value.Second = second
+	return value
+}
+
+func (a *constantArena) allocData(inner data.PlutusData) *Data {
+	value := a.datas.alloc()
+	value.Inner = inner
+	return value
+}
+
 func decodeDeBruijnBinder(d *decoder) (DeBruijn, error) {
 	i, err := d.word()
 	if err != nil {
@@ -653,6 +761,124 @@ func DecodeConstant(d *decoder) (IConstant, error) {
 		return nil, err
 	}
 	return decodeConstantValue(d, typ)
+}
+
+func decodeConstantWithArena(d *decoder, arena *constantArena) (IConstant, error) {
+	var tags constantTagSeq
+	err := decodeConstantTags(d, &tags)
+	if err != nil {
+		return nil, err
+	}
+	typ, err := decodeConstantType(&tags)
+	if err != nil {
+		return nil, err
+	}
+	return decodeConstantValueWithArena(d, typ, arena)
+}
+
+func decodeConstantValueWithArena(
+	d *decoder,
+	typ Typ,
+	arena *constantArena,
+) (IConstant, error) {
+	switch t := typ.(type) {
+	case *TInteger:
+		return decodeIntegerWithArena(d, arena)
+	case *TByteString:
+		b, err := d.bytes()
+		if err != nil {
+			return nil, err
+		}
+		return arena.allocByteString(b), nil
+	case *TString:
+		s, err := d.utf8()
+		if err != nil {
+			return nil, err
+		}
+		return arena.allocString(s), nil
+	case *TUnit:
+		return arena.allocUnit(), nil
+	case *TBool:
+		v, err := d.bit()
+		if err != nil {
+			return nil, err
+		}
+		return arena.allocBool(v), nil
+	case *TList:
+		items, err := decodeConstantListWithArena(d, t.Typ, arena)
+		if err != nil {
+			return nil, err
+		}
+		return arena.allocProtoList(t.Typ, items), nil
+	case *TPair:
+		first, err := decodeConstantValueWithArena(d, t.First, arena)
+		if err != nil {
+			return nil, err
+		}
+		second, err := decodeConstantValueWithArena(d, t.Second, arena)
+		if err != nil {
+			return nil, err
+		}
+		return arena.allocProtoPair(t.First, t.Second, first, second), nil
+	case *TData:
+		cborBytes, err := d.bytes()
+		if err != nil {
+			return nil, err
+		}
+		pd, err := arena.dataDecoder.Decode(cborBytes)
+		if err != nil {
+			return nil, err
+		}
+		return arena.allocData(pd), nil
+	default:
+		return nil, errors.New("unknown constant constructor")
+	}
+}
+
+func decodeIntegerWithArena(
+	d *decoder,
+	arena *constantArena,
+) (*Integer, error) {
+	small, word, err := d.bigWordSmall()
+	if err != nil {
+		return nil, err
+	}
+
+	inner := arena.allocBigInt()
+	if word == nil {
+		if smallInt, ok := unzigzagUint64(small); ok {
+			inner.SetInt64(smallInt)
+			return arena.allocInteger(inner), nil
+		}
+		inner.SetUint64(small)
+	} else {
+		inner.Set(word)
+	}
+	unzigzagInPlace(inner)
+	return arena.allocInteger(inner), nil
+}
+
+func decodeConstantListWithArena(
+	d *decoder,
+	itemType Typ,
+	arena *constantArena,
+) ([]IConstant, error) {
+	result := make([]IConstant, 0, 4)
+
+	for {
+		bit, err := d.bit()
+		if err != nil {
+			return nil, err
+		}
+		if !bit {
+			return result, nil
+		}
+		item, err := decodeConstantValueWithArena(d, itemType, arena)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
 }
 
 func decodeConstantValue(d *decoder, typ Typ) (IConstant, error) {
@@ -1361,6 +1587,15 @@ func unzigzagUint64(n uint64) (int64, bool) {
 		return int64(shifted), true
 	}
 	return -1 - int64(shifted), true
+}
+
+func unzigzagInPlace(n *big.Int) *big.Int {
+	if n.Bit(0) == 0 {
+		return n.Rsh(n, 1)
+	}
+	n.Rsh(n, 1)
+	n.Add(n, bigOne)
+	return n.Neg(n)
 }
 
 // Increment used bits by 1.

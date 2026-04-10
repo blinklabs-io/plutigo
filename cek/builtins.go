@@ -299,36 +299,62 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 ) (Value[T], bool, error) {
 	switch fn {
 	case builtin.FstPair:
-		fstPair, sndPair, err := unwrapPair[T](arg)
+		if err := m.CostOne(&fn, valueExMem[T](arg)); err != nil {
+			return nil, true, err
+		}
+		first, _, err := splitPairValue(m, arg)
 		if err != nil {
 			return nil, true, err
 		}
-		if err := m.CostOne(&fn, pairExMem(fstPair, sndPair)); err != nil {
-			return nil, true, err
-		}
-		if fstPair == nil {
+		if first == nil {
 			return nil, true, &InternalError{
 				Code:    ErrCodeInternalError,
 				Message: "fstPair returned nil constant",
 			}
 		}
-		return machineConstantValue(m, fstPair), true, nil
+		return first, true, nil
 	case builtin.SndPair:
-		fstPair, sndPair, err := unwrapPair[T](arg)
+		if err := m.CostOne(&fn, valueExMem[T](arg)); err != nil {
+			return nil, true, err
+		}
+		_, second, err := splitPairValue(m, arg)
 		if err != nil {
 			return nil, true, err
 		}
-		if err := m.CostOne(&fn, pairExMem(fstPair, sndPair)); err != nil {
-			return nil, true, err
-		}
-		if sndPair == nil {
+		if second == nil {
 			return nil, true, &InternalError{
 				Code:    ErrCodeInternalError,
 				Message: "sndPair returned nil constant",
 			}
 		}
-		return machineConstantValue(m, sndPair), true, nil
+		return second, true, nil
 	case builtin.HeadList:
+		if dataList, ok := arg.(*dataListValue[T]); ok {
+			if err := m.CostOne(&fn, valueExMem[T](arg)); err != nil {
+				return nil, true, err
+			}
+			if len(dataList.items) == 0 {
+				return nil, true, &BuiltinError{
+					Code:    ErrCodeOutOfBounds,
+					Builtin: "headList",
+					Message: "headList on an empty list",
+				}
+			}
+			return m.allocDataValue(dataList.items[0]), true, nil
+		}
+		if dataMap, ok := arg.(*dataMapValue[T]); ok {
+			if err := m.CostOne(&fn, valueExMem[T](arg)); err != nil {
+				return nil, true, err
+			}
+			if len(dataMap.items) == 0 {
+				return nil, true, &BuiltinError{
+					Code:    ErrCodeOutOfBounds,
+					Builtin: "headList",
+					Message: "headList on an empty list",
+				}
+			}
+			return m.allocDataPairValue(dataMap.items[0][0], dataMap.items[0][1]), true, nil
+		}
 		list, err := unwrapList[T](nil, arg)
 		if err != nil {
 			return nil, true, err
@@ -349,8 +375,34 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 				Message: "headList returned nil constant",
 			}
 		}
-		return machineConstantValue(m, list.List[0]), true, nil
+		return dataAwareConstantValue(m, list.List[0]), true, nil
 	case builtin.TailList:
+		if dataList, ok := arg.(*dataListValue[T]); ok {
+			if err := m.CostOne(&fn, valueExMem[T](arg)); err != nil {
+				return nil, true, err
+			}
+			if len(dataList.items) == 0 {
+				return nil, true, &BuiltinError{
+					Code:    ErrCodeOutOfBounds,
+					Builtin: "tailList",
+					Message: "tailList on an empty list",
+				}
+			}
+			return m.allocDataListValue(dataList.items[1:]), true, nil
+		}
+		if dataMap, ok := arg.(*dataMapValue[T]); ok {
+			if err := m.CostOne(&fn, valueExMem[T](arg)); err != nil {
+				return nil, true, err
+			}
+			if len(dataMap.items) == 0 {
+				return nil, true, &BuiltinError{
+					Code:    ErrCodeOutOfBounds,
+					Builtin: "tailList",
+					Message: "tailList on an empty list",
+				}
+			}
+			return m.allocDataMapValue(dataMap.items[1:]), true, nil
+		}
 		list, err := unwrapList[T](nil, arg)
 		if err != nil {
 			return nil, true, err
@@ -367,6 +419,18 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 		}
 		return m.allocConstant(m.allocProtoListConstant(list.LTyp, list.List[1:])), true, nil
 	case builtin.NullList:
+		if v, ok := arg.(*dataListValue[T]); ok {
+			if err := m.CostOne(&fn, valueExMem[T](v)); err != nil {
+				return nil, true, err
+			}
+			return boolConstant(len(v.items) == 0), true, nil
+		}
+		if w, ok := arg.(*dataMapValue[T]); ok {
+			if err := m.CostOne(&fn, valueExMem[T](w)); err != nil {
+				return nil, true, err
+			}
+			return boolConstant(len(w.items) == 0), true, nil
+		}
 		list, err := unwrapList[T](nil, arg)
 		if err != nil {
 			return nil, true, err
@@ -398,17 +462,10 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 				Message: "constructor tag too large for integer conversion",
 			}
 		}
-		fields := m.allocConstantElems(len(constr.Fields))
-		for i, field := range constr.Fields {
-			fields[i] = m.allocDataConstant(field)
-		}
-		pair := m.allocProtoPairConstant(
-			sharedIntegerType,
-			sharedListDataType,
-			m.int64Constant(int64(constr.Tag)).Constant,
-			m.allocProtoListConstant(sharedDataType, fields),
-		)
-		return m.allocConstant(pair), true, nil
+		return m.allocPairValue(
+			m.int64Constant(int64(constr.Tag)),
+			m.allocDataListValue(constr.Fields),
+		), true, nil
 	case builtin.UnMapData:
 		datum, err := unwrapData[T](arg)
 		if err != nil {
@@ -425,16 +482,7 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 				Message: "data is not a map",
 			}
 		}
-		items := m.allocConstantElems(len(dataMap.Pairs))
-		for i, item := range dataMap.Pairs {
-			items[i] = m.allocProtoPairConstant(
-				sharedDataType,
-				sharedDataType,
-				m.allocDataConstant(item[0]),
-				m.allocDataConstant(item[1]),
-			)
-		}
-		return m.allocConstant(m.allocProtoListConstant(sharedPairDataType, items)), true, nil
+		return m.allocDataMapValue(dataMap.Pairs), true, nil
 	case builtin.UnListData:
 		datum, err := unwrapData[T](arg)
 		if err != nil {
@@ -451,11 +499,7 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 				Message: "data is not a list",
 			}
 		}
-		items := m.allocConstantElems(len(dataList.Items))
-		for i, item := range dataList.Items {
-			items[i] = m.allocDataConstant(item)
-		}
-		return m.allocConstant(m.allocProtoListConstant(sharedDataType, items)), true, nil
+		return m.allocDataListValue(dataList.Items), true, nil
 	case builtin.UnIData:
 		datum, err := unwrapData[T](arg)
 		if err != nil {
@@ -567,6 +611,40 @@ func (m *Machine[T]) evalBinaryBuiltinFast(
 		m.Logs = append(m.Logs, msg)
 		return rightVal, true, nil
 	case builtin.MkCons:
+		if dataMap, ok := rightVal.(*dataMapValue[T]); ok {
+			if err := m.CostTwo(&fn, valueExMem[T](leftVal), valueExMem[T](rightVal)); err != nil {
+				return nil, true, err
+			}
+			first, second, err := splitPairValue(m, leftVal)
+			if err != nil {
+				return nil, true, err
+			}
+			dataFirst, err := unwrapData[T](first)
+			if err != nil {
+				return nil, true, err
+			}
+			dataSecond, err := unwrapData[T](second)
+			if err != nil {
+				return nil, true, err
+			}
+			consList := make([][2]data.PlutusData, len(dataMap.items)+1)
+			consList[0] = [2]data.PlutusData{dataFirst, dataSecond}
+			copy(consList[1:], dataMap.items)
+			return m.allocDataMapValue(consList), true, nil
+		}
+		if dataList, ok := rightVal.(*dataListValue[T]); ok {
+			if err := m.CostTwo(&fn, valueExMem[T](leftVal), valueExMem[T](rightVal)); err != nil {
+				return nil, true, err
+			}
+			dataHead, err := unwrapData[T](leftVal)
+			if err != nil {
+				return nil, true, err
+			}
+			consList := make([]data.PlutusData, len(dataList.items)+1)
+			consList[0] = dataHead
+			copy(consList[1:], dataList.items)
+			return m.allocDataListValue(consList), true, nil
+		}
 		head, err := unwrapConstant[T](leftVal)
 		if err != nil {
 			return nil, true, err
@@ -608,6 +686,24 @@ func (m *Machine[T]) evalTernaryBuiltinFast(
 		}
 		return thirdVal, true, nil
 	case builtin.ChooseList:
+		if dataList, ok := firstVal.(*dataListValue[T]); ok {
+			if err := m.CostThree(&fn, valueExMem[T](firstVal), valueExMem[T](secondVal), valueExMem[T](thirdVal)); err != nil {
+				return nil, true, err
+			}
+			if len(dataList.items) == 0 {
+				return secondVal, true, nil
+			}
+			return thirdVal, true, nil
+		}
+		if dataMap, ok := firstVal.(*dataMapValue[T]); ok {
+			if err := m.CostThree(&fn, valueExMem[T](firstVal), valueExMem[T](secondVal), valueExMem[T](thirdVal)); err != nil {
+				return nil, true, err
+			}
+			if len(dataMap.items) == 0 {
+				return secondVal, true, nil
+			}
+			return thirdVal, true, nil
+		}
 		list, err := unwrapList[T](nil, firstVal)
 		if err != nil {
 			return nil, true, err
@@ -1721,6 +1817,26 @@ func chooseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 }
 
+func validateConstrTag(arg *big.Int) (uint, error) {
+	// Keep constrData tags within the same range that unConstrData can decode
+	// back into an integer without overflow.
+	if arg.Sign() < 0 {
+		return 0, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "constrData",
+			Message: "constructor tag must be non-negative",
+		}
+	}
+	if !arg.IsInt64() || arg.BitLen() > bits.UintSize {
+		return 0, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "constrData",
+			Message: "constructor tag too large for unConstrData",
+		}
+	}
+	return uint(arg.Uint64()), nil
+}
+
 func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
@@ -1729,12 +1845,21 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	if arg1.Sign() < 0 {
-		return nil, &BuiltinError{
-			Code:    ErrCodeInvalidArgument,
-			Builtin: "constrData",
-			Message: "constructor tag must be non-negative",
+	if arg2, ok := m.argHolder[1].(*dataListValue[T]); ok {
+		err = m.CostTwo(&b.Func, bigIntExMem(arg1), valueExMem[T](arg2))
+		if err != nil {
+			return nil, err
 		}
+
+		tag, tagErr := validateConstrTag(arg1)
+		if tagErr != nil {
+			return nil, tagErr
+		}
+
+		return m.allocDataValue(&data.Constr{
+			Tag:    tag,
+			Fields: arg2.items,
+		}), nil
 	}
 
 	arg2, err := unwrapList[T](&syn.TData{}, m.argHolder[1])
@@ -1753,31 +1878,29 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		dataList[i] = itemData.Inner
 	}
 
-	if arg1.BitLen() > 64 {
-		return nil, &BuiltinError{
-			Code:    ErrCodeOverflow,
-			Builtin: "constrData",
-			Message: "constructor tag too large",
-		}
+	tag, tagErr := validateConstrTag(arg1)
+	if tagErr != nil {
+		return nil, tagErr
 	}
-	tag64 := arg1.Uint64()
-	if tag64 > uint64(math.MaxUint) {
-		return nil, &BuiltinError{
-			Code:    ErrCodeOverflow,
-			Builtin: "constrData",
-			Message: "constructor tag too large",
-		}
-	}
-	tag := uint(tag64)
 
-	return m.allocConstant(m.allocDataConstant(&data.Constr{
+	return m.allocDataValue(&data.Constr{
 		Tag:    tag,
 		Fields: dataList,
-	})), nil
+	}), nil
 }
 
 func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	if arg1, ok := m.argHolder[0].(*dataMapValue[T]); ok {
+		err := m.CostOne(&b.Func, valueExMem[T](arg1))
+		if err != nil {
+			return nil, err
+		}
+		return m.allocDataValue(&data.Map{
+			Pairs: arg1.items,
+		}), nil
+	}
 
 	pairType := &syn.TPair{
 		First:  &syn.TData{},
@@ -1802,13 +1925,23 @@ func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		dataList[i] = [2]data.PlutusData{fst.Inner, snd.Inner}
 	}
 
-	return m.allocConstant(m.allocDataConstant(&data.Map{
+	return m.allocDataValue(&data.Map{
 		Pairs: dataList,
-	})), nil
+	}), nil
 }
 
 func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	if arg1, ok := m.argHolder[0].(*dataListValue[T]); ok {
+		err := m.CostOne(&b.Func, valueExMem[T](arg1))
+		if err != nil {
+			return nil, err
+		}
+		return m.allocDataValue(&data.List{
+			Items: arg1.items,
+		}), nil
+	}
 
 	arg1, err := unwrapList[T](&syn.TData{}, m.argHolder[0])
 	if err != nil {
@@ -1826,9 +1959,9 @@ func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		dataList[i] = itemData.Inner
 	}
 
-	return m.allocConstant(m.allocDataConstant(&data.List{
+	return m.allocDataValue(&data.List{
 		Items: dataList,
-	})), nil
+	}), nil
 }
 
 func iData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1844,7 +1977,7 @@ func iData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	return m.allocConstant(m.allocDataConstant(&data.Integer{Inner: arg1})), nil
+	return m.allocDataValue(&data.Integer{Inner: arg1}), nil
 }
 
 func bData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1860,7 +1993,7 @@ func bData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	return m.allocConstant(m.allocDataConstant(&data.ByteString{Inner: arg1})), nil
+	return m.allocDataValue(&data.ByteString{Inner: arg1}), nil
 }
 
 func unConstrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1966,20 +2099,10 @@ func mkPairData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	pair := syn.ProtoPair{
-		FstType: &syn.TData{},
-		SndType: &syn.TData{},
-		First: &syn.Data{
-			Inner: arg1,
-		},
-		Second: &syn.Data{
-			Inner: arg2,
-		},
-	}
-
-	value := &Constant{&pair}
-
-	return value, nil
+	return m.allocPairValue(
+		m.allocDataValue(arg1),
+		m.allocDataValue(arg2),
+	), nil
 }
 
 func mkNilData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -1995,14 +2118,7 @@ func mkNilData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	l := syn.ProtoList{
-		LTyp: &syn.TData{},
-		List: []syn.IConstant{},
-	}
-
-	value := &Constant{&l}
-
-	return value, nil
+	return m.allocDataListValue(nil), nil
 }
 
 func mkNilPairData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -2018,17 +2134,7 @@ func mkNilPairData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	l := syn.ProtoList{
-		LTyp: &syn.TPair{
-			First:  &syn.TData{},
-			Second: &syn.TData{},
-		},
-		List: []syn.IConstant{},
-	}
-
-	value := &Constant{&l}
-
-	return value, nil
+	return m.allocDataMapValue(nil), nil
 }
 
 // ============================================================================
