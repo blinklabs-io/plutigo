@@ -7,23 +7,21 @@
 
 Summary: This release includes the changes listed below.
 
-```json
-{
-  "Additional Changes": [
-    "Expanded test coverage to validate arena-backed `CBOR` and DeBruijn decoding behavior across supported `PlutusData` shapes."
-  ],
-  "Bug Fixes": [
-    "Fixed retained arena state leaking between executions by ensuring arenas are cleared after `Machine.Run` completes."
-  ],
-  "New Features": [
-    "Added arena-backed `CBOR` decoding for `PlutusData` maps, lists, integers, and byte strings to reduce per-decode allocations and improve reuse across operations."
-  ],
-  "Performance": [
-    "Improved constant handling to reduce memory pressure during repeated decoding and evaluation workloads."
-  ]
-}
+### New Features
 
-```
+- Added arena-backed `CBOR` decoding for `PlutusData` maps, lists, integers, and byte strings to reduce per-decode allocations and improve reuse across operations.
+
+### Bug Fixes
+
+- Fixed retained arena state leaking between executions by ensuring arenas are cleared after `Machine.Run` completes.
+
+### Performance
+
+- Improved constant handling to reduce memory pressure during repeated decoding and evaluation workloads.
+
+### Additional Changes
+
+- Expanded test coverage to validate arena-backed `CBOR` and DeBruijn decoding behavior across supported `PlutusData` shapes.
 
 ## v0.1.3 - CBOR decoding and DeBruijn updates
 
