@@ -22,8 +22,8 @@ type Constant struct {
 }
 
 const (
-	cachedIntMin = -256
-	cachedIntMax = 65535
+	cachedIntMin = -64
+	cachedIntMax = 255
 )
 
 var (
@@ -38,7 +38,7 @@ var (
 	}
 	cachedIntConstants = buildCachedIntConstants()
 	sharedDynamicIntMu sync.RWMutex
-	sharedDynamicInts  = make(map[int64]*Constant, int64ConstantCacheCap)
+	sharedDynamicInts  map[int64]*Constant
 )
 
 func boolConstant(v bool) *Constant {
@@ -77,6 +77,9 @@ func storeSharedDynamicIntConstant(v int64, constant *Constant) *Constant {
 	defer sharedDynamicIntMu.Unlock()
 	if cached := sharedDynamicInts[v]; cached != nil {
 		return cached
+	}
+	if sharedDynamicInts == nil {
+		sharedDynamicInts = make(map[int64]*Constant, 64)
 	}
 	if len(sharedDynamicInts) >= int64ConstantCacheCap {
 		return nil
