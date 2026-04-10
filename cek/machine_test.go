@@ -119,6 +119,76 @@ func TestRunResetsEnvArena(t *testing.T) {
 	}
 }
 
+// TestRunClearsRetainedArenaReferencesAfterReturn guards against a regression
+// where Machine.Run's deferred teardown only trimmed arena headers without
+// clearing the retained chunks' contents. In that shape a long-lived or
+// pooled Machine would hold *syn.Term / *Env / Value pointers into the
+// previous evaluation's graph until its next Run call, pinning arbitrarily
+// large script sub-trees the caller may have already dropped.
+func TestRunClearsRetainedArenaReferencesAfterReturn(t *testing.T) {
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+
+	// envChunkSize+1 forces env arena extension past a single chunk while
+	// also populating lambda, constant, and elem arenas through the apply
+	// chain.
+	dbProgram, err := syn.NameToDeBruijn(buildLambdaChainProgram(envChunkSize + 1))
+	if err != nil {
+		t.Fatalf("NameToDeBruijn returned error: %v", err)
+	}
+
+	if _, err := m.Run(dbProgram.Term); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	for ci, chunk := range m.lambdaChunks {
+		for si := range chunk {
+			slot := chunk[si]
+			if slot.AST != nil || slot.Env != nil {
+				t.Fatalf("lambdaChunks[%d][%d] retained stale data after Run: %+v", ci, si, slot)
+			}
+		}
+	}
+	for ci, chunk := range m.delayChunks {
+		for si := range chunk {
+			slot := chunk[si]
+			if slot.AST != nil || slot.Env != nil {
+				t.Fatalf("delayChunks[%d][%d] retained stale data after Run: %+v", ci, si, slot)
+			}
+		}
+	}
+	for ci, chunk := range m.constrChunks {
+		for si := range chunk {
+			slot := chunk[si]
+			if slot.Tag != 0 || slot.Fields != nil {
+				t.Fatalf("constrChunks[%d][%d] retained stale data after Run: %+v", ci, si, slot)
+			}
+		}
+	}
+	for ci, chunk := range m.constantChunks {
+		for si := range chunk {
+			slot := chunk[si]
+			if slot.Constant != nil {
+				t.Fatalf("constantChunks[%d][%d] retained stale data after Run: %+v", ci, si, slot)
+			}
+		}
+	}
+	for ci, chunk := range m.envChunks {
+		for si := range chunk {
+			slot := chunk[si]
+			if slot.data != nil || slot.next != nil {
+				t.Fatalf("envChunks[%d][%d] retained stale data after Run: %+v", ci, si, slot)
+			}
+		}
+	}
+	for ci, chunk := range m.valueElemChunks {
+		for si := range chunk {
+			if chunk[si] != nil {
+				t.Fatalf("valueElemChunks[%d][%d] retained stale Value after Run", ci, si)
+			}
+		}
+	}
+}
+
 func TestResetEnvArenaRetainsOnlyTrackedChunkHeaders(t *testing.T) {
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 

@@ -379,6 +379,37 @@ func resetArenaChunks[S any](
 	*pos = 0
 }
 
+// lazyPrepareArenaChunks releases the previous run's references from a
+// per-arena chunk list without reallocating the slice header. It is called
+// from Machine.Run's defer so that a long-lived or pooled Machine does not
+// pin the previous evaluation's Value, Env, or syn.Term graph between runs.
+//
+// Chunks beyond retainCap are nil-cleared so the GC can reclaim them. The
+// used prefix of the retained chunks is cleared in place so the retained
+// slots no longer hold live pointers into the previous run's graph.
+func lazyPrepareArenaChunks[S any](
+	chunks *[][]S,
+	pos *int,
+	retainCap int,
+) {
+	retainedUsed := *pos
+	if len(*chunks) > retainCap {
+		for i := retainCap; i < len(*chunks); i++ {
+			(*chunks)[i] = nil
+		}
+		*chunks = (*chunks)[:retainCap]
+		maxRetained := 0
+		for i := range retainCap {
+			maxRetained += len((*chunks)[i])
+		}
+		if retainedUsed > maxRetained {
+			retainedUsed = maxRetained
+		}
+	}
+	clearArenaChunks(*chunks, retainedUsed)
+	*pos = 0
+}
+
 func (m *Machine[T]) allocDelay(term *syn.Delay[T], env *Env[T]) *Delay[T] {
 	delay := allocArenaSlot(&m.delayChunks, &m.delayChunkPos)
 	delay.AST = term
@@ -600,54 +631,45 @@ func NewMachine[T syn.Eval](
 		unbudgetedSteps: [9]uint32{0, 0, 0, 0, 0, 0, 0, 0, 0},
 		unbudgetedTotal: 0,
 
-		freeCompute:            make([]*Compute[T], 0, 32),
-		freeReturn:             make([]*Return[T], 0, 32),
-		freeDone:               make([]*Done[T], 0, 4),
-		freeFrameAwaitArg:      make([]*FrameAwaitArg[T], 0, 32),
-		freeFrameAwaitFunTerm:  make([]*FrameAwaitFunTerm[T], 0, 32),
-		freeFrameAwaitFunValue: make([]*FrameAwaitFunValue[T], 0, 32),
-		freeFrameForce:         make([]*FrameForce[T], 0, 16),
-		freeFrameConstr:        make([]*FrameConstr[T], 0, 16),
-		freeFrameCases:         make([]*FrameCases[T], 0, 16),
-		constrChunks:           make([][]Constr[T], 0, 8),
-		constrChunkPos:         0,
-		delayChunks:            make([][]Delay[T], 0, 8),
-		delayChunkPos:          0,
-		lambdaChunks:           make([][]Lambda[T], 0, 8),
-		lambdaChunkPos:         0,
-		constantChunks:         make([][]Constant, 0, 8),
-		constantChunkPos:       0,
-		dataChunks:             make([][]syn.Data, 0, 8),
-		dataChunkPos:           0,
-		integerChunks:          make([][]syn.Integer, 0, 4),
-		integerChunkPos:        0,
-		byteStringChunks:       make([][]syn.ByteString, 0, 4),
-		byteStringChunkPos:     0,
-		protoListChunks:        make([][]syn.ProtoList, 0, 8),
-		protoListChunkPos:      0,
-		protoPairChunks:        make([][]syn.ProtoPair, 0, 8),
-		protoPairChunkPos:      0,
-		dataValueChunks:        make([][]dataValue[T], 0, 8),
-		dataValueChunkPos:      0,
-		dataListValueChunks:    make([][]dataListValue[T], 0, 8),
-		dataListValueChunkPos:  0,
-		dataMapValueChunks:     make([][]dataMapValue[T], 0, 8),
-		dataMapValueChunkPos:   0,
-		pairValueChunks:        make([][]pairValue[T], 0, 8),
-		pairValueChunkPos:      0,
-		constantElemChunks:     make([][]syn.IConstant, 0, 8),
-		constantElemChunkPos:   0,
-		valueElemChunks:        make([][]Value[T], 0, 8),
-		valueElemChunkPos:      0,
-		builtinChunks:          make([][]Builtin[T], 0, 8),
-		builtinChunkPos:        0,
-		builtinArgChunks:       make([][]BuiltinArgs[T], 0, 8),
-		builtinArgChunkPos:     0,
-		envChunks:              make([][]Env[T], 0, 8),
-		envChunkPos:            0,
-		budgetTemplate:         DefaultExBudget,
-		lastRunRemaining:       DefaultExBudget,
-		hasRun:                 false,
+		constrChunks:          make([][]Constr[T], 0, 8),
+		constrChunkPos:        0,
+		delayChunks:           make([][]Delay[T], 0, 8),
+		delayChunkPos:         0,
+		lambdaChunks:          make([][]Lambda[T], 0, 8),
+		lambdaChunkPos:        0,
+		constantChunks:        make([][]Constant, 0, 8),
+		constantChunkPos:      0,
+		dataChunks:            make([][]syn.Data, 0, 8),
+		dataChunkPos:          0,
+		integerChunks:         make([][]syn.Integer, 0, 4),
+		integerChunkPos:       0,
+		byteStringChunks:      make([][]syn.ByteString, 0, 4),
+		byteStringChunkPos:    0,
+		protoListChunks:       make([][]syn.ProtoList, 0, 8),
+		protoListChunkPos:     0,
+		protoPairChunks:       make([][]syn.ProtoPair, 0, 8),
+		protoPairChunkPos:     0,
+		dataValueChunks:       make([][]dataValue[T], 0, 8),
+		dataValueChunkPos:     0,
+		dataListValueChunks:   make([][]dataListValue[T], 0, 8),
+		dataListValueChunkPos: 0,
+		dataMapValueChunks:    make([][]dataMapValue[T], 0, 8),
+		dataMapValueChunkPos:  0,
+		pairValueChunks:       make([][]pairValue[T], 0, 8),
+		pairValueChunkPos:     0,
+		constantElemChunks:    make([][]syn.IConstant, 0, 8),
+		constantElemChunkPos:  0,
+		valueElemChunks:       make([][]Value[T], 0, 8),
+		valueElemChunkPos:     0,
+		builtinChunks:         make([][]Builtin[T], 0, 8),
+		builtinChunkPos:       0,
+		builtinArgChunks:      make([][]BuiltinArgs[T], 0, 8),
+		builtinArgChunkPos:    0,
+		envChunks:             make([][]Env[T], 0, 8),
+		envChunkPos:           0,
+		budgetTemplate:        DefaultExBudget,
+		lastRunRemaining:      DefaultExBudget,
+		hasRun:                false,
 	}
 }
 
@@ -677,6 +699,10 @@ func (m *Machine[T]) extendEnv(parent *Env[T], data Value[T]) *Env[T] {
 		m.envChunks = append(m.envChunks, make([]Env[T], envChunkSize))
 	}
 	chunk := m.envChunks[chunkIdx]
+	if chunk == nil {
+		chunk = make([]Env[T], envChunkSize)
+		m.envChunks[chunkIdx] = chunk
+	}
 	env := &chunk[m.envChunkPos%envChunkSize]
 	m.envChunkPos += 1
 	env.data = data
@@ -699,6 +725,13 @@ func (m *Machine[T]) resetEnvArena() {
 	m.envChunkPos = 0
 }
 
+// lazyPrepareEnvArena trims chunks beyond envRetainChunkCap and clears the
+// used prefix of the retained env chunks so Run does not leave pointers into
+// the previous run's Env/Value graph pinned inside the Machine.
+func (m *Machine[T]) lazyPrepareEnvArena() {
+	lazyPrepareArenaChunks(&m.envChunks, &m.envChunkPos, envRetainChunkCap)
+}
+
 func (m *Machine[T]) resetValueArenas() {
 	resetArenaChunks(&m.constrChunks, &m.constrChunkPos, valueRetainChunkCap)
 	resetArenaChunks(&m.delayChunks, &m.delayChunkPos, valueRetainChunkCap)
@@ -717,6 +750,26 @@ func (m *Machine[T]) resetValueArenas() {
 	resetArenaChunks(&m.valueElemChunks, &m.valueElemChunkPos, valueRetainChunkCap)
 	resetArenaChunks(&m.builtinChunks, &m.builtinChunkPos, valueRetainChunkCap)
 	resetArenaChunks(&m.builtinArgChunks, &m.builtinArgChunkPos, valueRetainChunkCap)
+}
+
+func (m *Machine[T]) lazyPrepareValueArenas() {
+	lazyPrepareArenaChunks(&m.constrChunks, &m.constrChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(&m.delayChunks, &m.delayChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(&m.lambdaChunks, &m.lambdaChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(&m.constantChunks, &m.constantChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(&m.dataChunks, &m.dataChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(&m.integerChunks, &m.integerChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(&m.byteStringChunks, &m.byteStringChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(&m.protoListChunks, &m.protoListChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(&m.protoPairChunks, &m.protoPairChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(&m.dataValueChunks, &m.dataValueChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(&m.dataListValueChunks, &m.dataListValueChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(&m.dataMapValueChunks, &m.dataMapValueChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(&m.pairValueChunks, &m.pairValueChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(&m.constantElemChunks, &m.constantElemChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(&m.valueElemChunks, &m.valueElemChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(&m.builtinChunks, &m.builtinChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(&m.builtinArgChunks, &m.builtinArgChunkPos, valueRetainChunkCap)
 }
 
 func (m *Machine[T]) finishReturn(ret *Return[T]) (syn.Term[T], error) {
@@ -738,6 +791,12 @@ func (m *Machine[T]) finishValue(value Value[T]) (syn.Term[T], error) {
 // This implementation now uses an explicit machine-owned frame stack on the hot
 // path while preserving the existing setup, teardown, budget, and discharge
 // behavior.
+//
+// Arena teardown runs in the deferred block so a long-lived or pooled
+// Machine does not retain references into the previous evaluation's
+// Value/Env/syn.Term graph after Run returns. The entry path only handles
+// budget restoration and frame-stack reset (the latter also defends against
+// tests or other callers that tamper with the frame stack between runs).
 func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 	if m.hasRun {
 		if m.ExBudget != m.lastRunRemaining {
@@ -745,19 +804,19 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 		} else {
 			m.ExBudget = m.budgetTemplate
 		}
+		m.resetFrameStack()
 	} else {
 		m.budgetTemplate = m.ExBudget
 	}
 	m.Logs = m.Logs[:0]
-	m.resetFrameStack()
 	clear(m.unbudgetedSteps[:])
 	m.unbudgetedTotal = 0
 	defer func() {
 		m.lastRunRemaining = m.ExBudget
 		m.hasRun = true
 		m.resetFrameStack()
-		m.resetValueArenas()
-		m.resetEnvArena()
+		m.lazyPrepareValueArenas()
+		m.lazyPrepareEnvArena()
 	}()
 
 	// Spend initial startup budget for machine initialization
