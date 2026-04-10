@@ -1,6 +1,6 @@
 # Release Notes
 
-## v0.1.4 - arena-backed CBOR decoding updates
+## v0.1.4 - arena-backed CBOR decoding and runtime cleanup
 
 - Date: 2026-04-10
 - Version: v0.1.4
