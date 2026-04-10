@@ -1,11 +1,11 @@
 # Release Notes
 
-## v0.1.4 - maintenance updates
+## v0.1.4 - arena-backed CBOR decoding updates
 
 - Date: 2026-04-10
 - Version: v0.1.4
 
-Summary: This release includes the changes listed below.
+Summary: This release includes arena-backed `CBOR` decoding for additional `PlutusData` primitives, retained arena cleanup after `Machine.Run`, and updated constant handling to reduce memory pressure.
 
 ### New Features
 
@@ -17,11 +17,11 @@ Summary: This release includes the changes listed below.
 
 ### Performance
 
-- Improved constant handling to reduce memory pressure during repeated decoding and evaluation workloads.
+- Updated constant handling to reduce memory pressure during repeated decoding and evaluation workloads.
 
 ### Additional Changes
 
-- Expanded test coverage to validate arena-backed `CBOR` and DeBruijn decoding behavior across supported `PlutusData` shapes.
+- Updated test coverage to validate arena-backed `CBOR` and `DeBruijn` decoding behavior across supported `PlutusData` shapes.
 
 ## v0.1.3 - CBOR decoding and DeBruijn updates
 
