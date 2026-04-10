@@ -10,16 +10,16 @@ Summary: This release includes the changes listed below.
 ```json
 {
   "Additional Changes": [
-    "Test coverage has been expanded to validate the new CBOR and DeBruijn arena-based decoding behavior across supported PlutusData shapes. Additionally, encoding/decoding test cases were extended and benchmark harnesses were refactored to support both fresh and mixed workload scenarios."
+    "Expanded test coverage to validate arena-backed `CBOR` and DeBruijn decoding behavior across supported `PlutusData` shapes."
   ],
   "Bug Fixes": [
-    "The runtime now ensures arenas retained across executions are properly cleared so state from a prior run cannot leak into subsequent evaluations. Concretely, it introduces lazy arena-clearing helpers on Machine and adds tests asserting retained arenas are wiped after Run completes."
+    "Fixed retained arena state leaking between executions by ensuring arenas are cleared after `Machine.Run` completes."
   ],
   "New Features": [
-    "The decoder now supports reading PlutusData maps, lists, integers, and byte strings using arena-backed CBOR decoding, reducing per-decode allocations and improving reuse across operations. Specifically, CBOR decoding paths allocate from an arena for these PlutusData primitives and use a reusable constant/PlutusData arena inside the DeBruijn flat decoder to avoid repeated heap churn."
+    "Added arena-backed `CBOR` decoding for `PlutusData` maps, lists, integers, and byte strings to reduce per-decode allocations and improve reuse across operations."
   ],
   "Performance": [
-    "Constant handling has been tuned to reduce memory pressure during repeated decoding and evaluation workloads. In particular, integer constant caching was shrunk/adjusted and flat-file benchmarks were refactored to measure both fresh and mixed decode/eval modes for more realistic performance characterization."
+    "Improved constant handling to reduce memory pressure during repeated decoding and evaluation workloads."
   ]
 }
 
