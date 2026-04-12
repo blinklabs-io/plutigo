@@ -9,6 +9,7 @@ BINARIES=$(shell cd $(ROOT_DIR)/cmd && ls -1 | grep -v ^common)
 
 # Common flags for fuzz tests
 FUZZ_FLAGS ?= -run=^$ -fuzztime=10s
+NILAWAY_FLAGS ?= -include-pkgs=github.com/blinklabs-io/plutigo -exclude-file-docstrings="<nilaway skip stack-machine>"
 
 .PHONY: mod-tidy test test-match test-cover bench bench-baseline bench-compare fuzz format golines clean download-plutus-tests validate validate-quick validate-fix nilaway
 
@@ -99,4 +100,4 @@ validate-fix: ## Run validation and auto-fix formatting issues
 	@./scripts/validate.sh --fix
 
 nilaway: mod-tidy ## Run nilaway nil safety analysis
-	go run go.uber.org/nilaway/cmd/nilaway@latest ./...
+	go run go.uber.org/nilaway/cmd/nilaway@latest $(NILAWAY_FLAGS) ./...

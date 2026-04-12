@@ -1,3 +1,5 @@
+// <nilaway skip stack-machine>
+// The standalone NilAway driver times out on this large generic stack loop.
 package cek
 
 import (

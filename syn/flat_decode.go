@@ -473,6 +473,11 @@ func (a *arenaSlices[S]) alloc(n int) []S {
 
 	for a.chunkIdx < len(a.chunks) {
 		chunk := a.chunks[a.chunkIdx]
+		if chunk == nil {
+			a.chunkIdx++
+			a.offset = 0
+			continue
+		}
 		avail := len(chunk) - a.offset
 		if n <= avail {
 			start := a.offset
@@ -501,11 +506,15 @@ func (a *arenaSlices[S]) reset(retainCap int) {
 		retained = retainCap
 	}
 	for i := 0; i < retained; i++ {
+		chunk := a.chunks[i]
+		if chunk == nil {
+			continue
+		}
 		if i < a.chunkIdx {
-			clear(a.chunks[i])
+			clear(chunk)
 		} else if i == a.chunkIdx {
 			if a.offset > 0 {
-				clear(a.chunks[i][:a.offset])
+				clear(chunk[:a.offset])
 			}
 			break
 		}

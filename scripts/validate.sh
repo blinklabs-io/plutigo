@@ -92,11 +92,11 @@ fi
 # Step 4: Run nilaway
 echo_step "Running nilaway"
 if command -v nilaway &> /dev/null; then
-    if nilaway ./... 2>/dev/null; then
+    if nilaway -include-pkgs=github.com/blinklabs-io/plutigo -exclude-file-docstrings="<nilaway skip stack-machine>" ./... 2>/dev/null; then
         echo_pass "nilaway"
     else
         echo_fail "nilaway found nil safety issues"
-        echo "Run 'nilaway ./...' for details"
+        echo "Run 'nilaway -include-pkgs=github.com/blinklabs-io/plutigo -exclude-file-docstrings=\"<nilaway skip stack-machine>\" ./...' for details"
     fi
 else
     echo -e "${YELLOW}SKIP${NC}: nilaway not installed"
