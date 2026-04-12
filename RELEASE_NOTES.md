@@ -1,5 +1,38 @@
 # Release Notes
 
+## v0.1.5 - release notes
+
+- Date: 2026-04-12
+- Version: v0.1.5
+
+Summary: This release covers the changes captured in the structured notes below.
+
+```json
+{
+  "Additional Changes": [
+    "Updated test coverage to validate new caching, arena reuse, and fast-path behaviors. This extended tests to cover the `ed25519` verification cache, arena reset/reuse logic, adaptive arena sizing, and lambda-application fast paths."
+  ],
+  "Bug Fixes": [
+    "Fixed constant handling to behave more consistently across decoding and runtime evaluation. This improved constant-processing logic to correctly handle edge cases in constant decoding and evaluation paths.",
+    "Fixed arena lifecycle management so temporary allocations were released after program execution. This ensured arena cleanup runs after `Machine.Run` completes, preventing accumulation of per-run allocations."
+  ],
+  "New Features": [
+    "Added arena-backed allocation for decoded terms and constants to reduce heap churn during evaluation. This introduced arena-managed slice allocation with reusable empty-slice sentinels and reset logic for term/constant slices.",
+    "Added a verification cache to speed up repeated signature checks during execution. This introduced an `ed25519` verification cache integrated with the existing validation flow to reuse prior verification results.",
+    "Added environment skip pointers to make environment traversal cheaper in common evaluation paths. This introduced skip-pointer metadata in the environment representation to accelerate lookup and stepping operations.",
+    "Added fast paths for lambda application to reduce overhead in common call patterns. This introduced specialized lambda-application paths in the evaluator to avoid generic application machinery when inputs match optimized cases.",
+    "Added support for configuring the benchmark root directory without changing source code. This allowed overriding the benchmark test root directory via the `PLUTIGO_BENCH_DIR` environment variable."
+  ],
+  "Performance": [
+    "Improved CBOR decoding performance and memory usage by allocating decoded values from arenas. This implemented arena-backed CBOR decoding so decoder-produced terms/constants are backed by an arena rather than heap allocations.",
+    "Reduced peak memory usage for values and builtins by reusing instances and sizing arenas dynamically. This optimized value/builtin allocation arenas with adaptive sizing and added reusable no-arg builtin instances to cut repeated allocations.",
+    "Updated decoding to use smaller input chunks to reduce transient buffering during parsing. This reduced the data decoding chunk size from `256` to `64`.",
+    "Updated memory-cost accounting to better reflect actual allocation behavior under the new arena strategy. This refined memory-cost handling to align cost tracking with arena-backed allocations and reuse."
+  ]
+}
+
+```
+
 ## v0.1.4 - arena-backed CBOR decoding and runtime cleanup
 
 - Date: 2026-04-10
