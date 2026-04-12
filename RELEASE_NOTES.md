@@ -18,12 +18,12 @@ Summary: This release includes arena-backed allocation for decoded terms and con
 ### Bug Fixes
 
 - Fixed constant handling to behave more consistently across decoding and runtime evaluation.
-- Fixed arena lifecycle management so temporary allocations were released after program execution.
+- Fixed arena lifecycle management so temporary allocations were released after `Machine.Run` completes.
 
 ### Performance
 
 - Updated `CBOR` decoding to allocate decoded values from arenas to reduce per-decode allocations.
-- Updated value and builtin allocation to reduce peak memory usage by reusing instances and adapting arena sizes.
+- Updated value and builtin allocation to reduce peak memory usage by reusing instances, adapting arena sizes, and reusing no-arg builtin instances.
 - Updated decoding to use smaller input chunks by reducing the data decoding chunk size from `256` to `64`.
 - Updated memory-cost accounting to more accurately reflect allocation behavior under arena-backed reuse.
 
