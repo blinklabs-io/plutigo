@@ -1,37 +1,35 @@
 # Release Notes
 
-## v0.1.5 - release notes
+## v0.1.5 - arena-backed allocation and evaluation fast paths
 
 - Date: 2026-04-12
 - Version: v0.1.5
 
-Summary: This release covers the changes captured in the structured notes below.
+Summary: This release includes arena-backed allocation for decoded terms and constants, an `ed25519` verification cache, evaluator fast paths for common lambda application patterns, and decoding and cost-accounting updates that reduce allocation overhead.
 
-```json
-{
-  "Additional Changes": [
-    "Updated test coverage to validate new caching, arena reuse, and fast-path behaviors."
-  ],
-  "Bug Fixes": [
-    "Fixed constant handling to behave more consistently across decoding and runtime evaluation.",
-    "Fixed arena lifecycle management so temporary allocations were released after program execution."
-  ],
-  "New Features": [
-    "Added arena-backed allocation for decoded terms and constants to reduce heap churn during evaluation.",
-    "Added a verification cache to speed up repeated signature checks during execution.",
-    "Added environment skip pointers to make environment traversal cheaper in common evaluation paths.",
-    "Added fast paths for lambda application to reduce overhead in common call patterns.",
-    "Added support for configuring the benchmark root directory without changing source code."
-  ],
-  "Performance": [
-    "Improved CBOR decoding performance and memory usage by allocating decoded values from arenas.",
-    "Reduced peak memory usage for values and builtins by reusing instances and sizing arenas dynamically.",
-    "Updated decoding to use smaller input chunks to reduce transient buffering during parsing.",
-    "Updated memory-cost accounting to better reflect actual allocation behavior under the new arena strategy."
-  ]
-}
+### New Features
 
-```
+- Added arena-backed allocation for decoded terms and constants to reduce heap churn during evaluation.
+- Added an `ed25519` verification cache to improve repeated signature verification throughput.
+- Added environment skip pointers to reduce environment traversal overhead in common evaluation paths.
+- Added lambda-application fast paths to reduce overhead in common call patterns.
+- Added support for configuring the benchmark root directory via `PLUTIGO_BENCH_DIR`.
+
+### Bug Fixes
+
+- Fixed constant handling to behave more consistently across decoding and runtime evaluation.
+- Fixed arena lifecycle management so temporary allocations were released after program execution.
+
+### Performance
+
+- Updated `CBOR` decoding to allocate decoded values from arenas to reduce per-decode allocations.
+- Updated value and builtin allocation to reduce peak memory usage by reusing instances and sizing arenas dynamically.
+- Updated decoding to use smaller input chunks by reducing the data decoding chunk size from `256` to `64`.
+- Updated memory-cost accounting to better reflect allocation behavior under arena-backed reuse.
+
+### Additional Changes
+
+- Updated test coverage to validate caching, arena reuse, and evaluator fast-path behaviors.
 
 ## v0.1.4 - arena-backed CBOR decoding and runtime cleanup
 
