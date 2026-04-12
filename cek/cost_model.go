@@ -171,16 +171,16 @@ func bigIntExMemValue(i *big.Int) ExMem {
 
 func byteArrayExMem(b []byte) func() ExMem {
 	return func() ExMem {
-		length := len(b)
-
-		if length == 0 {
-			return ExMem(1)
-		} else {
-			i := ((length - 1) / 8) + 1
-
-			return ExMem(i)
-		}
+		return byteArrayExMemValue(b)
 	}
+}
+
+func byteArrayExMemValue(b []byte) ExMem {
+	length := len(b)
+	if length == 0 {
+		return ExMem(1)
+	}
+	return ExMem(((length - 1) / 8) + 1)
 }
 
 // Haskell uses T.length which returns the number of Unicode codepoints (characters),

@@ -266,6 +266,29 @@ func (m *Machine[T]) runStackNoSlippage(term syn.Term[T]) (syn.Term[T], error) {
 					return nil, m.budgetErrorForStep(ExApply)
 				}
 
+				if lambda, ok := t.Function.(*syn.Lambda[T]); ok {
+					if !m.spendStepNoSlippage(ExLambda) {
+						return nil, m.budgetErrorForStep(ExLambda)
+					}
+					if isImmediateTerm[T](t.Argument) {
+						argValue, err := m.computeKnownImmediateValueNoSlippage(currentEnv, t.Argument)
+						if err != nil {
+							return nil, err
+						}
+						currentTerm = lambda.Body
+						currentEnv = m.extendEnv(currentEnv, argValue)
+						currentValue = nil
+						returning = false
+						continue
+					}
+					frame := m.pushFrameSlot()
+					frame.kind = frameAwaitArgLambda
+					frame.env = currentEnv
+					frame.term = lambda.Body
+					currentTerm = t.Argument
+					continue
+				}
+
 				if isImmediateTerm[T](t.Function) {
 					funValue, err := m.computeKnownImmediateValueNoSlippage(currentEnv, t.Function)
 					if err != nil {
@@ -397,7 +420,6 @@ func (m *Machine[T]) runStackNoSlippage(term syn.Term[T]) (syn.Term[T], error) {
 		switch frame.kind {
 		case frameAwaitArg:
 			function := frame.value
-			frame.value = nil
 			m.frameStack = m.frameStack[:frameIdx]
 
 			var err error
@@ -411,8 +433,6 @@ func (m *Machine[T]) runStackNoSlippage(term syn.Term[T]) (syn.Term[T], error) {
 		case frameAwaitArgLambda:
 			env := frame.env
 			body := frame.term
-			frame.env = nil
-			frame.term = nil
 			m.frameStack = m.frameStack[:frameIdx]
 
 			currentTerm = body
@@ -421,7 +441,6 @@ func (m *Machine[T]) runStackNoSlippage(term syn.Term[T]) (syn.Term[T], error) {
 			returning = false
 		case frameAwaitArgBuiltin:
 			builtinValue := frame.builtin
-			frame.builtin = nil
 			m.frameStack = m.frameStack[:frameIdx]
 
 			var err error
@@ -432,8 +451,6 @@ func (m *Machine[T]) runStackNoSlippage(term syn.Term[T]) (syn.Term[T], error) {
 		case frameAwaitFunTerm:
 			env := frame.env
 			term := frame.term
-			frame.env = nil
-			frame.term = nil
 			m.frameStack = m.frameStack[:frameIdx]
 
 			if isImmediateTerm[T](term) {
@@ -457,7 +474,6 @@ func (m *Machine[T]) runStackNoSlippage(term syn.Term[T]) (syn.Term[T], error) {
 			returning = false
 		case frameAwaitFunValue:
 			arg := frame.value
-			frame.value = nil
 			m.frameStack = m.frameStack[:frameIdx]
 
 			var err error
@@ -483,9 +499,6 @@ func (m *Machine[T]) runStackNoSlippage(term syn.Term[T]) (syn.Term[T], error) {
 			if len(frame.fields) == 0 {
 				resolvedFields := frame.resolvedFields
 				tag := frame.tag
-				frame.env = nil
-				frame.fields = nil
-				frame.resolvedFields = nil
 				m.frameStack = m.frameStack[:frameIdx]
 
 				currentValue = m.allocConstr(tag, resolvedFields)
@@ -501,8 +514,6 @@ func (m *Machine[T]) runStackNoSlippage(term syn.Term[T]) (syn.Term[T], error) {
 		case frameCases:
 			env := frame.env
 			branches := frame.branches
-			frame.env = nil
-			frame.branches = nil
 			m.frameStack = m.frameStack[:frameIdx]
 
 			var err error
@@ -558,6 +569,29 @@ func (m *Machine[T]) runStack(term syn.Term[T]) (syn.Term[T], error) {
 			case *syn.Apply[T]:
 				if err := m.stepAndMaybeSpend(ExApply); err != nil {
 					return nil, err
+				}
+
+				if lambda, ok := t.Function.(*syn.Lambda[T]); ok {
+					if err := m.stepAndMaybeSpend(ExLambda); err != nil {
+						return nil, err
+					}
+					if isImmediateTerm[T](t.Argument) {
+						argValue, err := m.computeKnownImmediateValue(currentEnv, t.Argument)
+						if err != nil {
+							return nil, err
+						}
+						currentTerm = lambda.Body
+						currentEnv = m.extendEnv(currentEnv, argValue)
+						currentValue = nil
+						returning = false
+						continue
+					}
+					frame := m.pushFrameSlot()
+					frame.kind = frameAwaitArgLambda
+					frame.env = currentEnv
+					frame.term = lambda.Body
+					currentTerm = t.Argument
+					continue
 				}
 
 				if isImmediateTerm[T](t.Function) {

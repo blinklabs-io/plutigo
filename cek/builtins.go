@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"math/bits"
 	"sort"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -31,6 +32,25 @@ var (
 	sharedListDataType = &syn.TList{Typ: sharedDataType}
 	sharedPairDataType = &syn.TPair{First: sharedDataType, Second: sharedDataType}
 )
+
+const (
+	ed25519VerifyCacheLimit  = 4096
+	ed25519VerifyMaxCacheMsg = 64
+)
+
+type ed25519VerifyCacheKey struct {
+	publicKey [ed25519.PublicKeySize]byte
+	signature [ed25519.SignatureSize]byte
+	message   [ed25519VerifyMaxCacheMsg]byte
+	msgLen    uint8
+}
+
+var ed25519VerifyCache = struct {
+	sync.RWMutex
+	values map[ed25519VerifyCacheKey]bool
+}{
+	values: make(map[ed25519VerifyCacheKey]bool),
+}
 
 func absUint64(v int64) uint64 {
 	if v < 0 {
@@ -1166,11 +1186,11 @@ func verifyEd25519Signature[T syn.Eval](
 		return nil, err
 	}
 
-	err = m.CostThree(
+	err = m.CostThreeExMem(
 		&b.Func,
-		byteArrayExMem(publicKey),
-		byteArrayExMem(message),
-		byteArrayExMem(signature),
+		byteArrayExMemValue(publicKey),
+		byteArrayExMemValue(message),
+		byteArrayExMemValue(signature),
 	)
 	if err != nil {
 		return nil, err
@@ -1190,7 +1210,30 @@ func verifyEd25519Signature[T syn.Eval](
 		)
 	}
 
-	res := ed25519.Verify(publicKey, message, signature)
+	var res bool
+	if len(message) <= ed25519VerifyMaxCacheMsg {
+		var key ed25519VerifyCacheKey
+		copy(key.publicKey[:], publicKey)
+		copy(key.signature[:], signature)
+		copy(key.message[:], message)
+		key.msgLen = uint8(len(message))
+
+		ed25519VerifyCache.RLock()
+		cached, ok := ed25519VerifyCache.values[key]
+		ed25519VerifyCache.RUnlock()
+		if ok {
+			res = cached
+		} else {
+			res = ed25519.Verify(publicKey, message, signature)
+			ed25519VerifyCache.Lock()
+			if len(ed25519VerifyCache.values) < ed25519VerifyCacheLimit {
+				ed25519VerifyCache.values[key] = res
+			}
+			ed25519VerifyCache.Unlock()
+		}
+	} else {
+		res = ed25519.Verify(publicKey, message, signature)
+	}
 
 	con := &syn.Bool{
 		Inner: res,
@@ -2045,13 +2088,7 @@ func equalsData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	result := &syn.Bool{
-		Inner: arg1.Equal(arg2),
-	}
-
-	value := &Constant{result}
-
-	return value, nil
+	return boolConstant(arg1.Equal(arg2)), nil
 }
 
 func serialiseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
