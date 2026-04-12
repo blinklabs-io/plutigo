@@ -152,6 +152,9 @@ func forEachBenchFile(
 
 	testRoot := filepath.Join(filepath.Dir(filename), "bench")
 	testRoot = filepath.Clean(testRoot)
+	if benchDir := os.Getenv("PLUTIGO_BENCH_DIR"); benchDir != "" {
+		testRoot = filepath.Clean(benchDir)
+	}
 
 	if _, err := os.Stat(testRoot); os.IsNotExist(err) {
 		b.Fatalf("Test directory not found: %s", testRoot)
