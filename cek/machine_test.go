@@ -189,6 +189,93 @@ func TestRunClearsRetainedArenaReferencesAfterReturn(t *testing.T) {
 	}
 }
 
+func TestRunKeepsSmallReusedValueArenaCold(t *testing.T) {
+	term := &syn.Lambda[syn.DeBruijn]{
+		ParameterName: syn.DeBruijn(0),
+		Body:          &syn.Var[syn.DeBruijn]{Name: syn.DeBruijn(1)},
+	}
+
+	tests := []struct {
+		name               string
+		setup              func() *Machine[syn.DeBruijn]
+		term               syn.Term[syn.DeBruijn]
+		wantChunkSize      int
+		wantLambdaChunks   int
+		wantLambdaChunkLen int
+	}{
+		{
+			name: "single lambda reuse",
+			setup: func() *Machine[syn.DeBruijn] {
+				return NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+			},
+			term:               term,
+			wantChunkSize:      valueColdChunkSize,
+			wantLambdaChunks:   1,
+			wantLambdaChunkLen: valueColdChunkSize,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := tt.setup()
+			term := tt.term
+
+			if _, err := m.Run(term); err != nil {
+				t.Fatalf("first Run returned error: %v", err)
+			}
+			if _, err := m.Run(term); err != nil {
+				t.Fatalf("second Run returned error: %v", err)
+			}
+
+			if got := m.valueArenaChunkSize; got != tt.wantChunkSize {
+				t.Fatalf("valueArenaChunkSize after small reuse = %d, want %d", got, tt.wantChunkSize)
+			}
+			if got := len(m.lambdaChunks); got != tt.wantLambdaChunks {
+				t.Fatalf("len(lambdaChunks) after small reuse = %d, want %d", got, tt.wantLambdaChunks)
+			}
+			if tt.wantLambdaChunks == 0 {
+				return
+			}
+			if got := len(m.lambdaChunks[0]); got != tt.wantLambdaChunkLen {
+				t.Fatalf("len(lambdaChunks[0]) after small reuse = %d, want %d", got, tt.wantLambdaChunkLen)
+			}
+		})
+	}
+}
+
+func TestRunStackLambdaImmediateFastPathSkipsLambdaArena(t *testing.T) {
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 2, nil)
+	term := &syn.Apply[syn.DeBruijn]{
+		Function: &syn.Lambda[syn.DeBruijn]{
+			ParameterName: syn.DeBruijn(0),
+			Body:          &syn.Var[syn.DeBruijn]{Name: syn.DeBruijn(1)},
+		},
+		Argument: &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(42)}},
+	}
+
+	for _, run := range []string{"first", "second"} {
+		out, err := m.Run(term)
+		if err != nil {
+			t.Fatalf("%s Run returned error: %v", run, err)
+		}
+		outConst, ok := out.(*syn.Constant)
+		if !ok {
+			t.Fatalf("%s Run returned %T, want *syn.Constant", run, out)
+		}
+		outInt, ok := outConst.Con.(*syn.Integer)
+		if !ok {
+			t.Fatalf("%s Run returned %T constant, want *syn.Integer", run, outConst.Con)
+		}
+		if got := outInt.Inner.Int64(); got != 42 {
+			t.Fatalf("%s Run integer = %d, want 42", run, got)
+		}
+	}
+
+	if got := len(m.lambdaChunks); got != 0 {
+		t.Fatalf("len(lambdaChunks) after lambda immediate fast path = %d, want 0", got)
+	}
+}
+
 func TestResetEnvArenaRetainsOnlyTrackedChunkHeaders(t *testing.T) {
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
@@ -245,6 +332,14 @@ func TestLookupEnvUsesOneIndexedDepth(t *testing.T) {
 		deepEnv = deepEnv.Extend(&Constant{&syn.Integer{Inner: big.NewInt(i)}})
 	}
 
+	var linearDeepEnv *Env[syn.DeBruijn]
+	for i := int64(1); i <= 10; i++ {
+		linearDeepEnv = &Env[syn.DeBruijn]{
+			data: &Constant{&syn.Integer{Inner: big.NewInt(i)}},
+			next: linearDeepEnv,
+		}
+	}
+
 	tests := []struct {
 		name         string
 		env          *Env[syn.DeBruijn]
@@ -262,6 +357,9 @@ func TestLookupEnvUsesOneIndexedDepth(t *testing.T) {
 		{"deep idx=6 traverses loop", deepEnv, 6, 2, true},
 		{"deep idx=7 returns oldest", deepEnv, 7, 1, true},
 		{"deep idx=8 out of bounds", deepEnv, 8, -1, false},
+		{"linear idx=5 falls back without skip4", linearDeepEnv, 5, 6, true},
+		{"linear idx=9 falls back without skip4", linearDeepEnv, 9, 2, true},
+		{"linear idx=11 out of bounds", linearDeepEnv, 11, -1, false},
 	}
 
 	for _, tt := range tests {

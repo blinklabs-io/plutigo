@@ -379,6 +379,36 @@ func (m *Machine[T]) CostThree(
 	return m.spendBudget(cost)
 }
 
+func (m *Machine[T]) CostThreeExMem(
+	b *builtin.DefaultFunction,
+	x, y, z ExMem,
+) error {
+	model := m.costs.builtinCosts[*b]
+	mem := model.mem.(ThreeArgument)
+	cpu := model.cpu.(ThreeArgument)
+
+	memConstants := mem.HasConstants()
+	cpuConstants := cpu.HasConstants()
+
+	xMem := x
+	if memConstants[0] && cpuConstants[0] {
+		xMem = ExMem(0)
+	}
+	yMem := y
+	if memConstants[1] && cpuConstants[1] {
+		yMem = ExMem(0)
+	}
+	zMem := z
+	if memConstants[2] && cpuConstants[2] {
+		zMem = ExMem(0)
+	}
+
+	return m.spendBudget(ExBudget{
+		Mem: int64(mem.CostThree(xMem, yMem, zMem)),
+		Cpu: int64(cpu.CostThree(xMem, yMem, zMem)),
+	})
+}
+
 func (m *Machine[T]) CostFour(
 	b *builtin.DefaultFunction,
 	x, y, z, u func() ExMem,
