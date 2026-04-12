@@ -18,6 +18,11 @@ const (
 	decodeRetainApplyCap = 2
 )
 
+var (
+	emptyDeBruijnTermList = []Term[DeBruijn]{}
+	emptyConstantList     = []IConstant{}
+)
+
 type DeBruijnDecoder struct {
 	decoder decoder
 	arena   termArena[DeBruijn]
@@ -340,7 +345,7 @@ func decodeTermWithArena[T Binder](d *decoder, arena *termArena[T]) (Term[T], er
 }
 
 func decodeTermListWithArena[T Binder](d *decoder, arena *termArena[T]) ([]Term[T], error) {
-	result := make([]Term[T], 0, 4)
+	result := arena.allocTermList(4)[:0]
 
 	for {
 		bit, err := d.bit()
@@ -365,7 +370,7 @@ func decodeTermListDeBruijnWithArena(
 	arena *termArena[DeBruijn],
 	consts *constantArena,
 ) ([]Term[DeBruijn], error) {
-	result := make([]Term[DeBruijn], 0, 4)
+	var result []Term[DeBruijn]
 
 	for {
 		bit, err := d.bit()
@@ -373,7 +378,13 @@ func decodeTermListDeBruijnWithArena(
 			return nil, err
 		}
 		if !bit {
-			break
+			if result == nil {
+				return emptyDeBruijnTermList, nil
+			}
+			return result, nil
+		}
+		if result == nil {
+			result = arena.allocTermList(4)[:0]
 		}
 		item, err := decodeTermDeBruijnWithArena(d, arena, consts)
 		if err != nil {
@@ -381,8 +392,6 @@ func decodeTermListDeBruijnWithArena(
 		}
 		result = append(result, item)
 	}
-
-	return result, nil
 }
 
 type arenaChunks[S any] struct {
@@ -451,6 +460,66 @@ func (a *arenaChunks[S]) reset(retainCap int) {
 	a.offset = 0
 }
 
+type arenaSlices[S any] struct {
+	chunks   [][]S
+	chunkIdx int
+	offset   int
+}
+
+func (a *arenaSlices[S]) alloc(n int) []S {
+	if n == 0 {
+		return nil
+	}
+
+	for a.chunkIdx < len(a.chunks) {
+		chunk := a.chunks[a.chunkIdx]
+		avail := len(chunk) - a.offset
+		if n <= avail {
+			start := a.offset
+			a.offset += n
+			return chunk[start : start+n : start+n]
+		}
+		// Not enough space in current chunk, advance to next
+		a.chunkIdx++
+		a.offset = 0
+	}
+
+	size := decodeTermChunkSize
+	if n > size {
+		size = n
+	}
+	chunk := make([]S, size)
+	a.chunks = append(a.chunks, chunk)
+	a.chunkIdx = len(a.chunks) - 1
+	a.offset = n
+	return chunk[:n:n]
+}
+
+func (a *arenaSlices[S]) reset(retainCap int) {
+	retained := len(a.chunks)
+	if retained > retainCap {
+		retained = retainCap
+	}
+	for i := 0; i < retained; i++ {
+		if i < a.chunkIdx {
+			clear(a.chunks[i])
+		} else if i == a.chunkIdx {
+			if a.offset > 0 {
+				clear(a.chunks[i][:a.offset])
+			}
+			break
+		}
+	}
+	if len(a.chunks) > retainCap {
+		for i := retainCap; i < len(a.chunks); i++ {
+			a.chunks[i] = nil
+		}
+		a.chunks = a.chunks[:retainCap]
+	}
+	a.chunkIdx = 0
+	a.offset = 0
+}
+
 type termArena[T Binder] struct {
 	vars      arenaChunks[Var[T]]
 	delays    arenaChunks[Delay[T]]
@@ -462,6 +531,7 @@ type termArena[T Binder] struct {
 	errors    arenaChunks[Error]
 	constants arenaChunks[Constant]
 	builtins  arenaChunks[Builtin]
+	termLists arenaSlices[Term[T]]
 }
 
 func newTermArena[T Binder]() *termArena[T] {
@@ -479,6 +549,7 @@ func (a *termArena[T]) reset() {
 	a.errors.reset(decodeRetainVarCap)
 	a.constants.reset(decodeRetainVarCap)
 	a.builtins.reset(decodeRetainVarCap)
+	a.termLists.reset(decodeRetainApplyCap)
 }
 
 func (a *termArena[T]) allocVar(name T) *Var[T] {
@@ -543,6 +614,10 @@ func (a *termArena[T]) allocBuiltin(fn builtin.DefaultFunction) *Builtin {
 	return term
 }
 
+func (a *termArena[T]) allocTermList(n int) []Term[T] {
+	return a.termLists.alloc(n)
+}
+
 type constantArena struct {
 	bigInts     arenaChunks[big.Int]
 	integers    arenaChunks[Integer]
@@ -553,6 +628,7 @@ type constantArena struct {
 	protoLists  arenaChunks[ProtoList]
 	protoPairs  arenaChunks[ProtoPair]
 	datas       arenaChunks[Data]
+	lists       arenaSlices[IConstant]
 	dataDecoder data.Decoder
 }
 
@@ -566,6 +642,7 @@ func (a *constantArena) reset() {
 	a.protoLists.reset(decodeRetainVarCap)
 	a.protoPairs.reset(decodeRetainVarCap)
 	a.datas.reset(decodeRetainVarCap)
+	a.lists.reset(decodeRetainVarCap)
 	a.dataDecoder.Reset()
 }
 
@@ -626,6 +703,10 @@ func (a *constantArena) allocData(inner data.PlutusData) *Data {
 	value := a.datas.alloc()
 	value.Inner = inner
 	return value
+}
+
+func (a *constantArena) allocList(n int) []IConstant {
+	return a.lists.alloc(n)
 }
 
 func decodeDeBruijnBinder(d *decoder) (DeBruijn, error) {
@@ -863,7 +944,7 @@ func decodeConstantListWithArena(
 	itemType Typ,
 	arena *constantArena,
 ) ([]IConstant, error) {
-	result := make([]IConstant, 0, 4)
+	var result []IConstant
 
 	for {
 		bit, err := d.bit()
@@ -871,7 +952,13 @@ func decodeConstantListWithArena(
 			return nil, err
 		}
 		if !bit {
+			if result == nil {
+				return emptyConstantList, nil
+			}
 			return result, nil
+		}
+		if result == nil {
+			result = arena.allocList(4)[:0]
 		}
 		item, err := decodeConstantValueWithArena(d, itemType, arena)
 		if err != nil {
@@ -1413,7 +1500,6 @@ func (d *decoder) byteArray() ([]byte, error) {
 	blkLen := int(d.buffer[d.pos])
 	d.pos++
 	result := make([]byte, 0, blkLen)
-
 	for blkLen != 0 {
 		if err := d.ensureBytes(blkLen + 1); err != nil {
 			return nil, err
