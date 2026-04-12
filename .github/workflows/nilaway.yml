@@ -2,6 +2,12 @@ name: nilaway
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - v*
+    branches:
+      - main
+  pull_request:
 
 permissions:
   contents: read
@@ -20,4 +26,4 @@ jobs:
       - name: install nilaway
         run: go install go.uber.org/nilaway/cmd/nilaway@latest
       - name: run nilaway
-        run: nilaway ./...
+        run: nilaway -include-pkgs=github.com/blinklabs-io/plutigo -exclude-file-docstrings="<nilaway skip stack-machine>" ./...
