@@ -1,5 +1,36 @@
 # Release Notes
 
+## v0.1.5 - arena-backed allocation and evaluation fast paths
+
+- Date: 2026-04-12
+- Version: v0.1.5
+
+Summary: This release includes arena-backed allocation for decoded terms and constants, an `ed25519` verification cache, evaluator fast paths for common lambda application patterns, and decoding and cost-accounting updates that reduce allocation overhead.
+
+### New Features
+
+- Added arena-backed allocation for decoded terms and constants to reduce allocation overhead during evaluation.
+- Added an `ed25519` verification cache to reduce repeated signature verification overhead.
+- Added environment skip pointers to reduce environment traversal overhead in common evaluation paths.
+- Added lambda-application fast paths to reduce overhead in common call patterns.
+- Added support for configuring the benchmark root directory via `PLUTIGO_BENCH_DIR`.
+
+### Bug Fixes
+
+- Fixed constant handling to behave more consistently across decoding and runtime evaluation.
+- Fixed arena lifecycle management so temporary allocations were released after `Machine.Run` completes.
+
+### Performance
+
+- Updated `CBOR` decoding to allocate decoded values from arenas to reduce per-decode allocations.
+- Updated value and builtin allocation to reduce peak memory usage by reusing instances, adapting arena sizes, and reusing no-arg builtin instances.
+- Updated decoding to use smaller input chunks by reducing the data decoding chunk size from `256` to `64`.
+- Updated memory-cost accounting to more accurately reflect allocation behavior under arena-backed reuse.
+
+### Additional Changes
+
+- Updated test coverage to validate caching, arena reuse, and evaluator fast-path behaviors.
+
 ## v0.1.4 - arena-backed CBOR decoding and runtime cleanup
 
 - Date: 2026-04-10
