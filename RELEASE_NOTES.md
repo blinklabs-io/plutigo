@@ -9,8 +9,8 @@ Summary: This release includes arena-backed allocation for decoded terms and con
 
 ### New Features
 
-- Added arena-backed allocation for decoded terms and constants to reduce heap churn during evaluation.
-- Added an `ed25519` verification cache to improve repeated signature verification throughput.
+- Added arena-backed allocation for decoded terms and constants to reduce allocation overhead during evaluation.
+- Added an `ed25519` verification cache to reduce repeated signature verification overhead.
 - Added environment skip pointers to reduce environment traversal overhead in common evaluation paths.
 - Added lambda-application fast paths to reduce overhead in common call patterns.
 - Added support for configuring the benchmark root directory via `PLUTIGO_BENCH_DIR`.
@@ -23,9 +23,9 @@ Summary: This release includes arena-backed allocation for decoded terms and con
 ### Performance
 
 - Updated `CBOR` decoding to allocate decoded values from arenas to reduce per-decode allocations.
-- Updated value and builtin allocation to reduce peak memory usage by reusing instances and sizing arenas dynamically.
+- Updated value and builtin allocation to reduce peak memory usage by reusing instances and adapting arena sizes.
 - Updated decoding to use smaller input chunks by reducing the data decoding chunk size from `256` to `64`.
-- Updated memory-cost accounting to better reflect allocation behavior under arena-backed reuse.
+- Updated memory-cost accounting to more accurately reflect allocation behavior under arena-backed reuse.
 
 ### Additional Changes
 
