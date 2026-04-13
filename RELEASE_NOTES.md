@@ -7,24 +7,23 @@
 
 Summary: This release includes the changes listed below.
 
-```json
-{
-  "Additional Changes": [
-    "This release modernizes the CI/release workflow to keep automation current."
-  ],
-  "Bug Fixes": [
-    "This release fixes incorrect behavior when building constant lists so values are handled consistently.",
-    "This release improves static analysis reliability and corrects decoding behavior to prevent subtle issues."
-  ],
-  "New Features": [
-    "This release adds new capabilities and documentation around v0.1.5 so users can take advantage of recent improvements."
-  ],
-  "Security": [
-    "This release updates dependencies to incorporate upstream security and stability fixes."
-  ]
-}
+### New Features
 
-```
+- Added new capabilities and documentation around `v0.1.5` so users can take advantage of recent improvements.
+
+### Bug Fixes
+
+- Fixed incorrect behavior when building constant lists so values are handled consistently.
+- Fixed decoding chunk handling and state clearing to prevent subtle decode issues.
+
+### Security
+
+- Updated `golang.org/x/crypto` and `golang.org/x/sys` to incorporate upstream security and stability fixes.
+
+### Additional Changes
+
+- Updated the publish workflow to use `github-script` `v9.0.0` instead of `v8.0.0`.
+- Updated `nilaway` invocation flags and skipped analysis of the stack machine file to improve static analysis reliability.
 
 ## v0.1.5 - arena-backed allocation and evaluation fast paths
 
