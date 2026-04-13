@@ -9,12 +9,12 @@ Summary: This release includes the changes listed below.
 
 ### New Features
 
-- Added new capabilities and documentation around `v0.1.5` so users can take advantage of recent improvements.
+- Added release note coverage for `v0.1.5` to document recent improvements.
 
 ### Bug Fixes
 
 - Fixed incorrect behavior when building constant lists so values are handled consistently.
-- Fixed decoding chunk handling and state clearing to prevent subtle decode issues.
+- Fixed decoding chunk handling and state clearing to prevent subtle decoding issues.
 
 ### Security
 
