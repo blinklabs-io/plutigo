@@ -1,5 +1,31 @@
 # Release Notes
 
+## v0.1.6 - maintenance updates
+
+- Date: 2026-04-13
+- Version: v0.1.6
+
+Summary: This release includes the changes listed below.
+
+```json
+{
+  "Additional Changes": [
+    "This release modernizes the CI/release workflow to keep automation current. It updates the publish workflow to use the github-script action v9.0.0 instead of v8.0.0."
+  ],
+  "Bug Fixes": [
+    "This release fixes incorrect behavior when building constant lists so values are handled consistently. It adds a regression test for consing a dataValue onto a Constant list and updates constant unwrapping to materialize typed constants rather than only handling *Constant.",
+    "This release improves static analysis reliability and corrects decoding behavior to prevent subtle issues. It standardizes NilAway invocation with shared flags, skips analysis of the stack machine file, and fixes chunk handling and clearing in flat_decode.go."
+  ],
+  "New Features": [
+    "This release adds new capabilities and documentation around v0.1.5 so users can take advantage of recent improvements. It includes arena-backed allocation, evaluator fast paths, and other related v0.1.5 updates captured in the release notes."
+  ],
+  "Security": [
+    "This release updates dependencies to incorporate upstream security and stability fixes. It upgrades golang.org/x/crypto and golang.org/x/sys to newer versions (no CVE/severity details were provided in the raw notes)."
+  ]
+}
+
+```
+
 ## v0.1.5 - arena-backed allocation and evaluation fast paths
 
 - Date: 2026-04-12
