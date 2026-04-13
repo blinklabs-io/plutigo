@@ -9,7 +9,7 @@ Summary: This release includes the changes listed below.
 
 ### New Features
 
-- Added release note coverage for `v0.1.5` to document recent improvements.
+- Added release note coverage for `v0.1.5` to document recent updates.
 
 ### Bug Fixes
 
