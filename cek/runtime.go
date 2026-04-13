@@ -446,17 +446,15 @@ func (m *Machine[T]) CostSix(
 }
 
 func unwrapConstant[T syn.Eval](value Value[T]) (*Constant, error) {
-	var i *Constant
-
 	switch v := value.(type) {
 	case *Constant:
-		i = v
-
+		return v, nil
 	default:
+		if c, ok := materializeConstantValue[T](value); ok {
+			return &Constant{Constant: c}, nil
+		}
 		return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
 	}
-
-	return i, nil
 }
 
 func unwrapInteger[T syn.Eval](value Value[T]) (*big.Int, error) {

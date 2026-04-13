@@ -3215,6 +3215,51 @@ func TestMkConsBuiltinOnDataListValue(t *testing.T) {
 	}
 }
 
+// TestMkConsDataValueOntoConstantList reproduces a regression where a dataValue
+// (optimized PlutusData wrapper) is consed onto a regular Constant ProtoList.
+// The unwrapConstant function must handle dataValue, not just *Constant.
+func TestMkConsDataValueOntoConstantList(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.MkCons)
+
+	// Left: a dataValue (the optimized type)
+	head := m.allocDataValue(&data.Integer{Inner: big.NewInt(42)})
+
+	// Right: a regular Constant ProtoList of Data
+	tail := &Constant{&syn.ProtoList{
+		LTyp: &syn.TData{},
+		List: []syn.IConstant{
+			&syn.Data{Inner: &data.Integer{Inner: big.NewInt(1)}},
+			&syn.Data{Inner: &data.Integer{Inner: big.NewInt(2)}},
+		},
+	}}
+
+	b = b.ApplyArg(head)
+	b = b.ApplyArg(tail)
+
+	val := evalBuiltin(t, m, b)
+	resultList := expectMaterializedProtoList(t, val)
+
+	expectedValues := []int64{42, 1, 2}
+	if len(resultList.List) != len(expectedValues) {
+		t.Fatalf("expected list with %d elements, got %d", len(expectedValues), len(resultList.List))
+	}
+
+	for i, expectedValue := range expectedValues {
+		dataElem, ok := resultList.List[i].(*syn.Data)
+		if !ok {
+			t.Fatalf("expected element %d to be Data, got %T", i, resultList.List[i])
+		}
+		intElem, ok := dataElem.Inner.(*data.Integer)
+		if !ok {
+			t.Fatalf("expected element %d inner to be Integer, got %T", i, dataElem.Inner)
+		}
+		if intElem.Inner.Cmp(big.NewInt(expectedValue)) != 0 {
+			t.Fatalf("expected element %d value %d, got %v", i, expectedValue, intElem.Inner)
+		}
+	}
+}
+
 func TestHeadListBuiltinOnDataMapValue(t *testing.T) {
 	m := newTestMachine()
 	b := newTestBuiltin(builtin.HeadList)
