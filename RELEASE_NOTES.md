@@ -1,5 +1,27 @@
 # Release Notes
 
+## v0.1.6 - workflow and decoding maintenance
+
+- Date: 2026-04-13
+- Version: v0.1.6
+
+Summary: This release covers constant list construction fixes, flat decoding correctness updates, dependency security updates, and CI and release workflow maintenance.
+
+### Bug Fixes
+
+- Fixed `syn.Constant` list construction to unwrap typed constants consistently.
+- Fixed chunk handling and state clearing in `syn/flat_decode.go` to prevent subtle decoding issues.
+
+### Security
+
+- Updated `golang.org/x/crypto` and `golang.org/x/sys` to incorporate upstream security and stability fixes.
+
+### Additional Changes
+
+- Updated `.github/workflows/publish.yml` to use `actions/github-script@v9.0.0` instead of `v8.0.0`.
+- Updated `nilaway` invocation flags and excluded `cek/stack_machine.go` from analysis to improve static analysis reliability.
+- Updated `RELEASE_NOTES.md` to include the `v0.1.6` entry.
+
 ## v0.1.5 - arena-backed allocation and evaluation fast paths
 
 - Date: 2026-04-12
