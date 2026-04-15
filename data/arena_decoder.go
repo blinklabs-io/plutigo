@@ -89,6 +89,19 @@ func (a *arenaChunks[S]) reset(retainCap int) {
 	a.offset = 0
 }
 
+func resetBigIntChunks(a *arenaChunks[big.Int], retainCap int) {
+	// Keep big.Int word backing arrays across decoder reuse; integer decode
+	// overwrites every allocated value before returning it.
+	if len(a.chunks) > retainCap {
+		for i := retainCap; i < len(a.chunks); i++ {
+			a.chunks[i] = nil
+		}
+		a.chunks = a.chunks[:retainCap]
+	}
+	a.chunkIdx = 0
+	a.offset = 0
+}
+
 type arenaSlices[S any] struct {
 	chunks [][]S
 	pos    int
@@ -182,7 +195,7 @@ func NewDecoder() *Decoder {
 
 // Reset clears all internal arena pools so the Decoder can be reused; previously returned values become invalid.
 func (d *Decoder) Reset() {
-	d.bigInts.reset(dataDecodeRetainCap)
+	resetBigIntChunks(&d.bigInts, dataDecodeRetainCap)
 	d.integers.reset(dataDecodeRetainCap)
 	d.byteStrings.reset(dataDecodeRetainCap)
 	d.constrs.reset(dataDecodeRetainCap)
