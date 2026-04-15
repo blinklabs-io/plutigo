@@ -487,6 +487,40 @@ func TestDecoderReuseMatchesDecode(t *testing.T) {
 	})
 }
 
+func TestDecoderResetOverwritesRetainedBigInts(t *testing.T) {
+	decoder := NewDecoder()
+
+	large := new(big.Int).Lsh(big.NewInt(1), 80)
+	largeEncoded, err := Encode(NewInteger(large))
+	if err != nil {
+		t.Fatalf("Encode large failed: %v", err)
+	}
+	smallEncoded, err := Encode(NewInteger(big.NewInt(-3)))
+	if err != nil {
+		t.Fatalf("Encode small failed: %v", err)
+	}
+
+	if _, err := decoder.Decode(largeEncoded); err != nil {
+		t.Fatalf("Decode large failed: %v", err)
+	}
+	decoder.Reset()
+	decoded, err := decoder.Decode(smallEncoded)
+	if err != nil {
+		t.Fatalf("Decode small failed: %v", err)
+	}
+
+	integer, ok := decoded.(*Integer)
+	if !ok {
+		t.Fatalf("decoded value = %T, want *Integer", decoded)
+	}
+	if got, want := integer.Inner.Int64(), int64(-3); got != want {
+		t.Fatalf("decoded integer = %d, want %d", got, want)
+	}
+	if !decoded.Equal(NewInteger(big.NewInt(-3))) {
+		t.Fatalf("decoded value changed after overwrite: got %s", decoded)
+	}
+}
+
 func TestDecodeCBORTag(t *testing.T) {
 	tests := []struct {
 		name        string

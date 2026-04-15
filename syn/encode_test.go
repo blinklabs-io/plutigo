@@ -426,6 +426,116 @@ func TestDeBruijnDecoderReuse(t *testing.T) {
 	}
 }
 
+func TestDeBruijnDecoderReuseOverwritesBigInts(t *testing.T) {
+	tests := []struct {
+		name            string
+		programSequence []string
+	}{
+		{
+			name:            "large_then_small",
+			programSequence: []string{"large", "small"},
+		},
+		{
+			name:            "small_then_large",
+			programSequence: []string{"small", "large"},
+		},
+		{
+			name:            "same_size_large_values",
+			programSequence: []string{"same_size_a", "same_size_b"},
+		},
+		{
+			name:            "large_then_zero",
+			programSequence: []string{"large", "zero"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decoder := NewDeBruijnDecoder()
+
+			large := new(big.Int).Lsh(big.NewInt(1), 80)
+			sameSizeA := new(big.Int).Add(new(big.Int).Lsh(big.NewInt(1), 80), big.NewInt(5))
+			sameSizeB := new(big.Int).Add(new(big.Int).Lsh(big.NewInt(1), 80), big.NewInt(9))
+
+			largeProgram := &Program[DeBruijn]{
+				Version: lang.LanguageVersionV3,
+				Term:    &Constant{Con: &Integer{Inner: large}},
+			}
+			smallProgram := &Program[DeBruijn]{
+				Version: lang.LanguageVersionV3,
+				Term:    &Constant{Con: &Integer{Inner: big.NewInt(-3)}},
+			}
+			sameSizeAProgram := &Program[DeBruijn]{
+				Version: lang.LanguageVersionV3,
+				Term:    &Constant{Con: &Integer{Inner: sameSizeA}},
+			}
+			sameSizeBProgram := &Program[DeBruijn]{
+				Version: lang.LanguageVersionV3,
+				Term:    &Constant{Con: &Integer{Inner: sameSizeB}},
+			}
+			zeroProgram := &Program[DeBruijn]{
+				Version: lang.LanguageVersionV3,
+				Term:    &Constant{Con: &Integer{Inner: big.NewInt(0)}},
+			}
+
+			programs := map[string]*Program[DeBruijn]{
+				"large":       largeProgram,
+				"small":       smallProgram,
+				"same_size_a": sameSizeAProgram,
+				"same_size_b": sameSizeBProgram,
+				"zero":        zeroProgram,
+			}
+			expectedValues := map[string]*big.Int{
+				"large":       large,
+				"small":       big.NewInt(-3),
+				"same_size_a": sameSizeA,
+				"same_size_b": sameSizeB,
+				"zero":        big.NewInt(0),
+			}
+
+			for _, programName := range tt.programSequence {
+				program := programs[programName]
+				expectedValue := expectedValues[programName]
+
+				expectedEncoded, err := Encode(program)
+				if err != nil {
+					t.Fatalf("Encode %s failed: %v", programName, err)
+				}
+
+				decoded, err := decoder.Decode(expectedEncoded)
+				if err != nil {
+					t.Fatalf("Decode %s failed: %v", programName, err)
+				}
+
+				constant, ok := decoded.Term.(*Constant)
+				if !ok {
+					t.Fatalf("decoded %s term = %T, want *Constant", programName, decoded.Term)
+				}
+				integer, ok := constant.Con.(*Integer)
+				if !ok {
+					t.Fatalf("decoded %s constant = %T, want *Integer", programName, constant.Con)
+				}
+				if expectedValue.IsInt64() {
+					if got, want := integer.Inner.Int64(), expectedValue.Int64(); got != want {
+						t.Fatalf("decoded %s integer = %d, want %d", programName, got, want)
+					}
+				}
+				if integer.Inner.Cmp(expectedValue) != 0 {
+					t.Fatalf("decoded %s integer = %s, want %s", programName, integer.Inner, expectedValue)
+				}
+
+				reencoded, err := Encode(decoded)
+				if err != nil {
+					t.Fatalf("Re-encode %s failed: %v", programName, err)
+				}
+				if !bytes.Equal(expectedEncoded, reencoded) {
+					t.Fatalf("%s integer roundtrip mismatch after decoder reuse", programName)
+				}
+			}
+		})
+	}
+}
+
 func TestFlatRoundtripConstantTypes(t *testing.T) {
 	tests := []struct {
 		name     string
