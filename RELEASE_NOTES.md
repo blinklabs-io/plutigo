@@ -9,8 +9,8 @@ Summary: This release covers decoder retention and reset updates to improve repe
 
 ### New Features
 
-- Added specialized arena reset handling for retained `big.Int` values to improve decoder reuse correctness across repeated operations.
-- Added arena-backed byte storage and validated byte and `UTF-8` decoding to expand decode retention capacity while reducing allocations.
+- Added specialized arena reset handling for retained `big.Int` values to prevent stale large-number state across repeated decoding.
+- Added arena-backed byte storage and `UTF-8` validation to expand decode retention capacity and reduce allocations during repeated decoding.
 
 ### Additional Changes
 
