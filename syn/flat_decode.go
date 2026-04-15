@@ -14,13 +14,16 @@ import (
 
 const (
 	decodeTermChunkSize  = 384
-	decodeRetainVarCap   = 2
-	decodeRetainApplyCap = 2
+	decodeRetainVarCap   = 16
+	decodeRetainApplyCap = 16
+	decodeRetainListCap  = 32
+	decodeRetainBytesCap = 8
 )
 
 var (
 	emptyDeBruijnTermList = []Term[DeBruijn]{}
 	emptyConstantList     = []IConstant{}
+	emptyByteArray        = []byte{}
 )
 
 type DeBruijnDecoder struct {
@@ -408,16 +411,26 @@ func (a *arenaChunks[S]) used() int {
 }
 
 func (a *arenaChunks[S]) alloc() *S {
-	for a.chunkIdx < len(a.chunks) {
-		if a.offset < len(a.chunks[a.chunkIdx]) {
-			slot := &a.chunks[a.chunkIdx][a.offset]
+	if a.chunkIdx < len(a.chunks) {
+		chunk := a.chunks[a.chunkIdx]
+		if chunk != nil && a.offset < len(chunk) {
+			slot := &chunk[a.offset]
 			a.offset++
 			return slot
 		}
-		a.chunkIdx++
-		a.offset = 0
 	}
 
+	if nextIdx := a.chunkIdx + 1; nextIdx < len(a.chunks) {
+		chunk := a.chunks[nextIdx]
+		if chunk == nil {
+			goto allocNewChunk
+		}
+		a.chunkIdx = nextIdx
+		a.offset = 1
+		return &chunk[0]
+	}
+
+allocNewChunk:
 	chunk := make([]S, decodeTermChunkSize)
 	a.chunks = append(a.chunks, chunk)
 	a.chunkIdx = len(a.chunks) - 1
@@ -450,6 +463,19 @@ func (a *arenaChunks[S]) reset(retainCap int) {
 			remaining -= clearCount
 		}
 	}
+	if len(a.chunks) > retainCap {
+		for i := retainCap; i < len(a.chunks); i++ {
+			a.chunks[i] = nil
+		}
+		a.chunks = a.chunks[:retainCap]
+	}
+	a.chunkIdx = 0
+	a.offset = 0
+}
+
+func resetBigIntChunks(a *arenaChunks[big.Int], retainCap int) {
+	// Keep big.Int word backing arrays across decoder reuse; integer decode
+	// overwrites every allocated value before returning it.
 	if len(a.chunks) > retainCap {
 		for i := retainCap; i < len(a.chunks); i++ {
 			a.chunks[i] = nil
@@ -529,6 +555,17 @@ func (a *arenaSlices[S]) reset(retainCap int) {
 	a.offset = 0
 }
 
+func resetByteSlices(a *arenaSlices[byte], retainCap int) {
+	if len(a.chunks) > retainCap {
+		for i := retainCap; i < len(a.chunks); i++ {
+			a.chunks[i] = nil
+		}
+		a.chunks = a.chunks[:retainCap]
+	}
+	a.chunkIdx = 0
+	a.offset = 0
+}
+
 type termArena[T Binder] struct {
 	vars      arenaChunks[Var[T]]
 	delays    arenaChunks[Delay[T]]
@@ -558,7 +595,7 @@ func (a *termArena[T]) reset() {
 	a.errors.reset(decodeRetainVarCap)
 	a.constants.reset(decodeRetainVarCap)
 	a.builtins.reset(decodeRetainVarCap)
-	a.termLists.reset(decodeRetainApplyCap)
+	a.termLists.reset(decodeRetainListCap)
 }
 
 func (a *termArena[T]) allocVar(name T) *Var[T] {
@@ -638,11 +675,12 @@ type constantArena struct {
 	protoPairs  arenaChunks[ProtoPair]
 	datas       arenaChunks[Data]
 	lists       arenaSlices[IConstant]
+	bytes       arenaSlices[byte]
 	dataDecoder data.Decoder
 }
 
 func (a *constantArena) reset() {
-	a.bigInts.reset(decodeRetainVarCap)
+	resetBigIntChunks(&a.bigInts, decodeRetainVarCap)
 	a.integers.reset(decodeRetainVarCap)
 	a.byteStrings.reset(decodeRetainVarCap)
 	a.strings.reset(decodeRetainVarCap)
@@ -652,6 +690,7 @@ func (a *constantArena) reset() {
 	a.protoPairs.reset(decodeRetainVarCap)
 	a.datas.reset(decodeRetainVarCap)
 	a.lists.reset(decodeRetainVarCap)
+	resetByteSlices(&a.bytes, decodeRetainBytesCap)
 	a.dataDecoder.Reset()
 }
 
@@ -716,6 +755,10 @@ func (a *constantArena) allocData(inner data.PlutusData) *Data {
 
 func (a *constantArena) allocList(n int) []IConstant {
 	return a.lists.alloc(n)
+}
+
+func (a *constantArena) allocBytes(n int) []byte {
+	return a.bytes.alloc(n)
 }
 
 func decodeDeBruijnBinder(d *decoder) (DeBruijn, error) {
@@ -875,13 +918,13 @@ func decodeConstantValueWithArena(
 	case *TInteger:
 		return decodeIntegerWithArena(d, arena)
 	case *TByteString:
-		b, err := d.bytes()
+		b, err := d.bytesWithArena(arena)
 		if err != nil {
 			return nil, err
 		}
 		return arena.allocByteString(b), nil
 	case *TString:
-		s, err := d.utf8()
+		s, err := d.utf8WithArena(arena)
 		if err != nil {
 			return nil, err
 		}
@@ -911,7 +954,7 @@ func decodeConstantValueWithArena(
 		}
 		return arena.allocProtoPair(t.First, t.Second, first, second), nil
 	case *TData:
-		cborBytes, err := d.bytes()
+		cborBytes, err := d.bytesWithArena(arena)
 		if err != nil {
 			return nil, err
 		}
@@ -1473,6 +1516,19 @@ func (d *decoder) utf8() (string, error) {
 	return string(b), nil
 }
 
+func (d *decoder) utf8WithArena(arena *constantArena) (string, error) {
+	b, err := d.bytesWithArena(arena)
+	if err != nil {
+		return "", err
+	}
+
+	if !utf8.Valid(b) {
+		return "", fmt.Errorf("bytes are not valid utf8 %v", b)
+	}
+
+	return string(b), nil
+}
+
 // Decode a byte array.
 // Decodes a filler to byte align the buffer,
 // then decodes the next byte to get the array length up to a max of 255.
@@ -1487,6 +1543,14 @@ func (d *decoder) bytes() ([]byte, error) {
 	}
 
 	return d.byteArray()
+}
+
+func (d *decoder) bytesWithArena(arena *constantArena) ([]byte, error) {
+	if err := d.filler(); err != nil {
+		return nil, err
+	}
+
+	return d.byteArrayWithArena(arena)
 }
 
 // Decode a byte array.
@@ -1523,6 +1587,52 @@ func (d *decoder) byteArray() ([]byte, error) {
 	}
 
 	return result, nil
+}
+
+func (d *decoder) byteArrayWithArena(arena *constantArena) ([]byte, error) {
+	if d.usedBits != 0 {
+		return nil, errors.New("buffer not byte aligned")
+	}
+
+	if err := d.ensureBytes(1); err != nil {
+		return nil, err
+	}
+
+	scan := d.pos
+	total := 0
+	for {
+		blkLen := int(d.buffer[scan])
+		scan++
+		if blkLen == 0 {
+			break
+		}
+		if blkLen+1 > len(d.buffer)-scan {
+			return nil, fmt.Errorf("NotEnoughBytes(%d)", blkLen+1)
+		}
+		if blkLen > math.MaxInt-total {
+			return nil, errors.New("byte array too large")
+		}
+		total += blkLen
+		scan += blkLen
+	}
+
+	if total == 0 {
+		d.pos = scan
+		return emptyByteArray, nil
+	}
+
+	result := arena.allocBytes(total)
+	offset := 0
+	for {
+		blkLen := int(d.buffer[d.pos])
+		d.pos++
+		if blkLen == 0 {
+			return result, nil
+		}
+		copy(result[offset:], d.buffer[d.pos:d.pos+blkLen])
+		offset += blkLen
+		d.pos += blkLen
+	}
 }
 
 // integer decodes a variable-length signed integer from the buffer.
