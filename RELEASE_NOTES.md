@@ -1,5 +1,25 @@
 # Release Notes
 
+## v0.1.7 - updates
+
+- Date: 2026-04-15
+- Version: v0.1.7
+
+Summary: This release includes the changes listed below.
+
+```json
+{
+  "Additional Changes": [
+    "This release updates the published release notes entry to reflect the current set of fixes, security updates, and workflow changes for version v0.1.6. It adds a v0.1.6 changelog entry that documents fixes, security-related updates, and workflow/process adjustments."
+  ],
+  "New Features": [
+    "This update improves decoder reuse so repeated operations behave consistently even when previous runs left large-number state behind. It adds specialized arena reset logic for `big.Int` and includes tests proving that retained `big.Int` values are correctly overwritten in both the data decoder and the DeBruijn decoder.",
+    "This update expands how much decoded data can be retained while reducing allocations during repeated decoding. It increases decode retention capacities, adds arena-backed byte storage, and introduces arena-based byte and UTF-8 decoding with validation plus chunked-copy logic."
+  ]
+}
+
+```
+
 ## v0.1.6 - workflow and decoding maintenance
 
 - Date: 2026-04-13
