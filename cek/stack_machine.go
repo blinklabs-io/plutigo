@@ -78,6 +78,17 @@ func (m *Machine[T]) pushApplyFrames(args []Value[T]) {
 	}
 }
 
+func (m *Machine[T]) pushApplyFrameValue(arg Value[T]) {
+	frame := m.pushFrameSlot()
+	frame.kind = frameAwaitFunValue
+	frame.value = arg
+}
+
+func (m *Machine[T]) pushApplyFrames2(first, second Value[T]) {
+	m.pushApplyFrameValue(second)
+	m.pushApplyFrameValue(first)
+}
+
 func (m *Machine[T]) pushAwaitArgFrame(funValue Value[T]) {
 	frame := m.pushFrameSlot()
 	switch f := funValue.(type) {
@@ -981,7 +992,8 @@ func (m *Machine[T]) caseEvaluateStack(
 		return branches[v.Tag], env, nil, false, nil
 	case *Constant:
 		var tag int
-		var args []Value[T]
+		var firstArg Value[T]
+		var secondArg Value[T]
 		branchRule := 0
 
 		switch cval := v.Constant.(type) {
@@ -1027,17 +1039,15 @@ func (m *Machine[T]) caseEvaluateStack(
 				tag = 1
 			} else {
 				tag = 0
-				args = m.allocValueElems(2)
-				args[0] = m.allocConstant(cval.List[0])
+				firstArg = m.allocConstant(cval.List[0])
 				tail := m.allocProtoListConstant(cval.LTyp, cval.List[1:])
-				args[1] = m.allocConstant(tail)
+				secondArg = m.allocConstant(tail)
 			}
 		case *syn.ProtoPair:
 			branchRule = 1
 			tag = 0
-			args = m.allocValueElems(2)
-			args[0] = m.allocConstant(cval.First)
-			args[1] = m.allocConstant(cval.Second)
+			firstArg = m.allocConstant(cval.First)
+			secondArg = m.allocConstant(cval.Second)
 		default:
 			return nil, nil, nil, false, &TypeError{
 				Code:    ErrCodeNonConstrScrutinized,
@@ -1069,7 +1079,9 @@ func (m *Machine[T]) caseEvaluateStack(
 			}
 		}
 
-		m.pushApplyFrames(args)
+		if firstArg != nil {
+			m.pushApplyFrames2(firstArg, secondArg)
+		}
 		return branches[tag], env, nil, false, nil
 	case *dataListValue[T]:
 		if len(branches) < 1 || len(branches) > 2 {
@@ -1087,10 +1099,10 @@ func (m *Machine[T]) caseEvaluateStack(
 			}
 			return branches[1], env, nil, false, nil
 		}
-		args := m.allocValueElems(2)
-		args[0] = m.allocDataValue(v.items[0])
-		args[1] = m.allocDataListValue(v.items[1:])
-		m.pushApplyFrames(args)
+		m.pushApplyFrames2(
+			m.allocDataValue(v.items[0]),
+			m.allocDataListValue(v.items[1:]),
+		)
 		return branches[0], env, nil, false, nil
 	case *dataMapValue[T]:
 		if len(branches) < 1 || len(branches) > 2 {
@@ -1108,10 +1120,10 @@ func (m *Machine[T]) caseEvaluateStack(
 			}
 			return branches[1], env, nil, false, nil
 		}
-		args := m.allocValueElems(2)
-		args[0] = m.allocDataPairValue(v.items[0][0], v.items[0][1])
-		args[1] = m.allocDataMapValue(v.items[1:])
-		m.pushApplyFrames(args)
+		m.pushApplyFrames2(
+			m.allocDataPairValue(v.items[0][0], v.items[0][1]),
+			m.allocDataMapValue(v.items[1:]),
+		)
 		return branches[0], env, nil, false, nil
 	case *pairValue[T]:
 		if len(branches) != 1 {
@@ -1120,10 +1132,7 @@ func (m *Machine[T]) caseEvaluateStack(
 				Message: "InvalidCaseBranchCount",
 			}
 		}
-		args := m.allocValueElems(2)
-		args[0] = v.first
-		args[1] = v.second
-		m.pushApplyFrames(args)
+		m.pushApplyFrames2(v.first, v.second)
 		return branches[0], env, nil, false, nil
 	default:
 		return nil, nil, nil, false, &TypeError{
