@@ -299,6 +299,45 @@ func TestUpdateV3CostModel(t *testing.T) {
 	}
 }
 
+func TestUpdateV3CostModelWithExpModCoefficientNames(t *testing.T) {
+	params := make([]int64, len(lang.CostModelParamNamesV3))
+	var expModIdx int
+	foundExpMod := false
+	for i, name := range lang.CostModelParamNamesV3 {
+		if name == "expModInteger-cpu-arguments-coefficient00" {
+			expModIdx = i
+			foundExpMod = true
+			break
+		}
+	}
+	if !foundExpMod {
+		t.Fatal("expModInteger coefficient parameters not found")
+	}
+	params[expModIdx] = 607153
+	params[expModIdx+1] = 231697
+	params[expModIdx+2] = 53144
+
+	updatedCM, err := costModelFromList(
+		lang.LanguageVersionV3,
+		SemanticsVariantC,
+		params,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error building cost model from list: %s", err)
+	}
+
+	expModCPU := updatedCM.builtinCosts[builtin.ExpModInteger].cpu.(*ExpMod)
+	if expModCPU.coeff00 != 607153 {
+		t.Fatalf("expected expMod coeff00 to be 607153, got %d", expModCPU.coeff00)
+	}
+	if expModCPU.coeff11 != 231697 {
+		t.Fatalf("expected expMod coeff11 to be 231697, got %d", expModCPU.coeff11)
+	}
+	if expModCPU.coeff12 != 53144 {
+		t.Fatalf("expected expMod coeff12 to be 53144, got %d", expModCPU.coeff12)
+	}
+}
+
 func TestUpdateV1CostModelFromMap(t *testing.T) {
 	// PlutusV1 cost model from preview network alonzo-genesis.json
 	// Source: https://github.com/blinklabs-io/docker-cardano-configs/blob/main/config/preview/alonzo-genesis.json

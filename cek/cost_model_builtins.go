@@ -73,14 +73,24 @@ func (b *BuiltinCosts) update(param string, val int64) error {
 		paramIdx = 5
 	}
 
-	// For 3-part parameter names (builtin-cpu/memory-arguments), only ConstantCost is valid
+	// Some parameter lists use a single value for models that also have
+	// calibrated default slopes/coefficients. In that case, update the
+	// leading term and preserve the calibrated defaults for the rest.
 	if len(paramParts) == 3 {
-		if constCost, ok := args.(*ConstantCost); ok {
-			constCost.c = val
+		switch a := args.(type) {
+		case *ConstantCost:
+			a.c = val
 			return nil
-		} else {
-			// For non-ConstantCost types with 3-part names, throw an error
-			// This can happen when genesis file format differs from code expectations
+		case *LinearCost:
+			a.intercept = val
+			return nil
+		case *DropListCost:
+			a.intercept = val
+			return nil
+		case *QuadraticInXModel:
+			a.coeff0 = val
+			return nil
+		default:
 			return errors.New("cannot map parameter name to costing info: " + param)
 		}
 	}
@@ -119,7 +129,19 @@ func (b *BuiltinCosts) update(param string, val int64) error {
 	case *ConstAboveDiagonalModel:
 		if len(paramParts) > 5 && paramParts[3] == "model" && paramParts[4] == "arguments" {
 			// Accessing the nested model (e.g., divideInteger-cpu-arguments-model-arguments-intercept)
-			if model, ok := a.model.(*MultipliedSizesModel); ok {
+			switch model := a.model.(type) {
+			case *LinearInXAndY:
+				switch paramParts[5] {
+				case "intercept":
+					model.intercept = val
+				case "slope1":
+					model.slope1 = val
+				case "slope2":
+					model.slope2 = val
+				default:
+					return fmt.Errorf("unknown model param for builtin %s: %s", builtinName, paramParts[5])
+				}
+			case *MultipliedSizesModel:
 				switch paramParts[5] {
 				case "intercept":
 					model.intercept = val
@@ -128,7 +150,7 @@ func (b *BuiltinCosts) update(param string, val int64) error {
 				default:
 					return fmt.Errorf("unknown model param for builtin %s: %s", builtinName, paramParts[5])
 				}
-			} else {
+			default:
 				return errors.New("unexpected model type for builtin " + builtinName)
 			}
 		} else {
@@ -171,12 +193,30 @@ func (b *BuiltinCosts) update(param string, val int64) error {
 		}
 	case *ExpMod:
 		switch paramParts[paramIdx] {
-		case "coeff00":
+		case "coeff00", "coefficient00":
 			a.coeff00 = val
-		case "coeff11":
+		case "coeff11", "coefficient11":
 			a.coeff11 = val
-		case "coeff12":
+		case "coeff12", "coefficient12":
 			a.coeff12 = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *DropListCost:
+		switch paramParts[paramIdx] {
+		case "intercept":
+			a.intercept = val
+		case "slope":
+			a.slope = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *FourLinearInU:
+		switch paramParts[paramIdx] {
+		case "intercept":
+			a.intercept = val
+		case "slope":
+			a.slope = val
 		default:
 			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
 		}
@@ -253,6 +293,17 @@ func (b *BuiltinCosts) update(param string, val int64) error {
 			a.intercept = val
 		case "slope":
 			a.slope = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *QuadraticInXModel:
+		switch paramParts[paramIdx] {
+		case "coeff0", "c0", "intercept":
+			a.coeff0 = val
+		case "coeff1", "c1", "slope":
+			a.coeff1 = val
+		case "coeff2", "c2":
+			a.coeff2 = val
 		default:
 			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
 		}
@@ -351,6 +402,19 @@ func (b *BuiltinCosts) update(param string, val int64) error {
 			a.coeff1 = val
 		case "coeff2", "c2":
 			a.coeff2 = val
+		default:
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
+	case *WithInteractionInXAndY:
+		switch paramParts[paramIdx] {
+		case "c00":
+			a.c00 = val
+		case "c01":
+			a.c01 = val
+		case "c10":
+			a.c10 = val
+		case "c11":
+			a.c11 = val
 		default:
 			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
 		}
@@ -1003,8 +1067,10 @@ var DefaultBuiltinCosts = BuiltinCosts{
 	},
 	builtin.DropList: &CostingFunc[Arguments]{
 		mem: &ConstantCost{4},
-		// Raise baseline CPU so n=0 matches expected total budget better
-		cpu: &ConstantCost{116711},
+		cpu: &DropListCost{LinearCost{
+			intercept: 116711,
+			slope:     1957,
+		}},
 	},
 	builtin.LengthOfArray: &CostingFunc[Arguments]{
 		mem: &ConstantCost{10},
@@ -1298,6 +1364,7 @@ var (
 	hasConstantsFalse1            = []bool{false}
 	hasConstantsFalseTrue         = []bool{false, true}
 	hasConstantsTrueFalse         = []bool{true, false}
+	hasConstantsTrueTrue          = []bool{true, true}
 	hasConstantsFalseFalse        = []bool{false, false}
 	hasConstantsFalseFalseFalse   = []bool{false, false, false}
 	hasConstantsFalseTrueTrue     = []bool{false, true, true}
@@ -1340,6 +1407,20 @@ func (LinearCost) HasConstants() []bool {
 func (l LinearCost) Cost(x ExMem) int64 {
 	return l.slope*int64(x) + l.intercept
 }
+
+type DropListCost struct {
+	LinearCost
+}
+
+func (d DropListCost) CostTwo(x, y ExMem) int64 {
+	return d.intercept
+}
+
+func (DropListCost) HasConstants() []bool {
+	return hasConstantsTrueTrue
+}
+
+func (DropListCost) isArguments() {}
 
 // TwoArgument interface for costing functions with two arguments
 type TwoArgument interface {
