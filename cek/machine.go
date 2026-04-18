@@ -313,12 +313,13 @@ func allocArenaSlot[S any](chunks *[][]S, pos *int, chunkSize int) *S {
 	if chunkSize <= 0 {
 		chunkSize = valueColdChunkSize
 	}
-	chunkIdx := *pos / chunkSize
+	posVal := *pos
+	chunkIdx := posVal / chunkSize
 	if chunkIdx == len(*chunks) {
 		*chunks = append(*chunks, make([]S, chunkSize))
 	}
-	slot := &(*chunks)[chunkIdx][*pos%chunkSize]
-	*pos += 1
+	slot := &(*chunks)[chunkIdx][posVal%chunkSize]
+	*pos = posVal + 1
 	return slot
 }
 
