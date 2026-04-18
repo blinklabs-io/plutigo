@@ -3963,12 +3963,15 @@ func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	// Additional CPU spending proportional to |n| to align with conformance budgets
 	// Empirically derived cost model parameters for dropList operation.
 	const (
-		dropListCpuPerElement    int64 = 1957   // CPU cost per element to drop
 		dropListBaseCpuApprox    int64 = 212811 // Base CPU cost approximation
-		dropListHugeBitLenThresh       = 40     // ~1e12 threshold for "huge" requests
+		dropListHugeBitLenThresh int   = 40     // ~1e12 threshold for "huge" requests
 	)
 	if origAbsN.Sign() != 0 {
-		per := big.NewInt(dropListCpuPerElement)
+		perElementCpu := int64(1957)
+		if dropListCost, ok := m.costs.builtinCosts[builtin.DropList].cpu.(*DropListCost); ok {
+			perElementCpu = dropListCost.slope
+		}
+		per := big.NewInt(perElementCpu)
 		extra := new(big.Int).Mul(per, origAbsN)
 		// For extremely large requests, spend just enough so base+extra ~= MaxInt64
 		if origAbsN.BitLen() > dropListHugeBitLenThresh {
