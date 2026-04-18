@@ -1,5 +1,21 @@
 # Release Notes
 
+## v0.1.7 - decoder retention and reset updates
+
+- Date: 2026-04-15
+- Version: v0.1.7
+
+Summary: This release covers decoder retention and reset updates to improve repeated-decoding correctness and reduce allocation overhead.
+
+### New Features
+
+- Added specialized arena reset handling for retained `big.Int` values to prevent stale large-number state across repeated decoding.
+- Added arena-backed byte storage and `UTF-8` validation to expand decode retention capacity and reduce allocations during repeated decoding.
+
+### Additional Changes
+
+- Updated `RELEASE_NOTES.md` to document the current set of fixes, security updates, and workflow changes for `v0.1.6`.
+
 ## v0.1.6 - workflow and decoding maintenance
 
 - Date: 2026-04-13
