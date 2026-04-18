@@ -1,5 +1,24 @@
 # Release Notes
 
+## v0.1.8 - cost model handling and CEK hot-path tweaks
+
+- Date: 2026-04-18
+- Version: v0.1.8
+
+Summary: This release fixes CEK cost model handling and improves CEK hot-path performance to improve budget correctness and reduce interpreter overhead.
+
+### Bug Fixes
+
+* Corrected cost model handling so budget calculations stay accurate across a broader range of builtin cost parameters, including configurable `dropList` CPU settings.
+
+### Performance
+
+* Improved CEK hot path evaluation to reduce temporary allocation overhead during apply and case handling.
+
+### Additional Changes
+
+* Updated `RELEASE_NOTES.md` to include the `v0.1.8` entry.
+
 ## v0.1.7 - decoder retention and reset updates
 
 - Date: 2026-04-15
