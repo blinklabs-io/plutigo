@@ -958,7 +958,32 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 		return nil, err
 	}
 	if m.slippage <= 1 {
-		return m.runStackNoSlippage(term)
+		dbMachine := (*Machine[syn.DeBruijn])(unsafe.Pointer(m))
+		dbTerm, ok := any(term).(syn.Term[syn.DeBruijn])
+		if !ok {
+			return nil, &InternalError{
+				Code: ErrCodeInternalError,
+				Message: fmt.Sprintf(
+					"DeBruijn evaluator expected syn.Term[syn.DeBruijn], got %T",
+					term,
+				),
+			}
+		}
+		dbResult, err := runStackNoSlippageDeBruijn(dbMachine, dbTerm)
+		if err != nil {
+			return nil, err
+		}
+		result, ok := any(dbResult).(syn.Term[T])
+		if !ok {
+			return nil, &InternalError{
+				Code: ErrCodeInternalError,
+				Message: fmt.Sprintf(
+					"DeBruijn evaluator produced incompatible term type %T",
+					dbResult,
+				),
+			}
+		}
+		return result, nil
 	}
 	return m.runStack(term)
 }
