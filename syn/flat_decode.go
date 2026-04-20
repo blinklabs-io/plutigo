@@ -1443,6 +1443,11 @@ func (d *decoder) bits4() (byte, error) {
 		d.usedBits = 4
 		return b0 >> 4, nil
 	}
+	if d.usedBits == 4 {
+		d.usedBits = 0
+		d.pos++
+		return b0 & 0x0f, nil
+	}
 
 	unusedBits := 8 - d.usedBits
 	if unusedBits < 4 && d.pos+1 >= len(d.buffer) {
