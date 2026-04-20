@@ -68,7 +68,9 @@ type Machine[T syn.Eval] struct {
 	builtins           *Builtins[T]
 	builtinValues      *[builtin.TotalBuiltinCount]*Builtin[T]
 	builtinNoArgValues *[builtin.TotalBuiltinCount][3]*Builtin[T]
+	oneArgCosts        [builtin.TotalBuiltinCount]oneArgCost
 	twoArgCosts        [builtin.TotalBuiltinCount]twoArgCost
+	threeArgCosts      [builtin.TotalBuiltinCount]threeArgCost
 	available          *[builtin.TotalBuiltinCount]bool
 	slippage           uint32
 	version            lang.LanguageVersion
@@ -679,7 +681,9 @@ func NewMachine[T syn.Eval](
 		builtins:           chooseBuiltins[T](version, evalContext.ProtoMajor),
 		builtinValues:      getSharedBuiltinValues[T](),
 		builtinNoArgValues: getSharedBuiltinNoArgValues[T](),
+		oneArgCosts:        newOneArgCostCache(evalContext.CostModel.builtinCosts),
 		twoArgCosts:        newTwoArgCostCache(evalContext.CostModel.builtinCosts),
+		threeArgCosts:      newThreeArgCostCache(evalContext.CostModel.builtinCosts),
 		available:          chooseAvailableBuiltins(version, evalContext.ProtoMajor),
 		slippage:           slippage,
 		version:            version,

@@ -237,6 +237,36 @@ func (m *Machine[T]) evalBuiltinAppWithArg(
 	return m.evalBuiltinAppReady(fn, forces, argCount, &finalArgs)
 }
 
+type oneArgCost struct {
+	mem      OneArgument
+	cpu      OneArgument
+	constant bool
+}
+
+func newOneArgCostCache(
+	costs BuiltinCosts,
+) [builtin.TotalBuiltinCount]oneArgCost {
+	var ret [builtin.TotalBuiltinCount]oneArgCost
+	for i, model := range costs {
+		if model == nil {
+			continue
+		}
+
+		mem, memOK := model.mem.(OneArgument)
+		cpu, cpuOK := model.cpu.(OneArgument)
+		if !memOK || !cpuOK {
+			continue
+		}
+
+		ret[i] = oneArgCost{
+			mem:      mem,
+			cpu:      cpu,
+			constant: mem.HasConstants()[0] && cpu.HasConstants()[0],
+		}
+	}
+	return ret
+}
+
 type twoArgCost struct {
 	mem       TwoArgument
 	cpu       TwoArgument
@@ -275,6 +305,48 @@ func newTwoArgCostCache(
 	return ret
 }
 
+type threeArgCost struct {
+	mem       ThreeArgument
+	cpu       ThreeArgument
+	memConstX bool
+	memConstY bool
+	memConstZ bool
+	cpuConstX bool
+	cpuConstY bool
+	cpuConstZ bool
+}
+
+func newThreeArgCostCache(
+	costs BuiltinCosts,
+) [builtin.TotalBuiltinCount]threeArgCost {
+	var ret [builtin.TotalBuiltinCount]threeArgCost
+	for i, model := range costs {
+		if model == nil {
+			continue
+		}
+
+		mem, memOK := model.mem.(ThreeArgument)
+		cpu, cpuOK := model.cpu.(ThreeArgument)
+		if !memOK || !cpuOK {
+			continue
+		}
+
+		memConstants := mem.HasConstants()
+		cpuConstants := cpu.HasConstants()
+		ret[i] = threeArgCost{
+			mem:       mem,
+			cpu:       cpu,
+			memConstX: memConstants[0],
+			memConstY: memConstants[1],
+			memConstZ: memConstants[2],
+			cpuConstX: cpuConstants[0],
+			cpuConstY: cpuConstants[1],
+			cpuConstZ: cpuConstants[2],
+		}
+	}
+	return ret
+}
+
 // plutusVersionName returns a human-readable name for the Plutus version
 func plutusVersionName(v builtin.PlutusVersion) string {
 	switch v {
@@ -294,18 +366,26 @@ func plutusVersionName(v builtin.PlutusVersion) string {
 }
 
 func (m *Machine[T]) CostOne(b *builtin.DefaultFunction, x func() ExMem) error {
-	model := m.costs.builtinCosts[*b]
-
-	mem := model.mem.(OneArgument)
-	cpu := model.cpu.(OneArgument)
-
-	cf := CostingFunc[OneArgument]{
-		mem: mem,
-		cpu: cpu,
+	model := &m.oneArgCosts[*b]
+	mem := model.mem
+	cpu := model.cpu
+	if mem == nil || cpu == nil {
+		fallbackModel := m.costs.builtinCosts[*b]
+		mem = fallbackModel.mem.(OneArgument)
+		cpu = fallbackModel.cpu.(OneArgument)
+		model.mem = mem
+		model.cpu = cpu
+		model.constant = mem.HasConstants()[0] && cpu.HasConstants()[0]
 	}
 
-	cost := CostSingle(cf, x)
-	return m.spendBudget(cost)
+	xMem := ExMem(0)
+	if !model.constant {
+		xMem = x()
+	}
+	return m.spendBudget(ExBudget{
+		Mem: int64(mem.Cost(xMem)),
+		Cpu: int64(cpu.Cost(xMem)),
+	})
 }
 
 func (m *Machine[T]) CostTwo(
@@ -365,18 +445,41 @@ func (m *Machine[T]) CostThree(
 	b *builtin.DefaultFunction,
 	x, y, z func() ExMem,
 ) error {
-	model := m.costs.builtinCosts[*b]
-
-	mem := model.mem.(ThreeArgument)
-	cpu := model.cpu.(ThreeArgument)
-
-	cf := CostingFunc[ThreeArgument]{
-		mem: mem,
-		cpu: cpu,
+	model := &m.threeArgCosts[*b]
+	mem := model.mem
+	cpu := model.cpu
+	if mem == nil || cpu == nil {
+		fallbackModel := m.costs.builtinCosts[*b]
+		mem = fallbackModel.mem.(ThreeArgument)
+		cpu = fallbackModel.cpu.(ThreeArgument)
+		model.mem = mem
+		model.cpu = cpu
+		memConstants := mem.HasConstants()
+		cpuConstants := cpu.HasConstants()
+		model.memConstX = memConstants[0]
+		model.memConstY = memConstants[1]
+		model.memConstZ = memConstants[2]
+		model.cpuConstX = cpuConstants[0]
+		model.cpuConstY = cpuConstants[1]
+		model.cpuConstZ = cpuConstants[2]
 	}
 
-	cost := CostTriple(cf, x, y, z)
-	return m.spendBudget(cost)
+	xMem := ExMem(0)
+	if !model.memConstX || !model.cpuConstX {
+		xMem = x()
+	}
+	yMem := ExMem(0)
+	if !model.memConstY || !model.cpuConstY {
+		yMem = y()
+	}
+	zMem := ExMem(0)
+	if !model.memConstZ || !model.cpuConstZ {
+		zMem = z()
+	}
+	return m.spendBudget(ExBudget{
+		Mem: int64(mem.CostThree(xMem, yMem, zMem)),
+		Cpu: int64(cpu.CostThree(xMem, yMem, zMem)),
+	})
 }
 
 func (m *Machine[T]) CostThreeExMem(
