@@ -1,8 +1,18 @@
 # Release Notes
 
-### Additional Changes
+## v0.1.9 - CEK and syntax decoding performance optimizations
 
-* Updated `RELEASE_NOTES.md` to include the `v0.1.8` entry.
+- Date: 2026-04-20
+- Version: v0.1.9
+
+Summary: This release improves CEK execution and syntax decoding performance by adding a DeBruijn-specialized no-slippage evaluator, caching builtin cost calculations, adding a direct forced-builtin fast path, and optimizing low-nibble bits4 decoding.
+
+### Performance
+
+* Added a DeBruijn-specialized no-slippage CEK stack evaluator with optimized environment lookup and immediate-term handling, and routed `Machine.Run` through it for DeBruijn terms to reduce evaluation overhead.
+* Cached one-argument and three-argument builtin cost models and avoided unnecessary `ExMem` evaluation when cost parameters are constant to reduce builtin budget-accounting overhead.
+* Added a direct `force (builtin ...)` fast path in the DeBruijn stack machine so forced builtins can be evaluated without the slower general immediate-term path.
+* Optimized syntax decoding by teaching `bits4()` to return the low nibble directly when four bits remain in the current byte, reducing work in a hot decoding path.
 
 ## v0.1.8 - cost model handling and CEK hot-path tweaks
 
