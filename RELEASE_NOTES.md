@@ -1,5 +1,19 @@
 # Release Notes
 
+## v0.1.9 - DeBruijn evaluator and decoder fast paths
+
+- Date: 2026-04-20
+- Version: v0.1.9
+
+Summary: This release focuses on CEK and syntax-decoding performance improvements, especially faster DeBruijn no-slippage evaluation, builtin cost caching, and decoder fast paths.
+
+### Performance
+
+* Improved CEK execution by routing eligible `Machine.Run` calls through a dedicated no slippage DeBruijn evaluator.
+* Accelerated builtin execution by caching one argument and three argument cost calculations and by skipping unnecessary argument evaluation.
+* Refined syntax decoding with a low nibble `bits4()` fast path that increases decoder throughput.
+* Streamlined DeBruijn builtin forcing with a direct `force (builtin ...)` fast path that reduces evaluator overhead.
+
 ## v0.1.8 - cost model handling and CEK hot-path tweaks
 
 - Date: 2026-04-18
