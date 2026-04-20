@@ -315,6 +315,20 @@ func runStackNoSlippageDeBruijn(
 					return nil, m.budgetErrorForStep(ExForce)
 				}
 
+				if builtinTerm, ok := t.Term.(*syn.Builtin); ok {
+					if !m.spendStepNoSlippage(ExBuiltin) {
+						return nil, m.budgetErrorForStep(ExBuiltin)
+					}
+					var err error
+					currentTerm, currentEnv, currentValue, returning, err = m.forceEvaluateStack(
+						m.builtinValues[builtinTerm.DefaultFunction],
+					)
+					if err != nil {
+						return nil, err
+					}
+					continue
+				}
+
 				if isImmediateTermDeBruijn(t.Term) {
 					forcedValue, err := computeKnownImmediateValueNoSlippageDeBruijn(
 						m,
