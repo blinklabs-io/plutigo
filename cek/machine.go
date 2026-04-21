@@ -131,6 +131,8 @@ type Machine[T syn.Eval] struct {
 	builtinArgChunkPos     int
 	valueArenaChunkSize    int
 	envChunks              [][]Env[T]
+	envActiveChunk         []Env[T]
+	envActiveChunkLimit    int
 	envChunkPos            int
 	budgetTemplate         ExBudget
 	lastRunRemaining       ExBudget
@@ -762,17 +764,23 @@ func chooseAvailableBuiltins(
 }
 
 func (m *Machine[T]) extendEnv(parent *Env[T], data Value[T]) *Env[T] {
-	chunkIdx := m.envChunkPos / envChunkSize
-	if chunkIdx == len(m.envChunks) {
-		m.envChunks = append(m.envChunks, make([]Env[T], envChunkSize))
+	pos := m.envChunkPos
+	chunk := m.envActiveChunk
+	if chunk == nil || pos == m.envActiveChunkLimit {
+		chunkIdx := pos / envChunkSize
+		if chunkIdx == len(m.envChunks) {
+			m.envChunks = append(m.envChunks, make([]Env[T], envChunkSize))
+		}
+		chunk = m.envChunks[chunkIdx]
+		if chunk == nil {
+			chunk = make([]Env[T], envChunkSize)
+			m.envChunks[chunkIdx] = chunk
+		}
+		m.envActiveChunk = chunk
+		m.envActiveChunkLimit = (chunkIdx + 1) * envChunkSize
 	}
-	chunk := m.envChunks[chunkIdx]
-	if chunk == nil {
-		chunk = make([]Env[T], envChunkSize)
-		m.envChunks[chunkIdx] = chunk
-	}
-	env := &chunk[m.envChunkPos%envChunkSize]
-	m.envChunkPos += 1
+	env := &chunk[pos%envChunkSize]
+	m.envChunkPos = pos + 1
 	env.data = data
 	env.next = parent
 	if parent != nil {
@@ -799,6 +807,8 @@ func (m *Machine[T]) resetEnvArena() {
 		copy(retained, m.envChunks[:envRetainChunkCap])
 		m.envChunks = retained
 	}
+	m.envActiveChunk = nil
+	m.envActiveChunkLimit = 0
 	m.envChunkPos = 0
 }
 
@@ -807,10 +817,14 @@ func (m *Machine[T]) resetEnvArena() {
 // the previous run's Env/Value graph pinned inside the Machine.
 func (m *Machine[T]) lazyPrepareEnvArena() {
 	lazyPrepareArenaChunks(&m.envChunks, &m.envChunkPos, envRetainChunkCap)
+	m.envActiveChunk = nil
+	m.envActiveChunkLimit = 0
 }
 
 func (m *Machine[T]) dropEnvArena() {
 	m.envChunks = nil
+	m.envActiveChunk = nil
+	m.envActiveChunkLimit = 0
 	m.envChunkPos = 0
 }
 
