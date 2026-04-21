@@ -1439,11 +1439,11 @@ func (d *decoder) bits4() (byte, error) {
 	}
 
 	b0 := d.buffer[d.pos]
-	if d.usedBits == 0 {
+	switch d.usedBits {
+	case 0:
 		d.usedBits = 4
 		return b0 >> 4, nil
-	}
-	if d.usedBits == 4 {
+	case 4:
 		d.usedBits = 0
 		d.pos++
 		return b0 & 0x0f, nil
