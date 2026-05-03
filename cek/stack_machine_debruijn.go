@@ -598,10 +598,11 @@ func runStackNoSlippageDeBruijn(
 			continue
 		}
 
-		if len(frameStack) == 0 {
+		n := len(frameStack)
+		if n == 0 {
 			return m.finishValue(currentValue)
 		}
-		frameIdx := len(frameStack) - 1
+		frameIdx := n - 1
 		frame := &frameStack[frameIdx]
 
 		switch frame.kind {
