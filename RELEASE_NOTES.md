@@ -1,5 +1,16 @@
 # Release Notes
 
+## v0.1.10 - CEK and decoder hot-path performance updates
+
+- Date: 2026-05-04
+- Version: v0.1.10
+
+Summary: This release improves CEK and decoder hot paths to reduce evaluation and decoding overhead, fixes a frame stack length bug in the DeBruijn CEK return path, and updates the conventional-commits workflow dependency.
+
+### Bug Fixes
+
+* Corrected the DeBruijn CEK stack machine return path so it measures the frame stack length once before it indexes the top frame.
+
 ## v0.1.9 - CEK and syntax decoding performance optimizations
 
 - Date: 2026-04-20
