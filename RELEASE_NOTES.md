@@ -1,15 +1,15 @@
 # Release Notes
 
-## v0.1.10 - CEK and decoder hot-path performance updates
+### Performance
 
-- Date: 2026-05-04
-- Version: v0.1.10
+* Improved environment extension speed by caching the active environment chunk and its boundary limit during repeated value binding.
+* Refined syntax decoding throughput by switching `bits4()` to a direct branch selection path for used bit checks.
+* Enhanced stack machine throughput with specialized term checks, more local frame stack and environment handling, and faster lambda application paths.
+* Streamlined decoder allocation reuse by caching the active chunk in both data and syntax decoders.
 
-Summary: This release improves CEK and decoder hot paths to reduce evaluation and decoding overhead, fixes a frame stack length bug in the DeBruijn CEK return path, and updates the conventional-commits workflow dependency.
+### Additional Changes
 
-### Bug Fixes
-
-* Corrected the DeBruijn CEK stack machine return path so it measures the frame stack length once before it indexes the top frame.
+* Updated `.github/workflows/conventional-commits.yml` to bump `webiny/action-conventional-commits` from `v1.3.1` to `v1.4.2`.
 
 ## v0.1.9 - CEK and syntax decoding performance optimizations
 
