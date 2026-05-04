@@ -1,5 +1,16 @@
 # Release Notes
 
+### Performance
+
+* Improved environment extension speed by caching the active environment chunk and its boundary limit during repeated value binding.
+* Refined syntax decoding throughput by switching `bits4()` to a direct branch selection path for used bit checks.
+* Enhanced stack machine throughput with specialized term checks, more local frame stack and environment handling, and faster lambda application paths.
+* Streamlined decoder allocation reuse by caching the active chunk in both data and syntax decoders.
+
+### Additional Changes
+
+* Updated `.github/workflows/conventional-commits.yml` to bump `webiny/action-conventional-commits` from `v1.3.1` to `v1.4.2`.
+
 ## v0.1.9 - CEK and syntax decoding performance optimizations
 
 - Date: 2026-04-20
