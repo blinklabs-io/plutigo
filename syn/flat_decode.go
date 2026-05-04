@@ -398,9 +398,10 @@ func decodeTermListDeBruijnWithArena(
 }
 
 type arenaChunks[S any] struct {
-	chunks   [][]S
-	chunkIdx int
-	offset   int
+	chunks      [][]S
+	chunkIdx    int
+	offset      int
+	activeChunk []S // cached pointer to chunks[chunkIdx]; nil when chunkIdx >= len(chunks)
 }
 
 func (a *arenaChunks[S]) used() int {
@@ -410,32 +411,43 @@ func (a *arenaChunks[S]) used() int {
 	return a.chunkIdx*decodeTermChunkSize + a.offset
 }
 
+// alloc returns the next free slot. The fast path uses the cached
+// activeChunk so we avoid reloading chunks[chunkIdx] on every call.
 func (a *arenaChunks[S]) alloc() *S {
-	if a.chunkIdx < len(a.chunks) {
-		chunk := a.chunks[a.chunkIdx]
-		if chunk != nil && a.offset < len(chunk) {
-			slot := &chunk[a.offset]
-			a.offset++
-			return slot
-		}
+	if a.offset < len(a.activeChunk) {
+		slot := &a.activeChunk[a.offset]
+		a.offset++
+		return slot
 	}
+	return a.allocSlow()
+}
 
+//go:noinline
+func (a *arenaChunks[S]) allocSlow() *S {
 	if nextIdx := a.chunkIdx + 1; nextIdx < len(a.chunks) {
 		chunk := a.chunks[nextIdx]
-		if chunk == nil {
-			goto allocNewChunk
+		if chunk != nil {
+			a.chunkIdx = nextIdx
+			a.activeChunk = chunk
+			a.offset = 1
+			return &chunk[0]
 		}
-		a.chunkIdx = nextIdx
-		a.offset = 1
-		return &chunk[0]
 	}
 
-allocNewChunk:
 	chunk := make([]S, decodeTermChunkSize)
 	a.chunks = append(a.chunks, chunk)
 	a.chunkIdx = len(a.chunks) - 1
+	a.activeChunk = chunk
 	a.offset = 1
 	return &chunk[0]
+}
+
+func (a *arenaChunks[S]) setActiveChunkAfterReset() {
+	if len(a.chunks) > 0 {
+		a.activeChunk = a.chunks[0]
+	} else {
+		a.activeChunk = nil
+	}
 }
 
 func (a *arenaChunks[S]) reset(retainCap int) {
@@ -471,6 +483,7 @@ func (a *arenaChunks[S]) reset(retainCap int) {
 	}
 	a.chunkIdx = 0
 	a.offset = 0
+	a.setActiveChunkAfterReset()
 }
 
 func resetBigIntChunks(a *arenaChunks[big.Int], retainCap int) {
@@ -484,6 +497,7 @@ func resetBigIntChunks(a *arenaChunks[big.Int], retainCap int) {
 	}
 	a.chunkIdx = 0
 	a.offset = 0
+	a.setActiveChunkAfterReset()
 }
 
 type arenaSlices[S any] struct {
