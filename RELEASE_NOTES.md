@@ -9,7 +9,7 @@ Summary: This release improves reverse stack machine performance and keeps the d
 
 ### Performance
 
-* Improved reverse stack machine execution performance by simplifying apply, force, and case handling through shared machine helpers and ordinary type switches in the DeBruijn CEK evaluator.
+* Improved reverse stack machine execution performance by simplifying how the evaluator handles apply, force, and case steps, making stack based execution faster and easier to maintain.
 
 ### Additional Changes
 
