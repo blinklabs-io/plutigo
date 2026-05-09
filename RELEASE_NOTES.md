@@ -11,6 +11,10 @@ Summary: This release improves reverse stack machine performance and keeps the d
 
 * Improved reverse stack machine execution performance by simplifying apply, force, and case handling through shared machine helpers and ordinary type switches in the DeBruijn CEK evaluator.
 
+### Additional Changes
+
+* Updated `RELEASE_NOTES.md` to publish the `v0.1.10` release notes and preserve continuity in the project's documented release history.
+
 ### Performance
 
 * Improved environment extension speed by caching the active environment chunk and its boundary limit during repeated value binding.
