@@ -1,37 +1,14 @@
 // <nilaway skip stack-machine>
 package cek
 
-import (
-	"unsafe"
-
-	"github.com/blinklabs-io/plutigo/syn"
-)
-
-var nilControlTermDeBruijn syn.Term[syn.DeBruijn] = &syn.Error{}
-
-type termInterfaceDeBruijn struct {
-	tab  unsafe.Pointer
-	data unsafe.Pointer
-}
-
-var (
-	applyTermTabDeBruijn  = termTabDeBruijn(&syn.Apply[syn.DeBruijn]{})
-	forceTermTabDeBruijn  = termTabDeBruijn(&syn.Force[syn.DeBruijn]{})
-	caseTermTabDeBruijn   = termTabDeBruijn(&syn.Case[syn.DeBruijn]{})
-	constrTermTabDeBruijn = termTabDeBruijn(&syn.Constr[syn.DeBruijn]{})
-)
-
-func termTabDeBruijn(term syn.Term[syn.DeBruijn]) unsafe.Pointer {
-	return (*termInterfaceDeBruijn)(unsafe.Pointer(&term)).tab
-}
+import "github.com/blinklabs-io/plutigo/syn"
 
 func isImmediateTermDeBruijn(term syn.Term[syn.DeBruijn]) bool {
-	termIface := (*termInterfaceDeBruijn)(unsafe.Pointer(&term))
-	switch termIface.tab {
-	case applyTermTabDeBruijn, forceTermTabDeBruijn, caseTermTabDeBruijn:
+	switch t := term.(type) {
+	case *syn.Apply[syn.DeBruijn], *syn.Force[syn.DeBruijn], *syn.Case[syn.DeBruijn]:
 		return false
-	case constrTermTabDeBruijn:
-		return len((*syn.Constr[syn.DeBruijn])(termIface.data).Fields) == 0
+	case *syn.Constr[syn.DeBruijn]:
+		return len(t.Fields) == 0
 	default:
 		return true
 	}
@@ -167,47 +144,6 @@ func advanceEnv4DeBruijn(env *Env[syn.DeBruijn]) *Env[syn.DeBruijn] {
 	return env
 }
 
-func pushFrameSlotDeBruijn(
-	frameStack []stackFrame[syn.DeBruijn],
-	frameStackUsed int,
-) ([]stackFrame[syn.DeBruijn], int, *stackFrame[syn.DeBruijn]) {
-	frameIdx := len(frameStack)
-	if frameIdx < cap(frameStack) {
-		frameStack = frameStack[:frameIdx+1]
-	} else {
-		frameStack = append(frameStack, stackFrame[syn.DeBruijn]{})
-	}
-	if len(frameStack) > frameStackUsed {
-		frameStackUsed = len(frameStack)
-	}
-	return frameStack, frameStackUsed, &frameStack[frameIdx]
-}
-
-func pushAwaitArgFrameDeBruijn(
-	frameStack []stackFrame[syn.DeBruijn],
-	frameStackUsed int,
-	funValue Value[syn.DeBruijn],
-) ([]stackFrame[syn.DeBruijn], int) {
-	var frame *stackFrame[syn.DeBruijn]
-	frameStack, frameStackUsed, frame = pushFrameSlotDeBruijn(
-		frameStack,
-		frameStackUsed,
-	)
-	switch f := funValue.(type) {
-	case *Lambda[syn.DeBruijn]:
-		frame.kind = frameAwaitArgLambda
-		frame.env = f.Env
-		frame.term = f.AST.Body
-	case *Builtin[syn.DeBruijn]:
-		frame.kind = frameAwaitArgBuiltin
-		frame.builtin = f
-	default:
-		frame.kind = frameAwaitArg
-		frame.value = funValue
-	}
-	return frameStack, frameStackUsed
-}
-
 func computeKnownImmediateValueNoSlippageDeBruijn(
 	m *Machine[syn.DeBruijn],
 	env *Env[syn.DeBruijn],
@@ -266,53 +202,6 @@ func runStackNoSlippageDeBruijn(
 	currentTerm := term
 	var currentValue Value[syn.DeBruijn]
 	returning := false
-	envChunkPos := m.envChunkPos
-	envActiveChunk := m.envActiveChunk
-	envActiveChunkLimit := m.envActiveChunkLimit
-	syncEnvArena := func() {
-		m.envChunkPos = envChunkPos
-		m.envActiveChunk = envActiveChunk
-		m.envActiveChunkLimit = envActiveChunkLimit
-	}
-	defer syncEnvArena()
-	extendEnvLocal := func(parent *Env[syn.DeBruijn], data Value[syn.DeBruijn]) *Env[syn.DeBruijn] {
-		pos := envChunkPos
-		chunk := envActiveChunk
-		if chunk == nil || pos == envActiveChunkLimit {
-			chunkIdx := pos / envChunkSize
-			if chunkIdx == len(m.envChunks) {
-				m.envChunks = append(m.envChunks, make([]Env[syn.DeBruijn], envChunkSize))
-			}
-			chunk = m.envChunks[chunkIdx]
-			if chunk == nil {
-				chunk = make([]Env[syn.DeBruijn], envChunkSize)
-				m.envChunks[chunkIdx] = chunk
-			}
-			envActiveChunk = chunk
-			envActiveChunkLimit = (chunkIdx + 1) * envChunkSize
-		}
-		env := &chunk[pos%envChunkSize]
-		envChunkPos = pos + 1
-		env.data = data
-		env.next = parent
-		if parent != nil {
-			skip := parent.next
-			if skip != nil {
-				skip = skip.next
-				if skip != nil {
-					env.skip4 = skip.next
-				}
-			}
-		}
-		return env
-	}
-	frameStack := m.frameStack
-	frameStackUsed := m.frameStackUsed
-	syncFrameStack := func() {
-		m.frameStack = frameStack
-		m.frameStackUsed = frameStackUsed
-	}
-	defer syncFrameStack()
 
 	for {
 		if !returning {
@@ -362,16 +251,12 @@ func runStackNoSlippageDeBruijn(
 							return nil, err
 						}
 						currentTerm = lambda.Body
-						currentEnv = extendEnvLocal(currentEnv, argValue)
+						currentEnv = m.extendEnv(currentEnv, argValue)
 						currentValue = nil
 						returning = false
 						continue
 					}
-					var frame *stackFrame[syn.DeBruijn]
-					frameStack, frameStackUsed, frame = pushFrameSlotDeBruijn(
-						frameStack,
-						frameStackUsed,
-					)
+					frame := m.pushFrameSlot()
 					frame.kind = frameAwaitArgLambda
 					frame.env = currentEnv
 					frame.term = lambda.Body
@@ -398,46 +283,22 @@ func runStackNoSlippageDeBruijn(
 						if err != nil {
 							return nil, err
 						}
-						if lambdaValue, ok := funValue.(*Lambda[syn.DeBruijn]); ok {
-							currentTerm = lambdaValue.AST.Body
-							currentEnv = extendEnvLocal(lambdaValue.Env, argValue)
-							currentValue = nil
-							returning = false
-						} else {
-							currentTerm, currentEnv, currentValue, returning, err = m.applyEvaluateStack(
-								funValue,
-								argValue,
-							)
-						}
+						currentTerm, currentEnv, currentValue, returning, err = m.applyEvaluateStack(
+							funValue,
+							argValue,
+						)
 						if err != nil {
 							return nil, err
-						}
-						if currentTerm == nil {
-							if !returning {
-								return nil, &InternalError{
-									Code:    ErrCodeInternalError,
-									Message: "nil control term in DeBruijn evaluator",
-								}
-							}
-							currentTerm = nilControlTermDeBruijn
 						}
 						continue
 					}
 
-					frameStack, frameStackUsed = pushAwaitArgFrameDeBruijn(
-						frameStack,
-						frameStackUsed,
-						funValue,
-					)
+					m.pushAwaitArgFrame(funValue)
 					currentTerm = t.Argument
 					continue
 				}
 
-				var frame *stackFrame[syn.DeBruijn]
-				frameStack, frameStackUsed, frame = pushFrameSlotDeBruijn(
-					frameStack,
-					frameStackUsed,
-				)
+				frame := m.pushFrameSlot()
 				frame.kind = frameAwaitFunTerm
 				frame.env = currentEnv
 				frame.term = t.Argument
@@ -465,15 +326,6 @@ func runStackNoSlippageDeBruijn(
 					if err != nil {
 						return nil, err
 					}
-					if currentTerm == nil {
-						if !returning {
-							return nil, &InternalError{
-								Code:    ErrCodeInternalError,
-								Message: "nil control term in DeBruijn evaluator",
-							}
-						}
-						currentTerm = nilControlTermDeBruijn
-					}
 					continue
 				}
 
@@ -492,23 +344,10 @@ func runStackNoSlippageDeBruijn(
 					if err != nil {
 						return nil, err
 					}
-					if currentTerm == nil {
-						if !returning {
-							return nil, &InternalError{
-								Code:    ErrCodeInternalError,
-								Message: "nil control term in DeBruijn evaluator",
-							}
-						}
-						currentTerm = nilControlTermDeBruijn
-					}
 					continue
 				}
 
-				var frame *stackFrame[syn.DeBruijn]
-				frameStack, frameStackUsed, frame = pushFrameSlotDeBruijn(
-					frameStack,
-					frameStackUsed,
-				)
+				frame := m.pushFrameSlot()
 				frame.kind = frameForce
 				currentTerm = t.Term
 			case *syn.Error:
@@ -531,11 +370,7 @@ func runStackNoSlippageDeBruijn(
 					continue
 				}
 
-				var frame *stackFrame[syn.DeBruijn]
-				frameStack, frameStackUsed, frame = pushFrameSlotDeBruijn(
-					frameStack,
-					frameStackUsed,
-				)
+				frame := m.pushFrameSlot()
 				frame.kind = frameConstr
 				frame.env = currentEnv
 				frame.tag = t.Tag
@@ -556,34 +391,18 @@ func runStackNoSlippageDeBruijn(
 					if err != nil {
 						return nil, err
 					}
-					syncFrameStack()
 					currentTerm, currentEnv, currentValue, returning, err = m.caseEvaluateStack(
 						currentEnv,
 						t.Branches,
 						scrutinee,
 					)
-					frameStack = m.frameStack
-					frameStackUsed = m.frameStackUsed
 					if err != nil {
 						return nil, err
-					}
-					if currentTerm == nil {
-						if !returning {
-							return nil, &InternalError{
-								Code:    ErrCodeInternalError,
-								Message: "nil control term in DeBruijn evaluator",
-							}
-						}
-						currentTerm = nilControlTermDeBruijn
 					}
 					continue
 				}
 
-				var frame *stackFrame[syn.DeBruijn]
-				frameStack, frameStackUsed, frame = pushFrameSlotDeBruijn(
-					frameStack,
-					frameStackUsed,
-				)
+				frame := m.pushFrameSlot()
 				frame.kind = frameCases
 				frame.env = currentEnv
 				frame.branches = t.Branches
@@ -598,54 +417,37 @@ func runStackNoSlippageDeBruijn(
 			continue
 		}
 
-		n := len(frameStack)
-		if n == 0 {
+		if len(m.frameStack) == 0 {
 			return m.finishValue(currentValue)
 		}
-		frameIdx := n - 1
-		frame := &frameStack[frameIdx]
+		frameIdx := len(m.frameStack) - 1
+		frame := &m.frameStack[frameIdx]
 
 		switch frame.kind {
 		case frameAwaitArg:
 			function := frame.value
-			frameStack = frameStack[:frameIdx]
+			m.frameStack = m.frameStack[:frameIdx]
 
 			var err error
-			if lambdaValue, ok := function.(*Lambda[syn.DeBruijn]); ok {
-				currentTerm = lambdaValue.AST.Body
-				currentEnv = extendEnvLocal(lambdaValue.Env, currentValue)
-				currentValue = nil
-				returning = false
-			} else {
-				currentTerm, currentEnv, currentValue, returning, err = m.applyEvaluateStack(
-					function,
-					currentValue,
-				)
-			}
+			currentTerm, currentEnv, currentValue, returning, err = m.applyEvaluateStack(
+				function,
+				currentValue,
+			)
 			if err != nil {
 				return nil, err
-			}
-			if currentTerm == nil {
-				if !returning {
-					return nil, &InternalError{
-						Code:    ErrCodeInternalError,
-						Message: "nil control term in DeBruijn evaluator",
-					}
-				}
-				currentTerm = nilControlTermDeBruijn
 			}
 		case frameAwaitArgLambda:
 			env := frame.env
 			body := frame.term
-			frameStack = frameStack[:frameIdx]
+			m.frameStack = m.frameStack[:frameIdx]
 
 			currentTerm = body
-			currentEnv = extendEnvLocal(env, currentValue)
+			currentEnv = m.extendEnv(env, currentValue)
 			currentValue = nil
 			returning = false
 		case frameAwaitArgBuiltin:
 			builtinValue := frame.builtin
-			frameStack = frameStack[:frameIdx]
+			m.frameStack = m.frameStack[:frameIdx]
 
 			var err error
 			currentTerm, currentEnv, currentValue, returning, err = m.applyEvaluateStack(
@@ -655,89 +457,44 @@ func runStackNoSlippageDeBruijn(
 			if err != nil {
 				return nil, err
 			}
-			if currentTerm == nil {
-				if !returning {
-					return nil, &InternalError{
-						Code:    ErrCodeInternalError,
-						Message: "nil control term in DeBruijn evaluator",
-					}
-				}
-				currentTerm = nilControlTermDeBruijn
-			}
 		case frameAwaitFunTerm:
 			env := frame.env
 			term := frame.term
-			frameStack = frameStack[:frameIdx]
+			m.frameStack = m.frameStack[:frameIdx]
 
 			if isImmediateTermDeBruijn(term) {
 				argValue, err := computeKnownImmediateValueNoSlippageDeBruijn(m, env, term)
 				if err != nil {
 					return nil, err
 				}
-				if lambdaValue, ok := currentValue.(*Lambda[syn.DeBruijn]); ok {
-					currentTerm = lambdaValue.AST.Body
-					currentEnv = extendEnvLocal(lambdaValue.Env, argValue)
-					currentValue = nil
-					returning = false
-				} else {
-					currentTerm, currentEnv, currentValue, returning, err = m.applyEvaluateStack(
-						currentValue,
-						argValue,
-					)
-				}
+				currentTerm, currentEnv, currentValue, returning, err = m.applyEvaluateStack(
+					currentValue,
+					argValue,
+				)
 				if err != nil {
 					return nil, err
-				}
-				if currentTerm == nil {
-					if !returning {
-						return nil, &InternalError{
-							Code:    ErrCodeInternalError,
-							Message: "nil control term in DeBruijn evaluator",
-						}
-					}
-					currentTerm = nilControlTermDeBruijn
 				}
 				continue
 			}
 
-			frameStack, frameStackUsed = pushAwaitArgFrameDeBruijn(
-				frameStack,
-				frameStackUsed,
-				currentValue,
-			)
+			m.pushAwaitArgFrame(currentValue)
 			currentEnv = env
 			currentTerm = term
 			returning = false
 		case frameAwaitFunValue:
 			arg := frame.value
-			frameStack = frameStack[:frameIdx]
+			m.frameStack = m.frameStack[:frameIdx]
 
 			var err error
-			if lambdaValue, ok := currentValue.(*Lambda[syn.DeBruijn]); ok {
-				currentTerm = lambdaValue.AST.Body
-				currentEnv = extendEnvLocal(lambdaValue.Env, arg)
-				currentValue = nil
-				returning = false
-			} else {
-				currentTerm, currentEnv, currentValue, returning, err = m.applyEvaluateStack(
-					currentValue,
-					arg,
-				)
-			}
+			currentTerm, currentEnv, currentValue, returning, err = m.applyEvaluateStack(
+				currentValue,
+				arg,
+			)
 			if err != nil {
 				return nil, err
 			}
-			if currentTerm == nil {
-				if !returning {
-					return nil, &InternalError{
-						Code:    ErrCodeInternalError,
-						Message: "nil control term in DeBruijn evaluator",
-					}
-				}
-				currentTerm = nilControlTermDeBruijn
-			}
 		case frameForce:
-			frameStack = frameStack[:frameIdx]
+			m.frameStack = m.frameStack[:frameIdx]
 
 			var err error
 			currentTerm, currentEnv, currentValue, returning, err = m.forceEvaluateStack(
@@ -746,21 +503,12 @@ func runStackNoSlippageDeBruijn(
 			if err != nil {
 				return nil, err
 			}
-			if currentTerm == nil {
-				if !returning {
-					return nil, &InternalError{
-						Code:    ErrCodeInternalError,
-						Message: "nil control term in DeBruijn evaluator",
-					}
-				}
-				currentTerm = nilControlTermDeBruijn
-			}
 		case frameConstr:
 			frame.resolvedFields = append(frame.resolvedFields, currentValue)
 			if len(frame.fields) == 0 {
 				resolvedFields := frame.resolvedFields
 				tag := frame.tag
-				frameStack = frameStack[:frameIdx]
+				m.frameStack = m.frameStack[:frameIdx]
 
 				currentValue = m.allocConstr(tag, resolvedFields)
 				returning = true
@@ -775,28 +523,16 @@ func runStackNoSlippageDeBruijn(
 		case frameCases:
 			env := frame.env
 			branches := frame.branches
-			frameStack = frameStack[:frameIdx]
+			m.frameStack = m.frameStack[:frameIdx]
 
 			var err error
-			syncFrameStack()
 			currentTerm, currentEnv, currentValue, returning, err = m.caseEvaluateStack(
 				env,
 				branches,
 				currentValue,
 			)
-			frameStack = m.frameStack
-			frameStackUsed = m.frameStackUsed
 			if err != nil {
 				return nil, err
-			}
-			if currentTerm == nil {
-				if !returning {
-					return nil, &InternalError{
-						Code:    ErrCodeInternalError,
-						Message: "nil control term in DeBruijn evaluator",
-					}
-				}
-				currentTerm = nilControlTermDeBruijn
 			}
 		default:
 			return nil, &InternalError{
