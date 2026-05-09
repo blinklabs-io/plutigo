@@ -1,5 +1,16 @@
 # Release Notes
 
+## v0.1.11 - reverse stack machine performance rewrite
+
+- Date: 2026-05-09
+- Version: v0.1.11
+
+Summary: This release improves reverse stack machine performance and keeps the documented release history current by publishing the `v0.1.10` release notes.
+
+### Performance
+
+* Improved reverse stack machine execution performance by simplifying apply, force, and case handling through shared machine helpers and ordinary type switches in the DeBruijn CEK evaluator.
+
 ### Performance
 
 * Improved environment extension speed by caching the active environment chunk and its boundary limit during repeated value binding.
