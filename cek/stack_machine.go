@@ -869,9 +869,13 @@ func (m *Machine[T]) applyEvaluateStack(
 	case *Lambda[T]:
 		return f.AST.Body, m.extendEnv(f.Env, arg), nil, false, nil
 	case *Builtin[T]:
-		if !f.NeedsForce() && f.IsArrow() {
+		// Cache the per-builtin force/arity table lookups so we don't repeat
+		// them for each branch below.
+		forceCount := f.Func.ForceCount()
+		arity := f.Func.Arity()
+		if forceCount <= f.Forces && arity > f.ArgCount {
 			nextArgCount := f.ArgCount + 1
-			if f.Func.ForceCount() == f.Forces {
+			if forceCount == f.Forces {
 				switch nextArgCount {
 				case 1:
 					if resolved, handled, err := m.evalUnaryBuiltinFast(f.Func, arg); handled {
@@ -904,19 +908,19 @@ func (m *Machine[T]) applyEvaluateStack(
 						}
 					}
 				}
-			}
-			if f.Func.Arity() == nextArgCount && f.Func.ForceCount() == f.Forces {
-				resolved, err := m.evalBuiltinAppWithArg(
-					f.Func,
-					f.Forces,
-					nextArgCount,
-					f.Args,
-					arg,
-				)
-				if err != nil {
-					return nil, nil, nil, false, err
+				if arity == nextArgCount {
+					resolved, err := m.evalBuiltinAppWithArg(
+						f.Func,
+						f.Forces,
+						nextArgCount,
+						f.Args,
+						arg,
+					)
+					if err != nil {
+						return nil, nil, nil, false, err
+					}
+					return nil, nil, resolved, true, nil
 				}
-				return nil, nil, resolved, true, nil
 			}
 			nextArgs := m.extendBuiltinArgs(f.Args, arg)
 			return nil, nil, m.allocBuiltin(f.Func, f.Forces, nextArgCount, nextArgs), true, nil
@@ -940,9 +944,10 @@ func (m *Machine[T]) forceEvaluateStack(
 	case *Delay[T]:
 		return v.AST.Term, v.Env, nil, false, nil
 	case *Builtin[T]:
-		if v.NeedsForce() {
+		forceCount := v.Func.ForceCount()
+		if forceCount > v.Forces {
 			nextForces := v.Forces + 1
-			if v.Func.ForceCount() == nextForces && v.Func.Arity() == v.ArgCount {
+			if forceCount == nextForces && v.Func.Arity() == v.ArgCount {
 				resolved, err := m.evalBuiltinAppReady(
 					v.Func,
 					nextForces,
