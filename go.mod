@@ -13,7 +13,7 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.2
 	github.com/jinzhu/copier v0.4.0
 	github.com/minio/sha256-simd v1.0.1
-	golang.org/x/crypto v0.50.0
+	golang.org/x/crypto v0.51.0
 )
 
 require (
@@ -26,5 +26,5 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/sys v0.44.0 // indirect
 )
