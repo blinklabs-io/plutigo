@@ -1,14 +1,41 @@
 // <nilaway skip stack-machine>
 package cek
 
-import "github.com/blinklabs-io/plutigo/syn"
+import (
+	"unsafe"
+
+	"github.com/blinklabs-io/plutigo/syn"
+)
+
+// termInterfaceDeBruijn mirrors Go's runtime layout for an interface value
+// holding a syn.Term[syn.DeBruijn]. We use it to dispatch on the concrete
+// type via the iface tab pointer, which is faster than a type switch for
+// the very hot is-immediate / fast-path checks.
+type termInterfaceDeBruijn struct {
+	tab  unsafe.Pointer
+	data unsafe.Pointer
+}
+
+var (
+	applyTermTabDeBruijn   = termTabDeBruijn(&syn.Apply[syn.DeBruijn]{})
+	forceTermTabDeBruijn   = termTabDeBruijn(&syn.Force[syn.DeBruijn]{})
+	caseTermTabDeBruijn    = termTabDeBruijn(&syn.Case[syn.DeBruijn]{})
+	constrTermTabDeBruijn  = termTabDeBruijn(&syn.Constr[syn.DeBruijn]{})
+	lambdaTermTabDeBruijn  = termTabDeBruijn(&syn.Lambda[syn.DeBruijn]{})
+	builtinTermTabDeBruijn = termTabDeBruijn(&syn.Builtin{})
+)
+
+func termTabDeBruijn(term syn.Term[syn.DeBruijn]) unsafe.Pointer {
+	return (*termInterfaceDeBruijn)(unsafe.Pointer(&term)).tab
+}
 
 func isImmediateTermDeBruijn(term syn.Term[syn.DeBruijn]) bool {
-	switch t := term.(type) {
-	case *syn.Apply[syn.DeBruijn], *syn.Force[syn.DeBruijn], *syn.Case[syn.DeBruijn]:
+	termIface := (*termInterfaceDeBruijn)(unsafe.Pointer(&term))
+	switch termIface.tab {
+	case applyTermTabDeBruijn, forceTermTabDeBruijn, caseTermTabDeBruijn:
 		return false
-	case *syn.Constr[syn.DeBruijn]:
-		return len(t.Fields) == 0
+	case constrTermTabDeBruijn:
+		return len((*syn.Constr[syn.DeBruijn])(termIface.data).Fields) == 0
 	default:
 		return true
 	}
@@ -237,7 +264,9 @@ func runStackNoSlippageDeBruijn(
 					return nil, m.budgetErrorForStep(ExApply)
 				}
 
-				if lambda, ok := t.Function.(*syn.Lambda[syn.DeBruijn]); ok {
+				funcIface := (*termInterfaceDeBruijn)(unsafe.Pointer(&t.Function))
+				if funcIface.tab == lambdaTermTabDeBruijn {
+					lambda := (*syn.Lambda[syn.DeBruijn])(funcIface.data)
 					if !m.spendStepNoSlippage(ExLambda) {
 						return nil, m.budgetErrorForStep(ExLambda)
 					}
@@ -283,6 +312,17 @@ func runStackNoSlippageDeBruijn(
 						if err != nil {
 							return nil, err
 						}
+						// Fast path: when funValue is a Lambda value we can
+						// extend its env and continue without paying the
+						// function-call + 5-return-slot cost of
+						// applyEvaluateStack.
+						if lambdaValue, ok := funValue.(*Lambda[syn.DeBruijn]); ok {
+							currentTerm = lambdaValue.AST.Body
+							currentEnv = m.extendEnv(lambdaValue.Env, argValue)
+							currentValue = nil
+							returning = false
+							continue
+						}
 						currentTerm, currentEnv, currentValue, returning, err = m.applyEvaluateStack(
 							funValue,
 							argValue,
@@ -315,7 +355,9 @@ func runStackNoSlippageDeBruijn(
 					return nil, m.budgetErrorForStep(ExForce)
 				}
 
-				if builtinTerm, ok := t.Term.(*syn.Builtin); ok {
+				termIface := (*termInterfaceDeBruijn)(unsafe.Pointer(&t.Term))
+				if termIface.tab == builtinTermTabDeBruijn {
+					builtinTerm := (*syn.Builtin)(termIface.data)
 					if !m.spendStepNoSlippage(ExBuiltin) {
 						return nil, m.budgetErrorForStep(ExBuiltin)
 					}
