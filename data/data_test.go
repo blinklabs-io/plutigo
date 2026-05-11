@@ -688,6 +688,21 @@ func TestByteStringUnmarshalCBORIndefinite(t *testing.T) {
 	}
 }
 
+func TestByteStringMarshalCBOREmptyDecoded(t *testing.T) {
+	var decoded ByteString
+	if err := decoded.UnmarshalCBOR([]byte{0x40}); err != nil {
+		t.Fatalf("unmarshal empty bytestring: %v", err)
+	}
+
+	encoded, err := decoded.MarshalCBOR()
+	if err != nil {
+		t.Fatalf("marshal empty bytestring: %v", err)
+	}
+	if !bytes.Equal(encoded, []byte{0x40}) {
+		t.Fatalf("encoded empty bytestring = %x, want 40", encoded)
+	}
+}
+
 func TestEncodeDecodeRoundTrip(t *testing.T) {
 	for _, testDef := range testDefs {
 		// Encode
@@ -720,8 +735,30 @@ func FuzzDecodeCBOR(f *testing.F) {
 		f.Add(cborData)
 	}
 	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > 4096 {
+			t.Skip()
+		}
+
 		var wrapper PlutusDataWrapper
-		_ = wrapper.UnmarshalCBOR(data) // Ignore errors, just check no panic
+		if err := wrapper.UnmarshalCBOR(data); err != nil {
+			return
+		}
+		if wrapper.Data == nil {
+			t.Fatal("decoded nil PlutusData without error")
+		}
+
+		encoded, err := wrapper.MarshalCBOR()
+		if err != nil {
+			t.Fatalf("failed to marshal decoded PlutusData: %v", err)
+		}
+
+		var decodedAgain PlutusDataWrapper
+		if err := decodedAgain.UnmarshalCBOR(encoded); err != nil {
+			t.Fatalf("failed to decode marshaled PlutusData: %v", err)
+		}
+		if !wrapper.Data.Equal(decodedAgain.Data) {
+			t.Fatalf("CBOR round-trip mismatch: got %v, want %v", decodedAgain.Data, wrapper.Data)
+		}
 	})
 }
 
