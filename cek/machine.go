@@ -313,16 +313,21 @@ func newBuiltinNoArgValueTable[T syn.Eval]() [builtin.TotalBuiltinCount][3]*Buil
 	return ret
 }
 
+// allocArenaSlot allocates one slot of S from a chunked arena.
+// chunkSize must be a positive power of two; the value-arena chunk sizes
+// returned by nextValueArenaChunkSize satisfy this. We exploit that to
+// compute the in-chunk offset with a cheap mask instead of a modulo.
 func allocArenaSlot[S any](chunks *[][]S, pos *int, chunkSize int) *S {
 	if chunkSize <= 0 {
 		chunkSize = valueColdChunkSize
 	}
 	posVal := *pos
+	chunkMask := chunkSize - 1
 	chunkIdx := posVal / chunkSize
 	if chunkIdx == len(*chunks) {
 		*chunks = append(*chunks, make([]S, chunkSize))
 	}
-	slot := &(*chunks)[chunkIdx][posVal%chunkSize]
+	slot := &(*chunks)[chunkIdx][posVal&chunkMask]
 	*pos = posVal + 1
 	return slot
 }
@@ -779,7 +784,7 @@ func (m *Machine[T]) extendEnv(parent *Env[T], data Value[T]) *Env[T] {
 		m.envActiveChunk = chunk
 		m.envActiveChunkLimit = (chunkIdx + 1) * envChunkSize
 	}
-	env := &chunk[pos%envChunkSize]
+	env := &chunk[pos&(envChunkSize-1)]
 	m.envChunkPos = pos + 1
 	env.data = data
 	env.next = parent
