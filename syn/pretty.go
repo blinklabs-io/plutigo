@@ -472,8 +472,22 @@ func escapeString(s string) string {
 			builder.WriteString("\\n")
 		case '\t':
 			builder.WriteString("\\t")
+		case '\a':
+			builder.WriteString("\\a")
+		case '\b':
+			builder.WriteString("\\b")
+		case '\f':
+			builder.WriteString("\\f")
+		case '\r':
+			builder.WriteString("\\r")
+		case '\v':
+			builder.WriteString("\\v")
 		default:
-			builder.WriteRune(r)
+			if r < 0x20 || r == 0x7f {
+				fmt.Fprintf(&builder, "\\o%03o", r)
+			} else {
+				builder.WriteRune(r)
+			}
 		}
 	}
 
