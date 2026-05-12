@@ -151,8 +151,8 @@ func TestConstants(t *testing.T) {
 }
 
 func FuzzFromByte(f *testing.F) {
-	validBytes := []byte{0, 1, 10, 20, 50, 90}
-	invalidBytes := []byte{94, 255}
+	validBytes := []byte{0, 1, 10, 20, 50, 87, 88, 89, 90, MaxDefaultFunction - 1, MaxDefaultFunction}
+	invalidBytes := []byte{MaxDefaultFunction + 1, 255}
 	for _, b := range validBytes {
 		f.Add(b)
 	}
@@ -176,6 +176,12 @@ func FuzzFromByte(f *testing.F) {
 					b,
 					df,
 				)
+			}
+			name := df.String()
+			if name != "" {
+				if got, ok := Builtins[name]; !ok || got != df {
+					t.Errorf("builtin reverse lookup for %q = %v, %v; want %v, true", name, got, ok, df)
+				}
 			}
 		} else {
 			if err == nil {

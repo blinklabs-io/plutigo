@@ -221,13 +221,18 @@ func FuzzLexerNextToken(f *testing.F) {
 		f.Add(input)
 	}
 	f.Fuzz(func(t *testing.T, input string) {
+		if len(input) > 4096 {
+			t.Skip()
+		}
+
 		lexer := NewLexer(input)
-		for {
+		maxTokens := len([]rune(input)) + 1
+		for i := 0; i < maxTokens; i++ {
 			token := lexer.NextToken()
 			if token.Type == TokenEOF {
-				break
+				return
 			}
-			// Just ensure no panic
 		}
+		t.Fatalf("lexer did not reach EOF after %d tokens", maxTokens)
 	})
 }
