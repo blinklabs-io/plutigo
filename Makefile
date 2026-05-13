@@ -8,7 +8,7 @@ GO_FILES=$(shell find $(ROOT_DIR) -name '*.go')
 BINARIES=$(shell cd $(ROOT_DIR)/cmd && ls -1 | grep -v ^common)
 
 # Common flags for fuzz tests
-FUZZ_FLAGS ?= -run=^$ -fuzztime=10s
+FUZZ_FLAGS ?= -run='^$$' -fuzztime=10s
 NILAWAY_FLAGS ?= -include-pkgs=github.com/blinklabs-io/plutigo -exclude-file-docstrings="<nilaway skip stack-machine>"
 
 .PHONY: mod-tidy test test-match test-cover bench bench-baseline bench-compare fuzz format golines clean download-plutus-tests validate validate-quick validate-fix nilaway
@@ -61,6 +61,7 @@ fuzz: ## Run fuzz tests
 	@go test $(FUZZ_FLAGS) -fuzz=FuzzDecodeCBOR ./data
 	@go test $(FUZZ_FLAGS) -fuzz=FuzzParse ./syn
 	@go test $(FUZZ_FLAGS) -fuzz=FuzzPretty ./syn
+	@go test $(FUZZ_FLAGS) -fuzz=FuzzDecodeFlatDeBruijn ./syn
 	@go test $(FUZZ_FLAGS) -fuzz=FuzzLexerNextToken ./syn/lex
 	@go test $(FUZZ_FLAGS) -fuzz=FuzzMachineRun ./cek
 

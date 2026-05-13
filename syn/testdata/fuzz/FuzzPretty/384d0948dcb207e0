@@ -1,0 +1,2 @@
+go test fuzz v1
+string("(program 0.0.0(con string\"0\\00\"))")
