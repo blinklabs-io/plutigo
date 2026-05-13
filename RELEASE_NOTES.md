@@ -13,6 +13,21 @@ Summary: This release improves CEK performance, fixes CBOR encoding and syntax p
 * Refined allocator indexing in CEK arenas and environments by replacing modulo based chunk offset calculations with bitmask based indexing to reduce allocator overhead.
 * Accelerated DeBruijn evaluation by using a faster dispatch path in hot execution checks and a direct lambda path that skips extra stack work.
 
+### Bug Fixes
+
+* Corrected syntax pretty output so additional control characters now escape cleanly and other non printable ASCII bytes use octal escapes instead of appearing raw in generated output.
+* Fixed empty `CBOR` byte string encoding so empty decoded values now round trip back to canonical `0x40` output.
+
+### Security
+
+* Updated `golang.org/x/crypto` to `v0.51.0` and `golang.org/x/sys` to `v0.44.0` to incorporate upstream security and maintenance fixes.
+
+### Additional Changes
+
+* Updated `RELEASE_NOTES.md` to publish the `v0.1.11` entry and restore the `v0.1.10` header so the documented release history stayed continuous and correctly formatted.
+* Enhanced `github.com/fxamacker/cbor/v2` from `v2.9.1` to `v2.9.2`, bringing in upstream `CBOR` encoding hardening and validation improvements.
+* Expanded fuzz coverage across parsing, pretty output, lexing, `FLAT` decoding, builtin lookup validation, and CEK execution with new fuzz targets and stronger round trip checks.
+
 ## v0.1.11 - reverse stack machine performance rewrite
 
 - Date: 2026-05-09
