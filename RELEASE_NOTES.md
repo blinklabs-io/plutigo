@@ -9,9 +9,9 @@ Summary: This release improves CEK performance, fixes CBOR encoding and syntax p
 
 ### Performance
 
-* Improved builtin evaluation speed by caching builtin readiness checks so repeated metadata work no longer slows execution.
-* Refined allocator indexing in runtime memory management to reduce overhead during repeated value and environment allocation.
-* Accelerated evaluation of DeBruijn terms by using a faster dispatch path in hot execution checks and a direct lambda path that skips extra stack work.
+* Improved builtin evaluation speed by caching builtin force and arity lookups in the CEK stack machine so repeated metadata work no longer slows builtin evaluation.
+* Refined allocator performance by replacing modulo based chunk offset calculations with bitmask based indexing in CEK arena and environment allocators to reduce allocator overhead.
+* Accelerated the DeBruijn evaluator by using unsafe interface tab dispatch in hot paths and a direct lambda fast path that skips extra stack work.
 
 ### Bug Fixes
 
