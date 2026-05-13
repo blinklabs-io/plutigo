@@ -1,5 +1,18 @@
 # Release Notes
 
+## v0.1.12 - CEK performance, CBOR encoding, and syntax output fixes
+
+- Date: 2026-05-13
+- Version: v0.1.12
+
+Summary: This release improves CEK performance, fixes CBOR encoding and syntax pretty-print output, updates key dependencies, expands fuzz coverage, and keeps the release-note history current.
+
+### Performance
+
+* Improved builtin evaluation speed by caching force and argument requirement lookups so repeated metadata work no longer slows CEK execution.
+* Refined allocator indexing in CEK arenas and environments by replacing modulo based chunk offset calculations with bitmask based indexing to reduce allocator overhead.
+* Accelerated DeBruijn evaluation by using a faster dispatch path in hot execution checks and a direct lambda path that skips extra stack work.
+
 ## v0.1.11 - reverse stack machine performance rewrite
 
 - Date: 2026-05-09
