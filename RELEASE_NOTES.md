@@ -9,9 +9,9 @@ Summary: This release improves CEK performance, fixes CBOR encoding and syntax p
 
 ### Performance
 
-* Improved builtin evaluation speed by caching force and argument requirement lookups so repeated metadata work no longer slows CEK execution.
-* Refined allocator indexing in CEK arenas and environments by replacing modulo based chunk offset calculations with bitmask based indexing to reduce allocator overhead.
-* Accelerated DeBruijn evaluation by using a faster dispatch path in hot execution checks and a direct lambda path that skips extra stack work.
+* Improved builtin evaluation speed by caching builtin readiness checks so repeated metadata work no longer slows execution.
+* Refined allocator indexing in runtime memory management to reduce overhead during repeated value and environment allocation.
+* Accelerated evaluation of DeBruijn terms by using a faster dispatch path in hot execution checks and a direct lambda path that skips extra stack work.
 
 ### Bug Fixes
 
@@ -26,7 +26,7 @@ Summary: This release improves CEK performance, fixes CBOR encoding and syntax p
 
 * Updated `RELEASE_NOTES.md` to publish the `v0.1.11` entry and restore the `v0.1.10` header so the documented release history stayed continuous and correctly formatted.
 * Enhanced `github.com/fxamacker/cbor/v2` from `v2.9.1` to `v2.9.2`, bringing in upstream `CBOR` encoding hardening and validation improvements.
-* Expanded fuzz coverage across parsing, pretty output, lexing, `FLAT` decoding, builtin lookup validation, and CEK execution with new fuzz targets and stronger round trip checks.
+* Expanded fuzz coverage across parsing, pretty output, lexing, flat decoding, builtin lookup validation, and runtime execution with new fuzz targets and stronger round trip checks.
 
 ## v0.1.11 - reverse stack machine performance rewrite
 
