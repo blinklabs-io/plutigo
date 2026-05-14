@@ -3,6 +3,7 @@ package data
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"math/big"
 	"reflect"
 	"testing"
@@ -485,6 +486,56 @@ func TestDecoderReuseMatchesDecode(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestDecodeRejectsExcessiveNesting(t *testing.T) {
+	encoded := nestedListCBOR(MaxDecodeNestingDepth + 1)
+
+	_, err := Decode(encoded)
+	assertDecodeLimitError(t, err, "nesting depth")
+
+	decoder := NewDecoder()
+	_, err = decoder.Decode(encoded)
+	assertDecodeLimitError(t, err, "nesting depth")
+
+	var list List
+	err = list.UnmarshalCBOR(encoded)
+	assertDecodeLimitError(t, err, "nesting depth")
+}
+
+func TestDecodeRejectsExcessiveNodeCount(t *testing.T) {
+	encoded := []byte{0x84, 0x00, 0x00, 0x00, 0x00}
+	limits := decodeLimits{maxDepth: MaxDecodeNestingDepth, maxNodes: 4}
+
+	_, err := decodeWithState(encoded, newDecodeStateWithLimits(limits))
+	assertDecodeLimitError(t, err, "node count")
+
+	decoder := NewDecoder()
+	_, err = decoder.decode(encoded, newDecodeStateWithLimits(limits))
+	assertDecodeLimitError(t, err, "node count")
+}
+
+func nestedListCBOR(depth int) []byte {
+	encoded := make([]byte, depth+1)
+	for i := 0; i < depth; i++ {
+		encoded[i] = 0x81
+	}
+	encoded[depth] = 0x00
+	return encoded
+}
+
+func assertDecodeLimitError(t *testing.T, err error, limit string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("expected %s limit error, got nil", limit)
+	}
+	var limitErr *DecodeLimitError
+	if !errors.As(err, &limitErr) {
+		t.Fatalf("expected DecodeLimitError, got %T: %v", err, err)
+	}
+	if limitErr.Limit != limit {
+		t.Fatalf("DecodeLimitError limit = %q, want %q", limitErr.Limit, limit)
+	}
 }
 
 func TestDecoderResetOverwritesRetainedBigInts(t *testing.T) {

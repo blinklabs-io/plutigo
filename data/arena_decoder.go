@@ -222,56 +222,39 @@ func (d *Decoder) Reset() {
 
 // Decode decodes CBOR bytes into PlutusData; the Decoder is not safe for concurrent use.
 func (d *Decoder) Decode(data []byte) (PlutusData, error) {
-	v, err := d.decode(data)
+	v, err := d.decode(data, newDecodeState())
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode CBOR: %w", err)
 	}
 	return v, nil
 }
 
-func (d *Decoder) decode(data []byte) (PlutusData, error) {
-	if len(data) == 0 {
-		return nil, errors.New("empty data")
+func (d *Decoder) decode(data []byte, state *decodeState) (PlutusData, error) {
+	v, rest, err := d.decodeNextPlutusData(data, state)
+	if err != nil {
+		return nil, err
 	}
+	if len(rest) > 0 {
+		return nil, fmt.Errorf("unexpected %d trailing bytes", len(rest))
+	}
+	return v, nil
+}
+
+func (d *Decoder) decodePrimitive(data []byte) (PlutusData, error) {
 	cborType := data[0] & CborTypeMask
 	switch cborType {
 	case CborTypeUnsignedInt, CborTypeNegativeInt:
 		return d.decodeInteger(data)
 	case CborTypeByteString:
 		return d.decodeByteString(data)
-	case CborTypeArray:
-		tmpList, rest, err := d.decodeListNext(data)
-		if err != nil {
-			return nil, err
-		}
-		if len(rest) > 0 {
-			return nil, fmt.Errorf("unexpected %d trailing bytes", len(rest))
-		}
-		return tmpList, nil
-	case CborTypeMap:
-		tmpMap, rest, err := d.decodeMapNext(data)
-		if err != nil {
-			return nil, err
-		}
-		if len(rest) > 0 {
-			return nil, fmt.Errorf("unexpected %d trailing bytes", len(rest))
-		}
-		return tmpMap, nil
 	case CborTypeTag:
-		tagNumber, tagContent, err := decodeCBORTag(data)
+		tagNumber, _, err := decodeCBORTag(data)
 		if err != nil {
 			return nil, err
 		}
 		switch {
 		case tagNumber == 102 || (tagNumber >= 121 && tagNumber <= 127) || (tagNumber >= 1280 && tagNumber <= 1400):
-			tmpConstr, rest, err := d.decodeConstrNext(tagNumber, tagContent)
-			if err != nil {
-				return nil, err
-			}
-			if len(rest) > 0 {
-				return nil, fmt.Errorf("unexpected %d trailing bytes", len(rest))
-			}
-			return tmpConstr, nil
+			return nil, fmt.Errorf("unexpected constructor tag in scalar decoder: %d", tagNumber)
 		case tagNumber == 2 || tagNumber == 3:
 			return d.decodeInteger(data)
 		default:
@@ -281,20 +264,27 @@ func (d *Decoder) decode(data []byte) (PlutusData, error) {
 	return nil, fmt.Errorf("unsupported CBOR major type 0x%02x for PlutusData", cborType)
 }
 
-func (d *Decoder) decodeNextPlutusData(data []byte) (PlutusData, []byte, error) {
+func (d *Decoder) decodeNextPlutusData(
+	data []byte,
+	state *decodeState,
+) (PlutusData, []byte, error) {
 	if len(data) == 0 {
 		return nil, nil, errors.New("empty data")
 	}
+	if err := state.enterValue(); err != nil {
+		return nil, nil, err
+	}
+	defer state.leaveValue()
 
 	switch data[0] & CborTypeMask {
 	case CborTypeArray:
-		tmpList, rest, err := d.decodeListNext(data)
+		tmpList, rest, err := d.decodeListNextEntered(data, state)
 		if err != nil {
 			return nil, nil, err
 		}
 		return tmpList, rest, nil
 	case CborTypeMap:
-		tmpMap, rest, err := d.decodeMapNext(data)
+		tmpMap, rest, err := d.decodeMapNextEntered(data, state)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -306,7 +296,11 @@ func (d *Decoder) decodeNextPlutusData(data []byte) (PlutusData, []byte, error) 
 		}
 		switch {
 		case tagNumber == 102 || (tagNumber >= 121 && tagNumber <= 127) || (tagNumber >= 1280 && tagNumber <= 1400):
-			tmpConstr, rest, err := d.decodeConstrNext(tagNumber, tagContent)
+			tmpConstr, rest, err := d.decodeConstrNextEntered(
+				tagNumber,
+				tagContent,
+				state,
+			)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -314,22 +308,29 @@ func (d *Decoder) decodeNextPlutusData(data []byte) (PlutusData, []byte, error) 
 		}
 	}
 
-	item, rest, err := splitCBORItem(data)
+	item, rest, err := splitCBORItemEntered(data, state)
 	if err != nil {
 		return nil, nil, err
 	}
-	tmp, err := d.decode(item)
+	tmp, err := d.decodePrimitive(item)
 	if err != nil {
 		return nil, nil, err
 	}
 	return tmp, rest, nil
 }
 
-func (d *Decoder) decodeConstrNext(tagNumber uint64, data []byte) (*Constr, []byte, error) {
+func (d *Decoder) decodeConstrNextEntered(
+	tagNumber uint64,
+	data []byte,
+	state *decodeState,
+) (*Constr, []byte, error) {
 	constr := d.constrs.alloc()
 	switch {
 	case tagNumber >= 121 && tagNumber <= 127:
-		tmpFields, tmpUseIndef, rest, err := d.decodeListItemsNext(data)
+		tmpFields, tmpUseIndef, rest, err := d.decodeListItemsNextEntered(
+			data,
+			state,
+		)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -338,7 +339,10 @@ func (d *Decoder) decodeConstrNext(tagNumber uint64, data []byte) (*Constr, []by
 		constr.useIndef = tmpUseIndef
 		return constr, rest, nil
 	case tagNumber >= 1280 && tagNumber <= 1400:
-		tmpFields, tmpUseIndef, rest, err := d.decodeListItemsNext(data)
+		tmpFields, tmpUseIndef, rest, err := d.decodeListItemsNextEntered(
+			data,
+			state,
+		)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -364,7 +368,10 @@ func (d *Decoder) decodeConstrNext(tagNumber uint64, data []byte) (*Constr, []by
 		}
 		rest = next
 
-		tmpFields, tmpUseIndef, next, err := d.decodeListItemsNext(rest)
+		tmpFields, tmpUseIndef, next, err := d.decodeListItemsNextEntered(
+			rest,
+			state,
+		)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -386,7 +393,7 @@ func (d *Decoder) decodeConstrNext(tagNumber uint64, data []byte) (*Constr, []by
 	}
 }
 
-func (d *Decoder) decodeMapNext(data []byte) (*Map, []byte, error) {
+func (d *Decoder) decodeMapNextEntered(data []byte, state *decodeState) (*Map, []byte, error) {
 	pairCount, rest, useIndef, err := decodeCBORMap(data)
 	if err != nil {
 		return nil, nil, err
@@ -400,6 +407,9 @@ func (d *Decoder) decodeMapNext(data []byte) (*Map, []byte, error) {
 	if !useIndef {
 		if pairCount > len(rest)/2 {
 			return nil, nil, fmt.Errorf("CBOR map claims %d pairs but only %d bytes remain", pairCount, len(rest))
+		}
+		if err := state.checkAdditionalNodes(pairCount * 2); err != nil {
+			return nil, nil, err
 		}
 		pairs = d.pairs.alloc(pairCount)
 		pairLen = pairCount
@@ -416,13 +426,13 @@ func (d *Decoder) decodeMapNext(data []byte) (*Map, []byte, error) {
 			}
 		}
 
-		tmpKey, next, err := d.decodeNextPlutusData(rest)
+		tmpKey, next, err := d.decodeNextPlutusData(rest, state)
 		if err != nil {
 			return nil, nil, err
 		}
 		rest = next
 
-		tmpVal, next, err := d.decodeNextPlutusData(rest)
+		tmpVal, next, err := d.decodeNextPlutusData(rest, state)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -469,8 +479,11 @@ func (d *Decoder) decodeMapNext(data []byte) (*Map, []byte, error) {
 	return decoded, rest, nil
 }
 
-func (d *Decoder) decodeListNext(data []byte) (*List, []byte, error) {
-	tmpItems, tmpUseIndef, rest, err := d.decodeListItemsNext(data)
+func (d *Decoder) decodeListNextEntered(data []byte, state *decodeState) (*List, []byte, error) {
+	tmpItems, tmpUseIndef, rest, err := d.decodeListItemsNextEntered(
+		data,
+		state,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -480,14 +493,21 @@ func (d *Decoder) decodeListNext(data []byte) (*List, []byte, error) {
 	return decoded, rest, nil
 }
 
-func (d *Decoder) decodeListItemsNext(data []byte) ([]PlutusData, *bool, []byte, error) {
+func (d *Decoder) decodeListItemsNextEntered(
+	data []byte,
+	state *decodeState,
+) ([]PlutusData, *bool, []byte, error) {
 	itemCount, rest, useIndef, err := decodeCBORArray(data)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	if !useIndef {
-		tmpItems, rest, err := d.decodeListItemsDefinite(itemCount, rest)
+		tmpItems, rest, err := d.decodeListItemsDefiniteEntered(
+			itemCount,
+			rest,
+			state,
+		)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -506,7 +526,7 @@ func (d *Decoder) decodeListItemsNext(data []byte) ([]PlutusData, *bool, []byte,
 			break
 		}
 
-		tmp, next, err := d.decodeNextPlutusData(rest)
+		tmp, next, err := d.decodeNextPlutusData(rest, state)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -542,13 +562,20 @@ func (d *Decoder) decodeListItemsNext(data []byte) ([]PlutusData, *bool, []byte,
 	return tmpItems, useIndefPtr(true), rest, nil
 }
 
-func (d *Decoder) decodeListItemsDefinite(itemCount int, rest []byte) ([]PlutusData, []byte, error) {
+func (d *Decoder) decodeListItemsDefiniteEntered(
+	itemCount int,
+	rest []byte,
+	state *decodeState,
+) ([]PlutusData, []byte, error) {
 	if itemCount > len(rest) {
 		return nil, nil, fmt.Errorf("CBOR array claims %d items but only %d bytes remain", itemCount, len(rest))
 	}
+	if err := state.checkAdditionalNodes(itemCount); err != nil {
+		return nil, nil, err
+	}
 	tmpItems := d.items.alloc(itemCount)
 	for i := range itemCount {
-		tmp, next, err := d.decodeNextPlutusData(rest)
+		tmp, next, err := d.decodeNextPlutusData(rest, state)
 		if err != nil {
 			return nil, nil, err
 		}
