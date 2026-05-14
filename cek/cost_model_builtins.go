@@ -3,6 +3,7 @@ package cek
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -1777,6 +1778,19 @@ type ThreeArgument interface {
 	Arguments
 }
 
+type checkedThreeArgument interface {
+	costThreeChecked(x, y, z ExMem) (int64, bool)
+}
+
+func costThree(arg ThreeArgument, x, y, z ExMem) (int64, bool) {
+	if checked, ok := arg.(checkedThreeArgument); ok {
+		return checked.costThreeChecked(x, y, z)
+	}
+
+	cost := arg.CostThree(x, y, z)
+	return cost, cost >= 0
+}
+
 // Implementations for ThreeArguments variants
 
 // Using existing ConstantCost for three arguments
@@ -1973,23 +1987,77 @@ type ExpMod struct {
 func (ExpMod) isArguments() {}
 
 func (l ExpMod) CostThree(aa, ee, mm ExMem) int64 {
-	cost0 := l.coeff00 + l.coeff11*int64(
-		ee,
-	)*int64(
-		mm,
-	) + l.coeff12*int64(
-		ee,
-	)*int64(
-		mm,
-	)*int64(
-		mm,
-	)
-
-	if int64(aa) <= int64(mm) {
-		return cost0
-	} else {
-		return cost0 + (cost0 / 2)
+	cost, ok := l.costThreeChecked(aa, ee, mm)
+	if !ok {
+		return math.MaxInt64
 	}
+
+	return cost
+}
+
+func (l ExpMod) costThreeChecked(aa, ee, mm ExMem) (int64, bool) {
+	aaVal := int64(aa)
+	eeVal := int64(ee)
+	mmVal := int64(mm)
+	if aaVal < 0 || eeVal < 0 || mmVal < 0 {
+		return 0, false
+	}
+
+	term11, ok := checkedMulInt64(l.coeff11, eeVal)
+	if !ok {
+		return 0, false
+	}
+	term11, ok = checkedMulInt64(term11, mmVal)
+	if !ok {
+		return 0, false
+	}
+
+	term12, ok := checkedMulInt64(l.coeff12, eeVal)
+	if !ok {
+		return 0, false
+	}
+	term12, ok = checkedMulInt64(term12, mmVal)
+	if !ok {
+		return 0, false
+	}
+	term12, ok = checkedMulInt64(term12, mmVal)
+	if !ok {
+		return 0, false
+	}
+
+	cost0, ok := checkedAddInt64(l.coeff00, term11)
+	if !ok {
+		return 0, false
+	}
+	cost0, ok = checkedAddInt64(cost0, term12)
+	if !ok {
+		return 0, false
+	}
+
+	if aaVal <= mmVal {
+		return cost0, true
+	}
+
+	return checkedAddInt64(cost0, cost0/2)
+}
+
+func checkedAddInt64(x, y int64) (int64, bool) {
+	if x < 0 || y < 0 || x > math.MaxInt64-y {
+		return 0, false
+	}
+
+	return x + y, true
+}
+
+func checkedMulInt64(x, y int64) (int64, bool) {
+	if x < 0 || y < 0 {
+		return 0, false
+	}
+	if x != 0 && y > math.MaxInt64/x {
+		return 0, false
+	}
+
+	return x * y, true
 }
 
 func (ExpMod) HasConstants() []bool {

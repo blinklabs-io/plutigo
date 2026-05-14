@@ -2,6 +2,7 @@ package cek
 
 import (
 	"fmt"
+	"math"
 	"math/big"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -476,10 +477,19 @@ func (m *Machine[T]) CostThree(
 	if !model.memConstZ || !model.cpuConstZ {
 		zMem = z()
 	}
-	return m.spendBudget(ExBudget{
-		Mem: int64(mem.CostThree(xMem, yMem, zMem)),
-		Cpu: int64(cpu.CostThree(xMem, yMem, zMem)),
-	})
+	memCost, ok := costThree(mem, xMem, yMem, zMem)
+	if !ok {
+		return m.budgetCostOverflowError(ExBudget{Mem: math.MaxInt64})
+	}
+	cpuCost, ok := costThree(cpu, xMem, yMem, zMem)
+	if !ok {
+		return m.budgetCostOverflowError(ExBudget{
+			Mem: memCost,
+			Cpu: math.MaxInt64,
+		})
+	}
+
+	return m.spendBudget(ExBudget{Mem: memCost, Cpu: cpuCost})
 }
 
 func (m *Machine[T]) CostThreeExMem(
@@ -506,10 +516,19 @@ func (m *Machine[T]) CostThreeExMem(
 		zMem = ExMem(0)
 	}
 
-	return m.spendBudget(ExBudget{
-		Mem: int64(mem.CostThree(xMem, yMem, zMem)),
-		Cpu: int64(cpu.CostThree(xMem, yMem, zMem)),
-	})
+	memCost, ok := costThree(mem, xMem, yMem, zMem)
+	if !ok {
+		return m.budgetCostOverflowError(ExBudget{Mem: math.MaxInt64})
+	}
+	cpuCost, ok := costThree(cpu, xMem, yMem, zMem)
+	if !ok {
+		return m.budgetCostOverflowError(ExBudget{
+			Mem: memCost,
+			Cpu: math.MaxInt64,
+		})
+	}
+
+	return m.spendBudget(ExBudget{Mem: memCost, Cpu: cpuCost})
 }
 
 func (m *Machine[T]) CostFour(
