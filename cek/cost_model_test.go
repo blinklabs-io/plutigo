@@ -1,6 +1,7 @@
 package cek
 
 import (
+	"math"
 	"math/big"
 	"testing"
 
@@ -335,6 +336,56 @@ func TestUpdateV3CostModelWithExpModCoefficientNames(t *testing.T) {
 	}
 	if expModCPU.coeff12 != 53144 {
 		t.Fatalf("expected expMod coeff12 to be 53144, got %d", expModCPU.coeff12)
+	}
+}
+
+func TestExpModIntegerCostOverflowReturnsBudgetError(t *testing.T) {
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	originalBudget := m.ExBudget
+
+	fn := builtin.ExpModInteger
+	err := m.CostThree(
+		&fn,
+		func() ExMem { return ExMem(1) },
+		func() ExMem { return ExMem(55_779) },
+		func() ExMem { return ExMem(55_779) },
+	)
+	if err == nil {
+		t.Fatal("expected budget error for overflowing expModInteger cost, got nil")
+	}
+	if !IsBudgetError(err) {
+		t.Fatalf("expected budget error, got %T: %v", err, err)
+	}
+	if m.ExBudget != originalBudget {
+		t.Fatalf("budget mutated after cost overflow: got %+v, want %+v", m.ExBudget, originalBudget)
+	}
+}
+
+func TestExpModCostThreeSaturatesOnOverflow(t *testing.T) {
+	cost := ExpMod{
+		coeff00: 607153,
+		coeff11: 231697,
+		coeff12: 53144,
+	}.CostThree(ExMem(1), ExMem(55_779), ExMem(55_779))
+
+	if cost != math.MaxInt64 {
+		t.Fatalf("overflowing expModInteger cost = %d, want %d", cost, int64(math.MaxInt64))
+	}
+}
+
+func TestSpendBudgetRejectsNegativeCost(t *testing.T) {
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	originalBudget := m.ExBudget
+
+	err := m.spendBudget(ExBudget{Cpu: -1})
+	if err == nil {
+		t.Fatal("expected budget error for negative cost, got nil")
+	}
+	if !IsBudgetError(err) {
+		t.Fatalf("expected budget error, got %T: %v", err, err)
+	}
+	if m.ExBudget != originalBudget {
+		t.Fatalf("budget mutated after negative cost: got %+v, want %+v", m.ExBudget, originalBudget)
 	}
 }
 

@@ -2005,20 +2005,29 @@ func (m *Machine[T]) spendBudget(exBudget ExBudget) error {
 		)
 	}
 
+	if exBudget.Mem < 0 || exBudget.Cpu < 0 {
+		return m.budgetError(exBudget, "invalid negative budget cost")
+	}
+
+	if exBudget.Mem > m.ExBudget.Mem || exBudget.Cpu > m.ExBudget.Cpu {
+		return m.budgetError(exBudget, "out of budget")
+	}
+
 	m.ExBudget.Mem -= exBudget.Mem
 	m.ExBudget.Cpu -= exBudget.Cpu
 
-	if m.ExBudget.Mem < 0 || m.ExBudget.Cpu < 0 {
-		return &BudgetError{
-			Code:      ErrCodeBudgetExhausted,
-			Requested: exBudget,
-			Available: ExBudget{
-				Cpu: m.ExBudget.Cpu + exBudget.Cpu,
-				Mem: m.ExBudget.Mem + exBudget.Mem,
-			},
-			Message: "out of budget",
-		}
-	}
-
 	return nil
+}
+
+func (m *Machine[T]) budgetCostOverflowError(exBudget ExBudget) error {
+	return m.budgetError(exBudget, "budget cost overflow")
+}
+
+func (m *Machine[T]) budgetError(exBudget ExBudget, message string) error {
+	return &BudgetError{
+		Code:      ErrCodeBudgetExhausted,
+		Requested: exBudget,
+		Available: m.ExBudget,
+		Message:   message,
+	}
 }
