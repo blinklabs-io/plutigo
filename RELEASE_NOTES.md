@@ -5,11 +5,11 @@
 - Date: 2026-05-15
 - Version: v0.1.13
 
-Summary: This release fixes CEK `expModInteger` budget cost overflow handling, hardens `PlutusData` decoding with nesting depth, node count, and trailing byte validation, and records the routine release-notes maintenance update that published `v0.1.12`.
+Summary: This release fixes `expModInteger` budget cost overflow handling, hardens `PlutusData` decoding with nesting depth, node count, and trailing byte validation, and records the routine release notes maintenance update that published `v0.1.12`.
 
 ### Bug Fixes
 
-* Corrected `expModInteger` budget cost overflow handling so overflow-safe cost checks now return a budget error instead of corrupting budget accounting.
+* Corrected `expModInteger` budget cost overflow handling so overflow-safe cost checks now return a budget error instead of corrupting runtime budget tracking.
 * Hardened `PlutusData` decoding with a hard nesting depth limit, a hard total node limit, and rejection of unexpected trailing bytes during decoding.
 
 ### Additional Changes
