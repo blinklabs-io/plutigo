@@ -462,17 +462,36 @@ func (l *List) UnmarshalCBOR(data []byte) error {
 }
 
 func decodeConstrFromData(data []byte) (*Constr, []byte, error) {
+	state := newDecodeState()
+	if err := state.enterValue(); err != nil {
+		return nil, nil, err
+	}
+	defer state.leaveValue()
+	return decodeConstrFromDataEntered(data, state)
+}
+
+func decodeConstrFromDataEntered(
+	data []byte,
+	state *decodeState,
+) (*Constr, []byte, error) {
 	tagNumber, tagContent, err := decodeCBORTag(data)
 	if err != nil {
 		return nil, nil, err
 	}
-	return decodeConstrNext(tagNumber, tagContent)
+	return decodeConstrNextEntered(tagNumber, tagContent, state)
 }
 
-func decodeConstrNext(tagNumber uint64, data []byte) (*Constr, []byte, error) {
+func decodeConstrNextEntered(
+	tagNumber uint64,
+	data []byte,
+	state *decodeState,
+) (*Constr, []byte, error) {
 	switch {
 	case tagNumber >= 121 && tagNumber <= 127:
-		tmpFields, tmpUseIndef, rest, err := decodeListItemsNext(data)
+		tmpFields, tmpUseIndef, rest, err := decodeListItemsNextEntered(
+			data,
+			state,
+		)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -482,7 +501,10 @@ func decodeConstrNext(tagNumber uint64, data []byte) (*Constr, []byte, error) {
 			useIndef: tmpUseIndef,
 		}, rest, nil
 	case tagNumber >= 1280 && tagNumber <= 1400:
-		tmpFields, tmpUseIndef, rest, err := decodeListItemsNext(data)
+		tmpFields, tmpUseIndef, rest, err := decodeListItemsNextEntered(
+			data,
+			state,
+		)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -509,7 +531,10 @@ func decodeConstrNext(tagNumber uint64, data []byte) (*Constr, []byte, error) {
 		}
 		rest = next
 
-		tmpFields, tmpUseIndef, next, err := decodeListItemsNext(rest)
+		tmpFields, tmpUseIndef, next, err := decodeListItemsNextEntered(
+			rest,
+			state,
+		)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -536,6 +561,15 @@ func decodeConstrNext(tagNumber uint64, data []byte) (*Constr, []byte, error) {
 }
 
 func decodeMapNext(data []byte) (*Map, []byte, error) {
+	state := newDecodeState()
+	if err := state.enterValue(); err != nil {
+		return nil, nil, err
+	}
+	defer state.leaveValue()
+	return decodeMapNextEntered(data, state)
+}
+
+func decodeMapNextEntered(data []byte, state *decodeState) (*Map, []byte, error) {
 	pairCount, rest, useIndef, err := decodeCBORMap(data)
 	if err != nil {
 		return nil, nil, err
@@ -548,6 +582,9 @@ func decodeMapNext(data []byte) (*Map, []byte, error) {
 		// Each pair needs at least 2 bytes (one per key/value CBOR head).
 		if pairCount > len(rest)/2 {
 			return nil, nil, fmt.Errorf("CBOR map claims %d pairs but only %d bytes remain", pairCount, len(rest))
+		}
+		if err := state.checkAdditionalNodes(pairCount * 2); err != nil {
+			return nil, nil, err
 		}
 		pairs = make([][2]PlutusData, pairCount)
 	}
@@ -563,13 +600,13 @@ func decodeMapNext(data []byte) (*Map, []byte, error) {
 			}
 		}
 
-		tmpKey, next, err := decodeNextPlutusData(rest)
+		tmpKey, next, err := decodeNextPlutusDataWithState(rest, state)
 		if err != nil {
 			return nil, nil, err
 		}
 		rest = next
 
-		tmpVal, next, err := decodeNextPlutusData(rest)
+		tmpVal, next, err := decodeNextPlutusDataWithState(rest, state)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -586,7 +623,16 @@ func decodeMapNext(data []byte) (*Map, []byte, error) {
 }
 
 func decodeListNext(data []byte) (*List, []byte, error) {
-	tmpItems, tmpUseIndef, rest, err := decodeListItemsNext(data)
+	state := newDecodeState()
+	if err := state.enterValue(); err != nil {
+		return nil, nil, err
+	}
+	defer state.leaveValue()
+	return decodeListNextEntered(data, state)
+}
+
+func decodeListNextEntered(data []byte, state *decodeState) (*List, []byte, error) {
+	tmpItems, tmpUseIndef, rest, err := decodeListItemsNextEntered(data, state)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -594,13 +640,24 @@ func decodeListNext(data []byte) (*List, []byte, error) {
 }
 
 func decodeListItemsNext(data []byte) ([]PlutusData, *bool, []byte, error) {
+	return decodeListItemsNextEntered(data, newDecodeState())
+}
+
+func decodeListItemsNextEntered(
+	data []byte,
+	state *decodeState,
+) ([]PlutusData, *bool, []byte, error) {
 	itemCount, rest, useIndef, err := decodeCBORArray(data)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	if !useIndef {
-		tmpItems, rest, err := decodeListItemsDefinite(itemCount, rest)
+		tmpItems, rest, err := decodeListItemsDefiniteEntered(
+			itemCount,
+			rest,
+			state,
+		)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -619,7 +676,7 @@ func decodeListItemsNext(data []byte) ([]PlutusData, *bool, []byte, error) {
 			break
 		}
 
-		tmp, next, err := decodeNextPlutusData(rest)
+		tmp, next, err := decodeNextPlutusDataWithState(rest, state)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -656,13 +713,24 @@ func decodeListItemsNext(data []byte) ([]PlutusData, *bool, []byte, error) {
 }
 
 func decodeListItemsDefinite(itemCount int, rest []byte) ([]PlutusData, []byte, error) {
+	return decodeListItemsDefiniteEntered(itemCount, rest, newDecodeState())
+}
+
+func decodeListItemsDefiniteEntered(
+	itemCount int,
+	rest []byte,
+	state *decodeState,
+) ([]PlutusData, []byte, error) {
 	// Each item needs at least 1 byte for a CBOR head.
 	if itemCount > len(rest) {
 		return nil, nil, fmt.Errorf("CBOR array claims %d items but only %d bytes remain", itemCount, len(rest))
 	}
+	if err := state.checkAdditionalNodes(itemCount); err != nil {
+		return nil, nil, err
+	}
 	tmpItems := make([]PlutusData, itemCount)
 	for i := range itemCount {
-		tmp, next, err := decodeNextPlutusData(rest)
+		tmp, next, err := decodeNextPlutusDataWithState(rest, state)
 		if err != nil {
 			return nil, nil, err
 		}

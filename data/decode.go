@@ -23,10 +23,89 @@ const (
 	CborTypeMask uint8 = 0xe0
 
 	CborIndefFlag uint8 = 0x1f
+
+	MaxDecodeNestingDepth = 256
+	MaxDecodeNodes        = 1_000_000
 )
 
 // decMode is cached at package level to avoid recreation on every decode call
 var decMode cbor.DecMode
+
+type DecodeLimitError struct {
+	Limit  string
+	Max    int
+	Actual int
+}
+
+func (e *DecodeLimitError) Error() string {
+	return fmt.Sprintf(
+		"PlutusData CBOR %s limit exceeded: %d > %d",
+		e.Limit,
+		e.Actual,
+		e.Max,
+	)
+}
+
+type decodeLimits struct {
+	maxDepth int
+	maxNodes int
+}
+
+type decodeState struct {
+	limits decodeLimits
+	depth  int
+	nodes  int
+}
+
+func newDecodeState() *decodeState {
+	return newDecodeStateWithLimits(decodeLimits{
+		maxDepth: MaxDecodeNestingDepth,
+		maxNodes: MaxDecodeNodes,
+	})
+}
+
+func newDecodeStateWithLimits(limits decodeLimits) *decodeState {
+	return &decodeState{limits: limits}
+}
+
+func (s *decodeState) enterValue() error {
+	if s.depth >= s.limits.maxDepth {
+		return &DecodeLimitError{
+			Limit:  "nesting depth",
+			Max:    s.limits.maxDepth,
+			Actual: s.depth + 1,
+		}
+	}
+	s.depth++
+
+	s.nodes++
+	if s.nodes > s.limits.maxNodes {
+		s.depth--
+		return &DecodeLimitError{
+			Limit:  "node count",
+			Max:    s.limits.maxNodes,
+			Actual: s.nodes,
+		}
+	}
+
+	return nil
+}
+
+func (s *decodeState) leaveValue() {
+	s.depth--
+}
+
+func (s *decodeState) checkAdditionalNodes(n int) error {
+	if n < 0 || n > s.limits.maxNodes-s.nodes {
+		return &DecodeLimitError{
+			Limit:  "node count",
+			Max:    s.limits.maxNodes,
+			Actual: s.nodes + n,
+		}
+	}
+
+	return nil
+}
 
 func init() {
 	decOptions := cbor.DecOptions{
@@ -62,6 +141,21 @@ func cborUnmarshal(dataBytes []byte, dest any) error {
 // decode is a low-level decode function that detects the CBOR type and uses the correct
 // PlutusData type to decode it
 func decode(data []byte) (PlutusData, error) {
+	return decodeWithState(data, newDecodeState())
+}
+
+func decodeWithState(data []byte, state *decodeState) (PlutusData, error) {
+	v, rest, err := decodeNextPlutusDataWithState(data, state)
+	if err != nil {
+		return nil, err
+	}
+	if len(rest) > 0 {
+		return nil, fmt.Errorf("unexpected %d trailing bytes", len(rest))
+	}
+	return v, nil
+}
+
+func decodePrimitive(data []byte) (PlutusData, error) {
 	if len(data) == 0 {
 		return nil, errors.New("empty data")
 	}
@@ -76,18 +170,6 @@ func decode(data []byte) (PlutusData, error) {
 	case CborTypeByteString:
 		var tmpData ByteString
 		if err := cborUnmarshal(data, &tmpData); err != nil {
-			return nil, err
-		}
-		return &tmpData, nil
-	case CborTypeArray:
-		var tmpData List
-		if err := tmpData.UnmarshalCBOR(data); err != nil {
-			return nil, err
-		}
-		return &tmpData, nil
-	case CborTypeMap:
-		var tmpData Map
-		if err := tmpData.UnmarshalCBOR(data); err != nil {
 			return nil, err
 		}
 		return &tmpData, nil
@@ -236,19 +318,30 @@ func decodeCBORHead(data []byte) (uint8, uint64, []byte, bool, error) {
 }
 
 func decodeNextPlutusData(data []byte) (PlutusData, []byte, error) {
+	return decodeNextPlutusDataWithState(data, newDecodeState())
+}
+
+func decodeNextPlutusDataWithState(
+	data []byte,
+	state *decodeState,
+) (PlutusData, []byte, error) {
 	if len(data) == 0 {
 		return nil, nil, errors.New("empty data")
 	}
+	if err := state.enterValue(); err != nil {
+		return nil, nil, err
+	}
+	defer state.leaveValue()
 
 	switch data[0] & CborTypeMask {
 	case CborTypeArray:
-		tmpList, rest, err := decodeListNext(data)
+		tmpList, rest, err := decodeListNextEntered(data, state)
 		if err != nil {
 			return nil, nil, err
 		}
 		return tmpList, rest, nil
 	case CborTypeMap:
-		tmpMap, rest, err := decodeMapNext(data)
+		tmpMap, rest, err := decodeMapNextEntered(data, state)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -260,7 +353,11 @@ func decodeNextPlutusData(data []byte) (PlutusData, []byte, error) {
 		}
 		switch {
 		case tagNumber == 102 || (tagNumber >= 121 && tagNumber <= 127) || (tagNumber >= 1280 && tagNumber <= 1400):
-			tmpConstr, rest, err := decodeConstrNext(tagNumber, tagContent)
+			tmpConstr, rest, err := decodeConstrNextEntered(
+				tagNumber,
+				tagContent,
+				state,
+			)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -268,11 +365,11 @@ func decodeNextPlutusData(data []byte) (PlutusData, []byte, error) {
 		}
 	}
 
-	item, rest, err := splitCBORItem(data)
+	item, rest, err := splitCBORItemEntered(data, state)
 	if err != nil {
 		return nil, nil, err
 	}
-	tmp, err := decode(item)
+	tmp, err := decodePrimitive(item)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -280,7 +377,19 @@ func decodeNextPlutusData(data []byte) (PlutusData, []byte, error) {
 }
 
 func splitCBORItem(data []byte) ([]byte, []byte, error) {
-	rest, err := skipCBORItem(data)
+	state := newDecodeState()
+	if err := state.enterValue(); err != nil {
+		return nil, nil, err
+	}
+	defer state.leaveValue()
+	return splitCBORItemEntered(data, state)
+}
+
+func splitCBORItemEntered(
+	data []byte,
+	state *decodeState,
+) ([]byte, []byte, error) {
+	rest, err := skipCBORItemEntered(data, state)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -289,6 +398,19 @@ func splitCBORItem(data []byte) ([]byte, []byte, error) {
 }
 
 func skipCBORItem(data []byte) ([]byte, error) {
+	state := newDecodeState()
+	return skipCBORItemWithState(data, state)
+}
+
+func skipCBORItemWithState(data []byte, state *decodeState) ([]byte, error) {
+	if err := state.enterValue(); err != nil {
+		return nil, err
+	}
+	defer state.leaveValue()
+	return skipCBORItemEntered(data, state)
+}
+
+func skipCBORItemEntered(data []byte, state *decodeState) ([]byte, error) {
 	cborType, value, rest, indefinite, err := decodeCBORHead(data)
 	if err != nil {
 		return nil, err
@@ -304,25 +426,25 @@ func skipCBORItem(data []byte) ([]byte, error) {
 		return skipCBORBytesLike(rest, value, indefinite, cborType)
 	case CborTypeArray:
 		if indefinite {
-			return skipCBORSequence(rest, 1, true)
+			return skipCBORSequenceWithState(rest, 1, true, state)
 		}
 		if value > math.MaxInt {
 			return nil, fmt.Errorf("CBOR array too large: %d", value)
 		}
-		return skipCBORSequence(rest, int(value), false)
+		return skipCBORSequenceWithState(rest, int(value), false, state)
 	case CborTypeMap:
 		if indefinite {
-			return skipCBORSequence(rest, 2, true)
+			return skipCBORSequenceWithState(rest, 2, true, state)
 		}
 		if value > math.MaxInt/2 {
 			return nil, fmt.Errorf("CBOR map too large: %d", value)
 		}
-		return skipCBORSequence(rest, int(value)*2, false)
+		return skipCBORSequenceWithState(rest, int(value)*2, false, state)
 	case CborTypeTag:
 		if indefinite {
 			return nil, errors.New("indefinite CBOR tags are not supported")
 		}
-		return skipCBORItem(rest)
+		return skipCBORItemWithState(rest, state)
 	case CborTypeSimple:
 		if indefinite {
 			return nil, errors.New("unexpected CBOR break")
@@ -369,6 +491,15 @@ func skipCBORBytesLike(
 }
 
 func skipCBORSequence(rest []byte, count int, indefinite bool) ([]byte, error) {
+	return skipCBORSequenceWithState(rest, count, indefinite, newDecodeState())
+}
+
+func skipCBORSequenceWithState(
+	rest []byte,
+	count int,
+	indefinite bool,
+	state *decodeState,
+) ([]byte, error) {
 	if indefinite {
 		for {
 			if len(rest) == 0 {
@@ -379,7 +510,7 @@ func skipCBORSequence(rest []byte, count int, indefinite bool) ([]byte, error) {
 			}
 			var err error
 			for range count {
-				rest, err = skipCBORItem(rest)
+				rest, err = skipCBORItemWithState(rest, state)
 				if err != nil {
 					return nil, err
 				}
@@ -389,7 +520,7 @@ func skipCBORSequence(rest []byte, count int, indefinite bool) ([]byte, error) {
 
 	for range count {
 		var err error
-		rest, err = skipCBORItem(rest)
+		rest, err = skipCBORItemWithState(rest, state)
 		if err != nil {
 			return nil, err
 		}
