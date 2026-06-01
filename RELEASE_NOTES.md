@@ -16,6 +16,20 @@ Summary: This release adds optional CEK final slippage flush skipping for restri
 
 * Updated `golang.org/x/crypto` from `v0.51.0` to `v0.52.0` to incorporate upstream security and maintenance fixes.
 
+### Documentation
+
+* Removed self referential release notes bullets so each release entry now focuses on substantive changes.
+
+### Additional Changes
+
+* Recorded the `v0.1.13` release publication in the release history to keep the documented release sequence current.
+* Refreshed `github.com/btcsuite/btcd/chaincfg/chainhash` from `v1.1.0` to `v1.2.0` to bring in upstream dependency updates.
+* Raised `github.com/btcsuite/btcd/btcec/v2` from `v2.3.6` to `v2.5.0` to incorporate the latest upstream maintenance updates.
+* Advanced `github.com/ethereum/go-ethereum` from `v1.17.2` to `v1.17.3` to keep Ethereum runtime support current.
+* Updated `andrewslotin/go-proxy-pull-action` from `v1.4.0` to `v1.5.0` to keep the release workflow aligned with current upstream behavior.
+* Upgraded `codecov/codecov-action` from `v6.0.0` to `v6.0.1` to keep coverage reporting automation current.
+* Updated `golangci/golangci-lint-action` from `v9.2.0` to `v9.2.1` to keep lint automation aligned with the latest upstream fixes.
+
 ## v0.1.13 - expmod and plutus data decode limit fixes
 
 - Date: 2026-05-15
