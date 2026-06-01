@@ -1,5 +1,35 @@
 # Release Notes
 
+## v0.1.14 - CEK slippage handling, nil-safety hardening, and dependency updates
+
+- Date: 2026-06-01
+- Version: v0.1.14
+
+Summary: This release adds optional CEK final slippage flush skipping for restricting validation mode, hardens evaluator nil handling, removes self referential release notes maintenance text, and updates runtime and CI dependencies.
+
+### Bug Fixes
+
+* Fixed restricting validation mode so successful evaluations can leave the final deferred budget batch uncharged when exact charging should remain disabled.
+* Improved evaluator safety so missing values now fail consistently and zero length allocations now return empty results instead of nil slices.
+
+### Security
+
+* Strengthened runtime dependency protection by updating `golang.org/x/crypto` to `v0.52.0` and `golang.org/x/sys` to `v0.45.0` for upstream security fixes.
+
+### Documentation
+
+* Clarified `RELEASE_NOTES.md` by removing self referential maintenance bullets so each entry stays focused on substantive library changes.
+
+### Additional Changes
+
+* Added the `v0.1.13` release entry to keep the published release sequence complete.
+* Refreshed `github.com/btcsuite/btcd/chaincfg/chainhash` from `v1.1.0` to `v1.2.0`.
+* Updated `github.com/btcsuite/btcd/btcec/v2` to `v2.5.0` and refreshed related `secp256k1` dependencies.
+* Advanced `github.com/ethereum/go-ethereum` from `v1.17.2` to `v1.17.3`.
+* Modernized the module publishing workflow by updating `andrewslotin/go-proxy-pull-action` from `v1.4.0` to `v1.5.0`.
+* Upgraded coverage reporting by updating `codecov/codecov-action` from `v6.0.0` to `v6.0.1`.
+* Streamlined lint automation by updating `golangci/golangci-lint-action` from `v9.2.0` to `v9.2.1`.
+
 ## v0.1.13 - expmod and plutus data decode limit fixes
 
 - Date: 2026-05-15
