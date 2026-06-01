@@ -5,11 +5,11 @@
 - Date: 2026-06-01
 - Version: v0.1.14
 
-Summary: This release adds optional final budget flush skipping for restricting validation mode, hardens evaluator nil handling, cleans release notes self references, and updates runtime and CI dependencies.
+Summary: This release adds optional final budget flush skipping for restricting validation mode, hardens nil handling during evaluation, removes self referential release note bullets, and updates runtime and CI dependencies.
 
 ### Bug Fixes
 
-* Fixed restricting validation mode so successful evaluations can leave the final deferred budget batch uncharged when exact final charging should remain disabled.
+* Fixed restricting validation mode so successful evaluations can leave the final deferred budget batch uncharged when final exact charging should remain disabled.
 * Improved evaluator safety so missing values now fail consistently and zero length allocations now return empty results instead of nil values.
 
 ### Security
@@ -18,11 +18,11 @@ Summary: This release adds optional final budget flush skipping for restricting 
 
 ### Documentation
 
-* Clarified release note entries by removing self referential bullets so each entry stays focused on substantive changes.
+* Clarified release note entries by removing self referential bullets so each entry stays focused on substantive library changes.
 
 ### Additional Changes
 
-* Added the `v0.1.13` publication entry to keep the documented release sequence current.
+* Added the `v0.1.13` publication entry to keep the documented release sequence complete.
 * Refreshed `github.com/btcsuite/btcd/chaincfg/chainhash` from `v1.1.0` to `v1.2.0`.
 * Raised `github.com/btcsuite/btcd/btcec/v2` from `v2.3.6` to `v2.5.0`.
 * Advanced `github.com/ethereum/go-ethereum` from `v1.17.2` to `v1.17.3`.
