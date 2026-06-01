@@ -5,30 +5,30 @@
 - Date: 2026-06-01
 - Version: v0.1.14
 
-Summary: This release adds optional CEK final slippage flush skipping for restricting validation mode, hardens evaluator nil handling, cleans release notes self references, and updates runtime and CI dependencies.
+Summary: This release adds optional final budget flush skipping for restricting validation mode, hardens evaluator nil handling, cleans release notes self references, and updates runtime and CI dependencies.
 
 ### Bug Fixes
 
-* Fixed CEK evaluation so restricting validation mode can leave the final successful slippage batch unflushed when exact final charging should stay disabled.
-* Hardened evaluator error handling so nil values now fail with consistent internal errors, and zero length arena allocations now return empty slices instead of nil.
+* Fixed restricting validation mode so successful evaluations can leave the final deferred budget batch uncharged when exact final charging should remain disabled.
+* Improved evaluator safety so missing values now fail consistently and zero length allocations now return empty results instead of nil values.
 
 ### Security
 
-* Updated `golang.org/x/crypto` from `v0.51.0` to `v0.52.0` to incorporate upstream security and maintenance fixes.
+* Strengthened bundled cryptography support by updating `golang.org/x/crypto` from `v0.51.0` to `v0.52.0`.
 
 ### Documentation
 
-* Removed self referential release notes bullets so each release entry now focuses on substantive changes.
+* Clarified release note entries by removing self referential bullets so each entry stays focused on substantive changes.
 
 ### Additional Changes
 
-* Recorded the `v0.1.13` release publication in the release history to keep the documented release sequence current.
-* Refreshed `github.com/btcsuite/btcd/chaincfg/chainhash` from `v1.1.0` to `v1.2.0` to bring in upstream dependency updates.
-* Raised `github.com/btcsuite/btcd/btcec/v2` from `v2.3.6` to `v2.5.0` to incorporate the latest upstream maintenance updates.
-* Advanced `github.com/ethereum/go-ethereum` from `v1.17.2` to `v1.17.3` to keep Ethereum runtime support current.
-* Updated `andrewslotin/go-proxy-pull-action` from `v1.4.0` to `v1.5.0` to keep the release workflow aligned with current upstream behavior.
-* Upgraded `codecov/codecov-action` from `v6.0.0` to `v6.0.1` to keep coverage reporting automation current.
-* Updated `golangci/golangci-lint-action` from `v9.2.0` to `v9.2.1` to keep lint automation aligned with the latest upstream fixes.
+* Added the `v0.1.13` publication entry to keep the documented release sequence current.
+* Refreshed `github.com/btcsuite/btcd/chaincfg/chainhash` from `v1.1.0` to `v1.2.0`.
+* Raised `github.com/btcsuite/btcd/btcec/v2` from `v2.3.6` to `v2.5.0`.
+* Advanced `github.com/ethereum/go-ethereum` from `v1.17.2` to `v1.17.3`.
+* Modernized the proxy pull workflow by updating `andrewslotin/go-proxy-pull-action` from `v1.4.0` to `v1.5.0`.
+* Upgraded coverage reporting by updating `codecov/codecov-action` from `v6.0.0` to `v6.0.1`.
+* Streamlined lint automation by updating `golangci/golangci-lint-action` from `v9.2.0` to `v9.2.1`.
 
 ## v0.1.13 - expmod and plutus data decode limit fixes
 
