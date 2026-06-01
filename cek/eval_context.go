@@ -10,6 +10,11 @@ type EvalContext struct {
 	CostModel        CostModel
 	SemanticsVariant SemanticsVariant
 	ProtoMajor       uint
+
+	// SkipFinalSlippageFlush leaves a successful evaluation's trailing
+	// unbudgeted machine-step batch unspent. This matches Cardano ledger's
+	// restricting validation mode; exact cost evaluation should leave it false.
+	SkipFinalSlippageFlush bool
 }
 
 // NewDefaultEvalContext builds an EvalContext using the default cost model
