@@ -9,24 +9,24 @@ Summary: This release adds optional CEK final slippage flush skipping for restri
 
 ### Bug Fixes
 
-* Fixed restricting validation mode so successful evaluations can skip the final slippage flush when exact budget charging should stay disabled.
-* Improved evaluator safety so nil values now raise consistent internal errors and empty allocations now return empty results instead of nil slices.
+* Fixed restricting validation mode so successful evaluations can leave the final deferred budget batch uncharged when exact charging should remain disabled.
+* Improved evaluator safety so missing values now fail with consistent internal errors and zero length allocations now return empty results instead of nil slices.
 
 ### Security
 
-* Strengthened runtime dependency protection by updating `golang.org/x/crypto` to `v0.52.0` and `golang.org/x/sys` to `v0.45.0`.
+* Strengthened runtime dependency protection by updating `golang.org/x/crypto` to `v0.52.0` and `golang.org/x/sys` to `v0.45.0` for upstream security fixes.
 
 ### Documentation
 
-* Clarified `RELEASE_NOTES.md` by removing self referential maintenance bullets so each entry stays focused on substantive library changes.
+* Clarified `RELEASE_NOTES.md` by removing self referential maintenance bullets so each entry stays focused on library changes.
 
 ### Additional Changes
 
-* Added the `v0.1.13` publication entry to keep the documented release sequence complete.
+* Added the `v0.1.13` release entry to keep the published release sequence complete.
 * Refreshed `github.com/btcsuite/btcd/chaincfg/chainhash` from `v1.1.0` to `v1.2.0`.
-* Updated `github.com/btcsuite/btcd/btcec/v2` to `v2.5.0` and refreshed related `secp256k1` dependencies.
+* Updated `github.com/btcsuite/btcd/btcec/v2` to `v2.5.0` and refreshed related `secp256k1` packages.
 * Advanced `github.com/ethereum/go-ethereum` from `v1.17.2` to `v1.17.3`.
-* Modernized the proxy pull workflow by updating `andrewslotin/go-proxy-pull-action` from `v1.4.0` to `v1.5.0`.
+* Modernized the module publishing workflow by updating `andrewslotin/go-proxy-pull-action` from `v1.4.0` to `v1.5.0`.
 * Upgraded coverage reporting by updating `codecov/codecov-action` from `v6.0.0` to `v6.0.1`.
 * Streamlined lint automation by updating `golangci/golangci-lint-action` from `v9.2.0` to `v9.2.1`.
 
