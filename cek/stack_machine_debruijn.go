@@ -232,6 +232,9 @@ func runStackNoSlippageDeBruijn(
 
 	for {
 		if !returning {
+			if currentTerm == nil {
+				return nil, internalError("DeBruijn stack machine current term is nil")
+			}
 			switch t := currentTerm.(type) {
 			case *syn.Var[syn.DeBruijn]:
 				if !m.spendStepNoSlippage(ExVar) {
@@ -241,6 +244,9 @@ func runStackNoSlippageDeBruijn(
 				value, ok := lookupEnvDeBruijn(currentEnv, int(t.Name))
 				if !ok {
 					return nil, &TypeError{Code: ErrCodeOpenTerm, Message: "open term evaluated"}
+				}
+				if value == nil {
+					return nil, internalError("DeBruijn environment lookup returned nil value")
 				}
 
 				currentValue = value
@@ -459,6 +465,9 @@ func runStackNoSlippageDeBruijn(
 			continue
 		}
 
+		if currentValue == nil {
+			return nil, internalError("DeBruijn stack machine current value is nil")
+		}
 		if len(m.frameStack) == 0 {
 			return m.finishValue(currentValue)
 		}

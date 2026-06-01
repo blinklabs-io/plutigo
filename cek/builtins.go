@@ -317,6 +317,10 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 	fn builtin.DefaultFunction,
 	arg Value[T],
 ) (Value[T], bool, error) {
+	if arg == nil {
+		return nil, true, internalError("unary builtin evaluated nil argument")
+	}
+
 	switch fn {
 	case builtin.FstPair:
 		if err := m.CostOne(&fn, valueExMem[T](arg)); err != nil {

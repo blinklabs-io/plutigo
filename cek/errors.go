@@ -156,6 +156,13 @@ func (e *InternalError) Error() string {
 func (e *InternalError) IsRecoverable() bool  { return false }
 func (e *InternalError) ErrorCode() ErrorCode { return e.Code }
 
+func internalError(message string) *InternalError {
+	return &InternalError{
+		Code:    ErrCodeInternalError,
+		Message: message,
+	}
+}
+
 // Error classification helpers for consumers
 
 // IsBudgetError returns true if the error is a budget exhaustion error.

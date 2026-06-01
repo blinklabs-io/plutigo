@@ -247,6 +247,9 @@ func (m *Machine[T]) runStackNoSlippage(term syn.Term[T]) (syn.Term[T], error) {
 
 	for {
 		if !returning {
+			if currentTerm == nil {
+				return nil, internalError("stack machine current term is nil")
+			}
 			switch t := currentTerm.(type) {
 			case *syn.Var[T]:
 				if !m.spendStepNoSlippage(ExVar) {
@@ -424,6 +427,9 @@ func (m *Machine[T]) runStackNoSlippage(term syn.Term[T]) (syn.Term[T], error) {
 			continue
 		}
 
+		if currentValue == nil {
+			return nil, internalError("stack machine current value is nil")
+		}
 		if len(m.frameStack) == 0 {
 			return m.finishValue(currentValue)
 		}
@@ -552,6 +558,9 @@ func (m *Machine[T]) runStack(term syn.Term[T]) (syn.Term[T], error) {
 
 	for {
 		if !returning {
+			if currentTerm == nil {
+				return nil, internalError("stack machine current term is nil")
+			}
 			switch t := currentTerm.(type) {
 			case *syn.Var[T]:
 				if err := m.stepAndMaybeSpend(ExVar); err != nil {
@@ -729,6 +738,9 @@ func (m *Machine[T]) runStack(term syn.Term[T]) (syn.Term[T], error) {
 			continue
 		}
 
+		if currentValue == nil {
+			return nil, internalError("stack machine current value is nil")
+		}
 		if len(m.frameStack) == 0 {
 			return m.finishValue(currentValue)
 		}
@@ -865,6 +877,13 @@ func (m *Machine[T]) applyEvaluateStack(
 	function Value[T],
 	arg Value[T],
 ) (syn.Term[T], *Env[T], Value[T], bool, error) {
+	if function == nil {
+		return nil, nil, nil, false, internalError("stack apply evaluated nil function")
+	}
+	if arg == nil {
+		return nil, nil, nil, false, internalError("stack apply evaluated nil argument")
+	}
+
 	switch f := function.(type) {
 	case *Lambda[T]:
 		return f.AST.Body, m.extendEnv(f.Env, arg), nil, false, nil
@@ -940,6 +959,10 @@ func (m *Machine[T]) applyEvaluateStack(
 func (m *Machine[T]) forceEvaluateStack(
 	value Value[T],
 ) (syn.Term[T], *Env[T], Value[T], bool, error) {
+	if value == nil {
+		return nil, nil, nil, false, internalError("stack force evaluated nil value")
+	}
+
 	switch v := value.(type) {
 	case *Delay[T]:
 		return v.AST.Term, v.Env, nil, false, nil
@@ -978,6 +1001,10 @@ func (m *Machine[T]) caseEvaluateStack(
 	branches []syn.Term[T],
 	value Value[T],
 ) (syn.Term[T], *Env[T], Value[T], bool, error) {
+	if value == nil {
+		return nil, nil, nil, false, internalError("stack case evaluated nil value")
+	}
+
 	switch v := value.(type) {
 	case *Constr[T]:
 		if v.Tag > math.MaxInt {
