@@ -1,6 +1,7 @@
 package cek
 
 import (
+	"errors"
 	"math/big"
 	"strings"
 	"testing"
@@ -273,6 +274,50 @@ func TestRunStackLambdaImmediateFastPathSkipsLambdaArena(t *testing.T) {
 
 	if got := len(m.lambdaChunks); got != 0 {
 		t.Fatalf("len(lambdaChunks) after lambda immediate fast path = %d, want 0", got)
+	}
+}
+
+func TestRunRestrictingModeSkipsSuccessfulFinalSlippageFlush(t *testing.T) {
+	ctx := NewDefaultEvalContext(
+		lang.LanguageVersionV3,
+		ProtoVersion{},
+	)
+	ctx.SkipFinalSlippageFlush = true
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 200, ctx)
+	startupBudget := m.costs.machineCosts.startup
+	m.ExBudget = startupBudget
+
+	term := &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(42)}}
+	if _, err := m.Run(term); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if m.ExBudget != (ExBudget{}) {
+		t.Fatalf("remaining budget = %+v, want zero after startup only", m.ExBudget)
+	}
+	if got := m.unbudgetedTotal; got != 0 {
+		t.Fatalf("unbudgetedTotal after Run = %d, want 0", got)
+	}
+	if got := m.unbudgetedSteps; got != [9]uint32{} {
+		t.Fatalf("unbudgetedSteps after Run = %v, want zeroed", got)
+	}
+}
+
+func TestRunDefaultModeFlushesSuccessfulFinalSlippageBatch(t *testing.T) {
+	ctx := NewDefaultEvalContext(
+		lang.LanguageVersionV3,
+		ProtoVersion{},
+	)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 200, ctx)
+	m.ExBudget = m.costs.machineCosts.startup
+
+	term := &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(42)}}
+	_, err := m.Run(term)
+	if err == nil {
+		t.Fatal("expected final slippage flush to exhaust budget")
+	}
+	var budgetErr *BudgetError
+	if !errors.As(err, &budgetErr) {
+		t.Fatalf("Run error = %T %v, want BudgetError", err, err)
 	}
 }
 

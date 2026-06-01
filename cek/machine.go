@@ -61,23 +61,24 @@ func getFilteredBuiltins[T syn.Eval](
 }
 
 type Machine[T syn.Eval] struct {
-	costs              CostModel
-	stepCosts          [9]ExBudget
-	stepCostCpu        [9]int64
-	stepCostMem        [9]int64
-	builtins           *Builtins[T]
-	builtinValues      *[builtin.TotalBuiltinCount]*Builtin[T]
-	builtinNoArgValues *[builtin.TotalBuiltinCount][3]*Builtin[T]
-	oneArgCosts        [builtin.TotalBuiltinCount]oneArgCost
-	twoArgCosts        [builtin.TotalBuiltinCount]twoArgCost
-	threeArgCosts      [builtin.TotalBuiltinCount]threeArgCost
-	available          *[builtin.TotalBuiltinCount]bool
-	slippage           uint32
-	version            lang.LanguageVersion
-	semantics          SemanticsVariant
-	protoMajor         uint
-	ExBudget           ExBudget
-	Logs               []string
+	costs                  CostModel
+	stepCosts              [9]ExBudget
+	stepCostCpu            [9]int64
+	stepCostMem            [9]int64
+	builtins               *Builtins[T]
+	builtinValues          *[builtin.TotalBuiltinCount]*Builtin[T]
+	builtinNoArgValues     *[builtin.TotalBuiltinCount][3]*Builtin[T]
+	oneArgCosts            [builtin.TotalBuiltinCount]oneArgCost
+	twoArgCosts            [builtin.TotalBuiltinCount]twoArgCost
+	threeArgCosts          [builtin.TotalBuiltinCount]threeArgCost
+	available              *[builtin.TotalBuiltinCount]bool
+	slippage               uint32
+	version                lang.LanguageVersion
+	semantics              SemanticsVariant
+	protoMajor             uint
+	skipFinalSlippageFlush bool
+	ExBudget               ExBudget
+	Logs                   []string
 
 	argHolder       argHolder[T]
 	frameStack      []stackFrame[T]
@@ -681,23 +682,24 @@ func NewMachine[T syn.Eval](
 		stepCostMem[i] = s.Mem
 	}
 	return &Machine[T]{
-		costs:              evalContext.CostModel,
-		stepCosts:          stepCosts,
-		stepCostCpu:        stepCostCpu,
-		stepCostMem:        stepCostMem,
-		builtins:           chooseBuiltins[T](version, evalContext.ProtoMajor),
-		builtinValues:      getSharedBuiltinValues[T](),
-		builtinNoArgValues: getSharedBuiltinNoArgValues[T](),
-		oneArgCosts:        newOneArgCostCache(evalContext.CostModel.builtinCosts),
-		twoArgCosts:        newTwoArgCostCache(evalContext.CostModel.builtinCosts),
-		threeArgCosts:      newThreeArgCostCache(evalContext.CostModel.builtinCosts),
-		available:          chooseAvailableBuiltins(version, evalContext.ProtoMajor),
-		slippage:           slippage,
-		version:            version,
-		semantics:          evalContext.SemanticsVariant,
-		protoMajor:         evalContext.ProtoMajor,
-		ExBudget:           DefaultExBudget,
-		Logs:               make([]string, 0),
+		costs:                  evalContext.CostModel,
+		stepCosts:              stepCosts,
+		stepCostCpu:            stepCostCpu,
+		stepCostMem:            stepCostMem,
+		builtins:               chooseBuiltins[T](version, evalContext.ProtoMajor),
+		builtinValues:          getSharedBuiltinValues[T](),
+		builtinNoArgValues:     getSharedBuiltinNoArgValues[T](),
+		oneArgCosts:            newOneArgCostCache(evalContext.CostModel.builtinCosts),
+		twoArgCosts:            newTwoArgCostCache(evalContext.CostModel.builtinCosts),
+		threeArgCosts:          newThreeArgCostCache(evalContext.CostModel.builtinCosts),
+		available:              chooseAvailableBuiltins(version, evalContext.ProtoMajor),
+		slippage:               slippage,
+		version:                version,
+		semantics:              evalContext.SemanticsVariant,
+		protoMajor:             evalContext.ProtoMajor,
+		skipFinalSlippageFlush: evalContext.SkipFinalSlippageFlush,
+		ExBudget:               DefaultExBudget,
+		Logs:                   make([]string, 0),
 
 		argHolder:       newArgHolder[T](),
 		frameStack:      make([]stackFrame[T], 0, 32),
@@ -918,8 +920,13 @@ func (m *Machine[T]) finishReturn(ret *Return[T]) (syn.Term[T], error) {
 
 func (m *Machine[T]) finishValue(value Value[T]) (syn.Term[T], error) {
 	if m.unbudgetedTotal > 0 {
-		if err := m.spendUnbudgetedSteps(); err != nil {
-			return nil, err
+		if m.skipFinalSlippageFlush {
+			clear(m.unbudgetedSteps[:])
+			m.unbudgetedTotal = 0
+		} else {
+			if err := m.spendUnbudgetedSteps(); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return dischargeValue[T](value)
