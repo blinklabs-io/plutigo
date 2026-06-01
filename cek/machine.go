@@ -334,7 +334,7 @@ func allocArenaSlot[S any](chunks *[][]S, pos *int, chunkSize int) *S {
 
 func allocArenaSlice[S any](chunks *[][]S, pos *int, n int, chunkSize int) []S {
 	if n == 0 {
-		return nil
+		return make([]S, 0)
 	}
 
 	remaining := *pos
@@ -1085,11 +1085,17 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 		if ok {
+			if funValue == nil {
+				return nil, internalError("compute returned nil function value")
+			}
 			argValue, argImmediate, err := m.computeImmediateValue(env, t.Argument)
 			if err != nil {
 				return nil, err
 			}
 			if argImmediate {
+				if argValue == nil {
+					return nil, internalError("compute returned nil argument value")
+				}
 				return m.applyEvaluate(context, funValue, argValue)
 			}
 
@@ -1137,6 +1143,9 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 		if ok {
+			if forcedValue == nil {
+				return nil, internalError("compute returned nil force value")
+			}
 			return m.forceEvaluate(context, forcedValue)
 		}
 
@@ -1209,6 +1218,9 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 		if ok {
+			if scrutinee == nil {
+				return nil, internalError("compute returned nil case scrutinee")
+			}
 			return m.caseEvaluate(env, t.Branches, context, scrutinee)
 		}
 
@@ -1262,6 +1274,9 @@ func (m *Machine[T]) computeImmediateValue(
 		if !ok {
 			return nil, true, &TypeError{Code: ErrCodeOpenTerm, Message: "open term evaluated"}
 		}
+		if value == nil {
+			return nil, true, internalError("environment lookup returned nil value")
+		}
 		return value, true, nil
 	case *syn.Delay[T]:
 		if err := m.stepAndMaybeSpend(ExDelay); err != nil {
@@ -1304,6 +1319,10 @@ func (m *Machine[T]) caseEvaluate(
 	context MachineContext[T],
 	value Value[T],
 ) (MachineState[T], error) {
+	if value == nil {
+		return nil, internalError("case evaluated nil value")
+	}
+
 	switch v := value.(type) {
 	case *Constr[T]:
 		if v.Tag > math.MaxInt {
@@ -1497,6 +1516,10 @@ func (m *Machine[T]) returnCompute(
 			return nil, err
 		}
 		if ok {
+			if argValue == nil {
+				m.putFrameAwaitFunTerm(c)
+				return nil, internalError("compute returned nil argument value")
+			}
 			state, err = m.applyEvaluate(c.Ctx, value, argValue)
 			m.putFrameAwaitFunTerm(c)
 			if err != nil {
@@ -1592,6 +1615,10 @@ func (m *Machine[T]) forceEvaluate(
 	context MachineContext[T],
 	value Value[T],
 ) (MachineState[T], error) {
+	if value == nil {
+		return nil, internalError("force evaluated nil value")
+	}
+
 	var state MachineState[T]
 	var err error
 
@@ -1650,6 +1677,13 @@ func (m *Machine[T]) applyEvaluate(
 	function Value[T],
 	arg Value[T],
 ) (MachineState[T], error) {
+	if function == nil {
+		return nil, internalError("apply evaluated nil function")
+	}
+	if arg == nil {
+		return nil, internalError("apply evaluated nil argument")
+	}
+
 	var state MachineState[T]
 	var err error
 

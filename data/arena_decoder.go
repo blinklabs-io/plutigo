@@ -123,7 +123,7 @@ type arenaSlices[S any] struct {
 
 func (a *arenaSlices[S]) alloc(n int) []S {
 	if n == 0 {
-		return nil
+		return make([]S, 0)
 	}
 
 	remaining := a.pos
