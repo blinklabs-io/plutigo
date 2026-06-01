@@ -5,23 +5,19 @@
 - Date: 2026-05-15
 - Version: v0.1.13
 
-Summary: This release fixes `expModInteger` budget cost overflow handling, hardens `PlutusData` decoding with nesting depth, node count, and trailing byte validation, and records the routine release notes maintenance update that published `v0.1.12`.
+Summary: This release fixes `expModInteger` budget cost overflow handling and hardens `PlutusData` decoding with nesting depth, node count, and trailing byte validation.
 
 ### Bug Fixes
 
 * Corrected `expModInteger` budget cost overflow handling so overflow-safe cost checks now return a budget error instead of corrupting runtime budget tracking.
 * Hardened `PlutusData` decoding with a hard nesting depth limit, a hard total node limit, and rejection of unexpected trailing bytes during decoding.
 
-### Additional Changes
-
-* Updated `RELEASE_NOTES.md` to publish the `v0.1.12` entry and keep the documented release history current.
-
 ## v0.1.12 - CEK performance, CBOR encoding, and syntax output fixes
 
 - Date: 2026-05-13
 - Version: v0.1.12
 
-Summary: This release improves CEK performance, fixes CBOR encoding and syntax pretty-print output, updates key dependencies, expands fuzz coverage, and keeps the release-note history current.
+Summary: This release improves CEK performance, fixes CBOR encoding and syntax pretty-print output, updates key dependencies, and expands fuzz coverage.
 
 ### Performance
 
@@ -40,7 +36,6 @@ Summary: This release improves CEK performance, fixes CBOR encoding and syntax p
 
 ### Additional Changes
 
-* Updated `RELEASE_NOTES.md` to publish the `v0.1.11` entry and restore the `v0.1.10` header so the documented release history stayed continuous and correctly formatted.
 * Enhanced `github.com/fxamacker/cbor/v2` from `v2.9.1` to `v2.9.2`, bringing in upstream CBOR encoding hardening and validation improvements.
 * Expanded fuzz coverage across parser, pretty-printer, lexer, FLAT decoding, builtin lookup validation, and CEK execution with new fuzz targets and stronger round-trip checks.
 
@@ -49,15 +44,11 @@ Summary: This release improves CEK performance, fixes CBOR encoding and syntax p
 - Date: 2026-05-09
 - Version: v0.1.11
 
-Summary: This release improves reverse stack machine performance and keeps the documented release history current by publishing the `v0.1.10` release notes.
+Summary: This release improves reverse stack machine performance.
 
 ### Performance
 
 * Improved stack machine execution performance by rewriting the DeBruijn CEK evaluator to use shared machine helpers and ordinary type switches instead of previous unsafe style implementation details, which also simplifies apply, force, and case handling.
-
-### Additional Changes
-
-* Updated `RELEASE_NOTES.md` to publish the `v0.1.10` release notes and preserve continuity in the project's documented release history.
 
 ## v0.1.10 - environment, decoder, and stack-machine caching optimizations
 
@@ -106,10 +97,6 @@ Summary: This release fixes CEK cost model handling and improves CEK hot-path pe
 
 * Improved CEK hot path evaluation to reduce temporary allocation overhead during apply and case handling.
 
-### Additional Changes
-
-* Updated `RELEASE_NOTES.md` to include the `v0.1.8` entry.
-
 ## v0.1.7 - decoder retention and reset updates
 
 - Date: 2026-04-15
@@ -121,10 +108,6 @@ Summary: This release covers decoder retention and reset updates to improve repe
 
 - Added specialized arena reset handling for retained `big.Int` values to prevent stale large-number state across repeated decoding.
 - Added arena-backed byte storage and `UTF-8` validation to expand decode retention capacity and reduce allocations during repeated decoding.
-
-### Additional Changes
-
-- Updated `RELEASE_NOTES.md` to document the current set of fixes, security updates, and workflow changes for `v0.1.6`.
 
 ## v0.1.6 - workflow and decoding maintenance
 
@@ -146,7 +129,6 @@ Summary: This release covers constant list construction fixes, flat decoding cor
 
 - Updated `.github/workflows/publish.yml` to use `actions/github-script@v9.0.0` instead of `v8.0.0`.
 - Updated `nilaway` invocation flags and excluded `cek/stack_machine.go` from analysis to improve static analysis reliability.
-- Updated `RELEASE_NOTES.md` to include the `v0.1.6` entry.
 
 ## v0.1.5 - arena-backed allocation and evaluation fast paths
 
@@ -222,10 +204,6 @@ Summary: This release includes streaming CBOR decoding utilities, improved CBOR 
 
 - Improved DeBruijn decoding throughput and reduced allocation pressure by reusing an arena-backed decoder.
 
-### Additional Changes
-
-- Updated release notes to include the `v0.1.2` entry for documentation completeness.
-
 ## v0.1.2 - maintenance updates
 
 - Date: 2026-04-06
@@ -245,7 +223,6 @@ Summary: This release includes interpreter reliability improvements, performance
 
 - Updated project dependencies to incorporate upstream fixes and keep the toolchain current.
 - Updated the `nilaway` GitHub Actions workflow to run only when explicitly triggered.
-- Updated `RELEASE_NOTES.md` to reflect the current published build.
 
 ## v0.1.1 - go toolchain and cek interpreter updates
 
@@ -256,7 +233,6 @@ Summary: This release includes Go toolchain baseline updates, a CEK interpreter 
 
 ### New Features
 
-- Added release notes for `v0.1.0` consolidating pre-`v0.1.0` changes and CI pipeline updates.
 - Updated the CEK evaluator to use an explicit stack-based interpreter and added tests for frame stack reuse, builtin partial-application discharge, and case-on-pair semantics.
 
 ### Breaking Changes
@@ -284,7 +260,6 @@ Summary: This release includes CEK evaluation hot-path improvements, cached inte
 
 ### Additional Changes
 
-- Updated `RELEASE_NOTES.md` with a consolidated entry for `v0.0.29` covering ECDSA handling, encoding behavior, and dependency upgrades.
 - Updated the Codecov GitHub Action from `v5.5.3` to `v6.0.0`.
 
 ## v0.0.29 - maintenance updates
@@ -293,10 +268,6 @@ Summary: This release includes CEK evaluation hot-path improvements, cached inte
 - Version: v0.0.29
 
 Summary: This release includes ECDSA verification behavior changes, flat encoding fixes, and dependency updates.
-
-### New Features
-
-- Updated `RELEASE_NOTES.md` to document `v0.0.28` with a consolidated changelog entry covering toolchain updates, performance changes, security-related changes, and dependency updates.
 
 ### Breaking Changes
 
@@ -331,7 +302,6 @@ Summary: This release includes a Go toolchain requirement update, performance im
 
 ### Additional Changes
 
-- Added release notes for `v0.0.27` and referenced `v0.0.26` for continuity.
 - Updated `github.com/consensys/gnark-crypto` to `v0.20.0` and `github.com/bits-and-blooms/bitset` to `v1.24.4`.
 
 ## v0.0.27 - performance and tooling updates
@@ -349,7 +319,6 @@ Summary: This release includes performance improvements and tooling updates acro
 
 - Updated GitHub workflows to use `actions/setup-go@v6.3.0` and updated `github.com/ethereum/go-ethereum` from `v1.17.0` to `v1.17.1`.
 - Updated documentation and tests to match runtime string-escape handling, an `eval` context helper, and builtin availability filtering.
-- Added `v0.0.26` release notes to improve change tracking.
 
 ## v0.0.26 - data serialization and ci automation
 
