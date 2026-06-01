@@ -1,5 +1,21 @@
 # Release Notes
 
+## v0.1.14 - CEK slippage handling, nil-safety hardening, and dependency updates
+
+- Date: 2026-06-01
+- Version: v0.1.14
+
+Summary: This release adds optional CEK final slippage flush skipping for restricting validation mode, hardens evaluator nil handling, cleans release notes self references, and updates runtime and CI dependencies.
+
+### Bug Fixes
+
+* Fixed CEK evaluation so restricting validation mode can leave the final successful slippage batch unflushed when exact final charging should stay disabled.
+* Hardened evaluator error handling so nil values now fail with consistent internal errors, and zero length arena allocations now return empty slices instead of nil.
+
+### Security
+
+* Updated `golang.org/x/crypto` from `v0.51.0` to `v0.52.0` to incorporate upstream security and maintenance fixes.
+
 ## v0.1.13 - expmod and plutus data decode limit fixes
 
 - Date: 2026-05-15
