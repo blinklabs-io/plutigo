@@ -5,16 +5,16 @@
 - Date: 2026-06-01
 - Version: v0.1.14
 
-Summary: This release adds optional final budget flush skipping for restricting validation mode, hardens nil handling during evaluation, removes self referential release note bullets, and updates runtime and CI dependencies.
+Summary: This release adds optional CEK final slippage flush skipping for restricting validation mode, hardens evaluator nil handling, removes self referential release notes maintenance text, and updates runtime and CI dependencies.
 
 ### Bug Fixes
 
-* Fixed restricting validation mode so successful evaluations can leave the final deferred budget batch uncharged when final exact charging should remain disabled.
-* Improved evaluator safety so missing values now fail consistently and zero length allocations now return empty results instead of nil values.
+* Fixed restricting validation mode so successful evaluations can skip the final slippage flush when exact budget charging should stay disabled.
+* Improved evaluator safety so nil values now raise consistent internal errors and empty allocations now return empty results instead of nil slices.
 
 ### Security
 
-* Strengthened bundled cryptography support by updating `golang.org/x/crypto` from `v0.51.0` to `v0.52.0`.
+* Strengthened runtime dependency protection by updating `golang.org/x/crypto` to `v0.52.0` and `golang.org/x/sys` to `v0.45.0`.
 
 ### Documentation
 
