@@ -18,13 +18,13 @@ Summary: This release adds optional CEK final slippage flush skipping for restri
 
 ### Documentation
 
-* Clarified release note entries by removing self referential bullets so each entry stays focused on substantive library changes.
+* Clarified `RELEASE_NOTES.md` by removing self referential maintenance bullets so each entry stays focused on substantive library changes.
 
 ### Additional Changes
 
 * Added the `v0.1.13` publication entry to keep the documented release sequence complete.
 * Refreshed `github.com/btcsuite/btcd/chaincfg/chainhash` from `v1.1.0` to `v1.2.0`.
-* Raised `github.com/btcsuite/btcd/btcec/v2` from `v2.3.6` to `v2.5.0`.
+* Updated `github.com/btcsuite/btcd/btcec/v2` to `v2.5.0` and refreshed related `secp256k1` dependencies.
 * Advanced `github.com/ethereum/go-ethereum` from `v1.17.2` to `v1.17.3`.
 * Modernized the proxy pull workflow by updating `andrewslotin/go-proxy-pull-action` from `v1.4.0` to `v1.5.0`.
 * Upgraded coverage reporting by updating `codecov/codecov-action` from `v6.0.0` to `v6.0.1`.
