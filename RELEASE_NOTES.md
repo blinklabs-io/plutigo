@@ -10,7 +10,7 @@ Summary: This release adds optional CEK final slippage flush skipping for restri
 ### Bug Fixes
 
 * Fixed restricting validation mode so successful evaluations can leave the final deferred budget batch uncharged when exact charging should remain disabled.
-* Improved evaluator safety so missing values now fail with consistent internal errors and zero length allocations now return empty results instead of nil slices.
+* Improved evaluator safety so missing values now fail consistently and zero length allocations now return empty results instead of nil slices.
 
 ### Security
 
@@ -18,13 +18,13 @@ Summary: This release adds optional CEK final slippage flush skipping for restri
 
 ### Documentation
 
-* Clarified `RELEASE_NOTES.md` by removing self referential maintenance bullets so each entry stays focused on library changes.
+* Clarified `RELEASE_NOTES.md` by removing self referential maintenance bullets so each entry stays focused on substantive library changes.
 
 ### Additional Changes
 
 * Added the `v0.1.13` release entry to keep the published release sequence complete.
 * Refreshed `github.com/btcsuite/btcd/chaincfg/chainhash` from `v1.1.0` to `v1.2.0`.
-* Updated `github.com/btcsuite/btcd/btcec/v2` to `v2.5.0` and refreshed related `secp256k1` packages.
+* Updated `github.com/btcsuite/btcd/btcec/v2` to `v2.5.0` and refreshed related `secp256k1` dependencies.
 * Advanced `github.com/ethereum/go-ethereum` from `v1.17.2` to `v1.17.3`.
 * Modernized the module publishing workflow by updating `andrewslotin/go-proxy-pull-action` from `v1.4.0` to `v1.5.0`.
 * Upgraded coverage reporting by updating `codecov/codecov-action` from `v6.0.0` to `v6.0.1`.
