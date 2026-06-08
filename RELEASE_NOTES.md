@@ -1,5 +1,16 @@
 # Release Notes
 
+## v0.1.15 - 32-bit target support
+
+- Date: 2026-06-08
+- Version: v0.1.15
+
+Summary: This release adds 32-bit target support by changing `unConstrData` to compare the constructor tag via `uint64`, preventing build-time overflow on 32-bit targets while preserving the existing overflow guard behavior on 64-bit systems.
+
+### Bug Fixes
+
+* Improved `unConstrData` by comparing the constructor tag via `uint64`, preventing build-time overflow on 32-bit targets while preserving the existing overflow guard behavior on 64-bit systems.
+
 ## v0.1.14 - CEK slippage handling, nil-safety hardening, and dependency updates
 
 - Date: 2026-06-01
