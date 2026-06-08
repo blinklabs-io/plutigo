@@ -479,7 +479,12 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 				Message: "data is not a constr",
 			}
 		}
-		if constr.Tag > math.MaxInt64 {
+		// constr.Tag is a uint, whose width is platform-dependent. Compare via
+		// uint64 so this builds on 32-bit targets (where the untyped MaxInt64
+		// constant would otherwise overflow the uint comparison type). On 32-bit
+		// a uint tag can never exceed MaxInt64, so the guard is a no-op there; on
+		// 64-bit it behaves exactly as before.
+		if uint64(constr.Tag) > math.MaxInt64 {
 			return nil, true, &BuiltinError{
 				Code:    ErrCodeOverflow,
 				Builtin: "unConstrData",
