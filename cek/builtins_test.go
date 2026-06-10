@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"math"
 	"math/big"
 	"testing"
@@ -134,7 +135,10 @@ func expectMaterializedConstant(
 	val Value[syn.DeBruijn],
 ) syn.IConstant {
 	t.Helper()
-	constVal, ok := materializeConstantValue[syn.DeBruijn](val)
+	constVal, ok, err := materializeConstantValue[syn.DeBruijn](val)
+	if err != nil {
+		t.Fatalf("failed to materialize constant result: %v", err)
+	}
 	if !ok {
 		t.Fatalf("expected materializable constant result, got %T", val)
 	}
@@ -751,7 +755,10 @@ func TestUnConstrDataBuiltin(t *testing.T) {
 
 	// UnConstrData may use a lazy runtime pair, but it must materialize to the
 	// same ProtoPair constant shape.
-	constVal, ok := materializeConstantValue[syn.DeBruijn](val)
+	constVal, ok, err := materializeConstantValue[syn.DeBruijn](val)
+	if err != nil {
+		t.Fatalf("failed to materialize pair-like constant result: %v", err)
+	}
 	if !ok {
 		t.Fatalf("expected pair-like constant result, got %T", val)
 	}
@@ -3087,7 +3094,10 @@ func TestUnListDataBuiltin(t *testing.T) {
 	b = b.ApplyArg(v1)
 
 	val := evalBuiltin(t, m, b)
-	constVal, ok := materializeConstantValue[syn.DeBruijn](val)
+	constVal, ok, err := materializeConstantValue[syn.DeBruijn](val)
+	if err != nil {
+		t.Fatalf("failed to materialize list-like constant result: %v", err)
+	}
 	if !ok {
 		t.Fatalf("expected list-like constant result, got %T", val)
 	}
@@ -3138,7 +3148,10 @@ func TestUnMapDataBuiltin(t *testing.T) {
 	b = b.ApplyArg(v1)
 
 	val := evalBuiltin(t, m, b)
-	constVal, ok := materializeConstantValue[syn.DeBruijn](val)
+	constVal, ok, err := materializeConstantValue[syn.DeBruijn](val)
+	if err != nil {
+		t.Fatalf("failed to materialize list-like constant result: %v", err)
+	}
 	if !ok {
 		t.Fatalf("expected list-like constant result, got %T", val)
 	}
@@ -4366,5 +4379,279 @@ func TestVerifyEcdsaSecp256k1HighS(t *testing.T) {
 			"high-s ECDSA signature must be accepted per CIP-0049; " +
 				"BIP-146 low-s enforcement is Bitcoin-specific and must not apply",
 		)
+	}
+}
+
+// TestDataBuiltinsRejectMalformedElements verifies constrData/listData/mapData
+// return a typed error rather than panicking when handed a list whose declared
+// element type is Data (or pair-of-Data) but whose actual elements are not.
+// unwrapList only validates the declared list type, so element-level type
+// assertions must be guarded.
+func TestDataBuiltinsRejectMalformedElements(t *testing.T) {
+	intElem := &syn.Integer{Inner: big.NewInt(1)}
+
+	// list declared as (list data) but containing an integer element
+	badDataList := &Constant{&syn.ProtoList{
+		LTyp: &syn.TData{},
+		List: []syn.IConstant{intElem},
+	}}
+
+	// list declared as (list (pair data data)) but containing an integer element
+	badPairList := &Constant{&syn.ProtoList{
+		LTyp: &syn.TPair{First: &syn.TData{}, Second: &syn.TData{}},
+		List: []syn.IConstant{intElem},
+	}}
+
+	tests := []struct {
+		name        string
+		builtinFunc builtin.DefaultFunction
+		args        []Value[syn.DeBruijn]
+	}{
+		{
+			name:        "constrData",
+			builtinFunc: builtin.ConstrData,
+			args: []Value[syn.DeBruijn]{
+				&Constant{&syn.Integer{Inner: big.NewInt(0)}},
+				badDataList,
+			},
+		},
+		{
+			name:        "listData",
+			builtinFunc: builtin.ListData,
+			args:        []Value[syn.DeBruijn]{badDataList},
+		},
+		{
+			name:        "mapData",
+			builtinFunc: builtin.MapData,
+			args:        []Value[syn.DeBruijn]{badPairList},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(tt.builtinFunc)
+			for _, arg := range tt.args {
+				b = b.ApplyArg(arg)
+			}
+			if _, err := evalBuiltinWithError(t, m, b); err == nil {
+				t.Fatal("expected error, got nil")
+			} else {
+				var typeErr *TypeError
+				if !errors.As(err, &typeErr) {
+					t.Fatalf("expected TypeError, got %T: %v", err, err)
+				}
+				if typeErr.Code != ErrCodeTypeMismatch {
+					t.Fatalf("expected ErrCodeTypeMismatch, got %d", typeErr.Code)
+				}
+			}
+		})
+	}
+}
+
+func TestBigIntMod256Byte(t *testing.T) {
+	hugePlus5 := new(big.Int).Lsh(big.NewInt(1), 4096)
+	hugePlus5.Add(hugePlus5, big.NewInt(5))
+	negHugePlus5 := new(big.Int).Neg(hugePlus5)
+
+	hugeMultiple := new(big.Int).Lsh(big.NewInt(1), 4096)
+	negHugeMultiple := new(big.Int).Neg(hugeMultiple)
+
+	tests := []struct {
+		name     string
+		input    *big.Int
+		expected byte
+	}{
+		{name: "nil", input: nil, expected: 0},
+		{name: "zero", input: big.NewInt(0), expected: 0},
+		{name: "positive small", input: big.NewInt(255), expected: 255},
+		{name: "positive wraps", input: big.NewInt(257), expected: 1},
+		{name: "negative one", input: big.NewInt(-1), expected: 255},
+		{name: "negative wraps", input: big.NewInt(-257), expected: 255},
+		{name: "huge positive", input: hugePlus5, expected: 5},
+		{name: "huge negative", input: negHugePlus5, expected: 251},
+		{name: "huge positive multiple", input: hugeMultiple, expected: 0},
+		{name: "huge negative multiple", input: negHugeMultiple, expected: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := bigIntMod256Byte(tt.input); got != tt.expected {
+				t.Fatalf("bigIntMod256Byte(%v) = %d, want %d", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestConsByteStringVariantABBigInt verifies that under the pre-Chang
+// semantics variants (A/B used by V1/V2), consByteString reduces an
+// arbitrarily large first argument modulo 256 (floored), rather than failing
+// because it does not fit in an int64. The V3+ variant (C) still requires the
+// value to be in 0-255.
+func TestConsByteStringVariantABBigInt(t *testing.T) {
+	twoPow64Plus5, _ := new(big.Int).SetString("18446744073709551621", 10)     // 2^64 + 5
+	negTwoPow64Plus5, _ := new(big.Int).SetString("-18446744073709551621", 10) // -(2^64 + 5)
+	twoPow4096Plus5 := new(big.Int).Lsh(big.NewInt(1), 4096)
+	twoPow4096Plus5.Add(twoPow4096Plus5, big.NewInt(5))
+	negTwoPow4096Plus5 := new(big.Int).Neg(twoPow4096Plus5)
+
+	tests := []struct {
+		name      string
+		variant   SemanticsVariant
+		first     *big.Int
+		rest      []byte
+		expected  []byte
+		expectErr bool
+	}{
+		{
+			name:     "variant B reduces large positive mod 256",
+			variant:  SemanticsVariantB,
+			first:    twoPow64Plus5,
+			rest:     []byte{0xff},
+			expected: []byte{0x05, 0xff},
+		},
+		{
+			name:     "variant A floored-reduces large negative mod 256",
+			variant:  SemanticsVariantA,
+			first:    negTwoPow64Plus5,
+			rest:     []byte{0xff},
+			expected: []byte{0xfb, 0xff},
+		},
+		{
+			name:     "variant B reduces huge positive mod 256",
+			variant:  SemanticsVariantB,
+			first:    twoPow4096Plus5,
+			rest:     []byte{0xff},
+			expected: []byte{0x05, 0xff},
+		},
+		{
+			name:     "variant A floored-reduces huge negative mod 256",
+			variant:  SemanticsVariantA,
+			first:    negTwoPow4096Plus5,
+			rest:     []byte{0xff},
+			expected: []byte{0xfb, 0xff},
+		},
+		{
+			name:      "variant C rejects out-of-range",
+			variant:   SemanticsVariantC,
+			first:     twoPow64Plus5,
+			rest:      []byte{0xff},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewMachine[syn.DeBruijn](lang.LanguageVersionV1, 0, &EvalContext{
+				CostModel:        DefaultCostModel,
+				SemanticsVariant: tt.variant,
+			})
+			b := newTestBuiltin(builtin.ConsByteString)
+			b = b.ApplyArg(&Constant{&syn.Integer{Inner: tt.first}})
+			b = b.ApplyArg(&Constant{&syn.ByteString{Inner: tt.rest}})
+
+			val, err := evalBuiltinWithError(t, m, b)
+			if tt.expectErr {
+				if err == nil {
+					t.Fatalf("expected error, got %v", val)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			bs := expectByteString(t, expectConstant(t, val))
+			if !bytes.Equal(bs.Inner, tt.expected) {
+				t.Fatalf("expected %x, got %x", tt.expected, bs.Inner)
+			}
+		})
+	}
+}
+
+// TestSliceByteStringClamping verifies sliceByteString clamps out-of-range
+// skip/take values exactly like the Plutus reference (which slices a shared
+// ByteString buffer and never fails), instead of overflowing skip+take into a
+// negative slice bound and panicking. The huge-take case below previously
+// produced "slice bounds out of range [:-9223372036854775808]".
+func TestSliceByteStringClamping(t *testing.T) {
+	maxInt64 := new(big.Int).SetInt64(math.MaxInt64)
+	aboveMaxInt64 := new(big.Int).Add(maxInt64, big.NewInt(1))
+	huge, _ := new(big.Int).SetString("123456789123456789", 10)
+
+	tests := []struct {
+		name     string
+		skip     *big.Int
+		take     *big.Int
+		input    []byte
+		expected []byte
+	}{
+		{
+			name:     "small skip, huge take overflows skip+take",
+			skip:     big.NewInt(1),
+			take:     maxInt64,
+			input:    []byte{0x54, 0x68},
+			expected: []byte{0x68},
+		},
+		{
+			name:     "skip and take both huge (conformance-05)",
+			skip:     huge,
+			take:     huge,
+			input:    hexDecode(t, "54686543616B654973414C6965"),
+			expected: []byte{},
+		},
+		{
+			name:     "normal slice (conformance-04)",
+			skip:     big.NewInt(5),
+			take:     big.NewInt(3),
+			input:    hexDecode(t, "54686543616B654973414C6965"),
+			expected: hexDecode(t, "6b6549"),
+		},
+		{
+			name:     "negative skip clamps to zero",
+			skip:     big.NewInt(-5),
+			take:     big.NewInt(3),
+			input:    []byte{0x01, 0x02, 0x03, 0x04},
+			expected: []byte{0x01, 0x02, 0x03},
+		},
+		{
+			name:     "negative take yields empty",
+			skip:     big.NewInt(1),
+			take:     big.NewInt(-1),
+			input:    []byte{0x01, 0x02, 0x03},
+			expected: []byte{},
+		},
+		{
+			name:     "take past end clamps to remaining",
+			skip:     big.NewInt(2),
+			take:     maxInt64,
+			input:    []byte{0x01, 0x02, 0x03, 0x04},
+			expected: []byte{0x03, 0x04},
+		},
+		{
+			name:     "skip past end with non-int64 take yields empty",
+			skip:     big.NewInt(10),
+			take:     aboveMaxInt64,
+			input:    []byte{0x01, 0x02, 0x03},
+			expected: []byte{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.SliceByteString)
+			b = b.ApplyArg(&Constant{&syn.Integer{Inner: tt.skip}})
+			b = b.ApplyArg(&Constant{&syn.Integer{Inner: tt.take}})
+			b = b.ApplyArg(&Constant{&syn.ByteString{Inner: tt.input}})
+
+			val, err := evalBuiltinWithError(t, m, b)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			bs := expectByteString(t, expectConstant(t, val))
+			if !bytes.Equal(bs.Inner, tt.expected) {
+				t.Fatalf("expected %x, got %x", tt.expected, bs.Inner)
+			}
+		})
 	}
 }

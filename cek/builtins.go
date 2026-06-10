@@ -96,6 +96,24 @@ func quoInt64Exact(left, right int64) (int64, bool) {
 	return left / right, true
 }
 
+func bigIntMod256Byte(i *big.Int) byte {
+	if i == nil {
+		return 0
+	}
+
+	words := i.Bits()
+	if len(words) == 0 {
+		return 0
+	}
+
+	lowByte := byte(words[0])
+	if i.Sign() >= 0 || lowByte == 0 {
+		return lowByte
+	}
+
+	return byte(256 - int(lowByte))
+}
+
 // ============================================================================
 // INTEGER OPERATIONS
 // Functions: addInteger, subtractInteger, multiplyInteger, divideInteger,
@@ -888,25 +906,24 @@ func consByteString[T syn.Eval](
 		return nil, err
 	}
 
-	if !arg1.IsInt64() {
-		return nil, &BuiltinError{
-			Code:    ErrCodeOverflow,
-			Builtin: "consByteString",
-			Message: "int does not fit into a byte",
-		}
-	}
-
-	intVal := arg1.Int64()
+	var firstByte byte
 
 	switch m.semantics {
 	case SemanticsVariantA, SemanticsVariantB:
-		// Reduce first argument to single byte positive value using floored modulo
-		intVal = intVal % 256
-		if intVal < 0 {
-			intVal += 256
-		}
+		// Pre-Chang semantics reduce the first argument modulo 256 (floored)
+		// for any integer. Use the low byte directly so the post-costing work
+		// remains constant even for very large integer inputs.
+		firstByte = bigIntMod256Byte(arg1)
 	default:
 		// consByteString requires the integer to be in the range 0-255 in V3+
+		if !arg1.IsInt64() {
+			return nil, &BuiltinError{
+				Code:    ErrCodeOverflow,
+				Builtin: "consByteString",
+				Message: "int does not fit into a byte",
+			}
+		}
+		intVal := arg1.Int64()
 		if intVal < 0 || intVal > 255 {
 			return nil, &BuiltinError{
 				Code:    ErrCodeOverflow,
@@ -914,9 +931,10 @@ func consByteString[T syn.Eval](
 				Message: "int does not fit into a byte",
 			}
 		}
+		firstByte = byte(intVal)
 	}
 
-	res := append([]byte{byte(intVal)}, arg2...)
+	res := append([]byte{firstByte}, arg2...)
 
 	value := &Constant{&syn.ByteString{
 		Inner: res,
@@ -956,12 +974,14 @@ func sliceByteString[T syn.Eval](
 		return nil, err
 	}
 
-	// Convert skip and take to int
+	// Convert skip to int and clamp it before deriving take. The fallback for
+	// a positive take that does not fit in int64 depends on the remaining
+	// bytes after skip, so using an unclamped skip can produce a negative take.
 	skip := 0
 	if arg1.Sign() > 0 {
 		if skip64, ok := arg1.Int64(), arg1.IsInt64(); ok {
-			if skip64 > int64(math.MaxInt) {
-				skip = math.MaxInt
+			if skip64 > int64(len(arg3)) {
+				skip = len(arg3)
 			} else {
 				skip = int(skip64)
 			}
@@ -969,30 +989,28 @@ func sliceByteString[T syn.Eval](
 			skip = len(arg3) // Clamp to max if too large
 		}
 	}
+	remaining := len(arg3) - skip
 
+	// Convert take to int and clamp it into [0, remaining]. This keeps the
+	// final slice bounds in range and avoids skip+take overflowing.
 	take := 0
 	if arg2.Sign() > 0 {
 		if take64, ok := arg2.Int64(), arg2.IsInt64(); ok {
-			if take64 > int64(math.MaxInt) {
-				take = math.MaxInt
+			if take64 > int64(remaining) {
+				take = remaining
 			} else {
 				take = int(take64)
 			}
 		} else {
-			take = len(arg3) - skip // Take as much as possible
+			take = remaining // Take as much as possible
 		}
 	}
 
-	// Clamp end to len(arg3) to avoid out-of-bounds
-	end := min(skip+take, len(arg3))
-
-	if skip > len(arg3) {
-		skip = len(arg3)
-		end = len(arg3)
-	}
-
-	// Slice
-	res := arg3[skip:end]
+	// Slice. res aliases arg3's backing array; this is intentional and matches
+	// the reference's zero-copy slicing. Bytestring Constant.Inner must be
+	// treated as immutable by all builtins (the bitwise/cons/append builtins
+	// already allocate fresh buffers), so the aliasing is safe.
+	res := arg3[skip : skip+take]
 
 	value := &Constant{&syn.ByteString{
 		Inner: res,
@@ -1926,7 +1944,15 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	dataList := make([]data.PlutusData, len(arg2.List))
 	for i, item := range arg2.List {
-		itemData := item.(*syn.Data)
+		itemData, ok := item.(*syn.Data)
+		if !ok {
+			return nil, &TypeError{
+				Code:     ErrCodeTypeMismatch,
+				Expected: "Data",
+				Got:      fmt.Sprintf("%T", item),
+				Message:  "constrData: list element is not Data",
+			}
+		}
 		dataList[i] = itemData.Inner
 	}
 
@@ -1971,9 +1997,33 @@ func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	dataList := make([][2]data.PlutusData, len(arg1.List))
 	for i, item := range arg1.List {
-		pair := item.(*syn.ProtoPair)
-		fst := pair.First.(*syn.Data)
-		snd := pair.Second.(*syn.Data)
+		pair, ok := item.(*syn.ProtoPair)
+		if !ok {
+			return nil, &TypeError{
+				Code:     ErrCodeTypeMismatch,
+				Expected: "Pair",
+				Got:      fmt.Sprintf("%T", item),
+				Message:  "mapData: list element is not a pair",
+			}
+		}
+		fst, ok := pair.First.(*syn.Data)
+		if !ok {
+			return nil, &TypeError{
+				Code:     ErrCodeTypeMismatch,
+				Expected: "Data",
+				Got:      fmt.Sprintf("%T", pair.First),
+				Message:  "mapData: pair key is not Data",
+			}
+		}
+		snd, ok := pair.Second.(*syn.Data)
+		if !ok {
+			return nil, &TypeError{
+				Code:     ErrCodeTypeMismatch,
+				Expected: "Data",
+				Got:      fmt.Sprintf("%T", pair.Second),
+				Message:  "mapData: pair value is not Data",
+			}
+		}
 		dataList[i] = [2]data.PlutusData{fst.Inner, snd.Inner}
 	}
 
@@ -2007,7 +2057,15 @@ func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	dataList := make([]data.PlutusData, len(arg1.List))
 	for i, item := range arg1.List {
-		itemData := item.(*syn.Data)
+		itemData, ok := item.(*syn.Data)
+		if !ok {
+			return nil, &TypeError{
+				Code:     ErrCodeTypeMismatch,
+				Expected: "Data",
+				Got:      fmt.Sprintf("%T", item),
+				Message:  "listData: list element is not Data",
+			}
+		}
 		dataList[i] = itemData.Inner
 	}
 

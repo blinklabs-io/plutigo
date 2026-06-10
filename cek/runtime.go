@@ -572,7 +572,11 @@ func unwrapConstant[T syn.Eval](value Value[T]) (*Constant, error) {
 	case *Constant:
 		return v, nil
 	default:
-		if c, ok := materializeConstantValue[T](value); ok {
+		c, ok, err := materializeConstantValue[T](value)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
 			return &Constant{Constant: c}, nil
 		}
 		return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}

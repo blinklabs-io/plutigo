@@ -1,6 +1,7 @@
 package data
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -260,10 +261,58 @@ func marshalPlutusDataJSON(pd PlutusData) (json.RawMessage, error) {
 // discriminatorKeys are the top-level JSON keys that identify each PlutusData variant.
 var discriminatorKeys = []string{"int", "bytes", "list", "map", "constructor"}
 
+// jsonDecodeState bounds recursion depth and total node count while decoding
+// untrusted PlutusData JSON, mirroring the CBOR decoder's limits.
+type jsonDecodeState struct {
+	depth int
+	nodes int
+}
+
+func (st *jsonDecodeState) enterNode() error {
+	st.nodes++
+	if st.nodes > MaxDecodeNodes {
+		return fmt.Errorf(
+			"PlutusData JSON exceeds max node count %d",
+			MaxDecodeNodes,
+		)
+	}
+	return nil
+}
+
 // unmarshalPlutusDataJSON unmarshals JSON into the appropriate PlutusData type
 // by inspecting which key is present in the JSON object. It decodes directly
 // from the already-extracted raw messages to avoid double-parsing.
 func unmarshalPlutusDataJSON(data json.RawMessage) (PlutusData, error) {
+	return unmarshalPlutusDataJSONState(data, &jsonDecodeState{})
+}
+
+func unmarshalPlutusDataJSONState(
+	data json.RawMessage,
+	st *jsonDecodeState,
+) (PlutusData, error) {
+	return unmarshalPlutusDataJSONStateCounted(data, st, false)
+}
+
+func unmarshalPlutusDataJSONStateCounted(
+	data json.RawMessage,
+	st *jsonDecodeState,
+	counted bool,
+) (PlutusData, error) {
+	st.depth++
+	if st.depth > MaxDecodeNestingDepth {
+		return nil, fmt.Errorf(
+			"PlutusData JSON nesting exceeds max depth %d",
+			MaxDecodeNestingDepth,
+		)
+	}
+	defer func() { st.depth-- }()
+
+	if !counted {
+		if err := st.enterNode(); err != nil {
+			return nil, err
+		}
+	}
+
 	var keys map[string]json.RawMessage
 	if err := json.Unmarshal(data, &keys); err != nil {
 		return nil, fmt.Errorf("PlutusData JSON must be an object: %w", err)
@@ -302,43 +351,25 @@ func unmarshalPlutusDataJSON(data json.RawMessage) (PlutusData, error) {
 		}
 		return &ByteString{Inner: decoded}, nil
 	case hasKey(keys, "list"):
-		var items []json.RawMessage
-		if err := json.Unmarshal(keys["list"], &items); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal List value: %w", err)
-		}
-		if items == nil {
+		itemsRaw := keys["list"]
+		if string(itemsRaw) == "null" {
 			return nil, errors.New("null \"list\" value in List JSON")
 		}
-		l := &List{Items: make([]PlutusData, len(items))}
-		for i, item := range items {
-			pd, err := unmarshalPlutusDataJSON(item)
-			if err != nil {
-				return nil, fmt.Errorf("failed to unmarshal List item %d: %w", i, err)
-			}
-			l.Items[i] = pd
+		items, err := decodePlutusDataJSONArray(itemsRaw, st, "List item")
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal List value: %w", err)
 		}
-		return l, nil
+		return &List{Items: items}, nil
 	case hasKey(keys, "map"):
-		var pairs []mapPairJSON
-		if err := json.Unmarshal(keys["map"], &pairs); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal Map value: %w", err)
-		}
-		if pairs == nil {
+		pairsRaw := keys["map"]
+		if string(pairsRaw) == "null" {
 			return nil, errors.New("null \"map\" value in Map JSON")
 		}
-		m := &Map{Pairs: make([][2]PlutusData, len(pairs))}
-		for i, pair := range pairs {
-			k, err := unmarshalPlutusDataJSON(pair.K)
-			if err != nil {
-				return nil, fmt.Errorf("failed to unmarshal Map key %d: %w", i, err)
-			}
-			v, err := unmarshalPlutusDataJSON(pair.V)
-			if err != nil {
-				return nil, fmt.Errorf("failed to unmarshal Map value %d: %w", i, err)
-			}
-			m.Pairs[i] = [2]PlutusData{k, v}
+		pairs, err := decodePlutusDataJSONMap(pairsRaw, st)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal Map value: %w", err)
 		}
-		return m, nil
+		return &Map{Pairs: pairs}, nil
 	case hasKey(keys, "constructor"):
 		var tag uint
 		if err := json.Unmarshal(keys["constructor"], &tag); err != nil {
@@ -351,22 +382,163 @@ func unmarshalPlutusDataJSON(data json.RawMessage) (PlutusData, error) {
 		if string(fieldsRaw) == "null" {
 			return nil, errors.New("null \"fields\" value in Constr JSON")
 		}
-		var fields []json.RawMessage
-		if err := json.Unmarshal(fieldsRaw, &fields); err != nil {
+		fields, err := decodePlutusDataJSONArray(fieldsRaw, st, "Constr field")
+		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal Constr fields: %w", err)
 		}
-		c := &Constr{Tag: tag, Fields: make([]PlutusData, len(fields))}
-		for i, field := range fields {
-			pd, err := unmarshalPlutusDataJSON(field)
-			if err != nil {
-				return nil, fmt.Errorf("failed to unmarshal Constr field %d: %w", i, err)
-			}
-			c.Fields[i] = pd
-		}
-		return c, nil
+		return &Constr{Tag: tag, Fields: fields}, nil
 	default:
 		return nil, fmt.Errorf("unrecognized PlutusData JSON keys: %v", keysOf(keys))
 	}
+}
+
+func decodePlutusDataJSONArray(
+	data json.RawMessage,
+	st *jsonDecodeState,
+	itemLabel string,
+) ([]PlutusData, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	if err := readJSONArrayStart(dec); err != nil {
+		return nil, err
+	}
+
+	items := make([]PlutusData, 0)
+	for i := 0; dec.More(); i++ {
+		if err := st.enterNode(); err != nil {
+			return nil, err
+		}
+		var item json.RawMessage
+		if err := dec.Decode(&item); err != nil {
+			return nil, fmt.Errorf("failed to decode %s %d: %w", itemLabel, i, err)
+		}
+		pd, err := unmarshalPlutusDataJSONStateCounted(item, st, true)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal %s %d: %w", itemLabel, i, err)
+		}
+		items = append(items, pd)
+	}
+
+	if err := readJSONArrayEnd(dec); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func decodePlutusDataJSONMap(
+	data json.RawMessage,
+	st *jsonDecodeState,
+) ([][2]PlutusData, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	if err := readJSONArrayStart(dec); err != nil {
+		return nil, err
+	}
+
+	pairs := make([][2]PlutusData, 0)
+	for i := 0; dec.More(); i++ {
+		pair, err := decodePlutusDataJSONMapPair(dec, st, i)
+		if err != nil {
+			return nil, err
+		}
+		pairs = append(pairs, pair)
+	}
+
+	if err := readJSONArrayEnd(dec); err != nil {
+		return nil, err
+	}
+	return pairs, nil
+}
+
+func decodePlutusDataJSONMapPair(
+	dec *json.Decoder,
+	st *jsonDecodeState,
+	index int,
+) ([2]PlutusData, error) {
+	var pair [2]PlutusData
+	tok, err := dec.Token()
+	if err != nil {
+		return pair, fmt.Errorf("failed to read Map pair %d: %w", index, err)
+	}
+	if delim, ok := tok.(json.Delim); !ok || delim != '{' {
+		return pair, fmt.Errorf("Map pair %d must be an object", index)
+	}
+
+	var kRaw, vRaw json.RawMessage
+	for dec.More() {
+		keyTok, err := dec.Token()
+		if err != nil {
+			return pair, fmt.Errorf("failed to read Map pair %d key: %w", index, err)
+		}
+		key, ok := keyTok.(string)
+		if !ok {
+			return pair, fmt.Errorf("Map pair %d key must be a string", index)
+		}
+		switch key {
+		case "k":
+			if err := st.enterNode(); err != nil {
+				return pair, err
+			}
+			if err := dec.Decode(&kRaw); err != nil {
+				return pair, fmt.Errorf("failed to decode Map key %d: %w", index, err)
+			}
+		case "v":
+			if err := st.enterNode(); err != nil {
+				return pair, err
+			}
+			if err := dec.Decode(&vRaw); err != nil {
+				return pair, fmt.Errorf("failed to decode Map value %d: %w", index, err)
+			}
+		default:
+			return pair, fmt.Errorf("unexpected Map pair %d field %q", index, key)
+		}
+	}
+
+	tok, err = dec.Token()
+	if err != nil {
+		return pair, fmt.Errorf("failed to close Map pair %d: %w", index, err)
+	}
+	if delim, ok := tok.(json.Delim); !ok || delim != '}' {
+		return pair, fmt.Errorf("Map pair %d must end with an object delimiter", index)
+	}
+	if kRaw == nil {
+		return pair, fmt.Errorf("missing \"k\" key in Map pair %d", index)
+	}
+	if vRaw == nil {
+		return pair, fmt.Errorf("missing \"v\" key in Map pair %d", index)
+	}
+
+	k, err := unmarshalPlutusDataJSONStateCounted(kRaw, st, true)
+	if err != nil {
+		return pair, fmt.Errorf("failed to unmarshal Map key %d: %w", index, err)
+	}
+	v, err := unmarshalPlutusDataJSONStateCounted(vRaw, st, true)
+	if err != nil {
+		return pair, fmt.Errorf("failed to unmarshal Map value %d: %w", index, err)
+	}
+	pair[0] = k
+	pair[1] = v
+	return pair, nil
+}
+
+func readJSONArrayStart(dec *json.Decoder) error {
+	tok, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	if delim, ok := tok.(json.Delim); !ok || delim != '[' {
+		return errors.New("value must be an array")
+	}
+	return nil
+}
+
+func readJSONArrayEnd(dec *json.Decoder) error {
+	tok, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	if delim, ok := tok.(json.Delim); !ok || delim != ']' {
+		return errors.New("array value has invalid terminator")
+	}
+	return nil
 }
 
 func hasKey(m map[string]json.RawMessage, key string) bool {

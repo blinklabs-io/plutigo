@@ -348,7 +348,10 @@ func allocArenaSlice[S any](chunks *[][]S, pos *int, n int, chunkSize int) []S {
 			if remaining+n <= len(chunk) {
 				start := remaining
 				*pos += n
-				return chunk[start : start+n]
+				// Cap the slice at exactly n (3-index slice) so a future
+				// over-append reallocates instead of writing into arena
+				// cells handed out to other live values.
+				return chunk[start : start+n : start+n]
 			}
 			// Skip past the unused tail of this chunk so subsequent
 			// allocations don't overlap with the new chunk.
@@ -365,7 +368,7 @@ func allocArenaSlice[S any](chunks *[][]S, pos *int, n int, chunkSize int) []S {
 	chunk := make([]S, chunkSize)
 	*chunks = append(*chunks, chunk)
 	*pos += n
-	return chunk[:n]
+	return chunk[:n:n]
 }
 
 func clearArenaChunks[S any](chunks [][]S, usedTotal int) {
@@ -1776,7 +1779,33 @@ func (m *Machine[T]) transferArgStack(
 //
 // This function is crucial for producing the final result when evaluation
 // reaches the Done state, ensuring the output is a valid Plutus term.
+// maxDischargeDepth bounds the recursion depth of result discharge. Discharge
+// runs after the budgeted evaluation loop and walks the (attacker-influenced)
+// result value/term graph recursively, so without this bound a program that
+// evaluates within budget but produces a deeply nested residual could overflow
+// the Go stack (a fatal, unrecoverable crash). No realistic script returns a
+// term anywhere near this deep.
+const maxDischargeDepth = 100_000
+
+func dischargeDepthLimitError() *BudgetError {
+	return &BudgetError{
+		Code:    ErrCodeBudgetExhausted,
+		Message: "result term nesting too deep to discharge",
+	}
+}
+
 func dischargeValue[T syn.Eval](value Value[T]) (syn.Term[T], error) {
+	return dischargeValueDepth[T](value, 0)
+}
+
+func dischargeValueDepth[T syn.Eval](
+	value Value[T],
+	depth int,
+) (syn.Term[T], error) {
+	if depth > maxDischargeDepth {
+		return nil, dischargeDepthLimitError()
+	}
+
 	switch v := value.(type) {
 	case *Constant:
 		return constantTerm[T](v.Constant), nil
@@ -1787,7 +1816,14 @@ func dischargeValue[T syn.Eval](value Value[T]) (syn.Term[T], error) {
 	case *dataMapValue[T]:
 		return constantTerm[T](materializeDataMapConstant(v.items)), nil
 	case *pairValue[T]:
-		constant, ok := materializeConstantValue[T](v)
+		constant, ok, err := materializeConstantValueDepth[T](
+			v,
+			depth,
+			maxDischargeDepth,
+		)
+		if err != nil {
+			return nil, err
+		}
 		if !ok {
 			return nil, &InternalError{
 				Code:    ErrCodeInternalError,
@@ -1812,7 +1848,7 @@ func dischargeValue[T syn.Eval](value Value[T]) (syn.Term[T], error) {
 
 		// Add applications for each argument
 		for arg := range v.Args.Iter() {
-			discharged, err := dischargeValue[T](arg)
+			discharged, err := dischargeValueDepth[T](arg, depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -1825,7 +1861,7 @@ func dischargeValue[T syn.Eval](value Value[T]) (syn.Term[T], error) {
 		return forcedTerm, nil
 	case *Delay[T]:
 		// Discharge delayed computation with environment
-		body, err := withEnv(0, v.Env, v.AST.Term)
+		body, err := withEnv(0, v.Env, v.AST.Term, depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -1833,7 +1869,7 @@ func dischargeValue[T syn.Eval](value Value[T]) (syn.Term[T], error) {
 
 	case *Lambda[T]:
 		// Discharge lambda with environment (lamCnt=1 to account for parameter)
-		body, err := withEnv(1, v.Env, v.AST.Body)
+		body, err := withEnv(1, v.Env, v.AST.Body, depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -1847,7 +1883,7 @@ func dischargeValue[T syn.Eval](value Value[T]) (syn.Term[T], error) {
 		fields := make([]syn.Term[T], len(v.Fields))
 
 		for i, f := range v.Fields {
-			discharged, err := dischargeValue[T](f)
+			discharged, err := dischargeValueDepth[T](f, depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -1884,7 +1920,12 @@ func withEnv[T syn.Eval](
 	lamCnt int,
 	env *Env[T],
 	term syn.Term[T],
+	depth int,
 ) (syn.Term[T], error) {
+	if depth > maxDischargeDepth {
+		return nil, dischargeDepthLimitError()
+	}
+
 	switch t := term.(type) {
 	case *syn.Var[T]:
 		// Variable resolution with de Bruijn index adjustment
@@ -1895,14 +1936,14 @@ func withEnv[T syn.Eval](
 		value, ok := lookupEnv(env, t.Name.LookupIndex()-lamCnt)
 		if ok {
 			// Variable found in environment, discharge its value
-			return dischargeValue[T](value)
+			return dischargeValueDepth[T](value, depth+1)
 		}
 		// Free variable (shouldn't happen in well-formed terms)
 		return t, nil
 
 	case *syn.Lambda[T]:
 		// Lambda: increase lambda count for body processing
-		body, err := withEnv(lamCnt+1, env, t.Body)
+		body, err := withEnv(lamCnt+1, env, t.Body, depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -1913,11 +1954,11 @@ func withEnv[T syn.Eval](
 
 	case *syn.Apply[T]:
 		// Application: process both function and argument
-		fn, err := withEnv(lamCnt, env, t.Function)
+		fn, err := withEnv(lamCnt, env, t.Function, depth+1)
 		if err != nil {
 			return nil, err
 		}
-		arg, err := withEnv(lamCnt, env, t.Argument)
+		arg, err := withEnv(lamCnt, env, t.Argument, depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -1928,7 +1969,7 @@ func withEnv[T syn.Eval](
 
 	case *syn.Delay[T]:
 		// Delay: process delayed term
-		inner, err := withEnv(lamCnt, env, t.Term)
+		inner, err := withEnv(lamCnt, env, t.Term, depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -1936,7 +1977,7 @@ func withEnv[T syn.Eval](
 
 	case *syn.Force[T]:
 		// Force: process term to be forced
-		inner, err := withEnv(lamCnt, env, t.Term)
+		inner, err := withEnv(lamCnt, env, t.Term, depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -1946,7 +1987,7 @@ func withEnv[T syn.Eval](
 		// Constructor: recursively process all fields
 		fields := make([]syn.Term[T], len(t.Fields))
 		for i, f := range t.Fields {
-			d, err := withEnv(lamCnt, env, f)
+			d, err := withEnv(lamCnt, env, f, depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -1961,13 +2002,13 @@ func withEnv[T syn.Eval](
 		// Case expression: process scrutinee and all branches
 		branches := make([]syn.Term[T], len(t.Branches))
 		for i, b := range t.Branches {
-			d, err := withEnv(lamCnt, env, b)
+			d, err := withEnv(lamCnt, env, b, depth+1)
 			if err != nil {
 				return nil, err
 			}
 			branches[i] = d
 		}
-		constr, err := withEnv(lamCnt, env, t.Constr)
+		constr, err := withEnv(lamCnt, env, t.Constr, depth+1)
 		if err != nil {
 			return nil, err
 		}
