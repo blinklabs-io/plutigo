@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"math/bits"
 	"unicode/utf8"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -158,6 +159,11 @@ func decodeTermDeBruijnWithArena(
 	arena *termArena[DeBruijn],
 	consts *constantArena,
 ) (Term[DeBruijn], error) {
+	if err := d.enter(); err != nil {
+		return nil, err
+	}
+	defer d.leave()
+
 	tag, err := d.bits4()
 	if err != nil {
 		return nil, err
@@ -242,6 +248,11 @@ func decodeTermDeBruijnWithArena(
 }
 
 func decodeTermWithArena[T Binder](d *decoder, arena *termArena[T]) (Term[T], error) {
+	if err := d.enter(); err != nil {
+		return nil, err
+	}
+	defer d.leave()
+
 	tag, e := d.bits4()
 	if e != nil {
 		return nil, e
@@ -1237,6 +1248,13 @@ func decodeConstantTags(d *decoder, tags *constantTagSeq) error {
 		if !bit {
 			return nil
 		}
+		// Each nested list/pair constant type adds at least one tag, so the
+		// tag count bounds the recursion depth of both decodeConstantTypeAt and
+		// decodeConstantValue. Cap it to prevent stack-overflow on a
+		// pathologically nested constant type.
+		if tags.len() >= maxFlatDecodeDepth {
+			return errors.New("constant type nesting too deep")
+		}
 		tag, err := d.bits4()
 		if err != nil {
 			return err
@@ -1276,10 +1294,22 @@ func DecodeList[T any](
 	return result, nil
 }
 
+// maxFlatDecodeDepth bounds the nesting depth of decoded terms (and, via the
+// constant type-tag cap below, of decoded constants). The flat term decoder is
+// recursive, so without this bound a small attacker-controlled program of
+// deeply nested terms (e.g. a long chain of Delay tags, ~2 per input byte)
+// drives the Go call stack to a fatal, unrecoverable stack overflow. The limit
+// is chosen to be far above any realistic on-chain script's nesting while
+// staying comfortably below the stack-overflow point on both 32-bit and 64-bit
+// targets. It is a safety backstop and should be kept in sync with the
+// protocol's script-size limits.
+const maxFlatDecodeDepth = 100_000
+
 type decoder struct {
 	buffer   []byte
 	usedBits int64
 	pos      int
+	depth    int
 }
 
 func newDecoder(bytes []byte) *decoder {
@@ -1287,6 +1317,7 @@ func newDecoder(bytes []byte) *decoder {
 		buffer:   bytes,
 		usedBits: 0,
 		pos:      0,
+		depth:    0,
 	}
 }
 
@@ -1294,6 +1325,22 @@ func (d *decoder) reset(bytes []byte) {
 	d.buffer = bytes
 	d.usedBits = 0
 	d.pos = 0
+	d.depth = 0
+}
+
+// enter records descent into a nested term and fails if the nesting limit is
+// exceeded. Each successful enter must be paired with a leave (typically via
+// defer) so sibling terms do not accumulate depth.
+func (d *decoder) enter() error {
+	if d.depth >= maxFlatDecodeDepth {
+		return errors.New("term nesting too deep")
+	}
+	d.depth++
+	return nil
+}
+
+func (d *decoder) leave() {
+	d.depth--
 }
 
 // Decodes a filler of max one byte size.
@@ -1364,7 +1411,11 @@ func (d *decoder) word() (uint, error) {
 			word8 := d.buffer[d.pos]
 			d.pos++
 
-			finalWord |= uint(word8&127) << shl
+			word7 := uint(word8 & 127)
+			if err := checkWordShift(word7, shl); err != nil {
+				return 0, err
+			}
+			finalWord |= word7 << shl
 			shl += 7
 			if word8&128 == 0 {
 				return finalWord, nil
@@ -1378,9 +1429,11 @@ func (d *decoder) word() (uint, error) {
 			return 0, err
 		}
 
-		word7 := word8 & 127
-
-		finalWord |= uint(word7) << shl
+		word7 := uint(word8 & 127)
+		if err := checkWordShift(word7, shl); err != nil {
+			return 0, err
+		}
+		finalWord |= word7 << shl
 
 		shl += 7
 
@@ -1392,6 +1445,22 @@ func (d *decoder) word() (uint, error) {
 	}
 
 	return finalWord, nil
+}
+
+// checkWordShift reports an overflow error if placing the 7-bit group word7 at
+// bit offset shl would discard any set bit beyond the machine word width. Go
+// defines shifts of >= the integer width as yielding 0, so without this guard
+// a varint with too many continuation bytes would be silently truncated to a
+// wrong value (and differently on 32-bit vs 64-bit targets) rather than
+// rejected.
+func checkWordShift(word7 uint, shl int) error {
+	if word7 == 0 {
+		return nil
+	}
+	if shl >= bits.UintSize || word7>>(bits.UintSize-shl) != 0 {
+		return errors.New("varint overflows machine word")
+	}
+	return nil
 }
 
 // Decode up to 8 bits.

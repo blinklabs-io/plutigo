@@ -14,6 +14,11 @@ import (
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
 
+// maxParseDepth bounds the nesting depth of parsed terms, constants, data and
+// type specs. The recursive-descent parser would otherwise overflow the Go
+// stack (a fatal, unrecoverable crash) on deeply nested untrusted input.
+const maxParseDepth = 100_000
+
 type Parser struct {
 	lexer         *lex.Lexer
 	curToken      lex.Token
@@ -21,6 +26,22 @@ type Parser struct {
 	interned      map[string]Unique
 	uniqueCounter Unique
 	version       lang.LanguageVersion
+	depth         int
+}
+
+// enter records descent into a nested construct and fails if the nesting limit
+// is exceeded. Each successful enter must be paired with a leave (via defer) so
+// sibling constructs do not accumulate depth.
+func (p *Parser) enter() error {
+	if p.depth >= maxParseDepth {
+		return errors.New("term nesting too deep")
+	}
+	p.depth++
+	return nil
+}
+
+func (p *Parser) leave() {
+	p.depth--
 }
 
 func NewParser(input string) *Parser {
@@ -141,6 +162,11 @@ func (p *Parser) ParseProgram() (*Program[Name], error) {
 }
 
 func (p *Parser) ParseTerm() (Term[Name], error) {
+	if err := p.enter(); err != nil {
+		return nil, err
+	}
+	defer p.leave()
+
 	switch p.curToken.Type {
 	case lex.TokenIdentifier:
 		name := p.internName(p.curToken.Literal)
@@ -844,6 +870,11 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 }
 
 func (p *Parser) parseConstantValue(typ Typ) (IConstant, error) {
+	if err := p.enter(); err != nil {
+		return nil, err
+	}
+	defer p.leave()
+
 	switch t := typ.(type) {
 	case *TInteger:
 		if p.curToken.Type != lex.TokenNumber {
@@ -1035,6 +1066,11 @@ func (p *Parser) parseConstantValue(typ Typ) (IConstant, error) {
 }
 
 func (p *Parser) parsePlutusData() (data.PlutusData, error) {
+	if err := p.enter(); err != nil {
+		return nil, err
+	}
+	defer p.leave()
+
 	switch p.curToken.Type {
 	case lex.TokenI:
 		p.nextToken()
@@ -1225,6 +1261,11 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 }
 
 func (p *Parser) parseTypeSpec() (Typ, error) {
+	if err := p.enter(); err != nil {
+		return nil, err
+	}
+	defer p.leave()
+
 	// Check for invalid bare list or pair
 	if p.curToken.Type == lex.TokenList || p.curToken.Type == lex.TokenPair {
 		return nil, fmt.Errorf(
@@ -1369,5 +1410,13 @@ func (p *Parser) parseApply() (Term[Name], error) {
 }
 
 func (p *Parser) isBefore_v1_1_0() bool {
-	return p.version[0] < 2 && p.version[1] < 1
+	// Lexicographic comparison against 1.1.0 (the first version supporting
+	// constr/case). Comparing major and minor independently is not a valid
+	// version ordering (e.g. it would accept 0.9.0).
+	switch {
+	case p.version[0] != 1:
+		return p.version[0] < 1
+	default:
+		return p.version[1] < 1
+	}
 }

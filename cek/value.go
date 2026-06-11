@@ -249,33 +249,65 @@ func materializeDataMapConstant(items [][2]data.PlutusData) *syn.ProtoList {
 	}
 }
 
-func materializeConstantValue[T syn.Eval](value Value[T]) (syn.IConstant, bool) {
+func materializeConstantValue[T syn.Eval](
+	value Value[T],
+) (syn.IConstant, bool, error) {
+	return materializeConstantValueDepth[T](
+		value,
+		0,
+		maxDischargeDepth,
+	)
+}
+
+func materializeConstantValueDepth[T syn.Eval](
+	value Value[T],
+	depth int,
+	maxDepth int,
+) (syn.IConstant, bool, error) {
+	if depth > maxDepth {
+		return nil, false, dischargeDepthLimitError()
+	}
+
 	switch v := value.(type) {
 	case *Constant:
-		return v.Constant, true
+		return v.Constant, true, nil
 	case *dataValue[T]:
-		return &syn.Data{Inner: v.item}, true
+		return &syn.Data{Inner: v.item}, true, nil
 	case *dataListValue[T]:
-		return materializeDataListConstant(v.items), true
+		return materializeDataListConstant(v.items), true, nil
 	case *dataMapValue[T]:
-		return materializeDataMapConstant(v.items), true
+		return materializeDataMapConstant(v.items), true, nil
 	case *pairValue[T]:
-		first, ok := materializeConstantValue[T](v.first)
-		if !ok {
-			return nil, false
+		first, ok, err := materializeConstantValueDepth[T](
+			v.first,
+			depth+1,
+			maxDepth,
+		)
+		if err != nil {
+			return nil, false, err
 		}
-		second, ok := materializeConstantValue[T](v.second)
-		if !ok {
-			return nil, false
+		if !ok || first == nil {
+			return nil, false, nil
+		}
+		second, ok, err := materializeConstantValueDepth[T](
+			v.second,
+			depth+1,
+			maxDepth,
+		)
+		if err != nil {
+			return nil, false, err
+		}
+		if !ok || second == nil {
+			return nil, false, nil
 		}
 		return &syn.ProtoPair{
 			FstType: first.Typ(),
 			SndType: second.Typ(),
 			First:   first,
 			Second:  second,
-		}, true
+		}, true, nil
 	default:
-		return nil, false
+		return nil, false, nil
 	}
 }
 

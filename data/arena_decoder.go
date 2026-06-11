@@ -189,7 +189,20 @@ func (a *arenaSlices[S]) reset(retainCap int) {
 }
 
 // Decoder reuses arena-backed storage for decoded PlutusData values.
-// Returned values remain valid until the next Reset on the same decoder.
+//
+// Memory model: each Decode call bump-allocates from the internal arenas and
+// NEVER frees on its own. Every value returned by Decode (and all of its
+// nested children) stays valid until the next Reset, which is what lets a
+// single program containing many Data constants share one Decoder. The flip
+// side is that arena memory grows with the TOTAL number of bytes ever decoded,
+// not with the size of the largest single input.
+//
+// Therefore a long-lived Decoder reused across many independent inputs (e.g.
+// one Decoder pooled per connection) MUST call Reset between batches once it is
+// done with the previously returned values; otherwise memory grows without
+// bound (an OOM DoS on attacker-controlled input streams). If you do not need
+// to retain decoded values across calls, prefer the package-level Decode, which
+// does not retain anything between calls.
 type Decoder struct {
 	bigInts     arenaChunks[big.Int]
 	integers    arenaChunks[Integer]
@@ -220,7 +233,9 @@ func (d *Decoder) Reset() {
 	d.bytes.reset(dataSliceRetainCap)
 }
 
-// Decode decodes CBOR bytes into PlutusData; the Decoder is not safe for concurrent use.
+// Decode decodes CBOR bytes into PlutusData; the Decoder is not safe for
+// concurrent use. Decode does not free arena memory — see the Decoder type
+// docs for the accumulate-until-Reset memory model and when callers must Reset.
 func (d *Decoder) Decode(data []byte) (PlutusData, error) {
 	v, err := d.decode(data, newDecodeState())
 	if err != nil {
