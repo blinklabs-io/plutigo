@@ -1,6 +1,7 @@
 package syn
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -58,4 +59,52 @@ func TestParseDepthLimit(t *testing.T) {
 			t.Fatalf("expected a depth error, got: %v", err)
 		}
 	})
+}
+
+// TestParseApplyWidth verifies that a single application with more arguments
+// than maxParseDepth is rejected with a depth-limit error. Each argument in
+// [f a1 a2 ... aN] produces one Apply node in a left-nested chain of depth N,
+// so very wide applications defeat the recursive-descent depth guard on
+// downstream passes (NameToDeBruijn, flat encoding, pretty printing) just as
+// deeply nested terms do.
+func TestParseApplyWidth(t *testing.T) {
+	// Build argument strings: each argument is a simple variable "x".
+	makeApply := func(n int) string {
+		args := make([]string, n+1)
+		args[0] = "(builtin addInteger)" // function head
+		for i := 1; i <= n; i++ {
+			args[i] = fmt.Sprintf("x%d", i)
+		}
+		return "(program 1.0.0 [ " + strings.Join(args, " ") + " ])"
+	}
+
+	t.Run("healthy width parses", func(t *testing.T) {
+		// 100 args is well within maxParseDepth (100_000); must succeed.
+		if _, err := Parse(makeApply(100)); err != nil {
+			t.Fatalf("100-argument application should parse, got: %v", err)
+		}
+	})
+
+	t.Run("excessive width is rejected", func(t *testing.T) {
+		// maxParseDepth+1 args must be rejected with a "too deep" error.
+		src := makeApply(maxParseDepth + 1)
+		_, err := Parse(src)
+		if err == nil {
+			t.Fatal("expected depth-limit error for wide application, got nil")
+		}
+		if !strings.Contains(err.Error(), "too deep") {
+			t.Fatalf("expected a depth error, got: %v", err)
+		}
+	})
+}
+
+func TestParseApplyReleasesWidthOnArgumentError(t *testing.T) {
+	p := NewParser("[(builtin addInteger) (con integer x)]")
+	_, err := p.ParseTerm()
+	if err == nil {
+		t.Fatal("expected argument parse error, got nil")
+	}
+	if p.depth != 0 {
+		t.Fatalf("parser depth leaked after argument parse error: got %d, want 0", p.depth)
+	}
 }

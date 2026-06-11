@@ -1378,8 +1378,25 @@ func (p *Parser) parseApply() (Term[Name], error) {
 	}
 
 	var terms []Term[Name]
+	applicationDepth := 0
+	defer func() {
+		for range applicationDepth {
+			p.leave()
+		}
+	}()
 
 	for p.curToken.Type != lex.TokenRBracket {
+		// Each argument produces one Apply node in the left-nested chain,
+		// contributing depth 1 to the resulting AST. We therefore charge one
+		// depth unit per argument (held until the application is fully parsed)
+		// so the accumulated application width counts against the same budget
+		// as recursive term nesting — preventing downstream passes from
+		// overflowing the stack on very wide applications.
+		if err := p.enter(); err != nil {
+			return nil, err
+		}
+		applicationDepth++
+
 		term, err := p.ParseTerm()
 		if err != nil {
 			return nil, err
