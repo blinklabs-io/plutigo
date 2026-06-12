@@ -1,7 +1,6 @@
 package lex
 
 import (
-	"encoding/hex"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -107,6 +106,12 @@ func (l *Lexer) readNumber() (string, error) {
 	return string(l.input[start:l.pos]), nil
 }
 
+func isHexDigit(ch rune) bool {
+	return (ch >= '0' && ch <= '9') ||
+		(ch >= 'a' && ch <= 'f') ||
+		(ch >= 'A' && ch <= 'F')
+}
+
 func (l *Lexer) readString() (string, error) {
 	var sb strings.Builder
 	leftoverChar := false
@@ -134,14 +139,11 @@ func (l *Lexer) readString() (string, error) {
 				var unicodeHex string
 				for {
 					l.readChar()
-					unicodeHex += string(l.ch)
-					tmpHex := fmt.Sprintf("%04s", unicodeHex)
-					if _, err := hex.DecodeString(tmpHex); err != nil {
-						// Strip off last hex character
-						unicodeHex = unicodeHex[:len(unicodeHex)-1]
+					if !isHexDigit(l.ch) {
 						leftoverChar = true
 						break
 					}
+					unicodeHex += string(l.ch)
 					if len(unicodeHex) >= 4 {
 						break
 					}
@@ -152,16 +154,22 @@ func (l *Lexer) readString() (string, error) {
 						unicodeHex,
 					)
 				}
-				// Pad hex string for parsing
-				tmpHex := fmt.Sprintf("%04s", unicodeHex)
-				r, err := hex.DecodeString(tmpHex)
+				// The hex digits denote a Unicode code point, not raw
+				// bytes, so the result must be UTF-8 encoded
+				codepoint, err := strconv.ParseUint(unicodeHex, 16, 32)
 				if err != nil {
 					return "", fmt.Errorf(
 						"invalid unicode escape sequence: \\u%s",
 						unicodeHex,
 					)
 				}
-				sb.Write(r)
+				if codepoint > unicode.MaxRune {
+					return "", fmt.Errorf(
+						"invalid unicode escape sequence: \\u%s",
+						unicodeHex,
+					)
+				}
+				sb.WriteRune(rune(codepoint))
 				continue
 			}
 			// Hex escape
@@ -169,14 +177,11 @@ func (l *Lexer) readString() (string, error) {
 				var hexStr string
 				for {
 					l.readChar()
-					hexStr += string(l.ch)
-					tmpHex := fmt.Sprintf("%04s", hexStr)
-					if _, err := hex.DecodeString(tmpHex); err != nil {
-						// Strip off last hex character
-						hexStr = hexStr[:len(hexStr)-1]
+					if !isHexDigit(l.ch) {
 						leftoverChar = true
 						break
 					}
+					hexStr += string(l.ch)
 					if len(hexStr) >= 4 {
 						break
 					}
@@ -187,18 +192,22 @@ func (l *Lexer) readString() (string, error) {
 						hexStr,
 					)
 				}
-				// Pad hex string for parsing
-				tmpHex := fmt.Sprintf("%04s", hexStr)
-				// Strip out any leading zero bytes
-				tmpHex = strings.TrimPrefix(tmpHex, "00")
-				r, err := hex.DecodeString(tmpHex)
+				// The hex digits denote a Unicode code point, not raw
+				// bytes, so the result must be UTF-8 encoded
+				codepoint, err := strconv.ParseUint(hexStr, 16, 32)
 				if err != nil {
 					return "", fmt.Errorf(
 						"invalid hex escape sequence: \\x%s",
 						hexStr,
 					)
 				}
-				sb.Write(r)
+				if codepoint > unicode.MaxRune {
+					return "", fmt.Errorf(
+						"invalid hex escape sequence: \\x%s",
+						hexStr,
+					)
+				}
+				sb.WriteRune(rune(codepoint))
 				continue
 			}
 			// Octal escape
