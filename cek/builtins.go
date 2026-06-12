@@ -1224,17 +1224,25 @@ func verifyEd25519Signature[T syn.Eval](
 	}
 
 	if len(publicKey) != ed25519.PublicKeySize { // 32 bytes
-		return nil, fmt.Errorf(
-			"invalid public key length: got %d, expected 32",
-			len(publicKey),
-		)
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "verifyEd25519Signature",
+			Message: fmt.Sprintf(
+				"invalid public key length: got %d, expected 32",
+				len(publicKey),
+			),
+		}
 	}
 
 	if len(signature) != ed25519.SignatureSize { // 64 bytes
-		return nil, fmt.Errorf(
-			"invalid signature length: got %d, expected 64",
-			len(signature),
-		)
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "verifyEd25519Signature",
+			Message: fmt.Sprintf(
+				"invalid signature length: got %d, expected 64",
+				len(signature),
+			),
+		}
 	}
 
 	var res bool
@@ -1466,7 +1474,11 @@ func verifySchnorrSecp256K1Signature[T syn.Eval](
 
 	key, err := schnorr.ParsePubKey(publicKey)
 	if err != nil {
-		return nil, err
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "verifySchnorrSecp256k1Signature",
+			Message: fmt.Sprintf("invalid public key: %v", err),
+		}
 	}
 
 	r := new(btcec.FieldVal)
@@ -2971,7 +2983,11 @@ func integerToByteString[T syn.Eval](
 
 	// Check for negative input
 	if input.Sign() < 0 {
-		return nil, fmt.Errorf("integerToByteString: negative input %v", input)
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "integerToByteString",
+			Message: fmt.Sprintf("negative input %v", input),
+		}
 	}
 
 	// Convert size to int64
@@ -2986,10 +3002,11 @@ func integerToByteString[T syn.Eval](
 	sizeInt64 := size.Int64()
 
 	if sizeInt64 < 0 {
-		return nil, fmt.Errorf(
-			"integerToByteString: negative size %v",
-			sizeInt64,
-		)
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "integerToByteString",
+			Message: fmt.Sprintf("negative size %v", sizeInt64),
+		}
 	}
 
 	sizeUnwrapped := int(sizeInt64)
@@ -3025,10 +3042,14 @@ func integerToByteString[T syn.Eval](
 		(input.BitLen()-1) >= 8*IntegerToByteStringMaximumOutputLength {
 		required := (input.BitLen() + 7) / 8
 
-		return nil, fmt.Errorf(
-			"integerToByteString: input requires %d bytes, exceeds max %d",
-			required, IntegerToByteStringMaximumOutputLength,
-		)
+		return nil, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "integerToByteString",
+			Message: fmt.Sprintf(
+				"input requires %d bytes, exceeds max %d",
+				required, IntegerToByteStringMaximumOutputLength,
+			),
+		}
 	}
 
 	// Handle zero input
@@ -3045,10 +3066,14 @@ func integerToByteString[T syn.Eval](
 
 	// Check if bytes exceed specified size
 	if sizeInt64 != 0 && len(bytes) > sizeUnwrapped {
-		return nil, fmt.Errorf(
-			"integerToByteString: size %d too small, need %d",
-			sizeUnwrapped, len(bytes),
-		)
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "integerToByteString",
+			Message: fmt.Sprintf(
+				"size %d too small, need %d",
+				sizeUnwrapped, len(bytes),
+			),
+		}
 	}
 
 	// Handle padding
@@ -3483,10 +3508,14 @@ func writeBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		// Unwrap integer from list element
 		bitIndex, ok := index.(*syn.Integer)
 		if !ok {
-			return nil, fmt.Errorf(
-				"writeBits: expected integer in indices list, got %T",
-				index,
-			)
+			return nil, &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: "writeBits",
+				Message: fmt.Sprintf(
+					"expected integer in indices list, got %T",
+					index,
+				),
+			}
 		}
 
 		// Validate bit index
@@ -3583,10 +3612,11 @@ func replicateByte[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	// Validate byte
 	if !byteVal.IsInt64() || byteVal.Int64() < 0 || byteVal.Int64() > 255 {
-		return nil, fmt.Errorf(
-			"replicateByte: byte value %v out of bounds (0-255)",
-			byteVal,
-		)
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "replicateByte",
+			Message: fmt.Sprintf("byte value %v out of bounds (0-255)", byteVal),
+		}
 	}
 	byteUint := byte(byteVal.Int64())
 
@@ -3949,7 +3979,11 @@ func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	case bb.Sign() == 0:
 		// 0^negative is undefined
-		return nil, fmt.Errorf("expModInteger: 0^%s is undefined", e.String())
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "expModInteger",
+			Message: fmt.Sprintf("0^%s is undefined", e.String()),
+		}
 
 	default:
 		// Negative exponent: need to compute modular inverse
@@ -3961,12 +3995,16 @@ func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		gcd := new(big.Int)
 		gcd.GCD(nil, nil, reducedBase, mm)
 		if gcd.Cmp(big.NewInt(1)) != 0 {
-			return nil, fmt.Errorf(
-				"expModInteger: %s is not invertible modulo %s (gcd = %s)",
-				bb.String(),
-				mm.String(),
-				gcd.String(),
-			)
+			return nil, &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: "expModInteger",
+				Message: fmt.Sprintf(
+					"%s is not invertible modulo %s (gcd = %s)",
+					bb.String(),
+					mm.String(),
+					gcd.String(),
+				),
+			}
 		}
 
 		// Compute modular inverse using extended Euclidean algorithm
