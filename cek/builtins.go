@@ -1261,9 +1261,10 @@ func verifyEd25519Signature[T syn.Eval](
 		} else {
 			res = ed25519.Verify(publicKey, message, signature)
 			ed25519VerifyCache.Lock()
-			if len(ed25519VerifyCache.values) < ed25519VerifyCacheLimit {
-				ed25519VerifyCache.values[key] = res
+			if len(ed25519VerifyCache.values) >= ed25519VerifyCacheLimit {
+				ed25519VerifyCache.values = make(map[ed25519VerifyCacheKey]bool)
 			}
+			ed25519VerifyCache.values[key] = res
 			ed25519VerifyCache.Unlock()
 		}
 	} else {
