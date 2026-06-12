@@ -8,6 +8,7 @@ import (
 	"errors"
 	"math"
 	"math/big"
+	"reflect"
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -4927,5 +4928,450 @@ func TestSliceByteStringClamping(t *testing.T) {
 				t.Fatalf("expected %x, got %x", tt.expected, bs.Inner)
 			}
 		})
+	}
+}
+
+// ----------------------------------------------------------------------------
+// dropList characterization tests
+//
+// dropList must charge the exact same budget regardless of whether its list
+// argument is a materialized *syn.ProtoList constant or one of the
+// data-backed representations (*dataListValue / *dataMapValue) produced by
+// unListData / unMapData / unConstrData. dataListValue.toExMem and
+// dataMapValue.toExMem are defined to be equal to listExMem of the
+// materialized equivalent, which is what makes data-backed fast paths
+// consensus-safe (the same mechanism headList/tailList/nullList rely on).
+//
+// The exact budget numbers pinned below were captured from the
+// implementation that always materialized via unwrapList, BEFORE any
+// data-backed fast path existed. They must not change without a
+// corresponding cost-model change.
+// ----------------------------------------------------------------------------
+
+// newPV11TestMachine returns a machine where dropList is available
+// (dropList requires protocol version >= 11).
+func newPV11TestMachine() *Machine[syn.DeBruijn] {
+	ctx := NewDefaultEvalContext(
+		lang.LanguageVersionV3,
+		ProtoVersion{Major: 11},
+	)
+	return NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ctx)
+}
+
+func dropListCharItems() []data.PlutusData {
+	return []data.PlutusData{
+		data.NewInteger(big.NewInt(1)),
+		data.NewByteString(bytes.Repeat([]byte{0xab}, 24)),
+		data.NewList(
+			data.NewInteger(big.NewInt(2)),
+			data.NewInteger(big.NewInt(3)),
+		),
+		data.NewConstr(0, data.NewInteger(big.NewInt(5))),
+		data.NewInteger(new(big.Int).Lsh(big.NewInt(1), 100)),
+	}
+}
+
+func dropListCharPairs() [][2]data.PlutusData {
+	return [][2]data.PlutusData{
+		{
+			data.NewByteString([]byte("key-one")),
+			data.NewInteger(big.NewInt(42)),
+		},
+		{
+			data.NewInteger(big.NewInt(7)),
+			data.NewList(data.NewByteString([]byte{0x01, 0x02})),
+		},
+		{
+			data.NewByteString([]byte("k3")),
+			data.NewConstr(1, data.NewInteger(big.NewInt(9))),
+		},
+	}
+}
+
+// dropListTestBudget is the initial budget used by the dropList
+// characterization tests unless a case overrides it.
+var dropListTestBudget = ExBudget{Cpu: math.MaxInt64, Mem: math.MaxInt64}
+
+// evalDropListConsumed evaluates dropList with the given argument values on a
+// fresh machine and returns the result, the exact consumed budget, and any
+// evaluation error.
+func evalDropListConsumed(
+	t *testing.T,
+	initial ExBudget,
+	nArg Value[syn.DeBruijn],
+	listArg Value[syn.DeBruijn],
+) (Value[syn.DeBruijn], ExBudget, error) {
+	t.Helper()
+	m := newPV11TestMachine()
+	m.ExBudget = initial
+	b := newTestBuiltin(builtin.DropList)
+	b = b.ApplyArg(nArg)
+	b = b.ApplyArg(listArg)
+	val, err := m.evalBuiltinApp(b)
+	consumed := initial.Sub(&m.ExBudget)
+	return val, consumed, err
+}
+
+func materializeForTest(
+	t *testing.T,
+	val Value[syn.DeBruijn],
+) syn.IConstant {
+	t.Helper()
+	c, ok, err := materializeConstantValue[syn.DeBruijn](val)
+	if err != nil {
+		t.Fatalf("materializeConstantValue failed: %v", err)
+	}
+	if !ok || c == nil {
+		t.Fatalf("could not materialize %T", val)
+	}
+	return c
+}
+
+// runDropListCharacterization runs dropList over the data-backed
+// representation and the materialized ProtoList equivalent, asserting that
+// both charge byte-for-byte identical budgets (pinned to wantBudget) and
+// produce identical results / errors.
+func runDropListCharacterization(
+	t *testing.T,
+	initial ExBudget,
+	n *big.Int,
+	fastArg Value[syn.DeBruijn],
+	slowArg Value[syn.DeBruijn],
+	wantBudget ExBudget,
+	wantBudgetErr bool,
+) {
+	t.Helper()
+
+	fastN := &Constant{&syn.Integer{Inner: new(big.Int).Set(n)}}
+	slowN := &Constant{&syn.Integer{Inner: new(big.Int).Set(n)}}
+
+	fastVal, fastBudget, fastErr := evalDropListConsumed(t, initial, fastN, fastArg)
+	slowVal, slowBudget, slowErr := evalDropListConsumed(t, initial, slowN, slowArg)
+
+	if fastBudget != slowBudget {
+		t.Fatalf(
+			"budget mismatch between representations: data-backed=%+v materialized=%+v",
+			fastBudget,
+			slowBudget,
+		)
+	}
+	if fastBudget != wantBudget {
+		t.Fatalf(
+			"budget characterization changed: got %+v, want %+v",
+			fastBudget,
+			wantBudget,
+		)
+	}
+
+	if wantBudgetErr {
+		var fastBudgetErr, slowBudgetErr *BudgetError
+		if !errors.As(fastErr, &fastBudgetErr) {
+			t.Fatalf("expected BudgetError for data-backed arg, got %v", fastErr)
+		}
+		if !errors.As(slowErr, &slowBudgetErr) {
+			t.Fatalf("expected BudgetError for materialized arg, got %v", slowErr)
+		}
+		return
+	}
+
+	if fastErr != nil {
+		t.Fatalf("unexpected error for data-backed arg: %v", fastErr)
+	}
+	if slowErr != nil {
+		t.Fatalf("unexpected error for materialized arg: %v", slowErr)
+	}
+
+	fastConst := materializeForTest(t, fastVal)
+	slowConst := materializeForTest(t, slowVal)
+	if !reflect.DeepEqual(fastConst, slowConst) {
+		t.Fatalf(
+			"result mismatch: data-backed=%v materialized=%v",
+			fastConst,
+			slowConst,
+		)
+	}
+}
+
+func TestDropListDataListBudgetCharacterization(t *testing.T) {
+	items := dropListCharItems()
+
+	tests := []struct {
+		name          string
+		initial       ExBudget
+		n             *big.Int
+		wantBudget    ExBudget
+		wantBudgetErr bool
+	}{
+		{
+			"zero",
+			dropListTestBudget,
+			big.NewInt(0),
+			ExBudget{Mem: 4, Cpu: 116711},
+			false,
+		},
+		{
+			"negative",
+			dropListTestBudget,
+			big.NewInt(-3),
+			ExBudget{Mem: 4, Cpu: 122582},
+			false,
+		},
+		{
+			"drop two",
+			dropListTestBudget,
+			big.NewInt(2),
+			ExBudget{Mem: 4, Cpu: 120625},
+			false,
+		},
+		{
+			"exact length",
+			dropListTestBudget,
+			big.NewInt(int64(len(items))),
+			ExBudget{Mem: 4, Cpu: 126496},
+			false,
+		},
+		{
+			"beyond length",
+			dropListTestBudget,
+			big.NewInt(9),
+			ExBudget{Mem: 4, Cpu: 134324},
+			false,
+		},
+		{
+			"large int64",
+			dropListTestBudget,
+			new(big.Int).Lsh(big.NewInt(1), 39),
+			ExBudget{Mem: 4, Cpu: 1075872127895527},
+			false,
+		},
+		{
+			// |n| >= 2^40 charges just enough CPU so that base + extra
+			// approximates MaxInt64; with a MaxInt64 starting budget the
+			// spend still succeeds and everything is dropped.
+			"huge non-int64",
+			dropListTestBudget,
+			new(big.Int).Lsh(big.NewInt(1), 70),
+			ExBudget{Mem: 4, Cpu: 9223372036854679707},
+			false,
+		},
+		{
+			// With a small starting budget the huge-n CPU spend fails after
+			// the base cost was charged: a BudgetError with only the base
+			// cost consumed.
+			"huge non-int64 out of budget",
+			ExBudget{Mem: 1_000_000, Cpu: 1_000_000},
+			new(big.Int).Lsh(big.NewInt(1), 70),
+			ExBudget{Mem: 4, Cpu: 116711},
+			true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runDropListCharacterization(
+				t,
+				tt.initial,
+				tt.n,
+				&dataListValue[syn.DeBruijn]{items: items},
+				&Constant{materializeDataListConstant(items)},
+				tt.wantBudget,
+				tt.wantBudgetErr,
+			)
+		})
+	}
+}
+
+func TestDropListDataMapBudgetCharacterization(t *testing.T) {
+	pairs := dropListCharPairs()
+
+	tests := []struct {
+		name          string
+		initial       ExBudget
+		n             *big.Int
+		wantBudget    ExBudget
+		wantBudgetErr bool
+	}{
+		{
+			"zero",
+			dropListTestBudget,
+			big.NewInt(0),
+			ExBudget{Mem: 4, Cpu: 116711},
+			false,
+		},
+		{
+			"negative",
+			dropListTestBudget,
+			big.NewInt(-2),
+			ExBudget{Mem: 4, Cpu: 120625},
+			false,
+		},
+		{
+			"drop one",
+			dropListTestBudget,
+			big.NewInt(1),
+			ExBudget{Mem: 4, Cpu: 118668},
+			false,
+		},
+		{
+			"exact length",
+			dropListTestBudget,
+			big.NewInt(int64(len(pairs))),
+			ExBudget{Mem: 4, Cpu: 122582},
+			false,
+		},
+		{
+			"beyond length",
+			dropListTestBudget,
+			big.NewInt(7),
+			ExBudget{Mem: 4, Cpu: 130410},
+			false,
+		},
+		{
+			"huge non-int64",
+			dropListTestBudget,
+			new(big.Int).Lsh(big.NewInt(1), 70),
+			ExBudget{Mem: 4, Cpu: 9223372036854679707},
+			false,
+		},
+		{
+			"huge non-int64 out of budget",
+			ExBudget{Mem: 1_000_000, Cpu: 1_000_000},
+			new(big.Int).Lsh(big.NewInt(1), 70),
+			ExBudget{Mem: 4, Cpu: 116711},
+			true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runDropListCharacterization(
+				t,
+				tt.initial,
+				tt.n,
+				&dataMapValue[syn.DeBruijn]{items: pairs},
+				&Constant{materializeDataMapConstant(pairs)},
+				tt.wantBudget,
+				tt.wantBudgetErr,
+			)
+		})
+	}
+}
+
+// TestDropListTypeErrorCharacterization pins error behavior for wrong
+// argument types: a TypeError with zero budget consumed, identically for
+// data-backed and materialized list arguments.
+func TestDropListTypeErrorCharacterization(t *testing.T) {
+	items := dropListCharItems()
+
+	t.Run("non-integer count", func(t *testing.T) {
+		badN := &Constant{&syn.String{Inner: "nope"}}
+		listArgs := []Value[syn.DeBruijn]{
+			&dataListValue[syn.DeBruijn]{items: items},
+			&dataMapValue[syn.DeBruijn]{items: dropListCharPairs()},
+			&Constant{materializeDataListConstant(items)},
+		}
+		for _, listArg := range listArgs {
+			_, consumed, err := evalDropListConsumed(
+				t,
+				dropListTestBudget,
+				badN,
+				listArg,
+			)
+			var typeErr *TypeError
+			if !errors.As(err, &typeErr) {
+				t.Fatalf("expected TypeError for %T, got %v", listArg, err)
+			}
+			if consumed != (ExBudget{}) {
+				t.Fatalf(
+					"expected zero budget consumed for %T, got %+v",
+					listArg,
+					consumed,
+				)
+			}
+		}
+	})
+
+	t.Run("non-list argument", func(t *testing.T) {
+		nArg := &Constant{&syn.Integer{Inner: big.NewInt(1)}}
+		badLists := []Value[syn.DeBruijn]{
+			&Constant{&syn.Integer{Inner: big.NewInt(2)}},
+			&dataValue[syn.DeBruijn]{item: data.NewInteger(big.NewInt(3))},
+		}
+		for _, badList := range badLists {
+			_, consumed, err := evalDropListConsumed(
+				t,
+				dropListTestBudget,
+				nArg,
+				badList,
+			)
+			var typeErr *TypeError
+			if !errors.As(err, &typeErr) {
+				t.Fatalf("expected TypeError for %T, got %v", badList, err)
+			}
+			if consumed != (ExBudget{}) {
+				t.Fatalf(
+					"expected zero budget consumed for %T, got %+v",
+					badList,
+					consumed,
+				)
+			}
+		}
+	})
+}
+
+// TestDropListUnListDataEndToEnd pins the result and total consumed budget
+// of a full program where a data-backed list (from unListData) flows into
+// dropList through normal machine evaluation.
+func TestDropListUnListDataEndToEnd(t *testing.T) {
+	src := `(program 1.1.0
+ [
+  [ (force (builtin dropList)) (con integer 2) ]
+   [ (builtin unListData) (con data (List [I 11, I 22, I 33, I 44])) ]
+  ]
+)`
+
+	program, err := syn.Parse(src)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	dProgram, err := syn.NameToDeBruijn(program)
+	if err != nil {
+		t.Fatalf("NameToDeBruijn failed: %v", err)
+	}
+
+	machine := newPV11TestMachine()
+	initial := ExBudget{Cpu: math.MaxInt64, Mem: math.MaxInt64}
+	machine.ExBudget = initial
+
+	result, err := machine.Run(dProgram.Term)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	expectedSrc := `(program 1.1.0 (con (list data) [I 33, I 44]))`
+	expected, err := syn.Parse(expectedSrc)
+	if err != nil {
+		t.Fatalf("Parse of expected failed: %v", err)
+	}
+	dExpected, err := syn.NameToDeBruijn(expected)
+	if err != nil {
+		t.Fatalf("NameToDeBruijn of expected failed: %v", err)
+	}
+
+	prettyResult := syn.PrettyTerm[syn.DeBruijn](result)
+	prettyExpected := syn.PrettyTerm[syn.DeBruijn](dExpected.Term)
+	if prettyResult != prettyExpected {
+		t.Fatalf("result mismatch\ngot:\n%s\nwant:\n%s", prettyResult, prettyExpected)
+	}
+
+	// Budget pinned from the pre-fast-path implementation; must never change.
+	consumed := initial.Sub(&machine.ExBudget)
+	wantConsumed := ExBudget{Mem: 936, Cpu: 274658}
+	if consumed != wantConsumed {
+		t.Fatalf(
+			"consumed budget characterization changed: got %+v, want %+v",
+			consumed,
+			wantConsumed,
+		)
 	}
 }

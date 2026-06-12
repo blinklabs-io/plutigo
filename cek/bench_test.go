@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/builtin"
+	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 )
@@ -298,5 +299,49 @@ func buildDischargeValue(depth int) Value[syn.DeBruijn] {
 				},
 			},
 		},
+	}
+}
+
+// BenchmarkDropListDataBacked measures dropList over a data-backed list
+// value (as produced by unListData), the case optimized by the
+// dataListValue/dataMapValue fast paths.
+func BenchmarkDropListDataBacked(b *testing.B) {
+	for _, size := range []int{16, 128, 1024} {
+		items := make([]data.PlutusData, size)
+		for i := range items {
+			items[i] = data.NewInteger(big.NewInt(int64(i)))
+		}
+
+		machine := NewMachine[syn.DeBruijn](
+			lang.LanguageVersionV3,
+			0,
+			NewDefaultEvalContext(
+				lang.LanguageVersionV3,
+				ProtoVersion{Major: 11},
+			),
+		)
+		builtinValue := &Builtin[syn.DeBruijn]{Func: builtin.DropList}
+		builtinValue = builtinValue.ApplyArg(
+			benchmarkIntValue(int64(size / 2)),
+		)
+		builtinValue = builtinValue.ApplyArg(
+			&dataListValue[syn.DeBruijn]{items: items},
+		)
+
+		b.Run(fmt.Sprintf("size=%d", size), func(b *testing.B) {
+			b.ReportAllocs()
+
+			for b.Loop() {
+				machine.ExBudget = ExBudget{
+					Cpu: 1 << 62,
+					Mem: 1 << 62,
+				}
+				result, err := machine.evalBuiltinApp(builtinValue)
+				if err != nil {
+					b.Fatalf("evalBuiltinApp failed: %v", err)
+				}
+				benchmarkValueSink = result
+			}
+		})
 	}
 }
