@@ -3997,26 +3997,25 @@ func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 // Note: caseList and caseData (IDs 88, 89) were removed from Plutus.
 // ============================================================================
 
-func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	b.Args.Extract(&m.argHolder, b.ArgCount)
-	// Args: (con integer n) (con (list t) xs)
-	nVal, err := unwrapInteger[T](m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	lst, err := unwrapList[T](nil, m.argHolder[1])
-	if err != nil {
-		return nil, err
-	}
-
+// dropListStart charges the dropList budget for a list with the given
+// length and ExMem size, then computes the start index after dropping n
+// elements. The costing is shared by the materialized (ProtoList) path and
+// the data-backed fast paths so that both charge byte-for-byte identical
+// budgets.
+func dropListStart[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+	nVal *big.Int,
+	listLen int,
+	listMem func() ExMem,
+) (int, error) {
 	// Spend budget (base)
 	if err := m.CostTwo(
 		&b.Func,
-		func() ExMem { return listExMem(lst.List)() },
+		listMem,
 		bigIntExMem(nVal),
 	); err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	// Capture original magnitude for costing before clamping negatives to zero
@@ -4044,32 +4043,79 @@ func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		if origAbsN.BitLen() > dropListHugeBitLenThresh {
 			budgetCpu := math.MaxInt64 - dropListBaseCpuApprox
 			if err := m.spendBudget(ExBudget{Cpu: budgetCpu, Mem: 0}); err != nil {
-				return nil, err
+				return 0, err
 			}
 		} else if extra.BitLen() > 63 {
 			if err := m.spendBudget(ExBudget{Cpu: math.MaxInt64 / 2, Mem: 0}); err != nil {
-				return nil, err
+				return 0, err
 			}
 		} else {
 			if err := m.spendBudget(ExBudget{Cpu: extra.Int64(), Mem: 0}); err != nil {
-				return nil, err
+				return 0, err
 			}
 		}
 	}
 
 	// Convert n to int if possible, otherwise drop everything
-	start := len(lst.List)
+	start := listLen
 	if nVal.IsInt64() {
 		nVal64 := nVal.Int64()
 		if nVal64 > int64(math.MaxInt) {
-			return nil, &BuiltinError{
+			return 0, &BuiltinError{
 				Code:    ErrCodeOverflow,
 				Builtin: "dropList",
 				Message: "n too large",
 			}
 		}
 		ni := int(nVal64)
-		start = min(ni, len(lst.List))
+		start = min(ni, listLen)
+	}
+
+	return start, nil
+}
+
+func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+	// Args: (con integer n) (con (list t) xs)
+	nVal, err := unwrapInteger[T](m.argHolder[0])
+	if err != nil {
+		return nil, err
+	}
+
+	// Fast paths: data-backed lists/maps are re-sliced without materializing
+	// the whole list into a ProtoList. valueExMem (toExMem) of these values
+	// is defined to equal listExMem of their materialized equivalent, so the
+	// charged budget is identical to the materialized path (the same
+	// mechanism headList/tailList/nullList rely on).
+	switch v := m.argHolder[1].(type) {
+	case *dataListValue[T]:
+		start, err := dropListStart(m, b, nVal, len(v.items), valueExMem[T](v))
+		if err != nil {
+			return nil, err
+		}
+		return m.allocDataListValue(v.items[start:]), nil
+	case *dataMapValue[T]:
+		start, err := dropListStart(m, b, nVal, len(v.items), valueExMem[T](v))
+		if err != nil {
+			return nil, err
+		}
+		return m.allocDataMapValue(v.items[start:]), nil
+	}
+
+	lst, err := unwrapList[T](nil, m.argHolder[1])
+	if err != nil {
+		return nil, err
+	}
+
+	start, err := dropListStart(
+		m,
+		b,
+		nVal,
+		len(lst.List),
+		func() ExMem { return listExMem(lst.List)() },
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	// Build resulting list
