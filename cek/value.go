@@ -78,11 +78,8 @@ func storeSharedDynamicIntConstant(v int64, constant *Constant) *Constant {
 	if cached := sharedDynamicInts[v]; cached != nil {
 		return cached
 	}
-	if sharedDynamicInts == nil {
+	if sharedDynamicInts == nil || len(sharedDynamicInts) >= int64ConstantCacheCap {
 		sharedDynamicInts = make(map[int64]*Constant, 64)
-	}
-	if len(sharedDynamicInts) >= int64ConstantCacheCap {
-		return nil
 	}
 	sharedDynamicInts[v] = constant
 	return constant
