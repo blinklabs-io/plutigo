@@ -2460,6 +2460,280 @@ func TestConsByteStringBuiltin(t *testing.T) {
 	}
 }
 
+// TestTypedErrorsBuiltinValidation tests that each builtin error path that was
+// previously returning bare fmt.Errorf values now returns a typed *BuiltinError.
+func TestTypedErrorsBuiltinValidation(t *testing.T) {
+	// verifyEd25519Signature: invalid public key length (line ~1227)
+	t.Run("verifyEd25519Signature/invalid_pubkey_length", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.VerifyEd25519Signature)
+
+		// Use a 10-byte public key (not 32)
+		shortKey := make([]byte, 10)
+		msg := []byte("hello")
+		sig := make([]byte, ed25519.SignatureSize)
+
+		b = b.ApplyArg(&Constant{&syn.ByteString{Inner: shortKey}})
+		b = b.ApplyArg(&Constant{&syn.ByteString{Inner: msg}})
+		b = b.ApplyArg(&Constant{&syn.ByteString{Inner: sig}})
+
+		_, err := evalBuiltinWithError(t, m, b)
+		if err == nil {
+			t.Fatal("expected error for invalid public key length, got nil")
+		}
+		var builtinErr *BuiltinError
+		if !errors.As(err, &builtinErr) {
+			t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+		}
+		if builtinErr.Code != ErrCodeInvalidArgument {
+			t.Fatalf("expected ErrCodeInvalidArgument, got %v", builtinErr.Code)
+		}
+	})
+
+	// verifyEd25519Signature: invalid signature length (line ~1234)
+	t.Run("verifyEd25519Signature/invalid_signature_length", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.VerifyEd25519Signature)
+
+		validKey := make([]byte, ed25519.PublicKeySize)
+		msg := []byte("hello")
+		shortSig := make([]byte, 10) // not 64
+
+		b = b.ApplyArg(&Constant{&syn.ByteString{Inner: validKey}})
+		b = b.ApplyArg(&Constant{&syn.ByteString{Inner: msg}})
+		b = b.ApplyArg(&Constant{&syn.ByteString{Inner: shortSig}})
+
+		_, err := evalBuiltinWithError(t, m, b)
+		if err == nil {
+			t.Fatal("expected error for invalid signature length, got nil")
+		}
+		var builtinErr *BuiltinError
+		if !errors.As(err, &builtinErr) {
+			t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+		}
+		if builtinErr.Code != ErrCodeInvalidArgument {
+			t.Fatalf("expected ErrCodeInvalidArgument, got %v", builtinErr.Code)
+		}
+	})
+
+	// verifySchnorrSecp256k1Signature: schnorr.ParsePubKey returns raw error (line ~1469)
+	t.Run("verifySchnorrSecp256k1Signature/invalid_pubkey", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.VerifySchnorrSecp256k1Signature)
+
+		// 32-byte key that is invalid (all zeros is not a valid Schnorr pubkey)
+		invalidKey := make([]byte, 32)
+		msg := []byte("hello")
+		sig := make([]byte, 64)
+
+		b = b.ApplyArg(&Constant{&syn.ByteString{Inner: invalidKey}})
+		b = b.ApplyArg(&Constant{&syn.ByteString{Inner: msg}})
+		b = b.ApplyArg(&Constant{&syn.ByteString{Inner: sig}})
+
+		_, err := evalBuiltinWithError(t, m, b)
+		if err == nil {
+			t.Fatal("expected error for invalid Schnorr public key, got nil")
+		}
+		var builtinErr *BuiltinError
+		if !errors.As(err, &builtinErr) {
+			t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+		}
+		if builtinErr.Code != ErrCodeInvalidArgument {
+			t.Fatalf("expected ErrCodeInvalidArgument, got %v", builtinErr.Code)
+		}
+	})
+
+	// integerToByteString: negative input (line ~2974)
+	t.Run("integerToByteString/negative_input", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.IntegerToByteString)
+
+		b = b.ApplyArg(&Constant{&syn.Bool{Inner: true}})
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(-1)}})
+
+		_, err := evalBuiltinWithError(t, m, b)
+		if err == nil {
+			t.Fatal("expected error for negative input, got nil")
+		}
+		var builtinErr *BuiltinError
+		if !errors.As(err, &builtinErr) {
+			t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+		}
+		if builtinErr.Code != ErrCodeInvalidArgument {
+			t.Fatalf("expected ErrCodeInvalidArgument, got %v", builtinErr.Code)
+		}
+	})
+
+	// integerToByteString: negative size (line ~2989)
+	t.Run("integerToByteString/negative_size", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.IntegerToByteString)
+
+		b = b.ApplyArg(&Constant{&syn.Bool{Inner: true}})
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(-1)}})
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(5)}})
+
+		_, err := evalBuiltinWithError(t, m, b)
+		if err == nil {
+			t.Fatal("expected error for negative size, got nil")
+		}
+		var builtinErr *BuiltinError
+		if !errors.As(err, &builtinErr) {
+			t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+		}
+		if builtinErr.Code != ErrCodeInvalidArgument {
+			t.Fatalf("expected ErrCodeInvalidArgument, got %v", builtinErr.Code)
+		}
+	})
+
+	// integerToByteString: zero size with large input (line ~3028)
+	t.Run("integerToByteString/zero_size_large_input", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.IntegerToByteString)
+
+		// Build a number that requires more than max bytes
+		// IntegerToByteStringMaximumOutputLength is 8192 bytes = 65536 bits
+		// So we need a number with more than 65536 bits
+		large := new(big.Int).Lsh(big.NewInt(1), 8*IntegerToByteStringMaximumOutputLength)
+
+		b = b.ApplyArg(&Constant{&syn.Bool{Inner: true}})
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(0)}}) // size=0 means auto
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: large}})
+
+		_, err := evalBuiltinWithError(t, m, b)
+		if err == nil {
+			t.Fatal("expected error for zero-size with too-large input, got nil")
+		}
+		var builtinErr *BuiltinError
+		if !errors.As(err, &builtinErr) {
+			t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+		}
+		if builtinErr.Code != ErrCodeOverflow {
+			t.Fatalf("expected ErrCodeOverflow, got %v", builtinErr.Code)
+		}
+	})
+
+	// integerToByteString: size too small for input (line ~3048)
+	t.Run("integerToByteString/size_too_small", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.IntegerToByteString)
+
+		b = b.ApplyArg(&Constant{&syn.Bool{Inner: true}})
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(1)}}) // size=1
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(0xABCD)}}) // needs 2 bytes
+
+		_, err := evalBuiltinWithError(t, m, b)
+		if err == nil {
+			t.Fatal("expected error for size too small, got nil")
+		}
+		var builtinErr *BuiltinError
+		if !errors.As(err, &builtinErr) {
+			t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+		}
+		if builtinErr.Code != ErrCodeInvalidArgument {
+			t.Fatalf("expected ErrCodeInvalidArgument, got %v", builtinErr.Code)
+		}
+	})
+
+	// writeBits: non-integer in indices list (line ~3486)
+	t.Run("writeBits/non_integer_in_list", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.WriteBits)
+
+		bs := []byte{0xFF}
+		// Create a list containing a non-integer element (a ByteString instead)
+		indices := &syn.ProtoList{
+			LTyp: &syn.TInteger{},
+			List: []syn.IConstant{
+				&syn.ByteString{Inner: []byte{0x01}}, // wrong type!
+			},
+		}
+
+		b = b.ApplyArg(&Constant{&syn.ByteString{Inner: bs}})
+		b = b.ApplyArg(&Constant{indices})
+		b = b.ApplyArg(&Constant{&syn.Bool{Inner: true}})
+
+		_, err := evalBuiltinWithError(t, m, b)
+		if err == nil {
+			t.Fatal("expected error for non-integer in list, got nil")
+		}
+		var builtinErr *BuiltinError
+		if !errors.As(err, &builtinErr) {
+			t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+		}
+		if builtinErr.Code != ErrCodeInvalidArgument {
+			t.Fatalf("expected ErrCodeInvalidArgument, got %v", builtinErr.Code)
+		}
+	})
+
+	// replicateByte: byte value out of range (line ~3586)
+	t.Run("replicateByte/byte_out_of_range", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.ReplicateByte)
+
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})  // size=4
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(256)}}) // byte=256, out of range
+
+		_, err := evalBuiltinWithError(t, m, b)
+		if err == nil {
+			t.Fatal("expected error for byte value out of range, got nil")
+		}
+		var builtinErr *BuiltinError
+		if !errors.As(err, &builtinErr) {
+			t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+		}
+		if builtinErr.Code != ErrCodeInvalidArgument {
+			t.Fatalf("expected ErrCodeInvalidArgument, got %v", builtinErr.Code)
+		}
+	})
+
+	// expModInteger: 0^negative is undefined (line ~3952)
+	t.Run("expModInteger/zero_to_negative_exponent", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.ExpModInteger)
+
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(0)}})  // base=0
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(-1)}}) // exponent=-1
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(5)}})  // modulus=5
+
+		_, err := evalBuiltinWithError(t, m, b)
+		if err == nil {
+			t.Fatal("expected error for 0^(-1), got nil")
+		}
+		var builtinErr *BuiltinError
+		if !errors.As(err, &builtinErr) {
+			t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+		}
+		if builtinErr.Code != ErrCodeInvalidArgument {
+			t.Fatalf("expected ErrCodeInvalidArgument, got %v", builtinErr.Code)
+		}
+	})
+
+	// expModInteger: base not invertible modulo m (line ~3964)
+	t.Run("expModInteger/not_invertible", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.ExpModInteger)
+
+		// 2^(-1) mod 4 is undefined because gcd(2,4) = 2 != 1
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(2)}})  // base=2
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(-1)}}) // exponent=-1
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})  // modulus=4
+
+		_, err := evalBuiltinWithError(t, m, b)
+		if err == nil {
+			t.Fatal("expected error for non-invertible base, got nil")
+		}
+		var builtinErr *BuiltinError
+		if !errors.As(err, &builtinErr) {
+			t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+		}
+		if builtinErr.Code != ErrCodeInvalidArgument {
+			t.Fatalf("expected ErrCodeInvalidArgument, got %v", builtinErr.Code)
+		}
+	})
+}
+
 func TestSliceByteStringBuiltin(t *testing.T) {
 	tests := []struct {
 		name     string
