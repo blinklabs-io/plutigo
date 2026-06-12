@@ -2,6 +2,7 @@ package syn
 
 import (
 	"bytes"
+	"math/bits"
 	"strings"
 	"testing"
 
@@ -56,6 +57,106 @@ func TestDecodeTermDepthLimit(t *testing.T) {
 				t.Fatalf("expected error containing %q, got: %v", tt.wantErrText, err)
 			}
 		})
+	}
+}
+
+// TestDecodeRejectsTrailingBytes verifies the flat decoder consumes the whole
+// input: a valid program followed by trailing garbage bytes must be rejected,
+// while the exact same bytes without the garbage decode fine. Both the generic
+// decode path and the fast DeBruijn path must agree.
+func TestDecodeRejectsTrailingBytes(t *testing.T) {
+	// A binder-free program so the same encoding is valid for every binder
+	// type (DeBruijn and NamedDeBruijn binders encode differently).
+	encoded, err := Encode(&Program[DeBruijn]{
+		Version: lang.LanguageVersionV1,
+		Term:    &Error{},
+	})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		trailing []byte
+		wantErr  bool
+	}{
+		{"no trailing bytes decodes", nil, false},
+		{"trailing zero byte rejected", []byte{0x00}, true},
+		{"trailing 0xFF byte rejected", []byte{0xFF}, true},
+		{"multiple trailing bytes rejected", []byte{0x00, 0xFF, 0x00}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := make([]byte, 0, len(encoded)+len(tt.trailing))
+			input = append(input, encoded...)
+			input = append(input, tt.trailing...)
+
+			_, fastErr := DecodeDeBruijn(input)
+			_, genericFastErr := Decode[DeBruijn](input)
+			_, genericErr := Decode[NamedDeBruijn](input)
+
+			for path, err := range map[string]error{
+				"DecodeDeBruijn":        fastErr,
+				"Decode[DeBruijn]":      genericFastErr,
+				"Decode[NamedDeBruijn]": genericErr,
+			} {
+				if !tt.wantErr {
+					if err != nil {
+						t.Errorf("%s: decode should succeed, got: %v", path, err)
+					}
+					continue
+				}
+				if err == nil {
+					t.Errorf("%s: expected trailing-bytes error, got nil", path)
+					continue
+				}
+				if !strings.Contains(err.Error(), "trailing bytes") {
+					t.Errorf(
+						"%s: expected error containing %q, got: %v",
+						path, "trailing bytes", err,
+					)
+				}
+			}
+		})
+	}
+}
+
+// TestDecodeVersionOverflowFailsFast verifies that an oversized version varint
+// is rejected immediately after the version words are read, before any attempt
+// to decode the term. The input deliberately has no term bytes: a decoder that
+// validates the version only after the term decode reports "end of buffer"
+// instead of the version error.
+func TestDecodeVersionOverflowFailsFast(t *testing.T) {
+	// major = 2^32 (exceeds MaxUint32), minor = 1, patch = 1, then nothing.
+	input := []byte{0x80, 0x80, 0x80, 0x80, 0x10, 0x01, 0x01}
+
+	wantErrText := "version numbers too large"
+	if bits.UintSize == 32 {
+		// On 32-bit targets the varint itself overflows the machine word, so
+		// word() rejects it even earlier.
+		wantErrText = "overflows machine word"
+	}
+
+	_, fastErr := DecodeDeBruijn(input)
+	_, genericFastErr := Decode[DeBruijn](input)
+	_, genericErr := Decode[NamedDeBruijn](input)
+
+	for path, err := range map[string]error{
+		"DecodeDeBruijn":        fastErr,
+		"Decode[DeBruijn]":      genericFastErr,
+		"Decode[NamedDeBruijn]": genericErr,
+	} {
+		if err == nil {
+			t.Errorf("%s: expected error, got nil", path)
+			continue
+		}
+		if !strings.Contains(err.Error(), wantErrText) {
+			t.Errorf(
+				"%s: expected error containing %q, got: %v",
+				path, wantErrText, err,
+			)
+		}
 	}
 }
 
