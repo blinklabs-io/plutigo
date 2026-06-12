@@ -84,14 +84,14 @@ func Decode[T Binder](bytes []byte) (*Program[T], error) {
 		return nil, err
 	}
 
-	terms, err := decodeTermWithArena[T](d, arena)
-	if err != nil {
-		return nil, err
-	}
-
 	if major > math.MaxUint32 || minor > math.MaxUint32 ||
 		patch > math.MaxUint32 {
 		return nil, errors.New("version numbers too large")
+	}
+
+	terms, err := decodeTermWithArena[T](d, arena)
+	if err != nil {
+		return nil, err
 	}
 
 	version := lang.LanguageVersion{uint32(major), uint32(minor), uint32(patch)}
@@ -102,6 +102,10 @@ func Decode[T Binder](bytes []byte) (*Program[T], error) {
 	}
 
 	if err := d.filler(); err != nil {
+		return nil, err
+	}
+
+	if err := d.ensureFullyConsumed(); err != nil {
 		return nil, err
 	}
 
@@ -128,14 +132,14 @@ func decodeDeBruijnProgram(
 		return nil, err
 	}
 
-	terms, err := decodeTermDeBruijnWithArena(d, arena, consts)
-	if err != nil {
-		return nil, err
-	}
-
 	if major > math.MaxUint32 || minor > math.MaxUint32 ||
 		patch > math.MaxUint32 {
 		return nil, errors.New("version numbers too large")
+	}
+
+	terms, err := decodeTermDeBruijnWithArena(d, arena, consts)
+	if err != nil {
+		return nil, err
 	}
 
 	program := &Program[DeBruijn]{
@@ -144,6 +148,10 @@ func decodeDeBruijnProgram(
 	}
 
 	if err := d.filler(); err != nil {
+		return nil, err
+	}
+
+	if err := d.ensureFullyConsumed(); err != nil {
 		return nil, err
 	}
 
@@ -1358,6 +1366,22 @@ func (d *decoder) filler() error {
 		}
 	}
 
+	return nil
+}
+
+// ensureFullyConsumed verifies the decoder consumed the entire input buffer.
+// A valid flat-encoded program ends with a byte-aligned filler, so after the
+// final filler the decoder must sit exactly at the end of the buffer with no
+// partially consumed byte. Any leftover bytes (or stray bits from a filler
+// whose terminating 1-bit was not byte-aligned) are trailing garbage and the
+// input is rejected.
+func (d *decoder) ensureFullyConsumed() error {
+	if d.usedBits != 0 || d.pos != len(d.buffer) {
+		return fmt.Errorf(
+			"trailing bytes after program: %d byte(s) not consumed",
+			len(d.buffer)-d.pos,
+		)
+	}
 	return nil
 }
 
