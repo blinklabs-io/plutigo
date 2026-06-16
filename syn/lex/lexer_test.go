@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestUnknownNamedEscapeMessageContainsFullName(t *testing.T) {
@@ -150,6 +151,101 @@ func TestLexerStrings(t *testing.T) {
 				)
 			}
 		}
+	}
+}
+
+func TestLexerStringNumericEscapes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		// \u escapes denote Unicode code points, not raw bytes
+		{"unicode ascii 4 digits", `"\u0041"`, "A"},
+		{"unicode ascii 2 digits", `"\u41"`, "A"},
+		{"unicode latin1", `"\u00e9"`, "é"},
+		{"unicode bmp", `"\u20ac"`, "€"},
+		{"unicode nul", `"\u0000"`, "\x00"},
+		// \x escapes denote Unicode code points, not raw bytes.
+		// Leading zeros are insignificant digits of the same number, so
+		// \x0041 is the single character A, not a NUL byte followed by A.
+		{"hex ascii", `"\x41"`, "A"},
+		{"hex ascii leading zeros", `"\x0041"`, "A"},
+		{"hex latin1", `"\xe9"`, "é"},
+		{"hex bmp", `"\x20AC"`, "€"},
+		{"hex nul", `"\x00"`, "\x00"},
+		// Digit collection stops at 4 hex digits; the rest is literal text
+		{"unicode greedy 4 digit cap", `"\u0041BC"`, "ABC"},
+		// Digit collection stops at the first non-hex character
+		{"unicode stops at non-hex", `"\ue9z"`, "éz"},
+		{"hex stops at non-hex", `"\x41!"`, "A!"},
+		// Escapes embedded in surrounding text
+		{"unicode in text", `"caf\u00e9"`, "café"},
+		{"hex in text", `"caf\xe9"`, "café"},
+		// Surrogate code points cannot be encoded in UTF-8; they become
+		// U+FFFD, matching Data.Text's replacement behavior
+		{"unicode surrogate", `"\ud800"`, "�"},
+		// Decimal and octal escapes already used code point semantics
+		{"decimal", `"\233"`, "é"},
+		{"octal", `"\o351"`, "é"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(tt.input)
+			token := lexer.NextToken()
+
+			if token.Type != TokenString {
+				t.Fatalf(
+					"expected TokenString, got %v (literal %q)",
+					token.Type,
+					token.Literal,
+				)
+			}
+			if token.Literal != tt.expected {
+				t.Errorf(
+					"input %s: expected literal %q, got %q",
+					tt.input,
+					tt.expected,
+					token.Literal,
+				)
+			}
+			if !utf8.ValidString(token.Literal) {
+				t.Errorf(
+					"input %s: literal %q is not valid UTF-8",
+					tt.input,
+					token.Literal,
+				)
+			}
+		})
+	}
+}
+
+func TestLexerStringNumericEscapeErrors(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"unicode no digits", `"\uzz"`},
+		{"unicode one digit", `"\u9"`},
+		{"hex no digits", `"\xzz"`},
+		{"hex one digit", `"\x9"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := NewLexer(tt.input)
+			token := lexer.NextToken()
+
+			if token.Type != TokenError {
+				t.Fatalf(
+					"input %s: expected TokenError, got %v (literal %q)",
+					tt.input,
+					token.Type,
+					token.Literal,
+				)
+			}
+		})
 	}
 }
 
