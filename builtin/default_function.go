@@ -673,14 +673,14 @@ func (f DefaultFunction) String() string {
 	return defaultFunctionToString[f]
 }
 
-// Smallest DefaultFunction
-const MinDefaultFunction byte = 0
+// MinDefaultFunction is the smallest DefaultFunction tag value
+const MinDefaultFunction = 0
 
-// Smallest DefaultFunction
-const MaxDefaultFunction byte = 103
+// MaxDefaultFunction is the largest DefaultFunction tag value
+const MaxDefaultFunction = 103
 
-// Total Builtin Count
-const TotalBuiltinCount byte = MaxDefaultFunction + 1
+// TotalBuiltinCount is the total number of builtin functions
+const TotalBuiltinCount = MaxDefaultFunction + 1
 
 func FromByte(tag byte) (DefaultFunction, error) {
 	// only need to check if greater than because
