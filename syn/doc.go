@@ -33,7 +33,7 @@
 // # Basic Usage
 //
 //	// Parse UPLC text
-//	program, err := syn.Parse[syn.Name](input)
+//	program, err := syn.Parse(input)
 //	if err != nil {
 //	    // Handle parse error
 //	}

@@ -50,9 +50,7 @@ func (b *termInterner) intern(currentTerm Term[Name]) {
 	case *Error:
 		// No names to intern
 	default:
-		// Debug: print the type
-		println("intern: unhandled type", fmt.Sprintf("%T", currentTerm))
-		return
+		panic(fmt.Sprintf("intern: unhandled type %T", currentTerm))
 	}
 }
 

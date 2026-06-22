@@ -36,6 +36,13 @@ func NewPrettyPrinter(indentSize int) *PrettyPrinter {
 	}
 }
 
+// Reset clears the accumulated output and indentation state so the
+// printer can be reused
+func (pp *PrettyPrinter) Reset() {
+	pp.builder.Reset()
+	pp.indent = 0
+}
+
 // write writes a string to the builder
 func (pp *PrettyPrinter) write(s string) {
 	pp.builder.WriteString(s)

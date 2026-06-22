@@ -39,3 +39,19 @@ func TestPrettyTermComplex(t *testing.T) {
 		t.Errorf("PrettyTerm output does not contain 'lam': %s", result)
 	}
 }
+
+func TestPrettyPrinterReset(t *testing.T) {
+	pp := NewPrettyPrinter(2)
+	pp.write("hello")
+	pp.increaseIndent()
+
+	pp.Reset()
+
+	if got := pp.builder.String(); got != "" {
+		t.Errorf("expected empty builder after Reset, got %q", got)
+	}
+
+	if pp.indent != 0 {
+		t.Errorf("expected indent 0 after Reset, got %d", pp.indent)
+	}
+}
