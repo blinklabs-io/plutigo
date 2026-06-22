@@ -1,5 +1,42 @@
 # Release Notes
 
+## v0.1.16 - security hardening and CEK/data performance improvements
+
+- Date: 2026-06-22
+- Version: v0.1.16
+
+Summary: This release strengthens input handling and dependency protection, improves evaluation and data processing speed, tightens decoding and parsing validation, and refreshes maintenance updates across the library.
+
+### Security
+
+* Strengthened malformed input handling and runtime safeguards to improve protection during evaluation and decoding.
+* Updated `golang.org/x/crypto` to `v0.53.0` to incorporate the latest upstream security hardening.
+
+### Performance
+
+* Accelerated signature verification cache access to reduce contention during concurrent verification workloads.
+* Streamlined `PlutusData` JSON decoding into a single pass to reduce decoding overhead and improve throughput.
+* Optimized common list drop evaluation paths so repeated data heavy workloads complete with less processing overhead.
+
+### Bug Fixes
+
+* Stabilized cache reuse by resetting full verification and integer caches before stale entries can degrade repeated evaluation behavior.
+* Limited parser application width to the configured depth guard so hostile inputs cannot expand parsing work beyond expected bounds.
+* Hardened term decoding by rejecting trailing bytes and validating the version before term decoding begins, which improves failure handling for malformed inputs.
+* Standardized builtin argument validation failures so error handling stays more consistent across invalid inputs.
+* Corrected string escape decoding so Unicode escape sequences now resolve to the intended characters.
+* Resolved an unhandled term type path that could otherwise panic during syntax decoding.
+
+### Documentation
+
+* Clarified the published release history by adding the previous release entry so the release sequence remains complete.
+
+### Additional Changes
+
+* Updated release automation dependencies to keep project workflows current.
+* Refreshed coverage reporting automation to keep project verification current.
+* Advanced checkout automation maintenance as part of ongoing CI upkeep.
+
 ## v0.1.15 - 32-bit target support
 
 - Date: 2026-06-08
