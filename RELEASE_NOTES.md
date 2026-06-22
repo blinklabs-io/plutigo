@@ -33,9 +33,9 @@ Summary: This release strengthens input handling and dependency protection, impr
 
 ### Additional Changes
 
-* Updated the checkout workflow dependency to `actions/checkout` `v7.0.0` to keep release automation current.
-* Refreshed the coverage reporting workflow by updating `codecov/codecov-action` to `v7.0.0`.
-* Advanced the checkout workflow dependency to `actions/checkout` `v6.0.3` as part of ongoing CI maintenance.
+* Updated release automation dependencies to keep project workflows current.
+* Refreshed coverage reporting automation to keep project verification current.
+* Advanced checkout automation maintenance as part of ongoing CI upkeep.
 
 ## v0.1.15 - 32-bit target support
 
