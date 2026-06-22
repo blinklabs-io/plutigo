@@ -487,3 +487,19 @@ func TestIfThenElse(t *testing.T) {
 		t.Error("Expected IfThenElse builtin")
 	}
 }
+
+// unknownTestTerm implements Term[Name] but is not a variant the
+// interner knows about.
+type unknownTestTerm struct{}
+
+func (unknownTestTerm) isTerm() {}
+
+func TestInternPanicsOnUnknownTermType(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected Intern to panic on unknown term type")
+		}
+	}()
+
+	Intern(unknownTestTerm{})
+}
