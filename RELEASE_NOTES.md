@@ -18,6 +18,25 @@ Summary: This release strengthens input handling and dependency protection, impr
 * Streamlined `PlutusData` JSON decoding into a single pass to reduce decoding overhead and improve throughput.
 * Optimized `dropList` evaluation with faster paths for common data list and data map values, which reduces work in a frequent CEK execution path.
 
+### Bug Fixes
+
+* Stabilized cache reuse by resetting full `ed25519` and dynamic integer caches before stale entries can degrade repeated evaluation behavior.
+* Limited parser application width to the configured depth guard so hostile inputs cannot expand parsing work beyond expected bounds.
+* Hardened term decoding by rejecting trailing bytes and validating the version before term decoding begins, which improves failure handling for malformed inputs.
+* Standardized builtin argument validation failures as typed `BuiltinError` results so error handling stays more consistent.
+* Corrected string escape decoding so Unicode escape sequences now resolve to the intended characters.
+* Resolved an unhandled term type path that could otherwise panic during syntax decoding.
+
+### Documentation
+
+* Clarified the published release history by adding the previous release entry so the release sequence remains complete.
+
+### Additional Changes
+
+* Updated the checkout workflow dependency to `actions/checkout` `v7.0.0` to keep release automation current.
+* Refreshed the coverage reporting workflow by updating `codecov/codecov-action` to `v7.0.0`.
+* Advanced the checkout workflow dependency to `actions/checkout` `v6.0.3` as part of ongoing CI maintenance.
+
 ## v0.1.15 - 32-bit target support
 
 - Date: 2026-06-08
