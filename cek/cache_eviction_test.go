@@ -11,102 +11,60 @@ import (
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
-// TestEd25519VerifyCacheResetOnFull fills the ed25519 verify cache to its
-// limit, then verifies that one additional unique entry is still admitted
-// (i.e., the cache resets rather than stopping admissions permanently).
+// resetEd25519VerifyCache clears every shard of the ed25519 verify cache,
+// returning it to a known empty state for deterministic tests.
+func resetEd25519VerifyCache() {
+	for i := range ed25519VerifyCache.shards {
+		s := &ed25519VerifyCache.shards[i]
+		s.Lock()
+		s.values = make(map[ed25519VerifyCacheKey]bool, ed25519VerifyShardLimit)
+		s.Unlock()
+	}
+}
+
+// TestEd25519VerifyCacheResetOnFull drives a single cache shard to its limit,
+// then verifies that one additional unique entry mapping to that same shard is
+// still admitted (i.e., a full shard resets rather than refusing admissions
+// permanently). With sharded storage the new entry must be steered to a shard
+// known to be full, otherwise admission would prove nothing about reset-on-full.
 func TestEd25519VerifyCacheResetOnFull(t *testing.T) {
 	// Reset the cache to a known empty state before the test.
-	ed25519VerifyCache.Lock()
-	ed25519VerifyCache.values = make(map[ed25519VerifyCacheKey]bool)
-	ed25519VerifyCache.Unlock()
+	resetEd25519VerifyCache()
 
-	// Generate a fixed key pair for all synthetic entries.
-	pubKey, privKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("failed to generate ed25519 key: %v", err)
-	}
-
-	// Fill the cache to exactly the limit using distinct messages.
-	// We bypass the builtin machinery and insert directly so the test is fast
-	// and deterministic.
-	for i := 0; i < ed25519VerifyCacheLimit; i++ {
+	// Pick a target shard and synthesize distinct keys that all hash to it, so
+	// we can fill exactly that shard and observe reset-on-full deterministically.
+	target := &ed25519VerifyCache.shards[0]
+	keys := make([]ed25519VerifyCacheKey, 0, ed25519VerifyShardLimit+1)
+	for i := 0; len(keys) < ed25519VerifyShardLimit+1; i++ {
 		var key ed25519VerifyCacheKey
-		copy(key.publicKey[:], pubKey)
-		// Construct a unique message for each entry.
-		msg := [ed25519VerifyMaxCacheMsg]byte{}
-		// Encode i as 4 bytes so all 4096 entries are unique.
-		msg[0] = byte(i >> 24)
-		msg[1] = byte(i >> 16)
-		msg[2] = byte(i >> 8)
-		msg[3] = byte(i)
-		key.message = msg
-		key.msgLen = 4
-		sig := ed25519.Sign(privKey, msg[:4])
-		copy(key.signature[:], sig)
-		ed25519VerifyCache.Lock()
-		if len(ed25519VerifyCache.values) < ed25519VerifyCacheLimit {
-			ed25519VerifyCache.values[key] = true
+		// Vary the bytes the shard hash consumes so keys spread across shards.
+		key.publicKey[0] = byte(i)
+		key.publicKey[1] = byte(i >> 8)
+		key.signature[0] = byte(i >> 16)
+		key.signature[1] = byte(i >> 24)
+		if ed25519VerifyCache.shard(&key) == target {
+			keys = append(keys, key)
 		}
-		ed25519VerifyCache.Unlock()
 	}
 
-	// Verify the cache is now at capacity.
-	ed25519VerifyCache.RLock()
-	cacheSize := len(ed25519VerifyCache.values)
-	ed25519VerifyCache.RUnlock()
-	if cacheSize != ed25519VerifyCacheLimit {
-		t.Fatalf("expected cache size %d, got %d", ed25519VerifyCacheLimit, cacheSize)
+	// Fill the target shard exactly to its limit.
+	for i := 0; i < ed25519VerifyShardLimit; i++ {
+		ed25519VerifyCache.store(&keys[i], true)
 	}
 
-	// Now call verifyEd25519Signature via the builtin with a brand-new key/message.
-	// After the fix, this new entry should be cached (the cache resets on full).
-	newPubKey, newPrivKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("failed to generate new ed25519 key: %v", err)
-	}
-	newMsg := []byte("post-full message")
-	newSig := ed25519.Sign(newPrivKey, newMsg)
-
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
-	b := &Builtin[syn.DeBruijn]{
-		Func:     builtin.VerifyEd25519Signature,
-		ArgCount: 0,
-		Forces:   0,
-	}
-	b = b.ApplyArg(&Constant{&syn.ByteString{Inner: newPubKey}})
-	b = b.ApplyArg(&Constant{&syn.ByteString{Inner: newMsg}})
-	b = b.ApplyArg(&Constant{&syn.ByteString{Inner: newSig}})
-
-	val, err := m.evalBuiltinApp(b)
-	if err != nil {
-		t.Fatalf("evalBuiltinApp returned error: %v", err)
-	}
-	constVal, ok := val.(*Constant)
-	if !ok {
-		t.Fatalf("expected *Constant, got %T", val)
-	}
-	boolVal, ok := constVal.Constant.(*syn.Bool)
-	if !ok {
-		t.Fatalf("expected *syn.Bool, got %T", constVal.Constant)
-	}
-	if !boolVal.Inner {
-		t.Fatal("expected valid signature to return true")
+	target.Lock()
+	full := len(target.values)
+	target.Unlock()
+	if full != ed25519VerifyShardLimit {
+		t.Fatalf("expected shard at capacity %d, got %d", ed25519VerifyShardLimit, full)
 	}
 
-	// After the fix the new entry must appear in the cache.
-	// Build the key that would have been inserted.
-	var lookupKey ed25519VerifyCacheKey
-	copy(lookupKey.publicKey[:], newPubKey)
-	copy(lookupKey.signature[:], newSig)
-	copy(lookupKey.message[:], newMsg)
-	lookupKey.msgLen = uint8(len(newMsg))
-
-	ed25519VerifyCache.RLock()
-	_, cached := ed25519VerifyCache.values[lookupKey]
-	ed25519VerifyCache.RUnlock()
-
-	if !cached {
-		t.Fatal("new entry was not admitted to cache after cache was full — reset-on-full fix is missing")
+	// Storing a brand-new key for the now-full shard must still be admitted:
+	// reset-on-full clears the shard rather than refusing entries forever.
+	newKey := keys[ed25519VerifyShardLimit]
+	ed25519VerifyCache.store(&newKey, true)
+	if _, cached := ed25519VerifyCache.get(&newKey); !cached {
+		t.Fatal("new entry was not admitted after shard was full — reset-on-full fix is missing")
 	}
 }
 
@@ -114,9 +72,7 @@ func TestEd25519VerifyCacheResetOnFull(t *testing.T) {
 // reads and writes to catch data races.
 func TestEd25519VerifyCacheConcurrentAccess(t *testing.T) {
 	// Reset the cache.
-	ed25519VerifyCache.Lock()
-	ed25519VerifyCache.values = make(map[ed25519VerifyCacheKey]bool)
-	ed25519VerifyCache.Unlock()
+	resetEd25519VerifyCache()
 
 	const goroutines = 16
 	var wg sync.WaitGroup
