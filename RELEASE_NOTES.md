@@ -1,5 +1,23 @@
 # Release Notes
 
+## v0.1.16 - security hardening and CEK/data performance improvements
+
+- Date: 2026-06-22
+- Version: v0.1.16
+
+Summary: This release strengthens input handling and dependency protection, improves CEK and data path throughput, tightens decoding and parsing validation, and refreshes release maintenance updates across the library.
+
+### Security
+
+* Strengthened malformed input handling and runtime safeguards to address security audit findings and improve protection during evaluation and decoding.
+* Updated `golang.org/x/crypto` to `v0.53.0` to incorporate the latest upstream security hardening.
+
+### Performance
+
+* Accelerated `ed25519` verification cache access by sharding cache locks, which reduces contention during concurrent verification workloads.
+* Streamlined `PlutusData` JSON decoding into a single pass to reduce decoding overhead and improve throughput.
+* Optimized `dropList` evaluation with faster paths for common data list and data map values, which reduces work in a frequent CEK execution path.
+
 ## v0.1.15 - 32-bit target support
 
 - Date: 2026-06-08
