@@ -9,7 +9,7 @@ for a full node. The other stuff like Typed Plutus Core and Plutus IR is for Pli
 
 - Complete Plutus Support: Implements Untyped Plutus Core (UPLC) evaluation
 - Multi-Version Support: Compatible with Plutus V1, V2, V3, and initial Plutus V4 support
-- Cost Model Integration: Automatic cost model selection based on Plutus version (Plutus V4 cost models are placeholders)
+- Cost Model Integration: Automatic cost model selection based on Plutus version (the Plutus V4 cost model is provisional; only `multiIndexArray` still uses a placeholder cost)
 - High Performance: Optimized CEK machine implementation in pure Go
 - Cryptographic Operations: Full BLS12-381 support using gnark-crypto
 - Comprehensive Testing: 49.9% test coverage with fuzz testing and property-based testing
