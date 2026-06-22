@@ -5,25 +5,25 @@
 - Date: 2026-06-22
 - Version: v0.1.16
 
-Summary: This release strengthens input handling and dependency protection, improves CEK and data path throughput, tightens decoding and parsing validation, and refreshes release maintenance updates across the library.
+Summary: This release strengthens input handling and dependency protection, improves evaluation and data processing speed, tightens decoding and parsing validation, and refreshes maintenance updates across the library.
 
 ### Security
 
-* Strengthened malformed input handling and runtime safeguards to address security audit findings and improve protection during evaluation and decoding.
+* Strengthened malformed input handling and runtime safeguards to improve protection during evaluation and decoding.
 * Updated `golang.org/x/crypto` to `v0.53.0` to incorporate the latest upstream security hardening.
 
 ### Performance
 
-* Accelerated `ed25519` verification cache access by sharding cache locks, which reduces contention during concurrent verification workloads.
+* Accelerated signature verification cache access to reduce contention during concurrent verification workloads.
 * Streamlined `PlutusData` JSON decoding into a single pass to reduce decoding overhead and improve throughput.
-* Optimized `dropList` evaluation with faster paths for common data list and data map values, which reduces work in a frequent CEK execution path.
+* Optimized common list drop evaluation paths so repeated data heavy workloads complete with less processing overhead.
 
 ### Bug Fixes
 
-* Stabilized cache reuse by resetting full `ed25519` and dynamic integer caches before stale entries can degrade repeated evaluation behavior.
+* Stabilized cache reuse by resetting full verification and integer caches before stale entries can degrade repeated evaluation behavior.
 * Limited parser application width to the configured depth guard so hostile inputs cannot expand parsing work beyond expected bounds.
 * Hardened term decoding by rejecting trailing bytes and validating the version before term decoding begins, which improves failure handling for malformed inputs.
-* Standardized builtin argument validation failures as typed `BuiltinError` results so error handling stays more consistent.
+* Standardized builtin argument validation failures so error handling stays more consistent across invalid inputs.
 * Corrected string escape decoding so Unicode escape sequences now resolve to the intended characters.
 * Resolved an unhandled term type path that could otherwise panic during syntax decoding.
 
