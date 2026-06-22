@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/sha3"
+	"encoding/binary"
 	"fmt"
 	"math"
 	"math/big"
@@ -36,6 +37,8 @@ var (
 const (
 	ed25519VerifyCacheLimit  = 4096
 	ed25519VerifyMaxCacheMsg = 64
+	ed25519VerifyCacheShards = 64
+	ed25519VerifyShardLimit  = ed25519VerifyCacheLimit / ed25519VerifyCacheShards
 )
 
 type ed25519VerifyCacheKey struct {
@@ -45,11 +48,73 @@ type ed25519VerifyCacheKey struct {
 	msgLen    uint8
 }
 
-var ed25519VerifyCache = struct {
-	sync.RWMutex
+type ed25519VerifyCacheShard struct {
+	sync.Mutex
 	values map[ed25519VerifyCacheKey]bool
-}{
-	values: make(map[ed25519VerifyCacheKey]bool),
+}
+
+type ed25519VerifyCacheStore struct {
+	shards [ed25519VerifyCacheShards]ed25519VerifyCacheShard
+}
+
+var ed25519VerifyCache = newEd25519VerifyCacheStore()
+
+func newEd25519VerifyCacheStore() *ed25519VerifyCacheStore {
+	cache := &ed25519VerifyCacheStore{}
+	for i := range cache.shards {
+		cache.shards[i].values = make(map[ed25519VerifyCacheKey]bool, ed25519VerifyShardLimit)
+	}
+	return cache
+}
+
+func newEd25519VerifyCacheKey(
+	publicKey []byte,
+	message []byte,
+	signature []byte,
+) ed25519VerifyCacheKey {
+	var key ed25519VerifyCacheKey
+	copy(key.publicKey[:], publicKey)
+	copy(key.signature[:], signature)
+	copy(key.message[:], message)
+	key.msgLen = uint8(len(message))
+	return key
+}
+
+func (c *ed25519VerifyCacheStore) get(key *ed25519VerifyCacheKey) (bool, bool) {
+	shard := c.shard(key)
+	shard.Lock()
+	value, ok := shard.values[*key]
+	shard.Unlock()
+	return value, ok
+}
+
+func (c *ed25519VerifyCacheStore) store(key *ed25519VerifyCacheKey, value bool) {
+	shard := c.shard(key)
+	shard.Lock()
+	if _, ok := shard.values[*key]; !ok && len(shard.values) >= ed25519VerifyShardLimit {
+		// Reset-on-full: clear the shard rather than permanently refusing new
+		// admissions once it reaches capacity. This mirrors the cache-wide
+		// reset-on-full behavior introduced in #327, applied per shard.
+		shard.values = make(map[ed25519VerifyCacheKey]bool, ed25519VerifyShardLimit)
+	}
+	shard.values[*key] = value
+	shard.Unlock()
+}
+
+func (c *ed25519VerifyCacheStore) shard(key *ed25519VerifyCacheKey) *ed25519VerifyCacheShard {
+	hash := binary.LittleEndian.Uint64(key.publicKey[:8])
+	hash ^= bits.RotateLeft64(binary.LittleEndian.Uint64(key.signature[:8]), 21)
+	hash ^= bits.RotateLeft64(
+		binary.LittleEndian.Uint64(key.signature[ed25519.SignatureSize-8:]),
+		42,
+	)
+	if key.msgLen > 0 {
+		lastMsgByte := key.message[int(key.msgLen)-1]
+		hash ^= uint64(key.message[0]) << 8
+		hash ^= uint64(lastMsgByte) << 16
+	}
+	hash ^= uint64(key.msgLen) * 0x9e3779b97f4a7c15
+	return &c.shards[hash&(ed25519VerifyCacheShards-1)]
 }
 
 func absUint64(v int64) uint64 {
@@ -1247,25 +1312,13 @@ func verifyEd25519Signature[T syn.Eval](
 
 	var res bool
 	if len(message) <= ed25519VerifyMaxCacheMsg {
-		var key ed25519VerifyCacheKey
-		copy(key.publicKey[:], publicKey)
-		copy(key.signature[:], signature)
-		copy(key.message[:], message)
-		key.msgLen = uint8(len(message))
-
-		ed25519VerifyCache.RLock()
-		cached, ok := ed25519VerifyCache.values[key]
-		ed25519VerifyCache.RUnlock()
+		key := newEd25519VerifyCacheKey(publicKey, message, signature)
+		cached, ok := ed25519VerifyCache.get(&key)
 		if ok {
 			res = cached
 		} else {
 			res = ed25519.Verify(publicKey, message, signature)
-			ed25519VerifyCache.Lock()
-			if len(ed25519VerifyCache.values) >= ed25519VerifyCacheLimit {
-				ed25519VerifyCache.values = make(map[ed25519VerifyCacheKey]bool)
-			}
-			ed25519VerifyCache.values[key] = res
-			ed25519VerifyCache.Unlock()
+			ed25519VerifyCache.store(&key, res)
 		}
 	} else {
 		res = ed25519.Verify(publicKey, message, signature)

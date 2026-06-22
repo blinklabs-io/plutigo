@@ -1,8 +1,10 @@
 package cek
 
 import (
+	"crypto/ed25519"
 	"fmt"
 	"math/big"
+	"sync/atomic"
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -166,6 +168,42 @@ func BenchmarkBuiltinIntegerOps(b *testing.B) {
 	}
 }
 
+func BenchmarkEd25519VerifyCacheHitParallel(b *testing.B) {
+	keys := buildBenchmarkEd25519VerifyCacheKeys(b, 1024)
+
+	previousCache := ed25519VerifyCache
+	ed25519VerifyCache = newEd25519VerifyCacheStore()
+	b.Cleanup(func() {
+		ed25519VerifyCache = previousCache
+	})
+
+	for i := range keys {
+		ed25519VerifyCache.store(&keys[i], true)
+	}
+
+	var misses uint64
+	var nextWorker uint64
+	mask := len(keys) - 1
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		index := int(atomic.AddUint64(&nextWorker, 1)) * 17
+		for pb.Next() {
+			value, ok := ed25519VerifyCache.get(&keys[index&mask])
+			if !ok || !value {
+				atomic.AddUint64(&misses, 1)
+			}
+			index++
+		}
+	})
+
+	if misses := atomic.LoadUint64(&misses); misses != 0 {
+		b.Fatalf("ed25519VerifyCache misses = %d", misses)
+	}
+}
+
 func buildBenchmarkEnv(depth int) *Env[syn.DeBruijn] {
 	var env *Env[syn.DeBruijn]
 
@@ -179,6 +217,30 @@ func buildBenchmarkEnv(depth int) *Env[syn.DeBruijn] {
 	}
 
 	return env
+}
+
+func buildBenchmarkEd25519VerifyCacheKeys(
+	b *testing.B,
+	count int,
+) []ed25519VerifyCacheKey {
+	b.Helper()
+
+	var seed [ed25519.SeedSize]byte
+	for i := range seed {
+		seed[i] = byte(i + 1)
+	}
+
+	privateKey := ed25519.NewKeyFromSeed(seed[:])
+	publicKey := privateKey.Public().(ed25519.PublicKey)
+	keys := make([]ed25519VerifyCacheKey, count)
+
+	for i := range keys {
+		message := []byte(fmt.Sprintf("cache message %04d", i))
+		signature := ed25519.Sign(privateKey, message)
+		keys[i] = newEd25519VerifyCacheKey(publicKey, message, signature)
+	}
+
+	return keys
 }
 
 func benchmarkIntValue(v int64) *Constant {
