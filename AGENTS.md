@@ -53,7 +53,7 @@ The CEK machine that executes UPLC programs.
 
 **Standard evaluation flow:**
 ```go
-program, _ := syn.Parse[syn.Name](input)
+program, _ := syn.Parse(input)
 dbProgram, _ := syn.NameToDeBruijn(program)
 machine := cek.NewMachine[syn.DeBruijn](dbProgram.Version, 0, nil)
 result, _ := machine.Run(dbProgram.Term)

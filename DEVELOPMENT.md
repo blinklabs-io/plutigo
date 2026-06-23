@@ -401,7 +401,7 @@ import (
 )
 
 // Parse UPLC text
-program, err := syn.Parse[syn.Name](uplcText)
+program, err := syn.Parse(uplcText)
 if err != nil {
     return err
 }
