@@ -5,7 +5,7 @@
 - Date: 2026-07-14
 - Version: v0.1.17
 
-Summary: This release improves published guidance around parsing and Plutus V4 cost model status, refreshes key dependencies, updates workflow maintenance, and keeps the published release history complete.
+Summary: This release clarifies published parsing and Plutus V4 cost model guidance, refreshes key dependencies, updates project automation, and keeps the published release history complete.
 
 ### Documentation
 
@@ -15,7 +15,7 @@ Summary: This release improves published guidance around parsing and Plutus V4 c
 ### Security
 
 * Strengthened cryptographic input validation by updating `github.com/cloudflare/circl` to `v1.6.4`, which rejects more invalid signatures, OPRF inputs, and ciphertext values.
-* Updated `github.com/ethereum/go-ethereum` to `v1.17.4` so builds and runtime paths inherit the latest upstream maintenance fixes and reliability improvements.
+* Updated `github.com/ethereum/go-ethereum` to `v1.17.4` so the library picks up the latest upstream maintenance fixes and reliability improvements.
 
 ### Additional Changes
 
