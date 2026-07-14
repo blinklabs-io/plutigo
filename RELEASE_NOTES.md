@@ -1,5 +1,12 @@
 # Release Notes
 
+## v0.1.17 - dependency hardening and documentation clarity
+
+- Date: 2026-07-14
+- Version: v0.1.17
+
+Summary: This release improves published guidance around parsing and Plutus V4 cost model status, refreshes key dependencies, updates workflow maintenance, and keeps the published release history complete.
+
 ## v0.1.16 - security hardening and CEK/data performance improvements
 
 - Date: 2026-06-22
