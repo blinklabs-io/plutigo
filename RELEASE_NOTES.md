@@ -7,6 +7,11 @@
 
 Summary: This release improves published guidance around parsing and Plutus V4 cost model status, refreshes key dependencies, updates workflow maintenance, and keeps the published release history complete.
 
+### Documentation
+
+* Clarified parsing guidance so the published examples now show the current `syn.Parse(...)` usage and explain that Plutus V4 cost model support remains provisional, with only `multiIndexArray` still using a placeholder cost.
+* Recorded the `v0.1.16` release entry in `RELEASE_NOTES.md` so the published release history remains contiguous.
+
 ## v0.1.16 - security hardening and CEK/data performance improvements
 
 - Date: 2026-06-22
