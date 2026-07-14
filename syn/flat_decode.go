@@ -137,7 +137,7 @@ func decodeDeBruijnProgram(
 		return nil, errors.New("version numbers too large")
 	}
 
-	terms, err := decodeTermDeBruijnWithArena(d, arena, consts)
+	terms, err := decodeTermDeBruijnWithArena(d, arena, consts, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -166,11 +166,15 @@ func decodeTermDeBruijnWithArena(
 	d *decoder,
 	arena *termArena[DeBruijn],
 	consts *constantArena,
+	depth int,
 ) (Term[DeBruijn], error) {
-	if err := d.enter(); err != nil {
-		return nil, err
+	// Depth is threaded as a parameter rather than tracked via
+	// d.enter()/defer d.leave(): a per-node defer in this hot recursive
+	// decoder is not open-coded and routes every return through the Go
+	// runtime's panic/defer machinery, which measured ~39% of decode time.
+	if depth >= maxFlatDecodeDepth {
+		return nil, errors.New("term nesting too deep")
 	}
-	defer d.leave()
 
 	tag, err := d.bits4()
 	if err != nil {
@@ -185,23 +189,23 @@ func decodeTermDeBruijnWithArena(
 		}
 		return arena.allocVar(name), nil
 	case DelayTag:
-		t, err := decodeTermDeBruijnWithArena(d, arena, consts)
+		t, err := decodeTermDeBruijnWithArena(d, arena, consts, depth+1)
 		if err != nil {
 			return nil, err
 		}
 		return arena.allocDelay(t), nil
 	case LambdaTag:
-		t, err := decodeTermDeBruijnWithArena(d, arena, consts)
+		t, err := decodeTermDeBruijnWithArena(d, arena, consts, depth+1)
 		if err != nil {
 			return nil, err
 		}
 		return arena.allocLambda(DeBruijn(0), t), nil
 	case ApplyTag:
-		function, err := decodeTermDeBruijnWithArena(d, arena, consts)
+		function, err := decodeTermDeBruijnWithArena(d, arena, consts, depth+1)
 		if err != nil {
 			return nil, err
 		}
-		argument, err := decodeTermDeBruijnWithArena(d, arena, consts)
+		argument, err := decodeTermDeBruijnWithArena(d, arena, consts, depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -213,7 +217,7 @@ func decodeTermDeBruijnWithArena(
 		}
 		return arena.allocConstant(constant), nil
 	case ForceTag:
-		t, err := decodeTermDeBruijnWithArena(d, arena, consts)
+		t, err := decodeTermDeBruijnWithArena(d, arena, consts, depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -235,17 +239,17 @@ func decodeTermDeBruijnWithArena(
 		if err != nil {
 			return nil, err
 		}
-		fields, err := decodeTermListDeBruijnWithArena(d, arena, consts)
+		fields, err := decodeTermListDeBruijnWithArena(d, arena, consts, depth+1)
 		if err != nil {
 			return nil, err
 		}
 		return arena.allocConstr(constrTag, fields), nil
 	case CaseTag:
-		constr, err := decodeTermDeBruijnWithArena(d, arena, consts)
+		constr, err := decodeTermDeBruijnWithArena(d, arena, consts, depth+1)
 		if err != nil {
 			return nil, err
 		}
-		branches, err := decodeTermListDeBruijnWithArena(d, arena, consts)
+		branches, err := decodeTermListDeBruijnWithArena(d, arena, consts, depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -391,6 +395,7 @@ func decodeTermListDeBruijnWithArena(
 	d *decoder,
 	arena *termArena[DeBruijn],
 	consts *constantArena,
+	depth int,
 ) ([]Term[DeBruijn], error) {
 	var result []Term[DeBruijn]
 
@@ -408,7 +413,7 @@ func decodeTermListDeBruijnWithArena(
 		if result == nil {
 			result = arena.allocTermList(4)[:0]
 		}
-		item, err := decodeTermDeBruijnWithArena(d, arena, consts)
+		item, err := decodeTermDeBruijnWithArena(d, arena, consts, depth)
 		if err != nil {
 			return nil, err
 		}
