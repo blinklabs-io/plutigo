@@ -9,17 +9,17 @@ Summary: This release improves published guidance around parsing and Plutus V4 c
 
 ### Documentation
 
-* Clarified parsing guidance so the published examples now show the current `syn.Parse(...)` usage and explain that Plutus V4 cost model support remains provisional, with only `multiIndexArray` still using a placeholder cost.
-* Recorded the `v0.1.16` release entry in `RELEASE_NOTES.md` so the published release history remains contiguous.
+* Clarified parsing guidance so the published examples match the current API and the Plutus V4 cost model notes explain that only `multiIndexArray` still uses a placeholder cost.
+* Recorded the `v0.1.16` release summary so the published version history remains continuous.
 
 ### Security
 
-* Strengthened dependency validation by updating `github.com/cloudflare/circl` to `v1.6.4`, which brings upstream hardening for signatures, OPRF processing, and ciphertext checks.
+* Strengthened cryptographic input validation by updating `github.com/cloudflare/circl` to `v1.6.4`, which rejects more invalid signatures, OPRF inputs, and ciphertext values.
 * Updated `github.com/ethereum/go-ethereum` to `v1.17.4` so builds and runtime paths inherit the latest upstream maintenance fixes and reliability improvements.
 
 ### Additional Changes
 
-* Refreshed workflow provisioning by updating `actions/setup-go` to `v6.5.0` across benchmark, test, lint, and nil analysis automation.
+* Refreshed project automation by updating `actions/setup-go` to `v6.5.0` across benchmark, test, lint, and nil analysis workflows.
 
 ## v0.1.16 - security hardening and CEK/data performance improvements
 
