@@ -1,5 +1,26 @@
 # Release Notes
 
+## v0.1.17 - dependency hardening and documentation clarity
+
+- Date: 2026-07-14
+- Version: v0.1.17
+
+Summary: This release clarifies published parsing and Plutus V4 cost model guidance, refreshes key dependencies, updates project automation, and keeps the published release history complete.
+
+### Documentation
+
+* Clarified parsing guidance so the published examples match the current API and the Plutus V4 cost model notes explain that only `multiIndexArray` still uses a placeholder cost.
+* Recorded the `v0.1.16` release summary so the published version history remains continuous.
+
+### Security
+
+* Strengthened cryptographic input validation by updating `github.com/cloudflare/circl` to `v1.6.4`, which rejects more invalid signatures, OPRF inputs, and ciphertext values.
+* Updated `github.com/ethereum/go-ethereum` to `v1.17.4` so the library picks up the latest upstream maintenance fixes and reliability improvements.
+
+### Additional Changes
+
+* Refreshed project automation by updating `actions/setup-go` to `v6.5.0` across benchmark, test, lint, and nil analysis workflows.
+
 ## v0.1.16 - security hardening and CEK/data performance improvements
 
 - Date: 2026-06-22
