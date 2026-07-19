@@ -4086,7 +4086,6 @@ func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 // ============================================================================
 // LIST EXTENSION OPERATIONS
 // Functions: dropList
-// Note: caseList and caseData (IDs 88, 89) were removed from Plutus.
 // ============================================================================
 
 // dropListStart charges the dropList budget for a list with the given
@@ -4221,7 +4220,7 @@ func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 // ============================================================================
 // ARRAY OPERATIONS (V4)
-// Functions: lengthOfArray, listToArray, indexArray, multiIndexArray
+// Functions: lengthOfArray, listToArray, indexArray
 // ============================================================================
 
 func lengthOfArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -4320,79 +4319,6 @@ func indexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	return &Constant{lst.List[i]}, nil
-}
-
-func multiIndexArray[T syn.Eval](
-	m *Machine[T],
-	b *Builtin[T],
-) (Value[T], error) {
-	b.Args.Extract(&m.argHolder, b.ArgCount)
-	// Args: (con (list integer) indices) (con (array t) arr)
-
-	indicesList, err := unwrapList[T](&syn.TInteger{}, m.argHolder[0])
-	if err != nil {
-		return nil, err
-	}
-
-	arr, err := unwrapList[T](nil, m.argHolder[1])
-	if err != nil {
-		return nil, err
-	}
-
-	// Spend budget: linear in the length of the index list
-	indexListLen := len(indicesList.List)
-	err = m.CostTwo(
-		&b.Func,
-		func() ExMem { return ExMem(indexListLen) },
-		func() ExMem { return listExMem(arr.List)() },
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]syn.IConstant, 0, indexListLen)
-
-	for _, idxVal := range indicesList.List {
-		idxInt := idxVal.(*syn.Integer)
-		idx := idxInt.Inner
-
-		if idx.Sign() < 0 {
-			return nil, &BuiltinError{
-				Code:    ErrCodeOutOfBounds,
-				Builtin: "multiIndexArray",
-				Message: "negative index",
-			}
-		}
-
-		if !idx.IsInt64() {
-			return nil, &BuiltinError{
-				Code:    ErrCodeOverflow,
-				Builtin: "multiIndexArray",
-				Message: "index too large",
-			}
-		}
-
-		idx64 := idx.Int64()
-		if idx64 > int64(math.MaxInt) {
-			return nil, &BuiltinError{
-				Code:    ErrCodeOutOfBounds,
-				Builtin: "multiIndexArray",
-				Message: "index out of range",
-			}
-		}
-		i := int(idx64)
-		if i >= len(arr.List) {
-			return nil, &BuiltinError{
-				Code:    ErrCodeOutOfBounds,
-				Builtin: "multiIndexArray",
-				Message: fmt.Sprintf("index %d out of bounds for array of length %d", i, len(arr.List)),
-			}
-		}
-
-		result = append(result, arr.List[i])
-	}
-
-	return &Constant{&syn.ProtoList{LTyp: arr.LTyp, List: result}}, nil
 }
 
 // ============================================================================

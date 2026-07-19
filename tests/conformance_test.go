@@ -30,7 +30,6 @@ func isV4BuiltinTest(path string) bool {
 		"lengthOfArray",
 		"listToArray",
 		"indexArray",
-		"multiIndexArray",
 		"bls12_381_G1_multiScalarMul",
 		"bls12_381_G2_multiScalarMul",
 	}

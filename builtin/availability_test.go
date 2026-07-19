@@ -133,16 +133,9 @@ func TestBuiltinAvailabilityWithProto(t *testing.T) {
 		{"dropList in V3 at PV11", DropList, PlutusV3, 11, true},
 		{"dropList in V4 at PV11", DropList, PlutusV4, 11, true},
 
-		// PV11: MultiIndexArray remains V4-only
-		{"multiIndexArray in V1 at PV11", MultiIndexArray, PlutusV1, 11, false},
-		{"multiIndexArray in V2 at PV11", MultiIndexArray, PlutusV2, 11, false},
-		{"multiIndexArray in V3 at PV11", MultiIndexArray, PlutusV3, 11, false},
-		{"multiIndexArray in V4 at PV11", MultiIndexArray, PlutusV4, 11, true},
-
 		// PV12+: same as PV11
 		{"V3 builtin in V1 at PV12", Bls12_381_G1_Add, PlutusV1, 12, true},
 		{"dropList in V1 at PV12", DropList, PlutusV1, 12, true},
-		{"multiIndexArray in V1 at PV12", MultiIndexArray, PlutusV1, 12, false},
 	}
 
 	for _, tt := range tests {
