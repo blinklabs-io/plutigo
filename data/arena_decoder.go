@@ -416,7 +416,7 @@ func (d *Decoder) decodeMapNextEntered(data []byte, state *decodeState) (*Map, [
 
 	var (
 		smallPairs [4][2]PlutusData
-		pairs      = make([][2]PlutusData, 0)
+		pairs      [][2]PlutusData
 		pairLen    int
 	)
 	if !useIndef {
