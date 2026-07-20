@@ -71,7 +71,7 @@ func TestDefaultFunctionForceCount(t *testing.T) {
 		{IfThenElse, 1},
 		{ChooseUnit, 1},
 		{Trace, 1},
-		{MultiIndexArray, 1},
+		{LengthOfArray, 1},
 		{FstPair, 2},
 		{SndPair, 2},
 	}
@@ -98,7 +98,7 @@ func TestDefaultFunctionArity(t *testing.T) {
 		{Sha2_256, 1},
 		{IfThenElse, 3},
 		{ChooseUnit, 2},
-		{MultiIndexArray, 2},
+		{ScaleValue, 2},
 		{FstPair, 1},
 		{VerifyEd25519Signature, 3},
 	}
@@ -113,6 +113,42 @@ func TestDefaultFunctionArity(t *testing.T) {
 				result,
 			)
 		}
+	}
+}
+
+func TestDefaultFunctionV4TagsMatchPlutusSpec(t *testing.T) {
+	tests := []struct {
+		fn  DefaultFunction
+		tag byte
+	}{
+		{DropList, 88},
+		{LengthOfArray, 89},
+		{ListToArray, 90},
+		{IndexArray, 91},
+		{Bls12_381_G1_MultiScalarMul, 92},
+		{Bls12_381_G2_MultiScalarMul, 93},
+		{InsertCoin, 94},
+		{LookupCoin, 95},
+		{UnionValue, 96},
+		{ValueContains, 97},
+		{ValueData, 98},
+		{UnValueData, 99},
+		{ScaleValue, 100},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.fn.String(), func(t *testing.T) {
+			if byte(tt.fn) != tt.tag {
+				t.Fatalf("%s tag = %d, want %d", tt.fn, tt.fn, tt.tag)
+			}
+			got, err := FromByte(tt.tag)
+			if err != nil {
+				t.Fatalf("FromByte(%d): %v", tt.tag, err)
+			}
+			if got != tt.fn {
+				t.Fatalf("FromByte(%d) = %s, want %s", tt.tag, got, tt.fn)
+			}
+		})
 	}
 }
 

@@ -1144,11 +1144,6 @@ var DefaultBuiltinCosts = BuiltinCosts{
 			},
 		},
 	},
-	// V4 model: placeholder for multiIndexArray
-	builtin.MultiIndexArray: &CostingFunc[Arguments]{
-		mem: &ConstantCost{1},
-		cpu: &ConstantCost{1000000},
-	},
 	// Value/Data conversion builtins
 	builtin.ValueData: &CostingFunc[Arguments]{
 		mem: &LinearCost{
@@ -1156,18 +1151,18 @@ var DefaultBuiltinCosts = BuiltinCosts{
 			slope:     22,
 		},
 		cpu: &LinearCost{
-			intercept: 199604,
-			slope:     39211,
+			intercept: 1000,
+			slope:     38159,
 		},
 	},
 	builtin.UnValueData: &CostingFunc[Arguments]{
 		mem: &LinearCost{
-			intercept: 11,
-			slope:     1,
+			intercept: 1,
+			slope:     11,
 		},
 		cpu: &QuadraticInXModel{QuadraticFunction{
 			coeff0: 1000,
-			coeff1: 204904,
+			coeff1: 95933,
 			coeff2: 1,
 		}},
 	},

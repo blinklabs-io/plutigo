@@ -488,6 +488,37 @@ func TestDecoderReuseMatchesDecode(t *testing.T) {
 	})
 }
 
+func TestDecoderIndefiniteSmallMapUsesSinglePairArenaAllocation(t *testing.T) {
+	decoder := NewDecoder()
+	encoded := []byte{
+		0xbf,
+		0x01, 0x02,
+		0x03, 0x04,
+		0x05, 0x06,
+		0x07, 0x08,
+		0xff,
+	}
+
+	decoded, err := decoder.Decode(encoded)
+	if err != nil {
+		t.Fatalf("decoder.Decode() failed: %v", err)
+	}
+	decodedMap, ok := decoded.(*Map)
+	if !ok {
+		t.Fatalf("decoder.Decode() returned %T, want *Map", decoded)
+	}
+	if len(decodedMap.Pairs) != 4 {
+		t.Fatalf("decoded map has %d pairs, want 4", len(decodedMap.Pairs))
+	}
+	if decoder.pairs.pos != len(decodedMap.Pairs) {
+		t.Fatalf(
+			"pair arena used %d slots for %d pairs; small-map growth should allocate once",
+			decoder.pairs.pos,
+			len(decodedMap.Pairs),
+		)
+	}
+}
+
 func TestDecodeRejectsExcessiveNesting(t *testing.T) {
 	encoded := nestedListCBOR(MaxDecodeNestingDepth + 1)
 

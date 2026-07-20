@@ -10,6 +10,33 @@ import (
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
+func TestV4ValueCostModelsMatchPlutusSpec(t *testing.T) {
+	valueData := DefaultBuiltinCosts[builtin.ValueData]
+	valueDataCPU := valueData.cpu.(*LinearCost)
+	valueDataMem := valueData.mem.(*LinearCost)
+	if valueDataCPU.intercept != 1000 || valueDataCPU.slope != 38159 {
+		t.Fatalf("valueData CPU model = (%d, %d), want (1000, 38159)", valueDataCPU.intercept, valueDataCPU.slope)
+	}
+	if valueDataMem.intercept != 2 || valueDataMem.slope != 22 {
+		t.Fatalf("valueData memory model = (%d, %d), want (2, 22)", valueDataMem.intercept, valueDataMem.slope)
+	}
+
+	unValueData := DefaultBuiltinCosts[builtin.UnValueData]
+	unValueDataCPU := unValueData.cpu.(*QuadraticInXModel)
+	unValueDataMem := unValueData.mem.(*LinearCost)
+	if unValueDataCPU.coeff0 != 1000 || unValueDataCPU.coeff1 != 95933 || unValueDataCPU.coeff2 != 1 {
+		t.Fatalf(
+			"unValueData CPU model = (%d, %d, %d), want (1000, 95933, 1)",
+			unValueDataCPU.coeff0,
+			unValueDataCPU.coeff1,
+			unValueDataCPU.coeff2,
+		)
+	}
+	if unValueDataMem.intercept != 1 || unValueDataMem.slope != 11 {
+		t.Fatalf("unValueData memory model = (%d, %d), want (1, 11)", unValueDataMem.intercept, unValueDataMem.slope)
+	}
+}
+
 func TestMachineVersion(t *testing.T) {
 	version := lang.LanguageVersionV2
 	machine := NewMachine[syn.DeBruijn](version, 100, nil)

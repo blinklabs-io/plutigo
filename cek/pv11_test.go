@@ -88,21 +88,6 @@ func TestPV11BuiltinAvailabilityInMachine(t *testing.T) {
 			builtin.DropList,
 			false,
 		},
-		// PV11: MultiIndexArray still V4-only
-		{
-			"MultiIndexArray in V1 at PV11",
-			lang.LanguageVersionV1,
-			11,
-			builtin.MultiIndexArray,
-			false,
-		},
-		{
-			"MultiIndexArray in V4 at PV11",
-			lang.LanguageVersionV4,
-			11,
-			builtin.MultiIndexArray,
-			true,
-		},
 	}
 
 	for _, tt := range tests {

@@ -142,9 +142,6 @@ var builtinIntroducedIn = [TotalBuiltinCount]PlutusVersion{
 	ScaleValue:    PlutusV4,
 	UnionValue:    PlutusV4,
 	ValueContains: PlutusV4,
-	// Multi-index array
-	MultiIndexArray: PlutusV4,
-
 	// Value/Data conversion builtins
 	ValueData:   PlutusV4,
 	UnValueData: PlutusV4,
@@ -171,9 +168,7 @@ func (f DefaultFunction) IsAvailableIn(version PlutusVersion) bool {
 // Plutus language version and Cardano protocol major version.
 //
 // At protocol version >= 11 (van Rossem hard fork), all builtins become
-// available in all language versions, with two exceptions:
-//   - MultiIndexArray remains V4-only (not part of PV11 cost model params)
-//   - Builtins marked PlutusVUnreleased that are NOT activated at PV11 remain unavailable
+// available in all language versions. DropList is also activated at PV11.
 //
 // For protocol versions < 11, the original version-based gating applies.
 func (f DefaultFunction) IsAvailableInWithProto(
@@ -182,10 +177,6 @@ func (f DefaultFunction) IsAvailableInWithProto(
 ) bool {
 	if protoMajor >= VanRossemProtoVersion {
 		introduced := builtinIntroducedIn[f]
-		// MultiIndexArray is V4-only, not part of PV11
-		if f == MultiIndexArray {
-			return introduced <= version
-		}
 		// DropList becomes available at PV11 in all versions
 		if introduced == PlutusVUnreleased {
 			return f == DropList

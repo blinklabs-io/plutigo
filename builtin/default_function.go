@@ -122,32 +122,27 @@ const (
 
 	// Batch 6
 	ExpModInteger DefaultFunction = 87
-	// Note: IDs 88 and 89 were previously used by caseList and caseData
-	// which were removed from Plutus. These IDs are reserved.
-	DropList DefaultFunction = 90
+	DropList      DefaultFunction = 88
 
 	// Arrays
-	LengthOfArray DefaultFunction = 91
-	ListToArray   DefaultFunction = 92
-	IndexArray    DefaultFunction = 93
+	LengthOfArray DefaultFunction = 89
+	ListToArray   DefaultFunction = 90
+	IndexArray    DefaultFunction = 91
 
 	// Multi-scalar multiplication (G1/G2)
-	Bls12_381_G1_MultiScalarMul DefaultFunction = 94
-	Bls12_381_G2_MultiScalarMul DefaultFunction = 95
+	Bls12_381_G1_MultiScalarMul DefaultFunction = 92
+	Bls12_381_G2_MultiScalarMul DefaultFunction = 93
 
 	// Value/coin builtins
-	InsertCoin    DefaultFunction = 96
-	LookupCoin    DefaultFunction = 97
-	ScaleValue    DefaultFunction = 98
-	UnionValue    DefaultFunction = 99
-	ValueContains DefaultFunction = 100
-
-	// Multi-index array
-	MultiIndexArray DefaultFunction = 101
+	InsertCoin    DefaultFunction = 94
+	LookupCoin    DefaultFunction = 95
+	UnionValue    DefaultFunction = 96
+	ValueContains DefaultFunction = 97
 
 	// Value/Data conversion builtins
-	ValueData   DefaultFunction = 102
-	UnValueData DefaultFunction = 103
+	ValueData   DefaultFunction = 98
+	UnValueData DefaultFunction = 99
+	ScaleValue  DefaultFunction = 100
 )
 
 var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
@@ -274,16 +269,13 @@ var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
 	// Value/coin builtins
 	"insertCoin":    InsertCoin,
 	"lookupCoin":    LookupCoin,
-	"scaleValue":    ScaleValue,
 	"unionValue":    UnionValue,
 	"valueContains": ValueContains,
-
-	// Multi-index array
-	"multiIndexArray": MultiIndexArray,
 
 	// Value/Data conversion builtins
 	"valueData":   ValueData,
 	"unValueData": UnValueData,
+	"scaleValue":  ScaleValue,
 }
 
 var defaultFunctionForceCount = [TotalBuiltinCount]uint{
@@ -402,13 +394,12 @@ var defaultFunctionForceCount = [TotalBuiltinCount]uint{
 	Bls12_381_G2_MultiScalarMul: 0,
 	InsertCoin:                  0,
 	LookupCoin:                  0,
-	ScaleValue:                  0,
 	UnionValue:                  0,
 	ValueContains:               0,
-	MultiIndexArray:             1,
 	// Value/Data conversion
 	ValueData:   0,
 	UnValueData: 0,
+	ScaleValue:  0,
 }
 
 func (f DefaultFunction) ForceCount() uint {
@@ -531,13 +522,12 @@ var defaultFunctionArity = [TotalBuiltinCount]uint{
 	Bls12_381_G2_MultiScalarMul: 2,
 	InsertCoin:                  4,
 	LookupCoin:                  3,
-	ScaleValue:                  2,
 	UnionValue:                  2,
 	ValueContains:               2,
-	MultiIndexArray:             2,
 	// Value/Data conversion
 	ValueData:   1,
 	UnValueData: 1,
+	ScaleValue:  2,
 }
 
 func (f DefaultFunction) Arity() uint {
@@ -660,13 +650,12 @@ var defaultFunctionToString = [TotalBuiltinCount]string{
 	Bls12_381_G2_MultiScalarMul: "bls12_381_G2_multiScalarMul",
 	InsertCoin:                  "insertCoin",
 	LookupCoin:                  "lookupCoin",
-	ScaleValue:                  "scaleValue",
 	UnionValue:                  "unionValue",
 	ValueContains:               "valueContains",
-	MultiIndexArray:             "multiIndexArray",
 	// Value/Data conversion
 	ValueData:   "valueData",
 	UnValueData: "unValueData",
+	ScaleValue:  "scaleValue",
 }
 
 func (f DefaultFunction) String() string {
@@ -677,7 +666,7 @@ func (f DefaultFunction) String() string {
 const MinDefaultFunction = 0
 
 // MaxDefaultFunction is the largest DefaultFunction tag value
-const MaxDefaultFunction = 103
+const MaxDefaultFunction = 100
 
 // TotalBuiltinCount is the total number of builtin functions
 const TotalBuiltinCount = MaxDefaultFunction + 1

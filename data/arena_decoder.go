@@ -414,11 +414,6 @@ func (d *Decoder) decodeMapNextEntered(data []byte, state *decodeState) (*Map, [
 		return nil, nil, err
 	}
 
-	var (
-		smallPairs [4][2]PlutusData
-		pairs      [][2]PlutusData
-		pairLen    int
-	)
 	if !useIndef {
 		if pairCount > len(rest)/2 {
 			return nil, nil, fmt.Errorf("CBOR map claims %d pairs but only %d bytes remain", pairCount, len(rest))
@@ -426,38 +421,42 @@ func (d *Decoder) decodeMapNextEntered(data []byte, state *decodeState) (*Map, [
 		if err := state.checkAdditionalNodes(pairCount * 2); err != nil {
 			return nil, nil, err
 		}
-		pairs = d.pairs.alloc(pairCount)
-		pairLen = pairCount
+		pairs := d.pairs.alloc(pairCount)
+		for i := range pairCount {
+			pair, next, err := d.decodeMapPairNextEntered(rest, state)
+			if err != nil {
+				return nil, nil, err
+			}
+			pairs[i] = pair
+			rest = next
+		}
+
+		decoded := d.maps.alloc()
+		decoded.Pairs = pairs
+		decoded.useIndef = useIndefPtr(false)
+		return decoded, rest, nil
 	}
 
-	for i := 0; useIndef || i < pairCount; i++ {
-		if useIndef {
-			if len(rest) == 0 {
-				return nil, nil, errors.New("unterminated indefinite-length CBOR map")
-			}
-			if rest[0] == 0xff {
-				rest = rest[1:]
-				break
-			}
+	var (
+		smallPairs [4][2]PlutusData
+		pairs      [][2]PlutusData
+		pairLen    int
+	)
+	for {
+		if len(rest) == 0 {
+			return nil, nil, errors.New("unterminated indefinite-length CBOR map")
+		}
+		if rest[0] == 0xff {
+			rest = rest[1:]
+			break
 		}
 
-		tmpKey, next, err := d.decodeNextPlutusData(rest, state)
+		pair, next, err := d.decodeMapPairNextEntered(rest, state)
 		if err != nil {
 			return nil, nil, err
 		}
 		rest = next
 
-		tmpVal, next, err := d.decodeNextPlutusData(rest, state)
-		if err != nil {
-			return nil, nil, err
-		}
-		rest = next
-
-		pair := [2]PlutusData{tmpKey, tmpVal}
-		if !useIndef {
-			pairs[i] = pair
-			continue
-		}
 		if pairs != nil {
 			if pairLen == len(pairs) {
 				grown := d.pairs.alloc(max(pairLen*2, pairLen+1))
@@ -479,19 +478,32 @@ func (d *Decoder) decodeMapNextEntered(data []byte, state *decodeState) (*Map, [
 		pairLen++
 	}
 
-	if useIndef {
-		if pairs == nil {
-			pairs = d.pairs.alloc(pairLen)
-			copy(pairs, smallPairs[:pairLen])
-		} else {
-			pairs = pairs[:pairLen]
-		}
+	if pairs == nil {
+		pairs = d.pairs.alloc(pairLen)
+		copy(pairs, smallPairs[:pairLen])
+	} else {
+		pairs = pairs[:pairLen]
 	}
 
 	decoded := d.maps.alloc()
 	decoded.Pairs = pairs
-	decoded.useIndef = useIndefPtr(useIndef)
+	decoded.useIndef = useIndefPtr(true)
 	return decoded, rest, nil
+}
+
+func (d *Decoder) decodeMapPairNextEntered(
+	data []byte,
+	state *decodeState,
+) ([2]PlutusData, []byte, error) {
+	key, rest, err := d.decodeNextPlutusData(data, state)
+	if err != nil {
+		return [2]PlutusData{}, nil, err
+	}
+	value, rest, err := d.decodeNextPlutusData(rest, state)
+	if err != nil {
+		return [2]PlutusData{}, nil, err
+	}
+	return [2]PlutusData{key, value}, rest, nil
 }
 
 func (d *Decoder) decodeListNextEntered(data []byte, state *decodeState) (*List, []byte, error) {
