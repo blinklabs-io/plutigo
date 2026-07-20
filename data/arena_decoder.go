@@ -455,6 +455,9 @@ func (d *Decoder) decodeMapNextEntered(data []byte, state *decodeState) (*Map, [
 
 		pair := [2]PlutusData{tmpKey, tmpVal}
 		if !useIndef {
+			if pairs == nil {
+				return nil, nil, errors.New("definite-length CBOR map pair allocation returned nil")
+			}
 			pairs[i] = pair
 			continue
 		}
