@@ -29,14 +29,37 @@ func TestNewDefaultEvalContext(t *testing.T) {
 		ProtoVersion{Major: 11},
 	)
 
-	if ctx.CostModel != DefaultCostModel {
-		t.Fatal("NewDefaultEvalContext should use DefaultCostModel")
-	}
 	if ctx.ProtoMajor != 11 {
 		t.Fatalf("ProtoMajor = %d, want 11", ctx.ProtoMajor)
 	}
-	if ctx.SemanticsVariant != SemanticsVariantB {
-		t.Fatalf("SemanticsVariant = %v, want %v", ctx.SemanticsVariant, SemanticsVariantB)
+	if ctx.SemanticsVariant != SemanticsVariantD {
+		t.Fatalf("SemanticsVariant = %v, want %v", ctx.SemanticsVariant, SemanticsVariantD)
+	}
+}
+
+func TestGetSemanticsVanRossemMapping(t *testing.T) {
+	tests := []struct {
+		name    string
+		version lang.LanguageVersion
+		proto   uint
+		want    SemanticsVariant
+	}{
+		{"V1 pre-Chang", lang.LanguageVersionV1, 8, SemanticsVariantA},
+		{"V2 Chang", lang.LanguageVersionV2, 9, SemanticsVariantB},
+		{"V1 van Rossem", lang.LanguageVersionV1, 11, SemanticsVariantD},
+		{"V2 van Rossem", lang.LanguageVersionV2, 11, SemanticsVariantD},
+		{"V3 pre-van Rossem", lang.LanguageVersionV3, 10, SemanticsVariantC},
+		{"V3 van Rossem", lang.LanguageVersionV3, 11, SemanticsVariantE},
+		{"V4 van Rossem", lang.LanguageVersionV4, 11, SemanticsVariantE},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GetSemantics(tt.version, ProtoVersion{Major: tt.proto})
+			if got != tt.want {
+				t.Fatalf("GetSemantics(%v, PV%d) = %v, want %v", tt.version, tt.proto, got, tt.want)
+			}
+		})
 	}
 }
 

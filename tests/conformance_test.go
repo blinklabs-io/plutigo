@@ -240,8 +240,9 @@ func TestConformance(t *testing.T) {
 					// Parse program
 
 					program, err := syn.Parse(string(programText))
+					expectedResult := strings.TrimSpace(string(expectedText))
 					if err != nil {
-						if string(expectedText) == "parse error" {
+						if expectedResult == "parse error" {
 							return
 						}
 
@@ -256,7 +257,7 @@ func TestConformance(t *testing.T) {
 
 					dProgram, err := syn.NameToDeBruijn(program)
 					if err != nil {
-						if string(expectedText) == "evaluation failure" {
+						if expectedResult == "evaluation failure" {
 							return
 						}
 
@@ -284,13 +285,16 @@ func TestConformance(t *testing.T) {
 					machine := cek.NewMachine[syn.DeBruijn](
 						plutusVersion,
 						200,
-						nil,
+						cek.NewDefaultEvalContext(
+							plutusVersion,
+							cek.ProtoVersion{Major: 11},
+						),
 					)
 					machine.ExBudget = initialBudget
 
 					result, err := machine.Run(dProgram.Term)
 					if err != nil {
-						if string(expectedText) == "evaluation failure" {
+						if expectedResult == "evaluation failure" {
 							return
 						}
 

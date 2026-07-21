@@ -194,6 +194,15 @@ func stringExMem(s string) func() ExMem {
 	}
 }
 
+// textByteLengthExMem is the D/E semantics metric for Text-backed builtins.
+// The reference implementation stores UTF-8 text and charges one memory unit
+// per four complete bytes.
+func textByteLengthExMem(s string) func() ExMem {
+	return func() ExMem {
+		return ExMem(len(s) / 4)
+	}
+}
+
 func boolExMem(bool) func() ExMem {
 	return func() ExMem {
 		return ExMem(1)

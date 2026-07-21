@@ -10,9 +10,14 @@ const (
 	SemanticsVariantA SemanticsVariant = 1
 	SemanticsVariantB SemanticsVariant = 2
 	SemanticsVariantC SemanticsVariant = 3
+	SemanticsVariantD SemanticsVariant = 4
+	SemanticsVariantE SemanticsVariant = 5
 )
 
-const changProtoMajorVersion = 9
+const (
+	changProtoMajorVersion     = 9
+	vanRossemProtoMajorVersion = 11
+)
 
 type ProtoVersion struct {
 	Major uint
@@ -27,10 +32,15 @@ func GetSemantics(
 	case lang.LanguageVersionV1, lang.LanguageVersionV2:
 		if protoVersion.Major < changProtoMajorVersion {
 			return SemanticsVariantA
-		} else {
+		}
+		if protoVersion.Major < vanRossemProtoMajorVersion {
 			return SemanticsVariantB
 		}
+		return SemanticsVariantD
 	default:
+		if protoVersion.Major >= vanRossemProtoMajorVersion {
+			return SemanticsVariantE
+		}
 		return SemanticsVariantC
 	}
 }

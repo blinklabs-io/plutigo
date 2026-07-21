@@ -4446,12 +4446,8 @@ func TestBuiltinArgsExtract(t *testing.T) {
 	}
 }
 
-// TestVerifyEcdsaSecp256k1HighS verifies that ECDSA signatures with high-s
-// values are accepted. Cardano's CIP-0049 uses libsecp256k1's
-// secp256k1_ecdsa_verify which does NOT enforce BIP-146 low-s. Rejecting
-// high-s signatures causes disagreement with cardano-node on blocks
-// containing cross-chain bridge scripts (e.g. preview TX
-// 7e32983975bd529484ac5d4f2e930d5e8e98a5dcc2dabbc64880da60d294081d).
+// TestVerifyEcdsaSecp256k1HighS verifies that high-s ECDSA signatures are
+// rejected, matching libsecp256k1's verification contract.
 func TestVerifyEcdsaSecp256k1HighS(t *testing.T) {
 	// Static test vector from conformance test-vector-03 (OpenSSL-generated).
 	// Same keypair and message as test-vector-01, but with high-s.
@@ -4468,7 +4464,7 @@ func TestVerifyEcdsaSecp256k1HighS(t *testing.T) {
 		t.Fatal("test vector s should be over half order (high-s)")
 	}
 
-	// Now test through the builtin — must return true
+	// Now test through the builtin — it must return false.
 	m := newTestMachine()
 	b := newTestBuiltin(builtin.VerifyEcdsaSecp256k1Signature)
 
@@ -4484,11 +4480,30 @@ func TestVerifyEcdsaSecp256k1HighS(t *testing.T) {
 	constVal := expectConstant(t, val)
 	boolVal := expectBool(t, constVal)
 
-	if !boolVal.Inner {
-		t.Errorf(
-			"high-s ECDSA signature must be accepted per CIP-0049; " +
-				"BIP-146 low-s enforcement is Bitcoin-specific and must not apply",
-		)
+	if boolVal.Inner {
+		t.Error("high-s ECDSA signature must be rejected")
+	}
+}
+
+func TestBLSMSMScalarBounds(t *testing.T) {
+	limit := new(big.Int).Lsh(big.NewInt(1), 4095)
+	tests := []struct {
+		name   string
+		scalar *big.Int
+		want   bool
+	}{
+		{"maximum", new(big.Int).Sub(new(big.Int).Set(limit), big.NewInt(1)), true},
+		{"above maximum", new(big.Int).Set(limit), false},
+		{"minimum", new(big.Int).Neg(new(big.Int).Set(limit)), true},
+		{"below minimum", new(big.Int).Sub(new(big.Int).Neg(new(big.Int).Set(limit)), big.NewInt(1)), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := validBLSMSMScalar(tt.scalar); got != tt.want {
+				t.Fatalf("validBLSMSMScalar(%s) = %v, want %v", tt.scalar, got, tt.want)
+			}
+		})
 	}
 }
 

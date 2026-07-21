@@ -162,6 +162,45 @@ func (b *BuiltinCosts) update(param string, val int64) error {
 				return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
 			}
 		}
+	case *AboveAndBelowDiagonalModel:
+		if len(paramParts) > 5 && paramParts[3] == "model" && paramParts[4] == "arguments" {
+			switch model := a.model.(type) {
+			case *MultipliedSizesModel:
+				switch paramParts[5] {
+				case "intercept":
+					model.intercept = val
+				case "slope":
+					model.slope = val
+				default:
+					return fmt.Errorf("unknown model param for builtin %s: %s", builtinName, paramParts[5])
+				}
+			case *ConstAboveDiagonalIntoQuadraticXAndYModel:
+				switch paramParts[5] {
+				case "minimum":
+					model.minimum = val
+				case "coeff00", "c00":
+					model.coeff00 = val
+				case "coeff10", "c10":
+					model.coeff10 = val
+				case "coeff01", "c01":
+					model.coeff01 = val
+				case "coeff20", "c20":
+					model.coeff20 = val
+				case "coeff11", "c11":
+					model.coeff11 = val
+				case "coeff02", "c02":
+					model.coeff02 = val
+				default:
+					return fmt.Errorf("unknown model param for builtin %s: %s", builtinName, paramParts[5])
+				}
+			default:
+				return errors.New("unexpected model type for builtin " + builtinName)
+			}
+		} else if paramParts[paramIdx] == "constant" {
+			a.constant = val
+		} else {
+			return fmt.Errorf("unknown cost param for builtin %s: %s", builtinName, paramParts[paramIdx])
+		}
 	case *ConstBelowDiagonalModel:
 		if len(paramParts) > 5 && paramParts[3] == "model" && paramParts[4] == "arguments" {
 			// Accessing the nested model (e.g., modInteger-cpu-arguments-model-arguments-intercept)
@@ -1680,6 +1719,26 @@ func (ConstBelowDiagonalModel) HasConstants() []bool {
 
 func (ConstBelowDiagonalModel) isArguments() {}
 
+// AboveAndBelowDiagonalModel evaluates its nested model with the larger input
+// first and the smaller input second. The constant is retained because it is
+// part of the serialized Plutus cost-model shape, but is not used.
+type AboveAndBelowDiagonalModel struct {
+	ConstantOrTwoArguments
+}
+
+func (a AboveAndBelowDiagonalModel) CostTwo(x, y ExMem) int64 {
+	if x < y {
+		x, y = y, x
+	}
+	return a.model.CostTwo(x, y)
+}
+
+func (AboveAndBelowDiagonalModel) HasConstants() []bool {
+	return hasConstantsFalseFalse
+}
+
+func (AboveAndBelowDiagonalModel) isArguments() {}
+
 // QuadraticInYModel costs based on a quadratic function of y
 type QuadraticInYModel struct {
 	QuadraticFunction
@@ -2064,8 +2123,10 @@ func buildBuiltinCosts(
 	semantics SemanticsVariant,
 ) (BuiltinCosts, error) {
 	costs := DefaultBuiltinCosts.Clone()
-	// V1 and V2 have some slight changes from the default builtin costs, some depending on the semantics variant
-	if version == lang.LanguageVersionV1 || version == lang.LanguageVersionV2 {
+	// Variant A is the legacy V1/V2 model. Later V1/V2 semantics variants
+	// deliberately use different integer and signature costing models.
+	if (version == lang.LanguageVersionV1 || version == lang.LanguageVersionV2) &&
+		semantics == SemanticsVariantA {
 		costs[builtin.ModInteger] = &CostingFunc[Arguments]{
 			mem: &SubtractedSizesModel{SubtractedSizes{
 				intercept: 0,
@@ -2082,17 +2143,15 @@ func buildBuiltinCosts(
 				},
 			},
 		}
-		if semantics == SemanticsVariantA {
-			costs[builtin.MultiplyInteger] = &CostingFunc[Arguments]{
-				mem: &AddedSizesModel{AddedSizes{
-					intercept: 0,
-					slope:     1,
-				}},
-				cpu: &AddedSizesModel{AddedSizes{
-					intercept: 69522,
-					slope:     11687,
-				}},
-			}
+		costs[builtin.MultiplyInteger] = &CostingFunc[Arguments]{
+			mem: &AddedSizesModel{AddedSizes{
+				intercept: 0,
+				slope:     1,
+			}},
+			cpu: &AddedSizesModel{AddedSizes{
+				intercept: 69522,
+				slope:     11687,
+			}},
 		}
 		costs[builtin.DivideInteger] = &CostingFunc[Arguments]{
 			mem: &SubtractedSizesModel{SubtractedSizes{
@@ -2151,6 +2210,146 @@ func buildBuiltinCosts(
 				intercept: 57996947,
 				slope:     18975,
 			}},
+		}
+	}
+
+	if semantics == SemanticsVariantB {
+		costs[builtin.VerifyEd25519Signature] = &CostingFunc[Arguments]{
+			mem: &ConstantCost{10},
+			cpu: &ThreeLinearInY{LinearCost{
+				intercept: 53384111,
+				slope:     14333,
+			}},
+		}
+		newBCPU := func() Arguments {
+			return &ConstAboveDiagonalModel{ConstantOrTwoArguments{
+				constant: 85848,
+				model: &MultipliedSizesModel{MultipliedSizes{
+					intercept: 228465,
+					slope:     122,
+				}},
+			}}
+		}
+		newBMem := func() Arguments {
+			return &SubtractedSizesModel{SubtractedSizes{
+				intercept: 0,
+				slope:     1,
+				minimum:   1,
+			}}
+		}
+		costs[builtin.DivideInteger] = &CostingFunc[Arguments]{
+			mem: newBMem(), cpu: newBCPU(),
+		}
+		costs[builtin.QuotientInteger] = &CostingFunc[Arguments]{
+			mem: newBMem(), cpu: newBCPU(),
+		}
+		costs[builtin.RemainderInteger] = &CostingFunc[Arguments]{
+			mem: newBMem(), cpu: newBCPU(),
+		}
+		costs[builtin.ModInteger] = &CostingFunc[Arguments]{
+			mem: newBMem(), cpu: newBCPU(),
+		}
+	}
+
+	if semantics == SemanticsVariantD || semantics == SemanticsVariantE {
+		costs[builtin.EqualsByteString] = &CostingFunc[Arguments]{
+			mem: &ConstantCost{1},
+			cpu: &LinearOnDiagonalModel{ConstantOrLinear{
+				constant:  30623,
+				intercept: 28755,
+				slope:     75,
+			}},
+		}
+	}
+
+	if semantics == SemanticsVariantD {
+		// Variant D keeps the post-Chang linear-in-message Ed25519 model;
+		// it does not revert to Variant A's linear-in-signature model.
+		costs[builtin.VerifyEd25519Signature] = &CostingFunc[Arguments]{
+			mem: &ConstantCost{10},
+			cpu: &ThreeLinearInY{LinearCost{
+				intercept: 53384111,
+				slope:     14333,
+			}},
+		}
+		newDCPU := func(symmetric bool) TwoArgument {
+			model := &MultipliedSizesModel{MultipliedSizes{
+				intercept: 228465,
+				slope:     122,
+			}}
+			args := ConstantOrTwoArguments{constant: 85848, model: model}
+			if symmetric {
+				return &AboveAndBelowDiagonalModel{args}
+			}
+			return &ConstAboveDiagonalModel{args}
+		}
+		subtractedMem := func() Arguments {
+			return &SubtractedSizesModel{SubtractedSizes{
+				intercept: 0,
+				slope:     1,
+				minimum:   1,
+			}}
+		}
+		linearYMem := func() Arguments {
+			return &LinearInY{LinearCost{intercept: 0, slope: 1}}
+		}
+		costs[builtin.DivideInteger] = &CostingFunc[Arguments]{
+			mem: subtractedMem(), cpu: newDCPU(true),
+		}
+		costs[builtin.QuotientInteger] = &CostingFunc[Arguments]{
+			mem: subtractedMem(), cpu: newDCPU(false),
+		}
+		costs[builtin.RemainderInteger] = &CostingFunc[Arguments]{
+			mem: linearYMem(), cpu: newDCPU(false),
+		}
+		costs[builtin.ModInteger] = &CostingFunc[Arguments]{
+			mem: linearYMem(), cpu: newDCPU(true),
+		}
+	}
+
+	if semantics == SemanticsVariantE {
+		newECPU := func(symmetric bool) TwoArgument {
+			model := &ConstAboveDiagonalIntoQuadraticXAndYModel{
+				constant: 85848,
+				TwoArgumentsQuadraticFunction: TwoArgumentsQuadraticFunction{
+					minimum: 85848,
+					coeff00: 123203,
+					coeff01: 7305,
+					coeff02: -900,
+					coeff10: 1716,
+					coeff11: 960,
+					coeff20: 57,
+				},
+			}
+			if symmetric {
+				return &AboveAndBelowDiagonalModel{ConstantOrTwoArguments{
+					constant: 85848,
+					model:    model,
+				}}
+			}
+			return model
+		}
+		subtractedMem := func() Arguments {
+			return &SubtractedSizesModel{SubtractedSizes{
+				intercept: 0,
+				slope:     1,
+				minimum:   1,
+			}}
+		}
+		linearYMem := func() Arguments {
+			return &LinearInY{LinearCost{intercept: 0, slope: 1}}
+		}
+		costs[builtin.DivideInteger] = &CostingFunc[Arguments]{
+			mem: subtractedMem(), cpu: newECPU(true),
+		}
+		costs[builtin.QuotientInteger] = &CostingFunc[Arguments]{
+			mem: subtractedMem(), cpu: newECPU(false),
+		}
+		costs[builtin.RemainderInteger] = &CostingFunc[Arguments]{
+			mem: linearYMem(), cpu: newECPU(false),
+		}
+		costs[builtin.ModInteger] = &CostingFunc[Arguments]{
+			mem: linearYMem(), cpu: newECPU(true),
 		}
 	}
 	return costs, nil
