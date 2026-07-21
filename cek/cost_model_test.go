@@ -366,6 +366,90 @@ func TestUpdateV3CostModelWithExpModCoefficientNames(t *testing.T) {
 	}
 }
 
+func TestV1V2SignatureCostsFollowSemanticsVariant(t *testing.T) {
+	tests := []struct {
+		name      string
+		variant   SemanticsVariant
+		wantModel string
+		intercept int64
+		slope     int64
+	}{
+		{"variant A", SemanticsVariantA, "linear_in_z", 57996947, 18975},
+		{"variant B", SemanticsVariantB, "linear_in_y", 53384111, 14333},
+		{"variant D", SemanticsVariantD, "linear_in_y", 53384111, 14333},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			costs, err := buildBuiltinCosts(lang.LanguageVersionV1, tt.variant)
+			if err != nil {
+				t.Fatalf("buildBuiltinCosts failed: %v", err)
+			}
+
+			cpu := costs[builtin.VerifyEd25519Signature].cpu
+			var model string
+			var intercept, slope int64
+			switch c := cpu.(type) {
+			case *ThreeLinearInY:
+				model, intercept, slope = "linear_in_y", c.intercept, c.slope
+			case *ThreeLinearInZ:
+				model, intercept, slope = "linear_in_z", c.intercept, c.slope
+			default:
+				t.Fatalf("unexpected Ed25519 CPU model %T", cpu)
+			}
+			if model != tt.wantModel || intercept != tt.intercept || slope != tt.slope {
+				t.Fatalf(
+					"Ed25519 model = %s(%d,%d), want %s(%d,%d)",
+					model,
+					intercept,
+					slope,
+					tt.wantModel,
+					tt.intercept,
+					tt.slope,
+				)
+			}
+		})
+	}
+}
+
+func TestVariantBIntegerCosts(t *testing.T) {
+	costs, err := buildBuiltinCosts(
+		lang.LanguageVersionV1,
+		SemanticsVariantB,
+	)
+	if err != nil {
+		t.Fatalf("buildBuiltinCosts failed: %v", err)
+	}
+
+	for _, fn := range []builtin.DefaultFunction{
+		builtin.DivideInteger,
+		builtin.QuotientInteger,
+		builtin.RemainderInteger,
+		builtin.ModInteger,
+	} {
+		cpu, ok := costs[fn].cpu.(*ConstAboveDiagonalModel)
+		if !ok {
+			t.Fatalf("%s CPU model = %T, want *ConstAboveDiagonalModel", fn, costs[fn].cpu)
+		}
+		model, ok := cpu.model.(*MultipliedSizesModel)
+		if !ok {
+			t.Fatalf("%s nested CPU model = %T, want *MultipliedSizesModel", fn, cpu.model)
+		}
+		if cpu.constant != 85848 || model.intercept != 228465 || model.slope != 122 {
+			t.Fatalf(
+				"%s CPU model = constant %d, intercept %d, slope %d",
+				fn,
+				cpu.constant,
+				model.intercept,
+				model.slope,
+			)
+		}
+		if _, ok := costs[fn].mem.(*SubtractedSizesModel); !ok {
+			t.Fatalf("%s memory model = %T, want *SubtractedSizesModel", fn, costs[fn].mem)
+		}
+	}
+}
+
 func TestExpModIntegerCostOverflowReturnsBudgetError(t *testing.T) {
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 	originalBudget := m.ExBudget

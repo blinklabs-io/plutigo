@@ -2123,9 +2123,10 @@ func buildBuiltinCosts(
 	semantics SemanticsVariant,
 ) (BuiltinCosts, error) {
 	costs := DefaultBuiltinCosts.Clone()
-	// V1 and V2 have some slight changes from the default builtin costs, some depending on the semantics variant
+	// Variant A is the legacy V1/V2 model. Later V1/V2 semantics variants
+	// deliberately use different integer and signature costing models.
 	if (version == lang.LanguageVersionV1 || version == lang.LanguageVersionV2) &&
-		semantics != SemanticsVariantD {
+		semantics == SemanticsVariantA {
 		costs[builtin.ModInteger] = &CostingFunc[Arguments]{
 			mem: &SubtractedSizesModel{SubtractedSizes{
 				intercept: 0,
@@ -2142,17 +2143,15 @@ func buildBuiltinCosts(
 				},
 			},
 		}
-		if semantics == SemanticsVariantA {
-			costs[builtin.MultiplyInteger] = &CostingFunc[Arguments]{
-				mem: &AddedSizesModel{AddedSizes{
-					intercept: 0,
-					slope:     1,
-				}},
-				cpu: &AddedSizesModel{AddedSizes{
-					intercept: 69522,
-					slope:     11687,
-				}},
-			}
+		costs[builtin.MultiplyInteger] = &CostingFunc[Arguments]{
+			mem: &AddedSizesModel{AddedSizes{
+				intercept: 0,
+				slope:     1,
+			}},
+			cpu: &AddedSizesModel{AddedSizes{
+				intercept: 69522,
+				slope:     11687,
+			}},
 		}
 		costs[builtin.DivideInteger] = &CostingFunc[Arguments]{
 			mem: &SubtractedSizesModel{SubtractedSizes{
@@ -2214,6 +2213,44 @@ func buildBuiltinCosts(
 		}
 	}
 
+	if semantics == SemanticsVariantB {
+		costs[builtin.VerifyEd25519Signature] = &CostingFunc[Arguments]{
+			mem: &ConstantCost{10},
+			cpu: &ThreeLinearInY{LinearCost{
+				intercept: 53384111,
+				slope:     14333,
+			}},
+		}
+		newBCPU := func() Arguments {
+			return &ConstAboveDiagonalModel{ConstantOrTwoArguments{
+				constant: 85848,
+				model: &MultipliedSizesModel{MultipliedSizes{
+					intercept: 228465,
+					slope:     122,
+				}},
+			}}
+		}
+		newBMem := func() Arguments {
+			return &SubtractedSizesModel{SubtractedSizes{
+				intercept: 0,
+				slope:     1,
+				minimum:   1,
+			}}
+		}
+		costs[builtin.DivideInteger] = &CostingFunc[Arguments]{
+			mem: newBMem(), cpu: newBCPU(),
+		}
+		costs[builtin.QuotientInteger] = &CostingFunc[Arguments]{
+			mem: newBMem(), cpu: newBCPU(),
+		}
+		costs[builtin.RemainderInteger] = &CostingFunc[Arguments]{
+			mem: newBMem(), cpu: newBCPU(),
+		}
+		costs[builtin.ModInteger] = &CostingFunc[Arguments]{
+			mem: newBMem(), cpu: newBCPU(),
+		}
+	}
+
 	if semantics == SemanticsVariantD || semantics == SemanticsVariantE {
 		costs[builtin.EqualsByteString] = &CostingFunc[Arguments]{
 			mem: &ConstantCost{1},
@@ -2226,6 +2263,15 @@ func buildBuiltinCosts(
 	}
 
 	if semantics == SemanticsVariantD {
+		// Variant D keeps the post-Chang linear-in-message Ed25519 model;
+		// it does not revert to Variant A's linear-in-signature model.
+		costs[builtin.VerifyEd25519Signature] = &CostingFunc[Arguments]{
+			mem: &ConstantCost{10},
+			cpu: &ThreeLinearInY{LinearCost{
+				intercept: 53384111,
+				slope:     14333,
+			}},
+		}
 		newDCPU := func(symmetric bool) TwoArgument {
 			model := &MultipliedSizesModel{MultipliedSizes{
 				intercept: 228465,
