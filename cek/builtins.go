@@ -21,6 +21,7 @@ import (
 	schnorr "github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
+	blsfr "github.com/consensys/gnark-crypto/ecc/bls12-381/fr"
 	"github.com/ethereum/go-ethereum/crypto"
 	sha256 "github.com/minio/sha256-simd"
 	"golang.org/x/crypto/blake2b"
@@ -32,7 +33,23 @@ var (
 	sharedDataType     = &syn.TData{}
 	sharedListDataType = &syn.TList{Typ: sharedDataType}
 	sharedPairDataType = &syn.TPair{First: sharedDataType, Second: sharedDataType}
+	blsScalarModulus   = blsfr.Modulus()
+	blsMSMScalarLimit  = new(big.Int).Lsh(big.NewInt(1), 4095)
 )
+
+// normalizeBLSScalar maps an arbitrary UPLC integer into the BLS12-381 scalar
+// field. gnark-crypto's GLV implementation expects a field-sized scalar and
+// can panic when handed a larger integer directly.
+func normalizeBLSScalar(scalar *big.Int) *big.Int {
+	return new(big.Int).Mod(scalar, blsScalarModulus)
+}
+
+func validBLSMSMScalar(scalar *big.Int) bool {
+	if scalar.Sign() < 0 {
+		return scalar.Cmp(new(big.Int).Neg(blsMSMScalarLimit)) >= 0
+	}
+	return scalar.Cmp(blsMSMScalarLimit) < 0
+}
 
 const (
 	ed25519VerifyCacheLimit  = 4096
@@ -1473,6 +1490,9 @@ func verifyEcdsaSecp256K1Signature[T syn.Eval](
 			Message: "invalid signature (s)",
 		}
 	}
+	if s.IsOverHalfOrder() {
+		return boolConstant(false), nil
+	}
 
 	sig := ecdsa.NewSignature(r, s)
 
@@ -1717,7 +1737,11 @@ func appendString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	err = m.CostTwo(&b.Func, stringExMem(arg1), stringExMem(arg2))
+	arg1ExMem, arg2ExMem := stringExMem(arg1), stringExMem(arg2)
+	if m.semantics == SemanticsVariantD || m.semantics == SemanticsVariantE {
+		arg1ExMem, arg2ExMem = textByteLengthExMem(arg1), textByteLengthExMem(arg2)
+	}
+	err = m.CostTwo(&b.Func, arg1ExMem, arg2ExMem)
 	if err != nil {
 		return nil, err
 	}
@@ -1747,7 +1771,11 @@ func equalsString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	// Charge budget for string comparison
-	err = m.CostTwo(&b.Func, stringExMem(arg1), stringExMem(arg2))
+	arg1ExMem, arg2ExMem := stringExMem(arg1), stringExMem(arg2)
+	if m.semantics == SemanticsVariantD || m.semantics == SemanticsVariantE {
+		arg1ExMem, arg2ExMem = textByteLengthExMem(arg1), textByteLengthExMem(arg2)
+	}
+	err = m.CostTwo(&b.Func, arg1ExMem, arg2ExMem)
 	if err != nil {
 		return nil, err
 	}
@@ -1771,7 +1799,11 @@ func encodeUtf8[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	err = m.CostOne(&b.Func, stringExMem(arg1))
+	arg1ExMem := stringExMem(arg1)
+	if m.semantics == SemanticsVariantD || m.semantics == SemanticsVariantE {
+		arg1ExMem = textByteLengthExMem(arg1)
+	}
+	err = m.CostOne(&b.Func, arg1ExMem)
 	if err != nil {
 		return nil, err
 	}
@@ -2389,7 +2421,10 @@ func bls12381G1ScalarMul[T syn.Eval](
 		return nil, err
 	}
 
-	newG1 := new(bls.G1Jac).ScalarMultiplication(arg2, arg1)
+	newG1 := new(bls.G1Jac).ScalarMultiplication(
+		arg2,
+		normalizeBLSScalar(arg1),
+	)
 
 	value := &Constant{&syn.Bls12_381G1Element{Inner: newG1}}
 
@@ -2607,7 +2642,10 @@ func bls12381G2ScalarMul[T syn.Eval](
 		return nil, err
 	}
 
-	newG2 := new(bls.G2Jac).ScalarMultiplication(arg2, arg1)
+	newG2 := new(bls.G2Jac).ScalarMultiplication(
+		arg2,
+		normalizeBLSScalar(arg1),
+	)
 
 	value := &Constant{&syn.Bls12_381G2Element{
 		Inner: newG2,
@@ -2656,6 +2694,13 @@ func bls12381G1MultiScalarMul[T syn.Eval](
 				Message: "expected integer list",
 			}
 		}
+		if !validBLSMSMScalar(ni.Inner) {
+			return nil, &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: "bls12_381_G1_multiScalarMul",
+				Message: "scalar is outside the signed 4096-bit range",
+			}
+		}
 		pi, ok := elems.List[i].(*syn.Bls12_381G1Element)
 		if !ok {
 			return nil, &BuiltinError{
@@ -2665,7 +2710,10 @@ func bls12381G1MultiScalarMul[T syn.Eval](
 			}
 		}
 
-		tmp := new(bls.G1Jac).ScalarMultiplication(pi.Inner, ni.Inner)
+		tmp := new(bls.G1Jac).ScalarMultiplication(
+			pi.Inner,
+			normalizeBLSScalar(ni.Inner),
+		)
 		res.AddAssign(tmp)
 	}
 
@@ -2712,6 +2760,13 @@ func bls12381G2MultiScalarMul[T syn.Eval](
 				Message: "expected integer list",
 			}
 		}
+		if !validBLSMSMScalar(ni.Inner) {
+			return nil, &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: "bls12_381_G2_multiScalarMul",
+				Message: "scalar is outside the signed 4096-bit range",
+			}
+		}
 		pi, ok := elems.List[i].(*syn.Bls12_381G2Element)
 		if !ok {
 			return nil, &BuiltinError{
@@ -2721,7 +2776,10 @@ func bls12381G2MultiScalarMul[T syn.Eval](
 			}
 		}
 
-		tmp := new(bls.G2Jac).ScalarMultiplication(pi.Inner, ni.Inner)
+		tmp := new(bls.G2Jac).ScalarMultiplication(
+			pi.Inner,
+			normalizeBLSScalar(ni.Inner),
+		)
 		res.AddAssign(tmp)
 	}
 
@@ -3720,6 +3778,14 @@ func shiftByteString[T syn.Eval](
 	if err != nil {
 		return nil, err
 	}
+	if (m.semantics == SemanticsVariantD || m.semantics == SemanticsVariantE) &&
+		!shift.IsInt64() {
+		return nil, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "shiftByteString",
+			Message: "shift value is outside the Int64 range",
+		}
+	}
 
 	// Check if shift exceeds total bits - return all zeros
 	totalBitsInt := int64(len(bytes) * 8)
@@ -3813,6 +3879,14 @@ func rotateByteString[T syn.Eval](
 	err = m.CostTwo(&b.Func, byteArrayExMem(bytes), bigIntExMem(shift))
 	if err != nil {
 		return nil, err
+	}
+	if (m.semantics == SemanticsVariantD || m.semantics == SemanticsVariantE) &&
+		!shift.IsInt64() {
+		return nil, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "rotateByteString",
+			Message: "rotation value is outside the Int64 range",
+		}
 	}
 
 	// Handle empty byte string

@@ -24,9 +24,15 @@ func NewDefaultEvalContext(
 	version LanguageVersion,
 	protoVersion ProtoVersion,
 ) *EvalContext {
+	semantics := GetSemantics(version, protoVersion)
+	costModel := DefaultCostModel
+	if builtinCosts, err := buildBuiltinCosts(version, semantics); err == nil {
+		costModel = DefaultCostModel.Clone()
+		costModel.builtinCosts = builtinCosts
+	}
 	return &EvalContext{
-		CostModel:        DefaultCostModel,
-		SemanticsVariant: GetSemantics(version, protoVersion),
+		CostModel:        costModel,
+		SemanticsVariant: semantics,
 		ProtoMajor:       protoVersion.Major,
 	}
 }
@@ -49,7 +55,11 @@ func NewEvalContext(
 		case SemanticsVariantB:
 			semanticsName = "VariantB (post-Chang V1/V2)"
 		case SemanticsVariantC:
-			semanticsName = "VariantC (V3+)"
+			semanticsName = "VariantC (pre-van Rossem V3+)"
+		case SemanticsVariantD:
+			semanticsName = "VariantD (van Rossem V1/V2)"
+		case SemanticsVariantE:
+			semanticsName = "VariantE (van Rossem V3+)"
 		}
 		log.Printf(
 			"[PLUTIGO-DEBUG] NewEvalContext: langVersion=%v, protoVersion=%d.%d, semantics=%s, costModelParams=%d",

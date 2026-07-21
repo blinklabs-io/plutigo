@@ -1,10 +1,10 @@
 package syn
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math/big"
-	"sort"
 	"strconv"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -773,97 +773,38 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			return nil, err
 		}
 
-		// Canonicalize the value constant: merge duplicate token keys by summing,
-		// remove zero amounts and empty policy entries, and sort deterministically.
-		vm := make(map[string]map[string]*big.Int)
+		// Value constants are serialized canonically. Reject non-canonical text
+		// instead of silently sorting, merging, or dropping entries.
+		var previousPolicy []byte
+		for policyIndex, item := range items {
+			policy := item.(*ProtoPair)
+			policyID := policy.First.(*ByteString).Inner
+			if policyIndex > 0 && bytes.Compare(previousPolicy, policyID) >= 0 {
+				return nil, errors.New("value policy IDs must be unique and lexicographically ordered")
+			}
+			previousPolicy = policyID
 
-		for _, it := range items {
-			pp, ok := it.(*ProtoPair)
-			if !ok {
-				continue
-			}
-			polBs, ok := pp.First.(*ByteString)
-			pol := ""
-			if ok {
-				pol = string(polBs.Inner)
-			}
-			if _, exists := vm[pol]; !exists {
-				vm[pol] = make(map[string]*big.Int)
-			}
-			if lst, ok := pp.Second.(*ProtoList); ok {
-				for _, tk := range lst.List {
-					tkp, ok := tk.(*ProtoPair)
-					if !ok {
-						continue
-					}
-					tkBs, ok1 := tkp.First.(*ByteString)
-					amt, ok2 := tkp.Second.(*Integer)
-					if ok1 && ok2 {
-						key := string(tkBs.Inner)
-						val := new(big.Int).Set(amt.Inner)
-						if cur, ex := vm[pol][key]; ex {
-							vm[pol][key] = new(big.Int).Add(cur, val)
-						} else {
-							vm[pol][key] = val
-						}
-					}
-				}
-			}
-		}
-
-		// Validate summed token amounts fit in the allowed range
-		limit := new(big.Int).Lsh(big.NewInt(1), 127)           // 2^127
-		limitMinusOne := new(big.Int).Sub(limit, big.NewInt(1)) // 2^127 - 1
-		negLimit := new(big.Int).Neg(limit)                     // -2^127
-		for pol, tokens := range vm {
-			for key, amt := range tokens {
-				if amt.Sign() >= 0 {
-					if amt.Cmp(limitMinusOne) > 0 {
-						return nil, fmt.Errorf("summed token amount for policy %q key %q out of range %s", pol, key, amt.String())
-					}
-				} else {
-					if amt.Cmp(negLimit) < 0 {
-						return nil, fmt.Errorf("summed token amount for policy %q key %q out of range %s", pol, key, amt.String())
-					}
-				}
-			}
-		}
-
-		// Build canonical list
-		policies := make([]string, 0, len(vm))
-		for policy := range vm {
-			policies = append(policies, policy)
-		}
-		sort.Strings(policies)
-
-		res := make([]IConstant, 0)
-		for _, pol := range policies {
-			tokens := vm[pol]
-			// collect non-zero tokens
+			tokens := policy.Second.(*ProtoList).List
 			if len(tokens) == 0 {
-				continue
+				return nil, errors.New("value policy must contain at least one token")
 			}
-			keys := make([]string, 0, len(tokens))
-			for k := range tokens {
-				if tokens[k] == nil || tokens[k].Sign() == 0 {
-					continue
+			var previousToken []byte
+			for tokenIndex, tokenItem := range tokens {
+				token := tokenItem.(*ProtoPair)
+				tokenID := token.First.(*ByteString).Inner
+				if tokenIndex > 0 && bytes.Compare(previousToken, tokenID) >= 0 {
+					return nil, errors.New("value token IDs must be unique and lexicographically ordered")
 				}
-				keys = append(keys, k)
+				if token.Second.(*Integer).Inner.Sign() == 0 {
+					return nil, errors.New("value token amount must be non-zero")
+				}
+				previousToken = tokenID
 			}
-			if len(keys) == 0 {
-				continue
-			}
-			sort.Strings(keys)
-			inner := make([]IConstant, 0, len(keys))
-			for _, k := range keys {
-				inner = append(inner, &ProtoPair{FstType: &TByteString{}, SndType: &TInteger{}, First: &ByteString{Inner: []byte(k)}, Second: newInteger(tokens[k])})
-			}
-			res = append(res, &ProtoPair{FstType: &TByteString{}, SndType: &TList{Typ: &TPair{First: &TByteString{}, Second: &TInteger{}}}, First: &ByteString{Inner: []byte(pol)}, Second: &ProtoList{LTyp: &TPair{First: &TByteString{}, Second: &TInteger{}}, List: inner}})
 		}
 
 		valType := &TPair{First: &TByteString{}, Second: &TList{Typ: &TPair{First: &TByteString{}, Second: &TInteger{}}}}
 
-		return &Constant{Con: &ProtoList{LTyp: valType, List: res}}, nil
+		return &Constant{Con: &ProtoList{LTyp: valType, List: items}}, nil
 	default:
 		return nil, fmt.Errorf("unexpected type spec %v at position %d", typeSpec, p.curToken.Position)
 	}
