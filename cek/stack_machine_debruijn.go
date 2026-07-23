@@ -2,6 +2,7 @@
 package cek
 
 import (
+	"math/bits"
 	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/syn"
@@ -86,89 +87,61 @@ func lookupEnvDeBruijn(
 		}
 		return env.data, true
 	case 5:
-		env = advanceEnv4DeBruijn(env)
-		if env == nil {
-			return zero, false
+		if env.index != nil {
+			ancestor := env.index[1]
+			if ancestor != nil {
+				ancestor = ancestor.next
+				if ancestor != nil {
+					return ancestor.data, true
+				}
+			}
 		}
-		return env.data, true
 	case 6:
-		env = advanceEnv4DeBruijn(env)
-		if env == nil {
-			return zero, false
+		if env.index != nil {
+			ancestor := env.index[1]
+			if ancestor != nil {
+				ancestor = ancestor.next
+			}
+			if ancestor != nil {
+				ancestor = ancestor.next
+				if ancestor != nil {
+					return ancestor.data, true
+				}
+			}
 		}
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		return env.data, true
 	case 7:
-		env = advanceEnv4DeBruijn(env)
-		if env == nil {
-			return zero, false
+		if env.index != nil {
+			ancestor := env.index[1]
+			for range 3 {
+				if ancestor != nil {
+					ancestor = ancestor.next
+				}
+			}
+			if ancestor != nil {
+				return ancestor.data, true
+			}
 		}
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		return env.data, true
 	case 8:
-		env = advanceEnv4DeBruijn(env)
-		if env == nil {
-			return zero, false
+		if env.index != nil {
+			if ancestor := env.index[2]; ancestor != nil {
+				return ancestor.data, true
+			}
 		}
-		env = env.next
-		if env == nil {
-			return zero, false
+	}
+	if idx&(idx-1) == 0 {
+		level := bits.TrailingZeros(uint(idx)) - 1
+		if level < envIndexLevels && env.index != nil {
+			if ancestor := env.index[level]; ancestor != nil {
+				return ancestor.data, true
+			}
 		}
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		return env.data, true
 	}
 
-	current := env
-	remaining := idx - 1
-	for remaining >= 4 {
-		current = advanceEnv4DeBruijn(current)
-		if current == nil {
-			return zero, false
-		}
-		remaining -= 4
-	}
-	for remaining > 0 {
-		current = current.next
-		if current == nil {
-			return zero, false
-		}
-		remaining--
-	}
-
-	return current.data, true
-}
-
-func advanceEnv4DeBruijn(env *Env[syn.DeBruijn]) *Env[syn.DeBruijn] {
+	env = envAncestor(env, idx-1)
 	if env == nil {
-		return nil
+		return zero, false
 	}
-	if env.skip4 != nil {
-		return env.skip4
-	}
-	for range 4 {
-		env = env.next
-		if env == nil {
-			return nil
-		}
-	}
-	return env
+	return env.data, true
 }
 
 func computeKnownImmediateValueNoSlippageDeBruijn(
