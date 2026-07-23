@@ -36,6 +36,13 @@ func TestNewMachine(t *testing.T) {
 	if m.ExBudget != DefaultExBudget {
 		t.Fatalf("expected default budget, got %+v", m.ExBudget)
 	}
+	if cap(m.envIndexChunks) != cap(m.envChunks) {
+		t.Fatalf(
+			"env index chunk capacity = %d, want env chunk capacity %d",
+			cap(m.envIndexChunks),
+			cap(m.envChunks),
+		)
+	}
 }
 
 func TestRunConstant(t *testing.T) {
@@ -117,6 +124,13 @@ func TestRunResetsEnvArena(t *testing.T) {
 		if m.envChunkPos != 0 {
 			t.Fatalf("envChunkPos after %s Run = %d, want 0", run, m.envChunkPos)
 		}
+		if m.envIndexChunkPos != 0 {
+			t.Fatalf(
+				"envIndexChunkPos after %s Run = %d, want 0",
+				run,
+				m.envIndexChunkPos,
+			)
+		}
 	}
 }
 
@@ -176,8 +190,22 @@ func TestRunClearsRetainedArenaReferencesAfterReturn(t *testing.T) {
 	for ci, chunk := range m.envChunks {
 		for si := range chunk {
 			slot := chunk[si]
-			if slot.data != nil || slot.next != nil {
+			if slot.data != nil || slot.next != nil || slot.index != nil {
 				t.Fatalf("envChunks[%d][%d] retained stale data after Run: %+v", ci, si, slot)
+			}
+		}
+	}
+	for ci, chunk := range m.envIndexChunks {
+		for si := range chunk {
+			for level, ancestor := range chunk[si] {
+				if ancestor != nil {
+					t.Fatalf(
+						"envIndexChunks[%d][%d][%d] retained stale ancestor after Run",
+						ci,
+						si,
+						level,
+					)
+				}
 			}
 		}
 	}
@@ -331,6 +359,9 @@ func TestResetEnvArenaRetainsOnlyTrackedChunkHeaders(t *testing.T) {
 	if len(m.envChunks) < usedChunks {
 		t.Fatalf("expected multiple env chunks, got %d", len(m.envChunks))
 	}
+	if len(m.envIndexChunks) < usedChunks {
+		t.Fatalf("expected multiple env index chunks, got %d", len(m.envIndexChunks))
+	}
 
 	m.resetEnvArena()
 
@@ -340,8 +371,25 @@ func TestResetEnvArenaRetainsOnlyTrackedChunkHeaders(t *testing.T) {
 	if cap(m.envChunks) != envRetainChunkCap {
 		t.Fatalf("cap(envChunks) after reset = %d, want %d", cap(m.envChunks), envRetainChunkCap)
 	}
+	if len(m.envIndexChunks) != envRetainChunkCap {
+		t.Fatalf(
+			"len(envIndexChunks) after reset = %d, want %d",
+			len(m.envIndexChunks),
+			envRetainChunkCap,
+		)
+	}
+	if cap(m.envIndexChunks) != envRetainChunkCap {
+		t.Fatalf(
+			"cap(envIndexChunks) after reset = %d, want %d",
+			cap(m.envIndexChunks),
+			envRetainChunkCap,
+		)
+	}
 	if m.envChunkPos != 0 {
 		t.Fatalf("envChunkPos after reset = %d, want 0", m.envChunkPos)
+	}
+	if m.envIndexChunkPos != 0 {
+		t.Fatalf("envIndexChunkPos after reset = %d, want 0", m.envIndexChunkPos)
 	}
 }
 
@@ -428,6 +476,66 @@ func TestLookupEnvUsesOneIndexedDepth(t *testing.T) {
 				t.Fatalf("lookupEnv(%d) = %d, want %d", tt.idx, got.Inner.Int64(), tt.wantIntValue)
 			}
 		})
+	}
+}
+
+func TestLookupEnvIndexedAtMaximumDepth(t *testing.T) {
+	const depth = 100_000
+
+	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	var env *Env[syn.DeBruijn]
+	for i := 1; i <= depth; i++ {
+		env = machine.extendEnv(env, int64Constant(int64(i)))
+	}
+
+	for _, idx := range []int{1, 2, 3, 7, 31, 257, 4097, depth} {
+		value, ok := lookupEnv(env, idx)
+		if !ok {
+			t.Fatalf("lookupEnv(%d) failed at depth %d", idx, depth)
+		}
+		constant, ok := value.(*Constant)
+		if !ok {
+			t.Fatalf("lookupEnv(%d) returned %T, want *Constant", idx, value)
+		}
+		integer, ok := constant.Constant.(*syn.Integer)
+		if !ok {
+			t.Fatalf(
+				"lookupEnv(%d) constant = %T, want *syn.Integer",
+				idx,
+				constant.Constant,
+			)
+		}
+		want := int64(depth - idx + 1)
+		if got := integer.Inner.Int64(); got != want {
+			t.Fatalf("lookupEnv(%d) = %d, want %d", idx, got, want)
+		}
+	}
+
+	if _, ok := lookupEnv(env, depth+1); ok {
+		t.Fatalf("lookupEnv(%d) succeeded beyond depth %d", depth+1, depth)
+	}
+}
+
+func TestEnvLookupBeyondIndexRange(t *testing.T) {
+	const depth = 2 * (envMaxIndexedJump + 1)
+
+	oldest := int64Constant(1)
+	newer := int64Constant(2)
+	var env *Env[syn.DeBruijn]
+	env = env.Extend(oldest)
+	for range depth - 1 {
+		env = env.Extend(newer)
+	}
+
+	value, ok := env.Lookup(depth)
+	if !ok {
+		t.Fatalf("Lookup(%d) failed for an environment of depth %d", depth, depth)
+	}
+	if value != oldest {
+		t.Fatalf("Lookup(%d) returned %p, want oldest value %p", depth, value, oldest)
+	}
+	if _, ok := env.Lookup(depth + 1); ok {
+		t.Fatalf("Lookup(%d) succeeded beyond environment depth %d", depth+1, depth)
 	}
 }
 

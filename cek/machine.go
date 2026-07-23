@@ -135,6 +135,8 @@ type Machine[T syn.Eval] struct {
 	envActiveChunk         []Env[T]
 	envActiveChunkLimit    int
 	envChunkPos            int
+	envIndexChunks         [][]envIndex[T]
+	envIndexChunkPos       int
 	budgetTemplate         ExBudget
 	lastRunRemaining       ExBudget
 	hasRun                 bool
@@ -747,6 +749,8 @@ func NewMachine[T syn.Eval](
 		valueArenaChunkSize:   valueColdChunkSize,
 		envChunks:             make([][]Env[T], 0, 8),
 		envChunkPos:           0,
+		envIndexChunks:        make([][]envIndex[T], 0, 8),
+		envIndexChunkPos:      0,
 		budgetTemplate:        DefaultExBudget,
 		lastRunRemaining:      DefaultExBudget,
 		hasRun:                false,
@@ -791,17 +795,15 @@ func (m *Machine[T]) extendEnv(parent *Env[T], data Value[T]) *Env[T] {
 	}
 	env := &chunk[pos&(envChunkSize-1)]
 	m.envChunkPos = pos + 1
+	index := allocArenaSlot(
+		&m.envIndexChunks,
+		&m.envIndexChunkPos,
+		envChunkSize,
+	)
+	*index = envIndex[T]{}
+	env.index = index
 	env.data = data
-	env.next = parent
-	if parent != nil {
-		skip := parent.next
-		if skip != nil {
-			skip = skip.next
-			if skip != nil {
-				env.skip4 = skip.next
-			}
-		}
-	}
+	initEnvIndex(env, parent)
 	return env
 }
 
@@ -812,14 +814,21 @@ func (m *Machine[T]) resetEnvArena() {
 		retainedUsed = maxRetained
 	}
 	clearArenaChunks(m.envChunks, retainedUsed)
+	clearArenaChunks(m.envIndexChunks, retainedUsed)
 	if len(m.envChunks) > envRetainChunkCap {
 		retained := make([][]Env[T], envRetainChunkCap)
 		copy(retained, m.envChunks[:envRetainChunkCap])
 		m.envChunks = retained
 	}
+	if len(m.envIndexChunks) > envRetainChunkCap {
+		retained := make([][]envIndex[T], envRetainChunkCap)
+		copy(retained, m.envIndexChunks[:envRetainChunkCap])
+		m.envIndexChunks = retained
+	}
 	m.envActiveChunk = nil
 	m.envActiveChunkLimit = 0
 	m.envChunkPos = 0
+	m.envIndexChunkPos = 0
 }
 
 // lazyPrepareEnvArena trims chunks beyond envRetainChunkCap and clears the
@@ -827,15 +836,22 @@ func (m *Machine[T]) resetEnvArena() {
 // the previous run's Env/Value graph pinned inside the Machine.
 func (m *Machine[T]) lazyPrepareEnvArena() {
 	lazyPrepareArenaChunks(&m.envChunks, &m.envChunkPos, envRetainChunkCap)
+	lazyPrepareArenaChunks(
+		&m.envIndexChunks,
+		&m.envIndexChunkPos,
+		envRetainChunkCap,
+	)
 	m.envActiveChunk = nil
 	m.envActiveChunkLimit = 0
 }
 
 func (m *Machine[T]) dropEnvArena() {
 	m.envChunks = nil
+	m.envIndexChunks = nil
 	m.envActiveChunk = nil
 	m.envActiveChunkLimit = 0
 	m.envChunkPos = 0
+	m.envIndexChunkPos = 0
 }
 
 func (m *Machine[T]) resetValueArenas() {
