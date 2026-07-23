@@ -39,6 +39,10 @@ plutigo implements the following Cardano Improvement Proposals (CIPs) related to
 ### Testing and Conformance
 All implemented CIPs include comprehensive conformance tests ensuring correct behavior and cost modeling.
 
+Mainnet parity corpora can be executed with `plutigo-replay`; see the
+[replay corpus guide](replay/README.md) for the normalized transaction format
+and reporting workflow.
+
 ## Performance
 
 plutigo is optimized for high-performance Plutus script evaluation:
@@ -130,7 +134,9 @@ plutigo supports all major Plutus protocol versions:
 - Plutus V3 (1.2.0+): Chang+ era - Latest features and optimizations
 - Plutus V4 (1.3.0+): Initial support with placeholder cost models
 
-The library automatically selects appropriate cost models and builtin behavior based on the program version.
+The library selects cost models and builtin behavior from the Plutus ledger
+language supplied to `NewMachine` and the evaluation context. On-chain callers
+must use the ledger language rather than infer it from the UPLC program header.
 
 ## Development
 
