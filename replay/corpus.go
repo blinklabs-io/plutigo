@@ -12,7 +12,9 @@ import (
 	"strings"
 
 	"github.com/blinklabs-io/plutigo/cek"
+	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/lang"
+	"github.com/blinklabs-io/plutigo/syn"
 )
 
 const SchemaVersion = 1
@@ -186,12 +188,20 @@ func (c *Case) validate() error {
 	if _, err := c.Language.Version(); err != nil {
 		return err
 	}
-	if _, err := decodeHex("flat program", c.FlatProgramHex); err != nil {
+	flatProgram, err := decodeHex("flat program", c.FlatProgramHex)
+	if err != nil {
 		return err
 	}
+	if _, err := syn.Decode[syn.DeBruijn](flatProgram); err != nil {
+		return fmt.Errorf("decode FLAT program: %w", err)
+	}
 	for i, arg := range c.ArgumentsCBORHex {
-		if _, err := decodeHex(fmt.Sprintf("argument %d CBOR", i), arg); err != nil {
+		argCBOR, err := decodeHex(fmt.Sprintf("argument %d CBOR", i), arg)
+		if err != nil {
 			return err
+		}
+		if _, err := data.Decode(argCBOR); err != nil {
+			return fmt.Errorf("decode argument %d PlutusData: %w", i, err)
 		}
 	}
 	if c.CostModel.UseDefault == (len(c.CostModel.Parameters) > 0) {
@@ -204,6 +214,9 @@ func (c *Case) validate() error {
 	}
 	if c.Expected.ExUnits.Steps < 0 || c.Expected.ExUnits.Memory < 0 {
 		return errors.New("expected execution units cannot be negative")
+	}
+	if c.Expected.Success && c.Expected.ErrorCode != nil {
+		return errors.New("successful expected result cannot include an error code")
 	}
 	if c.Expected.ExUnits.Steps > c.BudgetLimit.Steps ||
 		c.Expected.ExUnits.Memory > c.BudgetLimit.Memory {

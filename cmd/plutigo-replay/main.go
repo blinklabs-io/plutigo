@@ -3,19 +3,37 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/blinklabs-io/plutigo/replay"
 )
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	code := runContext(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	stop()
+	os.Exit(code)
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	return runContext(context.Background(), args, stdout, stderr)
+}
+
+func runContext(
+	ctx context.Context,
+	args []string,
+	stdout, stderr io.Writer,
+) int {
 	flags := flag.NewFlagSet("plutigo-replay", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	var corpusPath string
@@ -23,6 +41,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags.StringVar(&corpusPath, "corpus", "", "path to a replay corpus JSON file")
 	flags.BoolVar(&pretty, "pretty", false, "indent the JSON report")
 	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		return 2
 	}
 
@@ -36,7 +57,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "plutigo-replay: %v\n", err)
 		return 2
 	}
-	report, err := replay.Run(context.Background(), corpus)
+	report, err := replay.Run(ctx, corpus)
 	if err != nil {
 		fmt.Fprintf(stderr, "plutigo-replay: %v\n", err)
 		return 2

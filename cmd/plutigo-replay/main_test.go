@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/data"
@@ -23,6 +25,70 @@ func TestRunRequiresCorpus(t *testing.T) {
 	}
 	if stdout.Len() != 0 {
 		t.Fatalf("run() stdout = %q, want empty", stdout.String())
+	}
+	if got := stderr.String(); !strings.Contains(
+		got,
+		"plutigo-replay: -corpus is required",
+	) {
+		t.Fatalf("run() stderr = %q, want missing corpus error", got)
+	}
+}
+
+func TestRunHelp(t *testing.T) {
+	for _, arg := range []string{"-h", "--help"} {
+		t.Run(arg, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			if code := run([]string{arg}, &stdout, &stderr); code != 0 {
+				t.Fatalf("run() code = %d, want 0", code)
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf(
+					"run() stdout = %q, want empty",
+					stdout.String(),
+				)
+			}
+			if got := stderr.String(); !strings.Contains(
+				got,
+				"Usage of plutigo-replay:",
+			) {
+				t.Fatalf("run() stderr = %q, want usage", got)
+			}
+		})
+	}
+}
+
+func TestRunCanceledContext(t *testing.T) {
+	corpusPath := writeCorpus(t, replay.Corpus{
+		SchemaVersion: replay.SchemaVersion,
+		Network:       "mainnet",
+		Reference:     commandReference(),
+		Cases:         []replay.Case{commandReplayCase(t)},
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if code := runContext(
+		ctx,
+		[]string{"-corpus", corpusPath},
+		&stdout,
+		&stderr,
+	); code != 2 {
+		t.Fatalf("runContext() code = %d, want 2", code)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf(
+			"runContext() stdout = %q, want empty",
+			stdout.String(),
+		)
+	}
+	if got := stderr.String(); !strings.Contains(got, "context canceled") {
+		t.Fatalf(
+			"runContext() stderr = %q, want cancellation error",
+			got,
+		)
 	}
 }
 

@@ -94,9 +94,9 @@ func TestRunCaseUsesLedgerLanguageInsteadOfUPLCVersion(t *testing.T) {
 			Con: &syn.Data{Inner: data.NewInteger(big.NewInt(42))},
 		},
 	}
-	replayCase := baseCase(t, term, nil)
-	// baseCase encodes a UPLC 1.0.0 program. serialiseData is nevertheless
-	// valid when the ledger identifies that program as Plutus V2.
+	replayCase := baseCaseWithVersion(t, lang.LanguageVersionV2, term, nil)
+	// The UPLC header identifies this as a V2 program. The ledger language must
+	// still control builtin availability, so the same program is rejected as V1.
 	replayCase.Language = PlutusV2
 	v2Result := RunCase(&replayCase)
 	if !v2Result.Actual.Success {
@@ -227,8 +227,23 @@ func baseCase(
 	arguments []string,
 ) Case {
 	t.Helper()
+	return baseCaseWithVersion(
+		t,
+		lang.LanguageVersionV1,
+		term,
+		arguments,
+	)
+}
+
+func baseCaseWithVersion(
+	t *testing.T,
+	version lang.LanguageVersion,
+	term syn.Term[syn.DeBruijn],
+	arguments []string,
+) Case {
+	t.Helper()
 	program := &syn.Program[syn.DeBruijn]{
-		Version: lang.LanguageVersionV1,
+		Version: version,
 		Term:    term,
 	}
 	encoded, err := syn.Encode(program)
