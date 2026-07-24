@@ -64,6 +64,30 @@ func TestCorpusValidateRejectsMalformedEncodedPayloads(t *testing.T) {
 	}
 }
 
+func FuzzLoadEncodedPayloads(f *testing.F) {
+	replayCase := successfulCase(f)
+	f.Add(replayCase.FlatProgramHex, replayCase.ArgumentsCBORHex[0])
+	f.Add("00", "ff")
+	f.Add("not-hex", "0")
+
+	f.Fuzz(func(t *testing.T, flatProgramHex, argumentCBORHex string) {
+		testCase := replayCase
+		testCase.FlatProgramHex = flatProgramHex
+		testCase.ArgumentsCBORHex = []string{argumentCBORHex}
+		encoded, err := json.Marshal(validCorpus(testCase))
+		if err != nil {
+			t.Fatalf("json.Marshal() failed: %v", err)
+		}
+
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				t.Fatalf("Load() panicked: %v", recovered)
+			}
+		}()
+		_, _ = Load(bytes.NewReader(encoded))
+	})
+}
+
 func validCorpus(replayCase Case) *Corpus {
 	return &Corpus{
 		SchemaVersion: SchemaVersion,

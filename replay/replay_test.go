@@ -60,6 +60,24 @@ func TestRunCaseMatchesSuccessAndBudget(t *testing.T) {
 	}
 }
 
+func BenchmarkRunCase(b *testing.B) {
+	replayCase := successfulCase(b)
+	first := RunCase(&replayCase)
+	if !first.Actual.Success {
+		b.Fatalf("RunCase() setup failed: %s", first.Actual.Error)
+	}
+	replayCase.Expected.ExUnits = first.Actual.ExUnits
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		result := RunCase(&replayCase)
+		if !result.Passed {
+			b.Fatalf("RunCase() mismatches = %v", result.Mismatches)
+		}
+	}
+}
+
 func TestRunCaseMatchesEvaluationFailure(t *testing.T) {
 	errorCode := cek.ErrCodeExplicitError
 	replayCase := baseCase(t, &syn.Error{}, nil)
@@ -82,6 +100,29 @@ func TestRunCaseMatchesEvaluationFailure(t *testing.T) {
 	result := RunCase(&replayCase)
 	if !result.Passed {
 		t.Fatalf("RunCase() mismatches = %v", result.Mismatches)
+	}
+}
+
+func TestEvaluateRecoversMachinePanic(t *testing.T) {
+	replayCase := baseCase(t, &syn.Error{}, nil)
+	decoded, err := replayCase.validate()
+	if err != nil {
+		t.Fatalf("validate() failed: %v", err)
+	}
+	decoded.program.Term = (*syn.Apply[syn.DeBruijn])(nil)
+
+	actual := evaluate(&replayCase, decoded)
+	if actual.Success {
+		t.Fatal("evaluate() unexpectedly succeeded")
+	}
+	if actual.SetupError {
+		t.Fatalf("evaluate() reported setup error: %s", actual.Error)
+	}
+	if !strings.Contains(actual.Error, "panic during script evaluation") {
+		t.Fatalf("evaluate() error = %q, want recovered panic", actual.Error)
+	}
+	if actual.ExUnits == (ExUnits{}) {
+		t.Fatal("evaluate() did not preserve consumed execution units")
 	}
 }
 
@@ -204,7 +245,7 @@ func testReference() Reference {
 	}
 }
 
-func successfulCase(t *testing.T) Case {
+func successfulCase(t testing.TB) Case {
 	t.Helper()
 	argument, err := data.Encode(data.NewInteger(big.NewInt(42)))
 	if err != nil {
@@ -222,7 +263,7 @@ func successfulCase(t *testing.T) Case {
 }
 
 func baseCase(
-	t *testing.T,
+	t testing.TB,
 	term syn.Term[syn.DeBruijn],
 	arguments []string,
 ) Case {
@@ -236,7 +277,7 @@ func baseCase(
 }
 
 func baseCaseWithVersion(
-	t *testing.T,
+	t testing.TB,
 	version lang.LanguageVersion,
 	term syn.Term[syn.DeBruijn],
 	arguments []string,

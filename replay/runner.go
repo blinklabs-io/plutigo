@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/blinklabs-io/plutigo/cek"
-	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
@@ -48,7 +47,8 @@ type Summary struct {
 }
 
 func Run(ctx context.Context, corpus *Corpus) (*Report, error) {
-	if err := corpus.Validate(); err != nil {
+	decodedCases, err := corpus.validate()
+	if err != nil {
 		return nil, err
 	}
 
@@ -65,7 +65,7 @@ func Run(ctx context.Context, corpus *Corpus) (*Report, error) {
 			return nil, fmt.Errorf("run replay corpus: %w", err)
 		}
 
-		result := RunCase(&corpus.Cases[i])
+		result := runDecodedCase(&corpus.Cases[i], decodedCases[i])
 		report.Cases = append(report.Cases, result)
 		durations = append(durations, result.DurationNS)
 		report.Summary.TotalDurationNS += result.DurationNS
@@ -94,50 +94,44 @@ func RunCase(replayCase *Case) CaseResult {
 			Mismatches: compare(Expected{}, actual),
 		}
 	}
+	decoded, err := replayCase.validate()
+	if err != nil {
+		actual := setupFailure(err)
+		return CaseResult{
+			ID:          replayCase.ID,
+			Transaction: replayCase.Transaction,
+			Actual:      actual,
+			Mismatches:  compare(replayCase.Expected, actual),
+		}
+	}
+	return runDecodedCase(replayCase, decoded)
+}
+
+func runDecodedCase(replayCase *Case, decoded decodedCase) CaseResult {
 	result := CaseResult{
 		ID:          replayCase.ID,
 		Transaction: replayCase.Transaction,
 	}
 	start := time.Now()
-	if err := replayCase.validate(); err != nil {
-		result.Actual = setupFailure(err)
-	} else {
-		result.Actual = evaluate(replayCase)
-	}
+	result.Actual = evaluate(replayCase, decoded)
 	result.DurationNS = time.Since(start).Nanoseconds()
 	result.Mismatches = compare(replayCase.Expected, result.Actual)
 	result.Passed = len(result.Mismatches) == 0
 	return result
 }
 
-func evaluate(replayCase *Case) Actual {
-	flatProgram, err := decodeHex("flat program", replayCase.FlatProgramHex)
-	if err != nil {
-		return setupFailure(err)
-	}
-	program, err := syn.Decode[syn.DeBruijn](flatProgram)
-	if err != nil {
-		return setupFailure(fmt.Errorf("decode FLAT program: %w", err))
-	}
+func evaluate(replayCase *Case, decoded decodedCase) Actual {
 	languageVersion, err := replayCase.Language.Version()
 	if err != nil {
 		return setupFailure(err)
 	}
 
-	term := program.Term
-	for i, encodedArg := range replayCase.ArgumentsCBORHex {
-		argCBOR, err := decodeHex(fmt.Sprintf("argument %d CBOR", i), encodedArg)
-		if err != nil {
-			return setupFailure(err)
-		}
-		arg, err := data.Decode(argCBOR)
-		if err != nil {
-			return setupFailure(fmt.Errorf("decode argument %d PlutusData: %w", i, err))
-		}
+	term := decoded.program.Term
+	for _, argument := range decoded.arguments {
 		term = &syn.Apply[syn.DeBruijn]{
 			Function: term,
 			Argument: &syn.Constant{
-				Con: &syn.Data{Inner: arg},
+				Con: &syn.Data{Inner: argument},
 			},
 		}
 	}
@@ -170,7 +164,7 @@ func evaluate(replayCase *Case) Actual {
 		evalContext,
 	)
 	machine.ExBudget = initialBudget
-	_, evalErr := machine.Run(term)
+	evalErr := runMachine(machine, term)
 	consumed := initialBudget.Sub(&machine.ExBudget)
 
 	actual := Actual{
@@ -187,6 +181,19 @@ func evaluate(replayCase *Case) Actual {
 		}
 	}
 	return actual
+}
+
+func runMachine(
+	machine *cek.Machine[syn.DeBruijn],
+	term syn.Term[syn.DeBruijn],
+) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("panic during script evaluation: %v", recovered)
+		}
+	}()
+	_, err = machine.Run(term)
+	return err
 }
 
 func setupFailure(err error) Actual {

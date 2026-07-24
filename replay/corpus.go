@@ -97,6 +97,11 @@ type Expected struct {
 	ErrorCode *cek.ErrorCode `json:"error_code,omitempty"`
 }
 
+type decodedCase struct {
+	program   *syn.Program[syn.DeBruijn]
+	arguments []data.PlutusData
+}
+
 func LoadFile(path string) (*Corpus, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -135,94 +140,127 @@ func Load(r io.Reader) (*Corpus, error) {
 }
 
 func (c *Corpus) Validate() error {
+	_, err := c.validate()
+	return err
+}
+
+func (c *Corpus) validate() ([]decodedCase, error) {
 	if c == nil {
-		return errors.New("replay corpus is required")
+		return nil, errors.New("replay corpus is required")
 	}
 	if c.SchemaVersion != SchemaVersion {
-		return fmt.Errorf(
+		return nil, fmt.Errorf(
 			"unsupported replay corpus schema version %d (want %d)",
 			c.SchemaVersion,
 			SchemaVersion,
 		)
 	}
 	if strings.TrimSpace(c.Network) == "" {
-		return errors.New("replay corpus network is required")
+		return nil, errors.New("replay corpus network is required")
 	}
 	if strings.TrimSpace(c.Reference.Implementation) == "" {
-		return errors.New("replay corpus reference implementation is required")
+		return nil, errors.New(
+			"replay corpus reference implementation is required",
+		)
 	}
 	if strings.TrimSpace(c.Reference.Version) == "" {
-		return errors.New("replay corpus reference version is required")
+		return nil, errors.New("replay corpus reference version is required")
 	}
 	if len(c.Cases) == 0 {
-		return errors.New("replay corpus must contain at least one case")
+		return nil, errors.New("replay corpus must contain at least one case")
 	}
 
 	ids := make(map[string]struct{}, len(c.Cases))
+	decodedCases := make([]decodedCase, 0, len(c.Cases))
 	for i := range c.Cases {
 		replayCase := &c.Cases[i]
-		if err := replayCase.validate(); err != nil {
-			return fmt.Errorf("replay case %d: %w", i, err)
+		decoded, err := replayCase.validate()
+		if err != nil {
+			return nil, fmt.Errorf("replay case %d: %w", i, err)
 		}
 		if _, exists := ids[replayCase.ID]; exists {
-			return fmt.Errorf("replay case %d: duplicate id %q", i, replayCase.ID)
+			return nil, fmt.Errorf(
+				"replay case %d: duplicate id %q",
+				i,
+				replayCase.ID,
+			)
 		}
 		ids[replayCase.ID] = struct{}{}
+		decodedCases = append(decodedCases, decoded)
 	}
-	return nil
+	return decodedCases, nil
 }
 
-func (c *Case) validate() error {
+func (c *Case) validate() (decodedCase, error) {
 	if strings.TrimSpace(c.ID) == "" {
-		return errors.New("id is required")
+		return decodedCase{}, errors.New("id is required")
 	}
 	if strings.TrimSpace(c.Transaction.ID) == "" {
-		return errors.New("transaction id is required")
+		return decodedCase{}, errors.New("transaction id is required")
 	}
 	if strings.TrimSpace(c.Transaction.Redeemer) == "" {
-		return errors.New("transaction redeemer is required")
+		return decodedCase{}, errors.New("transaction redeemer is required")
 	}
 	if c.ProtocolVersion.Major == 0 {
-		return errors.New("protocol major version must be positive")
+		return decodedCase{}, errors.New("protocol major version must be positive")
 	}
 	if _, err := c.Language.Version(); err != nil {
-		return err
+		return decodedCase{}, err
 	}
 	flatProgram, err := decodeHex("flat program", c.FlatProgramHex)
 	if err != nil {
-		return err
+		return decodedCase{}, err
 	}
-	if _, err := syn.Decode[syn.DeBruijn](flatProgram); err != nil {
-		return fmt.Errorf("decode FLAT program: %w", err)
+	program, err := syn.Decode[syn.DeBruijn](flatProgram)
+	if err != nil {
+		return decodedCase{}, fmt.Errorf("decode FLAT program: %w", err)
 	}
+	arguments := make([]data.PlutusData, 0, len(c.ArgumentsCBORHex))
 	for i, arg := range c.ArgumentsCBORHex {
 		argCBOR, err := decodeHex(fmt.Sprintf("argument %d CBOR", i), arg)
 		if err != nil {
-			return err
+			return decodedCase{}, err
 		}
-		if _, err := data.Decode(argCBOR); err != nil {
-			return fmt.Errorf("decode argument %d PlutusData: %w", i, err)
+		decodedArgument, err := data.Decode(argCBOR)
+		if err != nil {
+			return decodedCase{}, fmt.Errorf(
+				"decode argument %d PlutusData: %w",
+				i,
+				err,
+			)
 		}
+		arguments = append(arguments, decodedArgument)
 	}
 	if c.CostModel.UseDefault == (len(c.CostModel.Parameters) > 0) {
-		return errors.New(
+		return decodedCase{}, errors.New(
 			"cost model must select exactly one of use_default or parameters",
 		)
 	}
 	if c.BudgetLimit.Steps <= 0 || c.BudgetLimit.Memory <= 0 {
-		return errors.New("budget limit steps and memory must be positive")
+		return decodedCase{}, errors.New(
+			"budget limit steps and memory must be positive",
+		)
 	}
 	if c.Expected.ExUnits.Steps < 0 || c.Expected.ExUnits.Memory < 0 {
-		return errors.New("expected execution units cannot be negative")
+		return decodedCase{}, errors.New(
+			"expected execution units cannot be negative",
+		)
 	}
 	if c.Expected.Success && c.Expected.ErrorCode != nil {
-		return errors.New("successful expected result cannot include an error code")
+		return decodedCase{}, errors.New(
+			"successful expected result cannot include an error code",
+		)
 	}
 	if c.Expected.ExUnits.Steps > c.BudgetLimit.Steps ||
 		c.Expected.ExUnits.Memory > c.BudgetLimit.Memory {
-		return errors.New("expected execution units exceed the budget limit")
+		return decodedCase{}, errors.New(
+			"expected execution units exceed the budget limit",
+		)
 	}
-	return nil
+	return decodedCase{
+		program:   program,
+		arguments: arguments,
+	}, nil
 }
 
 func decodeHex(name, value string) ([]byte, error) {
