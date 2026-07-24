@@ -47,8 +47,7 @@ type Summary struct {
 }
 
 func Run(ctx context.Context, corpus *Corpus) (*Report, error) {
-	decodedCases, err := corpus.validate()
-	if err != nil {
+	if err := corpus.validate(); err != nil {
 		return nil, err
 	}
 
@@ -65,7 +64,12 @@ func Run(ctx context.Context, corpus *Corpus) (*Report, error) {
 			return nil, fmt.Errorf("run replay corpus: %w", err)
 		}
 
-		result := runDecodedCase(&corpus.Cases[i], decodedCases[i])
+		replayCase := &corpus.Cases[i]
+		decoded, err := replayCase.validate()
+		if err != nil {
+			return nil, fmt.Errorf("replay case %d: %w", i, err)
+		}
+		result := runDecodedCase(replayCase, decoded)
 		report.Cases = append(report.Cases, result)
 		durations = append(durations, result.DurationNS)
 		report.Summary.TotalDurationNS += result.DurationNS
