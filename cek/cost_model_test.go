@@ -412,6 +412,25 @@ func TestV1V2SignatureCostsFollowSemanticsVariant(t *testing.T) {
 	}
 }
 
+func TestVariantDLoadsLegacyIntegerMemoryMinimum(t *testing.T) {
+	costs, err := buildBuiltinCosts(
+		lang.LanguageVersionV1,
+		SemanticsVariantD,
+	)
+	if err != nil {
+		t.Fatalf("buildBuiltinCosts failed: %v", err)
+	}
+
+	for _, name := range []string{"modInteger", "remainderInteger"} {
+		t.Run(name, func(t *testing.T) {
+			param := name + "-memory-arguments-minimum"
+			if err := costs.update(param, 1); err != nil {
+				t.Errorf("update(%q) failed: %v", param, err)
+			}
+		})
+	}
+}
+
 func TestVariantBIntegerCosts(t *testing.T) {
 	costs, err := buildBuiltinCosts(
 		lang.LanguageVersionV1,

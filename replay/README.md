@@ -57,8 +57,36 @@ CBOR bytestring envelope. `arguments_cbor_hex` is ordered exactly as the ledger
 applies arguments to the script. `steps` corresponds to plutigo's CPU budget.
 
 For smoke tests only, `"cost_model": {"use_default": true}` selects plutigo's
-built-in model. Mainnet parity corpora should always include the historical
-cost-model parameter array active at the transaction's slot.
+built-in model. Mainnet parity corpora should always include the exact
+cost-model parameter array and protocol version used by the reference
+evaluation. That may differ from the transaction's historical slot when old
+transaction bytes are re-evaluated by a current node.
+
+## Checked-in mainnet corpus
+
+[`testdata/mainnet.json`](testdata/mainnet.json) contains eight validator
+evaluations collected from three immutable mainnet transactions:
+
+- Plutus V1 transaction
+  `dc051733f7ef07bdf78e98679308a131520594f37ea8782e74ba4e7cca203559`
+  covers two spending validators and one minting policy.
+- Plutus V2 Minswap transaction
+  `2b46a2e3e5be63a1bc77f11fa0890453c2cb656db1fdcf6734bb47df213db5ef`
+  covers three spending validators and a large withdrawal validator.
+- Plutus V3 Halo2 transaction
+  `71579b77ab7d974eb31ef1b50d58f14f2ceac2bcf540aac50f777f56a8f24bff`
+  exercises BLS12-381 builtins and consumes more than 9.2 billion CPU units.
+
+The transaction data came from Koios mainnet. Reference ExUnits were captured
+through its cardano-node-backed Ogmios `evaluateTransaction` endpoint on
+2026-07-28. Each case embeds the captured PV11 cost model for its respective
+Plutus language version. Run the exact parity regression and throughput
+benchmark with:
+
+```sh
+go test ./replay -run TestMainnetCorpusParity -v
+go test ./replay -run '^$' -bench BenchmarkMainnetCorpus -benchmem
+```
 
 ## Run
 
@@ -78,7 +106,8 @@ For each representative V1, V2, and V3 transaction:
 2. Resolve transaction inputs, datums, and reference scripts at that ledger
    state.
 3. Export the raw FLAT program and the ledger-ordered CBOR `Data` arguments.
-4. Record the active protocol version and complete cost-model parameter array.
+4. Record the protocol version and complete cost-model parameter array used by
+   the reference evaluation.
 5. Evaluate with cardano-node and record success/failure and exact ExUnits.
 6. Keep collector and cardano-node versions in `metadata` for reproducibility.
 
