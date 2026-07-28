@@ -293,6 +293,17 @@ func (b *BuiltinCosts) update(param string, val int64) error {
 		switch paramParts[paramIdx] {
 		case "intercept":
 			a.intercept = val
+		case "minimum":
+			// PV11 retains this legacy parameter slot for V1/V2 even though
+			// Variant D's mod/remainder memory model is linear in Y.
+			if builtinName != "modInteger" &&
+				builtinName != "remainderInteger" {
+				return fmt.Errorf(
+					"unknown cost param for builtin %s: %s",
+					builtinName,
+					paramParts[paramIdx],
+				)
+			}
 		case "slope":
 			a.slope = val
 		default:
