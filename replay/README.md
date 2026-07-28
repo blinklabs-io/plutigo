@@ -79,8 +79,9 @@ evaluations collected from three immutable mainnet transactions:
 
 The transaction data came from Koios mainnet. Reference ExUnits were captured
 through its cardano-node-backed Ogmios `evaluateTransaction` endpoint on
-2026-07-28, with the same captured PV11 cost models embedded in every case.
-Run the exact parity regression and throughput benchmark with:
+2026-07-28. Each case embeds the captured PV11 cost model for its respective
+Plutus language version. Run the exact parity regression and throughput
+benchmark with:
 
 ```sh
 go test ./replay -run TestMainnetCorpusParity -v

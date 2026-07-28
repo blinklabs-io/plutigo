@@ -20,17 +20,12 @@ func TestMainnetCorpusParity(t *testing.T) {
 	if report.Summary.Total != 8 {
 		t.Fatalf("mainnet corpus has %d cases, want 8", report.Summary.Total)
 	}
-	if report.Summary.Passed != report.Summary.Total {
-		for _, result := range report.Cases {
+	for _, result := range report.Cases {
+		t.Run(result.ID, func(t *testing.T) {
 			if !result.Passed {
-				t.Errorf("%s mismatches: %v", result.ID, result.Mismatches)
+				t.Errorf("mismatches: %v", result.Mismatches)
 			}
-		}
-		t.Fatalf(
-			"mainnet parity passed %d/%d cases",
-			report.Summary.Passed,
-			report.Summary.Total,
-		)
+		})
 	}
 }
 
