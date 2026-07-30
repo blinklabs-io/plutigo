@@ -9,9 +9,9 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	circlbls "github.com/cloudflare/circl/ecc/bls12381"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
-	"github.com/ethereum/go-ethereum/crypto"
 	sha256 "github.com/minio/sha256-simd"
 	"golang.org/x/crypto/blake2b"
+	legacykeccak "golang.org/x/crypto/sha3"
 )
 
 var benchmarkBLSScalarBytes = []byte{
@@ -32,19 +32,15 @@ func BenchmarkDirectCrypto(b *testing.B) {
 
 	b.Run("Keccak_256", func(b *testing.B) {
 		for b.Loop() {
-			crypto.Keccak256(message)
+			h := legacykeccak.NewLegacyKeccak256()
+			_, _ = h.Write(message)
+			h.Sum(nil)
 		}
 	})
 
 	b.Run("Blake2b_256", func(b *testing.B) {
 		for b.Loop() {
 			blake2b.Sum256(message)
-		}
-	})
-
-	b.Run("Keccak_256_Hash", func(b *testing.B) {
-		for b.Loop() {
-			crypto.Keccak256Hash(message)
 		}
 	})
 
