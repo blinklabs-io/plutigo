@@ -22,10 +22,10 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 	blsfr "github.com/consensys/gnark-crypto/ecc/bls12-381/fr"
-	"github.com/ethereum/go-ethereum/crypto"
 	sha256 "github.com/minio/sha256-simd"
 	"golang.org/x/crypto/blake2b"
 	legacyripemd160 "golang.org/x/crypto/ripemd160" //nolint:staticcheck,gosec
+	legacykeccak "golang.org/x/crypto/sha3"
 )
 
 var (
@@ -1395,10 +1395,15 @@ func keccak256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	res := crypto.Keccak256Hash(arg1)
+	// Plutus' keccak_256 is legacy Keccak (0x01 padding), not NIST SHA3
+	// (0x06 padding), so stdlib crypto/sha3 cannot serve this builtin --
+	// it exposes only the NIST variant.
+	res := legacykeccak.NewLegacyKeccak256()
+	// hash.Hash.Write never returns an error.
+	_, _ = res.Write(arg1)
 
 	con := &syn.ByteString{
-		Inner: res[:],
+		Inner: res.Sum(nil),
 	}
 
 	value := &Constant{con}
