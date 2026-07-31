@@ -1,5 +1,18 @@
 # Release Notes
 
+## v0.2.0 - mainnet replay tooling, V4 builtin alignment, and runtime improvements
+
+- Date: 2026-07-31
+- Version: v0.2.0
+
+Summary: This release expands Plutus V4 builtin support, improves CEK lookup performance, adds mainnet replay tooling and coverage, updates conformance behavior, removes the `go-ethereum` dependency from `keccak_256`, and refreshes CI automation.
+
+### New Features
+
+* Aligned Plutus V4 builtins with the current runtime expectations.
+* Added a mainnet script replay runner for mainnet validation workflows.
+* Expanded the replay corpus with mainnet cases to improve validation coverage.
+
 ## v0.1.17 - dependency hardening and documentation clarity
 
 - Date: 2026-07-14
