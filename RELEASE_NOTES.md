@@ -5,7 +5,7 @@
 - Date: 2026-07-31
 - Version: v0.2.0
 
-Summary: This release expands Plutus V4 builtin support, improves CEK lookup performance, adds mainnet replay tooling and coverage, updates conformance behavior, removes the `go-ethereum` dependency from `keccak_256`, and refreshes CI automation.
+Summary: This release aligns Plutus V4 builtins, improves CEK lookup performance, adds mainnet replay tooling and coverage, fixes conformance behavior, removes the `go-ethereum` dependency from `keccak_256`, and refreshes CI automation.
 
 ### New Features
 
@@ -19,7 +19,7 @@ Summary: This release expands Plutus V4 builtin support, improves CEK lookup per
 
 ### Bug Fixes
 
-* Updated conformance tests so V4 builtin behavior matches the current expected results.
+* Fixed conformance tests so V4 builtin behavior stays aligned with the current expected results.
 * Removed the `go-ethereum` dependency from `keccak_256`, keeping the hash implementation local to the library.
 
 ### Additional Changes
