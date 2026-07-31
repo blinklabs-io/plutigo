@@ -13,6 +13,15 @@ Summary: This release expands Plutus V4 builtin support, improves CEK lookup per
 * Added a mainnet script replay runner for mainnet validation workflows.
 * Expanded the replay corpus with mainnet cases to improve validation coverage.
 
+### Performance
+
+* Improved CEK environment lookup performance by indexing repeated lookups in the evaluator hot path.
+
+### Bug Fixes
+
+* Updated conformance tests so V4 builtin behavior matches the current expected results.
+* Removed the `go-ethereum` dependency from `keccak_256`, keeping the hash implementation local to the library.
+
 ## v0.1.17 - dependency hardening and documentation clarity
 
 - Date: 2026-07-14
