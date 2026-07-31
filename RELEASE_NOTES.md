@@ -22,6 +22,12 @@ Summary: This release expands Plutus V4 builtin support, improves CEK lookup per
 * Updated conformance tests so V4 builtin behavior matches the current expected results.
 * Removed the `go-ethereum` dependency from `keccak_256`, keeping the hash implementation local to the library.
 
+### Additional Changes
+
+* Bumped `actions/setup-go` to `v7.0.0`.
+* Bumped `actions/checkout` to `v7.0.1`.
+* Removed the issue closed date workflow action from CI.
+
 ## v0.1.17 - dependency hardening and documentation clarity
 
 - Date: 2026-07-14
