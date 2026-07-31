@@ -1,5 +1,33 @@
 # Release Notes
 
+## v0.2.0 - mainnet replay tooling, V4 builtin alignment, and runtime improvements
+
+- Date: 2026-07-31
+- Version: v0.2.0
+
+Summary: This release aligns Plutus V4 builtins, improves CEK lookup performance, adds mainnet replay tooling and coverage, fixes conformance behavior, removes the `go-ethereum` dependency from `keccak_256`, and refreshes CI automation.
+
+### New Features
+
+* Aligned Plutus V4 builtins with the current runtime expectations.
+* Added a mainnet script replay runner for mainnet validation workflows.
+* Expanded the replay corpus with mainnet cases to improve validation coverage.
+
+### Performance
+
+* Improved CEK environment lookup performance by indexing repeated lookups in the evaluator hot path.
+
+### Bug Fixes
+
+* Fixed conformance tests so V4 builtin behavior stays aligned with the current expected results.
+* Removed the `go-ethereum` dependency from `keccak_256`, keeping the hash implementation local to the library.
+
+### Additional Changes
+
+* Refreshed `actions/setup-go` to `v7.0.0`.
+* Upgraded `actions/checkout` to `v7.0.1`.
+* Dropped the issue closed date workflow action from CI.
+
 ## v0.1.17 - dependency hardening and documentation clarity
 
 - Date: 2026-07-14
