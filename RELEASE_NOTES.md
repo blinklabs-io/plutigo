@@ -24,9 +24,9 @@ Summary: This release expands Plutus V4 builtin support, improves CEK lookup per
 
 ### Additional Changes
 
-* Bumped `actions/setup-go` to `v7.0.0`.
-* Bumped `actions/checkout` to `v7.0.1`.
-* Removed the issue closed date workflow action from CI.
+* Refreshed `actions/setup-go` to `v7.0.0`.
+* Upgraded `actions/checkout` to `v7.0.1`.
+* Dropped the issue closed date workflow action from CI.
 
 ## v0.1.17 - dependency hardening and documentation clarity
 
