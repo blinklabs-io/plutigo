@@ -427,25 +427,57 @@ func TestDeBruijnDecoderReuse(t *testing.T) {
 }
 
 func TestDeBruijnDecoderReuseOverwritesBigInts(t *testing.T) {
+	type programCase struct {
+		name          string
+		program       *Program[DeBruijn]
+		expectedValue *big.Int
+	}
+
+	newProgram := func(value *big.Int) *Program[DeBruijn] {
+		return &Program[DeBruijn]{
+			Version: lang.LanguageVersionV3,
+			Term:    &Constant{Con: &Integer{Inner: value}},
+		}
+	}
+	newProgramCase := func(name string, value *big.Int) programCase {
+		return programCase{
+			name:          name,
+			program:       newProgram(value),
+			expectedValue: value,
+		}
+	}
+
 	tests := []struct {
 		name            string
-		programSequence []string
+		programSequence []programCase
 	}{
 		{
-			name:            "large_then_small",
-			programSequence: []string{"large", "small"},
+			name: "large_then_small",
+			programSequence: []programCase{
+				newProgramCase("large", new(big.Int).Lsh(big.NewInt(1), 80)),
+				newProgramCase("small", big.NewInt(-3)),
+			},
 		},
 		{
-			name:            "small_then_large",
-			programSequence: []string{"small", "large"},
+			name: "small_then_large",
+			programSequence: []programCase{
+				newProgramCase("small", big.NewInt(-3)),
+				newProgramCase("large", new(big.Int).Lsh(big.NewInt(1), 80)),
+			},
 		},
 		{
-			name:            "same_size_large_values",
-			programSequence: []string{"same_size_a", "same_size_b"},
+			name: "same_size_large_values",
+			programSequence: []programCase{
+				newProgramCase("same_size_a", new(big.Int).Add(new(big.Int).Lsh(big.NewInt(1), 80), big.NewInt(5))),
+				newProgramCase("same_size_b", new(big.Int).Add(new(big.Int).Lsh(big.NewInt(1), 80), big.NewInt(9))),
+			},
 		},
 		{
-			name:            "large_then_zero",
-			programSequence: []string{"large", "zero"},
+			name: "large_then_zero",
+			programSequence: []programCase{
+				newProgramCase("large", new(big.Int).Lsh(big.NewInt(1), 80)),
+				newProgramCase("zero", big.NewInt(0)),
+			},
 		},
 	}
 
@@ -453,49 +485,10 @@ func TestDeBruijnDecoderReuseOverwritesBigInts(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			decoder := NewDeBruijnDecoder()
 
-			large := new(big.Int).Lsh(big.NewInt(1), 80)
-			sameSizeA := new(big.Int).Add(new(big.Int).Lsh(big.NewInt(1), 80), big.NewInt(5))
-			sameSizeB := new(big.Int).Add(new(big.Int).Lsh(big.NewInt(1), 80), big.NewInt(9))
-
-			largeProgram := &Program[DeBruijn]{
-				Version: lang.LanguageVersionV3,
-				Term:    &Constant{Con: &Integer{Inner: large}},
-			}
-			smallProgram := &Program[DeBruijn]{
-				Version: lang.LanguageVersionV3,
-				Term:    &Constant{Con: &Integer{Inner: big.NewInt(-3)}},
-			}
-			sameSizeAProgram := &Program[DeBruijn]{
-				Version: lang.LanguageVersionV3,
-				Term:    &Constant{Con: &Integer{Inner: sameSizeA}},
-			}
-			sameSizeBProgram := &Program[DeBruijn]{
-				Version: lang.LanguageVersionV3,
-				Term:    &Constant{Con: &Integer{Inner: sameSizeB}},
-			}
-			zeroProgram := &Program[DeBruijn]{
-				Version: lang.LanguageVersionV3,
-				Term:    &Constant{Con: &Integer{Inner: big.NewInt(0)}},
-			}
-
-			programs := map[string]*Program[DeBruijn]{
-				"large":       largeProgram,
-				"small":       smallProgram,
-				"same_size_a": sameSizeAProgram,
-				"same_size_b": sameSizeBProgram,
-				"zero":        zeroProgram,
-			}
-			expectedValues := map[string]*big.Int{
-				"large":       large,
-				"small":       big.NewInt(-3),
-				"same_size_a": sameSizeA,
-				"same_size_b": sameSizeB,
-				"zero":        big.NewInt(0),
-			}
-
-			for _, programName := range tt.programSequence {
-				program := programs[programName]
-				expectedValue := expectedValues[programName]
+			for _, programCase := range tt.programSequence {
+				programName := programCase.name
+				program := programCase.program
+				expectedValue := programCase.expectedValue
 
 				expectedEncoded, err := Encode(program)
 				if err != nil {
