@@ -570,36 +570,59 @@ func assertDecodeLimitError(t *testing.T, err error, limit string) {
 }
 
 func TestDecoderResetOverwritesRetainedBigInts(t *testing.T) {
-	decoder := NewDecoder()
+	tests := []struct {
+		name       string
+		inputLarge *big.Int
+		inputSmall int64
+		expected   int64
+	}{
+		{
+			name:       "large_then_negative_small",
+			inputLarge: new(big.Int).Lsh(big.NewInt(1), 80),
+			inputSmall: -3,
+			expected:   -3,
+		},
+		{
+			name:       "larger_then_zero",
+			inputLarge: new(big.Int).Lsh(big.NewInt(1), 128),
+			inputSmall: 0,
+			expected:   0,
+		},
+	}
 
-	large := new(big.Int).Lsh(big.NewInt(1), 80)
-	largeEncoded, err := Encode(NewInteger(large))
-	if err != nil {
-		t.Fatalf("Encode large failed: %v", err)
-	}
-	smallEncoded, err := Encode(NewInteger(big.NewInt(-3)))
-	if err != nil {
-		t.Fatalf("Encode small failed: %v", err)
-	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			decoder := NewDecoder()
 
-	if _, err := decoder.Decode(largeEncoded); err != nil {
-		t.Fatalf("Decode large failed: %v", err)
-	}
-	decoder.Reset()
-	decoded, err := decoder.Decode(smallEncoded)
-	if err != nil {
-		t.Fatalf("Decode small failed: %v", err)
-	}
+			largeEncoded, err := Encode(NewInteger(tc.inputLarge))
+			if err != nil {
+				t.Fatalf("Encode large failed: %v", err)
+			}
+			smallEncoded, err := Encode(NewInteger(big.NewInt(tc.inputSmall)))
+			if err != nil {
+				t.Fatalf("Encode small failed: %v", err)
+			}
 
-	integer, ok := decoded.(*Integer)
-	if !ok {
-		t.Fatalf("decoded value = %T, want *Integer", decoded)
-	}
-	if got, want := integer.Inner.Int64(), int64(-3); got != want {
-		t.Fatalf("decoded integer = %d, want %d", got, want)
-	}
-	if !decoded.Equal(NewInteger(big.NewInt(-3))) {
-		t.Fatalf("decoded value changed after overwrite: got %s", decoded)
+			if _, err := decoder.Decode(largeEncoded); err != nil {
+				t.Fatalf("Decode large failed: %v", err)
+			}
+			decoder.Reset()
+			decoded, err := decoder.Decode(smallEncoded)
+			if err != nil {
+				t.Fatalf("Decode small failed: %v", err)
+			}
+
+			integer, ok := decoded.(*Integer)
+			if !ok {
+				t.Fatalf("decoded value = %T, want *Integer", decoded)
+			}
+			if got, want := integer.Inner.Int64(), tc.expected; got != want {
+				t.Fatalf("decoded integer = %d, want %d", got, want)
+			}
+			if !decoded.Equal(NewInteger(big.NewInt(tc.expected))) {
+				t.Fatalf("decoded value changed after overwrite: got %s", decoded)
+			}
+		})
 	}
 }
 
