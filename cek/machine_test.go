@@ -305,48 +305,44 @@ func TestRunStackLambdaImmediateFastPathSkipsLambdaArena(t *testing.T) {
 	}
 }
 
-func TestRunRestrictingModeSkipsSuccessfulFinalSlippageFlush(t *testing.T) {
+func TestRunFlushesSuccessfulFinalSlippageBatch(t *testing.T) {
 	ctx := NewDefaultEvalContext(
-		lang.LanguageVersionV3,
-		ProtoVersion{},
+		lang.LanguageVersionV1,
+		ProtoVersion{Major: 7},
 	)
-	ctx.SkipFinalSlippageFlush = true
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 200, ctx)
-	startupBudget := m.costs.machineCosts.startup
-	m.ExBudget = startupBudget
+	// Preview PV7 Haskell plutus-core charges startup (100 CPU, 100 memory)
+	// immediately and flushes the trailing constant step (29,773 CPU,
+	// 100 memory) when the CEK machine returns successfully.
+	ctx.CostModel.machineCosts.startup = ExBudget{Cpu: 100, Mem: 100}
+	ctx.CostModel.machineCosts.constant = ExBudget{Cpu: 29_773, Mem: 100}
+	haskellBudget := ExBudget{Cpu: 29_873, Mem: 200}
 
 	term := &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(42)}}
-	if _, err := m.Run(term); err != nil {
-		t.Fatalf("Run returned error: %v", err)
-	}
-	if m.ExBudget != (ExBudget{}) {
-		t.Fatalf("remaining budget = %+v, want zero after startup only", m.ExBudget)
-	}
-	if got := m.unbudgetedTotal; got != 0 {
-		t.Fatalf("unbudgetedTotal after Run = %d, want 0", got)
-	}
-	if got := m.unbudgetedSteps; got != [9]uint32{} {
-		t.Fatalf("unbudgetedSteps after Run = %v, want zeroed", got)
-	}
-}
+	t.Run("exact Haskell budget", func(t *testing.T) {
+		m := NewMachine[syn.DeBruijn](lang.LanguageVersionV1, 200, ctx)
+		m.ExBudget = haskellBudget
 
-func TestRunDefaultModeFlushesSuccessfulFinalSlippageBatch(t *testing.T) {
-	ctx := NewDefaultEvalContext(
-		lang.LanguageVersionV3,
-		ProtoVersion{},
-	)
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 200, ctx)
-	m.ExBudget = m.costs.machineCosts.startup
+		if _, err := m.Run(term); err != nil {
+			t.Fatalf("Run returned error: %v", err)
+		}
+		if m.ExBudget != (ExBudget{}) {
+			t.Fatalf("remaining budget = %+v, want zero", m.ExBudget)
+		}
+	})
 
-	term := &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(42)}}
-	_, err := m.Run(term)
-	if err == nil {
-		t.Fatal("expected final slippage flush to exhaust budget")
-	}
-	var budgetErr *BudgetError
-	if !errors.As(err, &budgetErr) {
-		t.Fatalf("Run error = %T %v, want BudgetError", err, err)
-	}
+	t.Run("missing final constant memory", func(t *testing.T) {
+		m := NewMachine[syn.DeBruijn](lang.LanguageVersionV1, 200, ctx)
+		m.ExBudget = ExBudget{Cpu: haskellBudget.Cpu, Mem: haskellBudget.Mem - 1}
+
+		_, err := m.Run(term)
+		if err == nil {
+			t.Fatal("expected final slippage flush to exhaust budget")
+		}
+		var budgetErr *BudgetError
+		if !errors.As(err, &budgetErr) {
+			t.Fatalf("Run error = %T %v, want BudgetError", err, err)
+		}
+	})
 }
 
 func TestResetEnvArenaRetainsOnlyTrackedChunkHeaders(t *testing.T) {

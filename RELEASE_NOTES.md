@@ -1,5 +1,15 @@
 # Release Notes
 
+## Unreleased
+
+### Breaking Changes
+
+* Removed `EvalContext.SkipFinalSlippageFlush`. Successful CEK evaluation now
+  always charges the trailing accumulated machine-step batch, matching the
+  Haskell Plutus implementation. Consumers that enabled the removed option
+  must stop doing so; retaining the option could accept scripts whose declared
+  execution budget the reference ledger rejects.
+
 ## v0.2.0 - mainnet replay tooling, V4 builtin alignment, and runtime improvements
 
 - Date: 2026-07-31
