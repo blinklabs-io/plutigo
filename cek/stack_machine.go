@@ -29,7 +29,7 @@ type stackFrame[T syn.Eval] struct {
 	env     *Env[T]
 	term    syn.Term[T]
 
-	tag            uint
+	tag            uint64
 	fields         []syn.Term[T]
 	resolvedFields []Value[T]
 	branches       []syn.Term[T]

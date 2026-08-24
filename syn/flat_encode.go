@@ -115,7 +115,7 @@ func EncodeTerm[T Binder](e *encoder, term Term[T]) error {
 			return termError
 		}
 
-		e.word(t.Tag)
+		e.word64(t.Tag)
 
 		err := EncodeList(e, t.Fields, EncodeTerm[T])
 		if err != nil {
@@ -203,6 +203,10 @@ func (e *encoder) safeEncodeBits(numBits byte, val byte) error {
 // value is greater than 127 we encode a leading 1 followed by
 // repeating the above for the next 7 bits and so on.
 func (e *encoder) word(c uint) *encoder {
+	return e.word64(uint64(c))
+}
+
+func (e *encoder) word64(c uint64) *encoder {
 	d := c
 
 	for {

@@ -155,7 +155,7 @@ func (m *Map) UnmarshalJSON(data []byte) error {
 
 // constrJSON is the JSON representation of a Constr.
 type constrJSON struct {
-	Constructor uint              `json:"constructor"`
+	Constructor *big.Int          `json:"constructor"`
 	Fields      []json.RawMessage `json:"fields"`
 }
 
@@ -169,7 +169,11 @@ func (c Constr) MarshalJSON() ([]byte, error) {
 		}
 		fields[i] = raw
 	}
-	return json.Marshal(constrJSON{Constructor: c.Tag, Fields: fields})
+	constructor := c.Tag
+	if constructor == nil {
+		constructor = new(big.Int)
+	}
+	return json.Marshal(constrJSON{Constructor: constructor, Fields: fields})
 }
 
 // UnmarshalJSON implements json.Unmarshaler for Constr.
@@ -182,9 +186,11 @@ func (c *Constr) UnmarshalJSON(data []byte) error {
 	if !ok {
 		return errors.New("missing \"constructor\" key in Constr JSON")
 	}
-	if err := json.Unmarshal(tagRaw, &c.Tag); err != nil {
+	var tag big.Int
+	if err := json.Unmarshal(tagRaw, &tag); err != nil {
 		return fmt.Errorf("failed to unmarshal Constr constructor tag: %w", err)
 	}
+	c.Tag = &tag
 	fieldsRaw, ok := raw["fields"]
 	if !ok {
 		return errors.New("missing \"fields\" key in Constr JSON")
@@ -610,7 +616,7 @@ func decodePlutusDataJSONValue(
 		}
 		return &Map{Pairs: pairs}, nil
 	case hasKey(keys, "constructor"):
-		var tag uint
+		var tag big.Int
 		if err := json.Unmarshal(jsonRawSpan(data, keys["constructor"]), &tag); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal Constr constructor tag: %w", err)
 		}
@@ -625,7 +631,7 @@ func decodePlutusDataJSONValue(
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal Constr fields: %w", err)
 		}
-		return &Constr{Tag: tag, Fields: fields}, nil
+		return &Constr{Tag: &tag, Fields: fields}, nil
 	default:
 		return nil, fmt.Errorf("unrecognized PlutusData JSON keys: %v", keysOf(keys))
 	}

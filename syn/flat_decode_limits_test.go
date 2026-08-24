@@ -207,3 +207,15 @@ func TestWordOverflowRejected(t *testing.T) {
 		})
 	}
 }
+
+func TestWord64Boundary(t *testing.T) {
+	encoded := append(bytes.Repeat([]byte{0xff}, 9), 0x01)
+	d := newDecoder(encoded)
+	got, err := d.word64()
+	if err != nil {
+		t.Fatalf("word64 returned error: %v", err)
+	}
+	if got != ^uint64(0) {
+		t.Fatalf("word64 = %d, want %d", got, ^uint64(0))
+	}
+}

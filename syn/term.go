@@ -54,7 +54,7 @@ func (Builtin) isTerm() {}
 
 // (constr 0 (con integer 1) (con string "1234"))
 type Constr[T any] struct {
-	Tag    uint
+	Tag    uint64
 	Fields []Term[T]
 }
 

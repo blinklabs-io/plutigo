@@ -740,7 +740,7 @@ func TestUnConstrDataBuiltin(t *testing.T) {
 
 	// Create a constr data
 	constr := &data.Constr{
-		Tag:    1,
+		Tag:    big.NewInt(1),
 		Fields: []data.PlutusData{&data.Integer{Inner: big.NewInt(99)}},
 	}
 	d := &syn.Data{Inner: constr}
@@ -1471,32 +1471,87 @@ func TestConstrDataBuiltin(t *testing.T) {
 		t.Fatalf("expected Constr data, got %T", dataConst.Inner)
 	}
 
-	if constrData.Tag != 0 {
+	if constrData.Tag.Cmp(big.NewInt(0)) != 0 {
 		t.Fatalf("expected constructor 0, got %d", constrData.Tag)
 	}
 }
 
-func TestConstrDataBuiltinRejectsTagAboveMaxInt64(t *testing.T) {
-	m := newTestMachine()
-	b := newTestBuiltin(builtin.ConstrData)
-
-	tooLarge := new(big.Int).Add(big.NewInt(math.MaxInt64), big.NewInt(1))
-	list := &syn.ProtoList{LTyp: &syn.TData{}}
-
-	b = b.ApplyArg(&Constant{&syn.Integer{Inner: tooLarge}})
-	b = b.ApplyArg(&Constant{list})
-
-	_, err := evalBuiltinWithError(t, m, b)
-	if err == nil {
-		t.Fatal("expected overflow error for constructor tag above MaxInt64")
+func TestConstrDataTagSemantics(t *testing.T) {
+	twoTo64 := new(big.Int).Lsh(big.NewInt(1), 64)
+	twoTo80 := new(big.Int).Lsh(big.NewInt(1), 80)
+	maxWord64 := new(big.Int).Sub(new(big.Int).Set(twoTo64), big.NewInt(1))
+	tests := []struct {
+		name      string
+		semantics SemanticsVariant
+		tag       *big.Int
+		wantCode  ErrorCode
+	}{
+		{name: "variant A accepts negative", semantics: SemanticsVariantA, tag: big.NewInt(-1)},
+		{name: "variant A accepts unbounded", semantics: SemanticsVariantA, tag: twoTo80},
+		{name: "variant B accepts negative", semantics: SemanticsVariantB, tag: big.NewInt(-1)},
+		{name: "variant B accepts unbounded", semantics: SemanticsVariantB, tag: twoTo80},
+		{name: "variant C accepts negative", semantics: SemanticsVariantC, tag: big.NewInt(-1)},
+		{name: "variant C accepts unbounded", semantics: SemanticsVariantC, tag: twoTo80},
+		{name: "variant D accepts Word64 max", semantics: SemanticsVariantD, tag: maxWord64},
+		{name: "variant D rejects negative", semantics: SemanticsVariantD, tag: big.NewInt(-1), wantCode: ErrCodeInvalidArgument},
+		{name: "variant D rejects above Word64", semantics: SemanticsVariantD, tag: twoTo64, wantCode: ErrCodeOverflow},
+		{name: "variant E accepts Word64 max", semantics: SemanticsVariantE, tag: maxWord64},
+		{name: "variant E rejects negative", semantics: SemanticsVariantE, tag: big.NewInt(-1), wantCode: ErrCodeInvalidArgument},
+		{name: "variant E rejects above Word64", semantics: SemanticsVariantE, tag: twoTo64, wantCode: ErrCodeOverflow},
 	}
 
-	builtinErr, ok := err.(*BuiltinError)
-	if !ok {
-		t.Fatalf("expected BuiltinError, got %T", err)
-	}
-	if builtinErr.Code != ErrCodeOverflow {
-		t.Fatalf("expected overflow code, got %v", builtinErr.Code)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := &EvalContext{
+				CostModel:        DefaultCostModel,
+				SemanticsVariant: tt.semantics,
+			}
+			m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ctx)
+			constructed := &syn.Apply[syn.DeBruijn]{
+				Function: &syn.Apply[syn.DeBruijn]{
+					Function: &syn.Builtin{DefaultFunction: builtin.ConstrData},
+					Argument: &syn.Constant{Con: &syn.Integer{Inner: new(big.Int).Set(tt.tag)}},
+				},
+				Argument: &syn.Constant{Con: &syn.ProtoList{LTyp: &syn.TData{}}},
+			}
+			term := &syn.Apply[syn.DeBruijn]{
+				Function: &syn.Builtin{DefaultFunction: builtin.UnConstrData},
+				Argument: constructed,
+			}
+
+			value, err := m.Run(term)
+			if tt.wantCode != 0 {
+				if err == nil {
+					t.Fatalf("expected error code %v", tt.wantCode)
+				}
+				builtinErr, ok := err.(*BuiltinError)
+				if !ok {
+					t.Fatalf("expected BuiltinError, got %T: %v", err, err)
+				}
+				if builtinErr.Code != tt.wantCode {
+					t.Fatalf("error code = %v, want %v", builtinErr.Code, tt.wantCode)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Run returned error: %v", err)
+			}
+			constant, ok := value.(*syn.Constant)
+			if !ok {
+				t.Fatalf("Run result has type %T, want *syn.Constant", value)
+			}
+			pair, ok := constant.Con.(*syn.ProtoPair)
+			if !ok {
+				t.Fatalf("Run constant has type %T, want *syn.ProtoPair", constant.Con)
+			}
+			gotTag, ok := pair.First.(*syn.Integer)
+			if !ok {
+				t.Fatalf("constructor tag result has type %T, want *syn.Integer", pair.First)
+			}
+			if gotTag.Inner.Cmp(tt.tag) != 0 {
+				t.Fatalf("constructor tag = %s, want %s", gotTag.Inner, tt.tag)
+			}
+		})
 	}
 }
 

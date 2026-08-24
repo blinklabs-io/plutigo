@@ -349,7 +349,7 @@ func (d *Decoder) decodeConstrNextEntered(
 		if err != nil {
 			return nil, nil, err
 		}
-		constr.Tag = uint(tagNumber) - 121
+		constr.Tag = d.bigInts.alloc().SetUint64(tagNumber - 121)
 		constr.Fields = tmpFields
 		constr.useIndef = tmpUseIndef
 		return constr, rest, nil
@@ -361,7 +361,7 @@ func (d *Decoder) decodeConstrNextEntered(
 		if err != nil {
 			return nil, nil, err
 		}
-		constr.Tag = uint(tagNumber) - 1280 + 7
+		constr.Tag = d.bigInts.alloc().SetUint64(tagNumber - 1280 + 7)
 		constr.Fields = tmpFields
 		constr.useIndef = tmpUseIndef
 		return constr, rest, nil
@@ -377,9 +377,6 @@ func (d *Decoder) decodeConstrNextEntered(
 		alternative, next, err := decodeCBORUint(rest)
 		if err != nil {
 			return nil, nil, err
-		}
-		if alternative > math.MaxUint {
-			return nil, nil, fmt.Errorf("constructor alternative too large: %d", alternative)
 		}
 		rest = next
 
@@ -399,7 +396,7 @@ func (d *Decoder) decodeConstrNextEntered(
 			rest = rest[1:]
 		}
 
-		constr.Tag = uint(alternative)
+		constr.Tag = d.bigInts.alloc().SetUint64(alternative)
 		constr.Fields = tmpFields
 		constr.useIndef = tmpUseIndef
 		return constr, rest, nil

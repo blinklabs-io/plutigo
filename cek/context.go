@@ -63,7 +63,7 @@ func (f FrameForce[T]) isMachineContext() {}
 
 type FrameConstr[T syn.Eval] struct {
 	Env            *Env[T]
-	Tag            uint
+	Tag            uint64
 	Fields         []syn.Term[T]
 	ResolvedFields []Value[T]
 	Ctx            MachineContext[T]

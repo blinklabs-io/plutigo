@@ -35,6 +35,25 @@ func TestParseConstrVersionGate(t *testing.T) {
 	}
 }
 
+func TestParseConstrTagWord64Boundary(t *testing.T) {
+	program, err := Parse("(program 1.1.0 (constr 18446744073709551615))")
+	if err != nil {
+		t.Fatalf("Word64 constructor tag should parse: %v", err)
+	}
+	constr, ok := program.Term.(*Constr[Name])
+	if !ok {
+		t.Fatalf("parsed term has type %T, want *Constr[Name]", program.Term)
+	}
+	if constr.Tag != ^uint64(0) {
+		t.Fatalf("constructor tag = %d, want %d", constr.Tag, ^uint64(0))
+	}
+
+	_, err = Parse("(program 1.1.0 (constr 18446744073709551616))")
+	if err == nil {
+		t.Fatal("constructor tag above Word64 should be rejected")
+	}
+}
+
 // TestParseDepthLimit verifies the recursive-descent parser rejects
 // pathologically deep nesting with an error instead of overflowing the Go
 // stack. A modestly deep program still parses.

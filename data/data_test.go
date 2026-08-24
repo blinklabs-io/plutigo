@@ -6,6 +6,7 @@ import (
 	"errors"
 	"math/big"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -283,6 +284,74 @@ var testDefs = []struct {
 		),
 		CborHex: "a444364b6579413144354b6579413744364b65794044354b657940",
 	},
+}
+
+func TestConstrIntegerTagCBOR(t *testing.T) {
+	tests := []struct {
+		name    string
+		tag     *big.Int
+		wantHex string
+		wantErr string
+	}{
+		{
+			name:    "Word64 max",
+			tag:     new(big.Int).SetUint64(^uint64(0)),
+			wantHex: "d866821bffffffffffffffff80",
+		},
+		{
+			name:    "negative",
+			tag:     big.NewInt(-1),
+			wantErr: "outside the Word64 CBOR range",
+		},
+		{
+			name:    "above Word64",
+			tag:     new(big.Int).Lsh(big.NewInt(1), 64),
+			wantErr: "outside the Word64 CBOR range",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encoded, err := Encode(NewConstrFromBigInt(tt.tag))
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("Encode returned nil error, want %q", tt.wantErr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("Encode error = %q, want text %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Encode returned error: %v", err)
+			}
+			if got := hex.EncodeToString(encoded); got != tt.wantHex {
+				t.Fatalf("encoded CBOR = %s, want %s", got, tt.wantHex)
+			}
+			decoded, err := Decode(encoded)
+			if err != nil {
+				t.Fatalf("Decode returned error: %v", err)
+			}
+			if !decoded.Equal(NewConstrFromBigInt(tt.tag)) {
+				t.Fatalf("decoded value = %v, want constructor tag %s", decoded, tt.tag)
+			}
+
+			arenaDecoded, err := NewDecoder().Decode(encoded)
+			if err != nil {
+				t.Fatalf("arena Decode returned error: %v", err)
+			}
+			if !arenaDecoded.Equal(NewConstrFromBigInt(tt.tag)) {
+				t.Fatalf("arena-decoded value = %v, want constructor tag %s", arenaDecoded, tt.tag)
+			}
+		})
+	}
+}
+
+func TestNewConstrWord64Boundary(t *testing.T) {
+	tag := ^uint64(0)
+	constr := NewConstr(tag).(*Constr)
+	if !constr.Tag.IsUint64() || constr.Tag.Uint64() != tag {
+		t.Fatalf("constructor tag = %s, want %d", constr.Tag, tag)
+	}
 }
 
 func TestUseIndefHonored(t *testing.T) {
@@ -879,6 +948,18 @@ func TestPlutusDataClone(t *testing.T) {
 		reflect.ValueOf(cloned).
 			Pointer() {
 		t.Error("Cloned data should be a different instance")
+	}
+}
+
+func TestConstrCloneCopiesTag(t *testing.T) {
+	original := NewConstrFromBigInt(
+		new(big.Int).Lsh(big.NewInt(1), 80),
+	).(*Constr)
+	cloned := original.Clone().(*Constr)
+
+	original.Tag.SetInt64(7)
+	if cloned.Tag.Cmp(new(big.Int).Lsh(big.NewInt(1), 80)) != 0 {
+		t.Fatalf("cloned tag changed with original: got %s", cloned.Tag)
 	}
 }
 

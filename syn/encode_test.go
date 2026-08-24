@@ -269,7 +269,7 @@ func TestFlatRoundtrip(t *testing.T) {
 							&Constr[DeBruijn]{
 								Tag: 1,
 								Fields: []Term[DeBruijn]{
-									&Constant{Con: &Data{Inner: &data.Constr{Tag: 0, Fields: []data.PlutusData{}}}},
+									&Constant{Con: &Data{Inner: &data.Constr{Tag: big.NewInt(0), Fields: []data.PlutusData{}}}},
 									&Constant{Con: &ByteString{Inner: []byte{0xca, 0xfe}}},
 									&Constant{Con: &Bool{Inner: true}},
 								},
@@ -387,7 +387,7 @@ func TestDeBruijnDecoderReuse(t *testing.T) {
 							SndType: &TData{},
 							First:   &Integer{Inner: big.NewInt(-5)},
 							Second: &Data{Inner: &data.Constr{
-								Tag: 2,
+								Tag: big.NewInt(2),
 								Fields: []data.PlutusData{
 									&data.Integer{Inner: big.NewInt(9)},
 									&data.List{Items: []data.PlutusData{

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"math"
 	"math/big"
 
 	"github.com/fxamacker/cbor/v2"
@@ -53,7 +52,7 @@ func useIndefPtr(useIndef bool) *bool {
 // Constr
 
 type Constr struct {
-	Tag      uint
+	Tag      *big.Int
 	Fields   []PlutusData
 	useIndef *bool
 }
@@ -75,6 +74,17 @@ func (c *Constr) UnmarshalCBOR(data []byte) error {
 }
 
 func (c Constr) MarshalCBOR() ([]byte, error) {
+	constrTag := c.Tag
+	if constrTag == nil {
+		constrTag = new(big.Int)
+	}
+	if !constrTag.IsUint64() {
+		return nil, fmt.Errorf(
+			"constructor tag %s is outside the Word64 CBOR range",
+			constrTag,
+		)
+	}
+
 	// Determine whether to use indefinite-length encoding for fields.
 	// If useIndef is explicitly set, honor it; otherwise default to
 	// Haskell's cborg behavior: indefinite for non-empty, definite for empty.
@@ -88,19 +98,19 @@ func (c Constr) MarshalCBOR() ([]byte, error) {
 		return nil, err
 	}
 
-	// Determine CBOR tag based on Constr tag value
+	// Determine CBOR tag based on Constr tag value.
 	var cborTag uint64
 	switch {
-	case c.Tag <= 6:
+	case constrTag.Uint64() <= 6:
 		// Tags 0-6 map to CBOR tags 121-127
-		cborTag = 121 + uint64(c.Tag)
-	case c.Tag >= 7 && c.Tag <= 127:
+		cborTag = 121 + constrTag.Uint64()
+	case constrTag.Uint64() <= 127:
 		// Tags 7-127 map to CBOR tags 1280-1400
-		cborTag = 1280 + uint64(c.Tag-7)
+		cborTag = 1280 + constrTag.Uint64() - 7
 	default:
 		// Tag 102 uses a definite-length 2-element outer list
 		cborTag = 102
-		fields = []any{c.Tag, fields}
+		fields = []any{constrTag, fields}
 	}
 
 	tmpTag := cbor.Tag{
@@ -116,7 +126,11 @@ func (c Constr) Clone() PlutusData {
 		tmpFields[i] = field.Clone()
 	}
 	tmpIndef := cloneUseIndef(c.useIndef)
-	return &Constr{Tag: c.Tag, Fields: tmpFields, useIndef: tmpIndef}
+	tmpTag := new(big.Int)
+	if c.Tag != nil {
+		tmpTag.Set(c.Tag)
+	}
+	return &Constr{Tag: tmpTag, Fields: tmpFields, useIndef: tmpIndef}
 }
 
 func (c Constr) Equal(pd PlutusData) bool {
@@ -124,7 +138,7 @@ func (c Constr) Equal(pd PlutusData) bool {
 	if !ok {
 		return false
 	}
-	if c.Tag != pdConstr.Tag {
+	if constrTagCmp(c.Tag, pdConstr.Tag) != 0 {
 		return false
 	}
 	if len(c.Fields) != len(pdConstr.Fields) {
@@ -139,25 +153,64 @@ func (c Constr) Equal(pd PlutusData) bool {
 }
 
 func (c Constr) String() string {
-	return fmt.Sprintf("Constr{tag: %d, fields: %v}", c.Tag, c.Fields)
+	return fmt.Sprintf("Constr{tag: %s, fields: %v}", constrTagString(c.Tag), c.Fields)
 }
 
 // NewConstr creates a new Constr variant.
-func NewConstr(tag uint, fields ...PlutusData) PlutusData {
+func NewConstr(tag uint64, fields ...PlutusData) PlutusData {
 	tmpFields := make([]PlutusData, len(fields))
 	copy(tmpFields, fields)
-	return &Constr{Tag: tag, Fields: tmpFields}
+	return &Constr{
+		Tag:    new(big.Int).SetUint64(tag),
+		Fields: tmpFields,
+	}
+}
+
+// NewConstrFromBigInt creates a Constr variant with an arbitrary integer tag.
+// The tag is copied so later caller mutations don't change the constructor.
+func NewConstrFromBigInt(tag *big.Int, fields ...PlutusData) PlutusData {
+	tmpFields := make([]PlutusData, len(fields))
+	copy(tmpFields, fields)
+	tmpTag := new(big.Int)
+	if tag != nil {
+		tmpTag.Set(tag)
+	}
+	return &Constr{Tag: tmpTag, Fields: tmpFields}
 }
 
 // NewConstrDefIndef creates a Constr with the ability to specify whether it should use definite- or indefinite-length encoding
 func NewConstrDefIndef(
 	useIndef bool,
-	tag uint,
+	tag uint64,
 	fields ...PlutusData,
 ) PlutusData {
 	tmpFields := make([]PlutusData, len(fields))
 	copy(tmpFields, fields)
-	return &Constr{Tag: tag, Fields: tmpFields, useIndef: useIndefPtr(useIndef)}
+	return &Constr{
+		Tag:      new(big.Int).SetUint64(tag),
+		Fields:   tmpFields,
+		useIndef: useIndefPtr(useIndef),
+	}
+}
+
+func constrTagCmp(a, b *big.Int) int {
+	switch {
+	case a == nil && b == nil:
+		return 0
+	case a == nil:
+		return -b.Sign()
+	case b == nil:
+		return a.Sign()
+	default:
+		return a.Cmp(b)
+	}
+}
+
+func constrTagString(tag *big.Int) string {
+	if tag == nil {
+		return "0"
+	}
+	return tag.String()
 }
 
 // encodeCBORArray encodes a slice of PlutusData items as a CBOR array.
@@ -496,7 +549,7 @@ func decodeConstrNextEntered(
 			return nil, nil, err
 		}
 		return &Constr{
-			Tag:      uint(tagNumber) - 121,
+			Tag:      new(big.Int).SetUint64(tagNumber - 121),
 			Fields:   tmpFields,
 			useIndef: tmpUseIndef,
 		}, rest, nil
@@ -509,7 +562,7 @@ func decodeConstrNextEntered(
 			return nil, nil, err
 		}
 		return &Constr{
-			Tag:      uint(tagNumber) - 1280 + 7,
+			Tag:      new(big.Int).SetUint64(tagNumber - 1280 + 7),
 			Fields:   tmpFields,
 			useIndef: tmpUseIndef,
 		}, rest, nil
@@ -525,9 +578,6 @@ func decodeConstrNextEntered(
 		alternative, next, err := decodeCBORUint(rest)
 		if err != nil {
 			return nil, nil, err
-		}
-		if alternative > math.MaxUint {
-			return nil, nil, fmt.Errorf("constructor alternative too large: %d", alternative)
 		}
 		rest = next
 
@@ -548,7 +598,7 @@ func decodeConstrNextEntered(
 		}
 
 		return &Constr{
-			Tag:      uint(alternative),
+			Tag:      new(big.Int).SetUint64(alternative),
 			Fields:   tmpFields,
 			useIndef: tmpUseIndef,
 		}, rest, nil

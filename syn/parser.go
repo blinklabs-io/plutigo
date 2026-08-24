@@ -331,7 +331,7 @@ func (p *Parser) parseConstr() (Term[Name], error) {
 		)
 	}
 
-	n, err := strconv.ParseUint(p.curToken.Literal, 10, strconv.IntSize)
+	n, err := strconv.ParseUint(p.curToken.Literal, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"invalid constr tag %s at position %d: %w",
@@ -340,8 +340,6 @@ func (p *Parser) parseConstr() (Term[Name], error) {
 			err,
 		)
 	}
-
-	tag := uint(n)
 
 	p.nextToken()
 
@@ -360,7 +358,7 @@ func (p *Parser) parseConstr() (Term[Name], error) {
 		return nil, err
 	}
 
-	return &Constr[Name]{Tag: uint(tag), Fields: fields}, nil
+	return &Constr[Name]{Tag: n, Fields: fields}, nil
 }
 
 func (p *Parser) parseCase() (Term[Name], error) {
@@ -1145,24 +1143,14 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 			)
 		}
 
-		nu, err := strconv.ParseUint(p.curToken.Literal, 10, 64)
-		if err != nil {
+		tag, ok := new(big.Int).SetString(p.curToken.Literal, 10)
+		if !ok {
 			return nil, fmt.Errorf(
-				"invalid constr tag %s at position %d: %w",
+				"invalid constr tag %s at position %d",
 				p.curToken.Literal,
 				p.curToken.Position,
-				err,
 			)
 		}
-
-		if nu > uint64(^uint(0)) {
-			return nil, fmt.Errorf(
-				"constr tag %d out of range at position %d",
-				nu,
-				p.curToken.Position,
-			)
-		}
-		tag := uint(nu)
 
 		p.nextToken()
 
@@ -1191,7 +1179,7 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 			return nil, err
 		}
 
-		return data.NewConstr(tag, fields...), nil
+		return data.NewConstrFromBigInt(tag, fields...), nil
 	default:
 		return nil, fmt.Errorf(
 			"expected PlutusData constructor (I, B, List, Map, Constr), got %v at position %d",
