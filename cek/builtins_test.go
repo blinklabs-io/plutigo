@@ -802,6 +802,38 @@ func TestUnConstrDataBuiltin(t *testing.T) {
 	}
 }
 
+func TestUnConstrDataBuiltinZeroValueConstr(t *testing.T) {
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	b := (&Builtin[syn.DeBruijn]{
+		Func: builtin.UnConstrData,
+	}).ApplyArg(&Constant{
+		&syn.Data{Inner: &data.Constr{}},
+	})
+
+	val, err := m.evalBuiltinApp(b)
+	if err != nil {
+		t.Fatalf("evalBuiltinApp returned error: %v", err)
+	}
+	constVal, ok, err := materializeConstantValue[syn.DeBruijn](val)
+	if err != nil {
+		t.Fatalf("failed to materialize pair-like constant result: %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected pair-like constant result, got %T", val)
+	}
+	pair, ok := constVal.(*syn.ProtoPair)
+	if !ok {
+		t.Fatalf("expected ProtoPair constant, got %T", constVal)
+	}
+	tag, ok := pair.First.(*syn.Integer)
+	if !ok {
+		t.Fatalf("expected Integer tag, got %T", pair.First)
+	}
+	if tag.Inner.Sign() != 0 {
+		t.Fatalf("expected constructor tag 0, got %s", tag.Inner)
+	}
+}
+
 func TestAppendStringBuiltin(t *testing.T) {
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
 
