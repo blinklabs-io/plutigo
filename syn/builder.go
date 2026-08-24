@@ -21,7 +21,7 @@ func newTermInterner() *termInterner {
 }
 
 func (b *termInterner) intern(currentTerm Term[Name]) {
-	switch term := (currentTerm).(type) {
+	switch term := currentTerm.(type) {
 	case *Var[Name]:
 		b.internName(&term.Name)
 	case *Delay[Name]:
