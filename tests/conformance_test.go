@@ -278,8 +278,10 @@ func TestConformance(t *testing.T) {
 					// Determine appropriate Plutus version based on test path
 					// V4 builtins require V4; otherwise use V3
 					plutusVersion := lang.LanguageVersionV3
+					protoVersion := uint(11)
 					if isV4BuiltinTest(path) {
 						plutusVersion = lang.LanguageVersionV4
+						protoVersion = 12
 					}
 
 					machine := cek.NewMachine[syn.DeBruijn](
@@ -287,7 +289,7 @@ func TestConformance(t *testing.T) {
 						200,
 						cek.NewDefaultEvalContext(
 							plutusVersion,
-							cek.ProtoVersion{Major: 11},
+							cek.ProtoVersion{Major: protoVersion},
 						),
 					)
 					machine.ExBudget = initialBudget
