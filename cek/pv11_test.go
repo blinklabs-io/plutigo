@@ -63,7 +63,7 @@ func TestGetSemanticsVanRossemMapping(t *testing.T) {
 	}
 }
 
-func TestPV11BuiltinAvailabilityInMachine(t *testing.T) {
+func TestBuiltinAvailabilityMatrixInMachine(t *testing.T) {
 	tests := []struct {
 		name        string
 		langVersion lang.LanguageVersion
@@ -71,60 +71,77 @@ func TestPV11BuiltinAvailabilityInMachine(t *testing.T) {
 		builtin     builtin.DefaultFunction
 		wantAvail   bool
 	}{
-		// Pre-PV11: V3 builtin NOT available in V1
 		{
-			"V3 builtin in V1 at PV10",
-			lang.LanguageVersionV1,
-			10,
-			builtin.Bls12_381_G1_Add,
+			"batch 3 in V2 at PV7",
+			lang.LanguageVersionV2,
+			7,
+			builtin.VerifyEcdsaSecp256k1Signature,
 			false,
 		},
-		// PV11: V3 builtin available in V1
 		{
-			"V3 builtin in V1 at PV11",
-			lang.LanguageVersionV1,
-			11,
-			builtin.Bls12_381_G1_Add,
+			"batch 4b in V2 at PV10",
+			lang.LanguageVersionV2,
+			10,
+			builtin.IntegerToByteString,
 			true,
 		},
-		// PV11: V4 builtin available in V1
 		{
-			"V4 builtin in V1 at PV11",
-			lang.LanguageVersionV1,
-			11,
-			builtin.LengthOfArray,
+			"batch 5 in V2 at PV10",
+			lang.LanguageVersionV2,
+			10,
+			builtin.AndByteString,
+			false,
+		},
+		{
+			"batch 5 in V3 at PV10",
+			lang.LanguageVersionV3,
+			10,
+			builtin.AndByteString,
 			true,
 		},
-		// PV11: DropList available in V1
 		{
-			"DropList in V1 at PV11",
+			"batch 6 in V1 at PV11",
 			lang.LanguageVersionV1,
 			11,
 			builtin.DropList,
 			true,
 		},
-		// PV11: DropList not available pre-PV11
 		{
-			"DropList in V4 at PV10",
+			"batch 1 in V4 at PV11",
 			lang.LanguageVersionV4,
-			10,
-			builtin.DropList,
+			11,
+			builtin.AddInteger,
 			false,
+		},
+		{
+			"batch 6 in V4 at PV12",
+			lang.LanguageVersionV4,
+			12,
+			builtin.DropList,
+			true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plutusVersion := builtin.LanguageVersionToPlutusVersion(
+			m := NewMachine[syn.DeBruijn](
 				tt.langVersion,
+				0,
+				NewDefaultEvalContext(
+					tt.langVersion,
+					ProtoVersion{Major: tt.protoMajor},
+				),
 			)
-			got := tt.builtin.IsAvailableInWithProto(
-				plutusVersion,
-				tt.protoMajor,
-			)
+			got := m.builtins[tt.builtin] != nil &&
+				(m.available == nil || m.available[tt.builtin])
 			if got != tt.wantAvail {
-				t.Errorf("IsAvailableInWithProto(%v, %d) = %v, want %v",
-					plutusVersion, tt.protoMajor, got, tt.wantAvail)
+				t.Errorf(
+					"machine availability for %s at PV%d = %v, want %v",
+					tt.builtin,
+					tt.protoMajor,
+					got,
+					tt.wantAvail,
+				)
 			}
 		})
 	}

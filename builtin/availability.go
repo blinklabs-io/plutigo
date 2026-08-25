@@ -1,5 +1,7 @@
 package builtin
 
+import "slices"
+
 // PlutusVersion represents a Plutus ledger language version.
 // This is used to determine which builtins are available.
 type PlutusVersion int
@@ -10,13 +12,15 @@ const (
 	PlutusV3 PlutusVersion = 3
 	PlutusV4 PlutusVersion = 4
 
-	// PlutusVUnreleased represents builtins that are defined but not yet
-	// available on mainnet. These will fail availability checks for all versions.
+	// PlutusVUnreleased is reserved for protocol-independent legacy metadata.
+	// Live availability must be checked with IsAvailableInWithProto.
 	PlutusVUnreleased PlutusVersion = 999
 )
 
-// builtinIntroducedIn maps each builtin to the Plutus version it was introduced in.
-// Builtins can only be used in their introduced version or later.
+// builtinIntroducedIn maps each builtin to its protocol-independent legacy
+// language metadata. Live availability must be checked with
+// IsAvailableInWithProto because ledger languages receive batches at different
+// protocol versions.
 var builtinIntroducedIn = [TotalBuiltinCount]PlutusVersion{
 	// V1 (Alonzo) - Original builtins
 	// Integer functions
@@ -150,42 +154,122 @@ var builtinIntroducedIn = [TotalBuiltinCount]PlutusVersion{
 	DropList: PlutusVUnreleased,
 }
 
-// VanRossemProtoVersion is the Cardano protocol major version at which
-// all builtins become available in all Plutus language versions.
+// VanRossemProtoVersion is the Cardano protocol major version at which batch 6
+// becomes available. Availability remains specific to the Plutus ledger
+// language; it is not a global switch for every builtin.
 const VanRossemProtoVersion uint = 11
 
-// IntroducedIn returns the Plutus version in which the builtin was introduced.
+const (
+	alonzoProtoVersion    uint = 5
+	vasilProtoVersion     uint = 7
+	valentineProtoVersion uint = 8
+	changProtoVersion     uint = 9
+	plominProtoVersion    uint = 10
+	dijkstraProtoVersion  uint = 12
+)
+
+type availabilityBatch struct {
+	introducedAt uint
+	functions    []DefaultFunction
+}
+
+func builtinRange(first, last DefaultFunction) []DefaultFunction {
+	ret := make([]DefaultFunction, 0, int(last-first)+1)
+	for f := first; f <= last; f++ {
+		ret = append(ret, f)
+	}
+	return ret
+}
+
+func combineBatches(batches ...[]DefaultFunction) []DefaultFunction {
+	length := 0
+	for _, batch := range batches {
+		length += len(batch)
+	}
+	ret := make([]DefaultFunction, 0, length)
+	for _, batch := range batches {
+		ret = append(ret, batch...)
+	}
+	return ret
+}
+
+var (
+	batch1  = builtinRange(AddInteger, MkNilPairData)
+	batch2  = []DefaultFunction{SerialiseData}
+	batch3  = []DefaultFunction{VerifyEcdsaSecp256k1Signature, VerifySchnorrSecp256k1Signature}
+	batch4a = builtinRange(Bls12_381_G1_Add, Blake2b_224)
+	batch4b = []DefaultFunction{IntegerToByteString, ByteStringToInteger}
+	batch5  = builtinRange(AndByteString, Ripemd_160)
+	batch6  = builtinRange(ExpModInteger, ScaleValue)
+)
+
+// builtinAvailability mirrors PlutusLedgerApi.Common.Versions. A builtin's
+// availability depends on the (ledger language, protocol version) pair: later
+// protocol versions can extend an existing language without extending every
+// other language at the same time.
+var builtinAvailability = map[PlutusVersion][]availabilityBatch{
+	PlutusV1: {
+		{introducedAt: alonzoProtoVersion, functions: batch1},
+		{
+			introducedAt: VanRossemProtoVersion,
+			functions:    combineBatches(batch2, batch3, batch4a, batch4b, batch5, batch6),
+		},
+	},
+	PlutusV2: {
+		{introducedAt: vasilProtoVersion, functions: combineBatches(batch1, batch2)},
+		{introducedAt: valentineProtoVersion, functions: batch3},
+		{introducedAt: plominProtoVersion, functions: batch4b},
+		{
+			introducedAt: VanRossemProtoVersion,
+			functions:    combineBatches(batch4a, batch5, batch6),
+		},
+	},
+	PlutusV3: {
+		{
+			introducedAt: changProtoVersion,
+			functions:    combineBatches(batch1, batch2, batch3, batch4a, batch4b),
+		},
+		{introducedAt: plominProtoVersion, functions: batch5},
+		{introducedAt: VanRossemProtoVersion, functions: batch6},
+	},
+	PlutusV4: {
+		{
+			introducedAt: dijkstraProtoVersion,
+			functions:    combineBatches(batch1, batch2, batch3, batch4a, batch4b, batch5, batch6),
+		},
+	},
+}
+
+// IntroducedIn returns the builtin's protocol-independent legacy language
+// metadata. Use IsAvailableInWithProto for live ledger availability.
 func (f DefaultFunction) IntroducedIn() PlutusVersion {
 	return builtinIntroducedIn[f]
 }
 
-// IsAvailableIn returns true if the builtin is available in the given Plutus version.
+// IsAvailableIn returns the legacy language-only availability. Use
+// IsAvailableInWithProto for live ledger availability.
 func (f DefaultFunction) IsAvailableIn(version PlutusVersion) bool {
 	return builtinIntroducedIn[f] <= version
 }
 
-// IsAvailableInWithProto returns true if the builtin is available given the
-// Plutus language version and Cardano protocol major version.
-//
-// At protocol version >= 11 (van Rossem hard fork), all builtins become
-// available in all language versions. DropList is also activated at PV11.
-//
-// For protocol versions < 11, the original version-based gating applies.
+// IsAvailableInWithProto returns true if the builtin is available for the
+// supplied Plutus ledger language and Cardano protocol major version.
 func (f DefaultFunction) IsAvailableInWithProto(
 	version PlutusVersion,
 	protoMajor uint,
 ) bool {
-	if protoMajor >= VanRossemProtoVersion {
-		introduced := builtinIntroducedIn[f]
-		// DropList becomes available at PV11 in all versions
-		if introduced == PlutusVUnreleased {
-			return f == DropList
-		}
-		// All other builtins are available in all versions at PV11
-		return true
+	if protoMajor == 0 {
+		return f.IsAvailableIn(version)
 	}
-	// Pre-PV11: use language version gating
-	return builtinIntroducedIn[f] <= version
+	for _, batch := range builtinAvailability[version] {
+		if protoMajor < batch.introducedAt {
+			continue
+		}
+		if slices.Contains(batch.functions, f) {
+			return true
+		}
+	}
+	return false
 }
 
 // LanguageVersionToPlutusVersion converts a [3]uint32 language version to PlutusVersion.

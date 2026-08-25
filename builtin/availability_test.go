@@ -98,44 +98,32 @@ func TestBuiltinAvailabilityWithProto(t *testing.T) {
 		protoMajor uint
 		available  bool
 	}{
-		// Pre-PV11: existing behavior preserved
-		{"V1 builtin in V1 at PV10", AddInteger, PlutusV1, 10, true},
-		{"V2 builtin in V1 at PV10", SerialiseData, PlutusV1, 10, false},
-		{"V3 builtin in V2 at PV10", Bls12_381_G1_Add, PlutusV2, 10, false},
-		{"V3 builtin in V3 at PV10", Bls12_381_G1_Add, PlutusV3, 10, true},
-		{"V4 builtin in V3 at PV10", LengthOfArray, PlutusV3, 10, false},
-		{"V4 builtin in V4 at PV10", LengthOfArray, PlutusV4, 10, true},
-		{"dropList in V4 at PV10", DropList, PlutusV4, 10, false},
+		// Plutus V1 receives only batch 1 before PV11.
+		{"batch 1 in V1 at PV5", AddInteger, PlutusV1, 5, true},
+		{"batch 2 in V1 at PV10", SerialiseData, PlutusV1, 10, false},
+		{"batch 4b in V1 at PV10", IntegerToByteString, PlutusV1, 10, false},
+		{"batch 6 in V1 at PV11", DropList, PlutusV1, 11, true},
 
-		// PV11: all builtins available across all versions
-		{"V1 builtin in V1 at PV11", AddInteger, PlutusV1, 11, true},
-		{"V2 builtin in V1 at PV11", SerialiseData, PlutusV1, 11, true},
-		{"V3 builtin in V1 at PV11", Bls12_381_G1_Add, PlutusV1, 11, true},
-		{"V3 builtin in V2 at PV11", Bls12_381_G1_Add, PlutusV2, 11, true},
-		{"V4 builtin in V1 at PV11", LengthOfArray, PlutusV1, 11, true},
-		{"V4 builtin in V2 at PV11", InsertCoin, PlutusV2, 11, true},
-		{"V4 builtin in V3 at PV11", ScaleValue, PlutusV3, 11, true},
-		{"expModInteger in V1 at PV11", ExpModInteger, PlutusV1, 11, true},
-		{"bitwise in V1 at PV11", AndByteString, PlutusV1, 11, true},
-		{
-			"BLS MSM in V2 at PV11",
-			Bls12_381_G1_MultiScalarMul,
-			PlutusV2,
-			11,
-			true,
-		},
-		{"valueData in V1 at PV11", ValueData, PlutusV1, 11, true},
-		{"unValueData in V2 at PV11", UnValueData, PlutusV2, 11, true},
+		// Plutus V2 receives batch 3 at PV8 and batch 4b at PV10.
+		{"batch 2 in V2 at PV7", SerialiseData, PlutusV2, 7, true},
+		{"batch 3 in V2 at PV7", VerifyEcdsaSecp256k1Signature, PlutusV2, 7, false},
+		{"batch 3 in V2 at PV8", VerifyEcdsaSecp256k1Signature, PlutusV2, 8, true},
+		{"batch 4b in V2 at PV9", IntegerToByteString, PlutusV2, 9, false},
+		{"batch 4b in V2 at PV10", IntegerToByteString, PlutusV2, 10, true},
+		{"batch 4a in V2 at PV10", Bls12_381_G1_Add, PlutusV2, 10, false},
+		{"batch 4a in V2 at PV11", Bls12_381_G1_Add, PlutusV2, 11, true},
 
-		// PV11: DropList becomes available
-		{"dropList in V1 at PV11", DropList, PlutusV1, 11, true},
-		{"dropList in V2 at PV11", DropList, PlutusV2, 11, true},
-		{"dropList in V3 at PV11", DropList, PlutusV3, 11, true},
-		{"dropList in V4 at PV11", DropList, PlutusV4, 11, true},
+		// Plutus V3 receives batches 1 through 4 at PV9 and batch 5 at PV10.
+		{"batch 1 in V3 at PV8", AddInteger, PlutusV3, 8, false},
+		{"batch 4a in V3 at PV9", Bls12_381_G1_Add, PlutusV3, 9, true},
+		{"batch 5 in V3 at PV9", AndByteString, PlutusV3, 9, false},
+		{"batch 5 in V3 at PV10", AndByteString, PlutusV3, 10, true},
+		{"batch 6 in V3 at PV10", DropList, PlutusV3, 10, false},
+		{"batch 6 in V3 at PV11", DropList, PlutusV3, 11, true},
 
-		// PV12+: same as PV11
-		{"V3 builtin in V1 at PV12", Bls12_381_G1_Add, PlutusV1, 12, true},
-		{"dropList in V1 at PV12", DropList, PlutusV1, 12, true},
+		// Plutus V4 is introduced at PV12 with batches 1 through 6.
+		{"batch 1 in V4 at PV11", AddInteger, PlutusV4, 11, false},
+		{"batch 6 in V4 at PV12", DropList, PlutusV4, 12, true},
 	}
 
 	for _, tt := range tests {
