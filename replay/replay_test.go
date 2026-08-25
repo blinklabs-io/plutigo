@@ -135,9 +135,10 @@ func TestRunCaseUsesLedgerLanguageInsteadOfUPLCVersion(t *testing.T) {
 			Con: &syn.Data{Inner: data.NewInteger(big.NewInt(42))},
 		},
 	}
-	replayCase := baseCaseWithVersion(t, lang.LanguageVersionV2, term, nil)
-	// The UPLC header identifies this as a V2 program. The ledger language must
-	// still control builtin availability, so the same program is rejected as V1.
+	// The UPLC header is 1.0.0, which is valid for both ledger languages at PV10.
+	// The selected ledger language must control builtin availability, so the
+	// same program is accepted as V2 and rejected as V1.
+	replayCase := baseCaseWithVersion(t, lang.LanguageVersionV1, term, nil)
 	replayCase.Language = PlutusV2
 	v2Result := RunCase(&replayCase)
 	if !v2Result.Actual.Success {
@@ -149,8 +150,8 @@ func TestRunCaseUsesLedgerLanguageInsteadOfUPLCVersion(t *testing.T) {
 	if v1Result.Actual.Success {
 		t.Fatal("Plutus V1 evaluation unexpectedly accepted a V2 builtin")
 	}
-	if v1Result.Actual.SetupError {
-		t.Fatalf("Plutus V1 evaluation setup failed: %s", v1Result.Actual.Error)
+	if !v1Result.Actual.SetupError {
+		t.Fatalf("Plutus V1 evaluation did not reject the invalid program during setup: %s", v1Result.Actual.Error)
 	}
 }
 
