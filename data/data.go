@@ -440,7 +440,7 @@ func (b *ByteString) UnmarshalCBOR(data []byte) error {
 func (b ByteString) MarshalCBOR() ([]byte, error) {
 	// Haskell's Plutus encodes ByteStrings <= 64 bytes as definite-length,
 	// and ByteStrings > 64 bytes as indefinite-length with 64-byte chunks.
-	if len(b.Inner) <= 64 {
+	if len(b.Inner) <= MaxByteStringLeafSize {
 		if b.Inner == nil {
 			return cborMarshal([]byte{})
 		}
@@ -449,8 +449,8 @@ func (b ByteString) MarshalCBOR() ([]byte, error) {
 	// Indefinite-length byte string with 64-byte chunks
 	var buf bytes.Buffer
 	buf.WriteByte(0x5f) // Start indefinite-length byte string
-	for i := 0; i < len(b.Inner); i += 64 {
-		end := i + 64
+	for i := 0; i < len(b.Inner); i += MaxByteStringLeafSize {
+		end := i + MaxByteStringLeafSize
 		if end > len(b.Inner) {
 			end = len(b.Inner)
 		}

@@ -24,6 +24,7 @@ const (
 
 	CborIndefFlag uint8 = 0x1f
 
+	MaxByteStringLeafSize = 64
 	MaxDecodeNestingDepth = 256
 	MaxDecodeNodes        = 1_000_000
 )
@@ -135,7 +136,21 @@ func cborUnmarshal(dataBytes []byte, dest any) error {
 	if dm == nil {
 		panic("CBOR decoder not initialized")
 	}
+	if err := validateCBORByteStringLeaves(dataBytes); err != nil {
+		return err
+	}
 	return dm.Unmarshal(dataBytes, dest)
+}
+
+func validateCBORByteStringLeaves(data []byte) error {
+	rest, err := skipCBORItemWithState(data, newDecodeState())
+	if err != nil {
+		return err
+	}
+	if len(rest) > 0 {
+		return fmt.Errorf("unexpected %d trailing bytes", len(rest))
+	}
+	return nil
 }
 
 // decode is a low-level decode function that detects the CBOR type and uses the correct
@@ -462,6 +477,9 @@ func skipCBORBytesLike(
 	cborType uint8,
 ) ([]byte, error) {
 	if !indefinite {
+		if err := checkByteStringLeafSize(value); err != nil {
+			return nil, err
+		}
 		if value > uint64(len(rest)) {
 			return nil, errors.New("truncated CBOR payload")
 		}
@@ -483,10 +501,28 @@ func skipCBORBytesLike(
 		if chunkIndef || chunkType != cborType {
 			return nil, fmt.Errorf("invalid CBOR chunk type 0x%02x", chunkType)
 		}
+		if err := checkByteStringLeafSize(chunkValue); err != nil {
+			return nil, err
+		}
 		if chunkValue > uint64(len(chunkRest)) {
 			return nil, errors.New("truncated CBOR payload")
 		}
 		rest = chunkRest[chunkValue:]
+	}
+}
+
+func checkByteStringLeafSize(size uint64) error {
+	if size <= MaxByteStringLeafSize {
+		return nil
+	}
+	actual := math.MaxInt
+	if size <= uint64(math.MaxInt) {
+		actual = int(size)
+	}
+	return &DecodeLimitError{
+		Limit:  "bytestring leaf",
+		Max:    MaxByteStringLeafSize,
+		Actual: actual,
 	}
 }
 

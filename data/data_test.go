@@ -603,6 +603,18 @@ func TestDecodeRejectsExcessiveNesting(t *testing.T) {
 	assertDecodeLimitError(t, err, "nesting depth")
 }
 
+func TestDirectUnmarshalRejectsExcessiveNesting(t *testing.T) {
+	encoded := nestedListCBOR(MaxDecodeNestingDepth + 1)
+
+	var byteString ByteString
+	err := byteString.UnmarshalCBOR(encoded)
+	assertDefaultNestingDepthLimit(t, err)
+
+	var integer Integer
+	err = integer.UnmarshalCBOR(encoded)
+	assertDefaultNestingDepthLimit(t, err)
+}
+
 func TestDecodeRejectsExcessiveNodeCount(t *testing.T) {
 	encoded := []byte{0x84, 0x00, 0x00, 0x00, 0x00}
 	limits := decodeLimits{maxDepth: MaxDecodeNestingDepth, maxNodes: 4}
@@ -635,6 +647,30 @@ func assertDecodeLimitError(t *testing.T, err error, limit string) {
 	}
 	if limitErr.Limit != limit {
 		t.Fatalf("DecodeLimitError limit = %q, want %q", limitErr.Limit, limit)
+	}
+}
+
+func assertDefaultNestingDepthLimit(t *testing.T, err error) {
+	t.Helper()
+	assertDecodeLimitError(t, err, "nesting depth")
+
+	var limitErr *DecodeLimitError
+	if !errors.As(err, &limitErr) {
+		t.Fatalf("expected DecodeLimitError, got %T: %v", err, err)
+	}
+	if limitErr.Max != MaxDecodeNestingDepth {
+		t.Fatalf(
+			"DecodeLimitError max = %d, want %d",
+			limitErr.Max,
+			MaxDecodeNestingDepth,
+		)
+	}
+	if limitErr.Actual != MaxDecodeNestingDepth+1 {
+		t.Fatalf(
+			"DecodeLimitError actual = %d, want %d",
+			limitErr.Actual,
+			MaxDecodeNestingDepth+1,
+		)
 	}
 }
 
@@ -859,6 +895,81 @@ func TestByteStringUnmarshalCBORIndefinite(t *testing.T) {
 
 	if !bytes.Equal(decoded.Inner, original) {
 		t.Fatalf("decoded bytes mismatch")
+	}
+}
+
+func TestDecodeRejectsOversizedByteStringLeaves(t *testing.T) {
+	byteString := bytes.Repeat([]byte{0xab}, 65)
+	tests := []struct {
+		name  string
+		input []byte
+	}{
+		{
+			name:  "definite bytestring",
+			input: append([]byte{0x58, 0x41}, byteString...),
+		},
+		{
+			name:  "indefinite bytestring chunk",
+			input: append(append([]byte{0x5f, 0x58, 0x41}, byteString...), 0xff),
+		},
+		{
+			name:  "positive bignum payload",
+			input: append([]byte{0xc2, 0x58, 0x41}, byteString...),
+		},
+		{
+			name:  "negative bignum payload",
+			input: append([]byte{0xc3, 0x58, 0x41}, byteString...),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := Decode(tt.input); err == nil {
+				t.Fatal("Decode accepted an oversized bytestring leaf")
+			}
+
+			if _, err := NewDecoder().Decode(tt.input); err == nil {
+				t.Fatal("Decoder.Decode accepted an oversized bytestring leaf")
+			}
+		})
+	}
+}
+
+func TestUnmarshalRejectsOversizedByteStringLeaves(t *testing.T) {
+	byteString := bytes.Repeat([]byte{0xab}, 65)
+	definite := append([]byte{0x58, 0x41}, byteString...)
+	indefinite := append(append([]byte{0x5f, 0x58, 0x41}, byteString...), 0xff)
+
+	var decoded ByteString
+	if err := decoded.UnmarshalCBOR(definite); err == nil {
+		t.Fatal("ByteString.UnmarshalCBOR accepted an oversized definite leaf")
+	}
+	if err := decoded.UnmarshalCBOR(indefinite); err == nil {
+		t.Fatal("ByteString.UnmarshalCBOR accepted an oversized indefinite chunk")
+	}
+
+	var integer Integer
+	if err := integer.UnmarshalCBOR(append([]byte{0xc2}, definite...)); err == nil {
+		t.Fatal("Integer.UnmarshalCBOR accepted an oversized bignum payload")
+	}
+}
+
+func TestDecodeAcceptsBoundedByteStringChunks(t *testing.T) {
+	byteString := bytes.Repeat([]byte{0xab}, 65)
+	indefinite := append([]byte{0x5f, 0x58, 0x40}, byteString[:64]...)
+	indefinite = append(indefinite, 0x41, byteString[64], 0xff)
+
+	decoded, err := Decode(indefinite)
+	if err != nil {
+		t.Fatalf("Decode rejected bounded indefinite bytestring chunks: %v", err)
+	}
+	if got := decoded.(*ByteString).Inner; !bytes.Equal(got, byteString) {
+		t.Fatalf("decoded bytes = %x, want %x", got, byteString)
+	}
+
+	bignum := append([]byte{0xc2}, indefinite...)
+	if _, err := Decode(bignum); err != nil {
+		t.Fatalf("Decode rejected bounded bignum bytestring chunks: %v", err)
 	}
 }
 

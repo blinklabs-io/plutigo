@@ -695,6 +695,9 @@ func (d *Decoder) decodeByteStringContent(data []byte) ([]byte, []byte, error) {
 		return nil, nil, err
 	}
 	if !indefinite {
+		if err := checkByteStringLeafSize(value); err != nil {
+			return nil, nil, err
+		}
 		if value > uint64(len(rest)) {
 			return nil, nil, errors.New("truncated CBOR payload")
 		}
@@ -718,6 +721,9 @@ func (d *Decoder) decodeByteStringContent(data []byte) ([]byte, []byte, error) {
 		}
 		if chunkIndef || chunkType != CborTypeByteString {
 			return nil, nil, fmt.Errorf("invalid CBOR chunk type 0x%02x", chunkType)
+		}
+		if err := checkByteStringLeafSize(chunkValue); err != nil {
+			return nil, nil, err
 		}
 		if chunkValue > uint64(len(chunkRest)) {
 			return nil, nil, errors.New("truncated CBOR payload")
