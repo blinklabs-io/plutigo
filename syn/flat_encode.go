@@ -430,11 +430,28 @@ func encodeConstantTypeTags(e *encoder, typ Typ) error {
 	case *TData:
 		e.one()
 		e.bits(ConstTagWidth, DataTag)
+	case *TBls12_381G1Element:
+		e.one()
+		e.bits(ConstTagWidth, Bls12_381G1Tag)
+	case *TBls12_381G2Element:
+		e.one()
+		e.bits(ConstTagWidth, Bls12_381G2Tag)
+	case *TBls12_381MlResult:
+		e.one()
+		e.bits(ConstTagWidth, Bls12_381MlTag)
 	case *TList:
 		e.one()
 		e.bits(ConstTagWidth, ProtoListOneTag)
 		e.one()
 		e.bits(ConstTagWidth, ProtoListTwoTag)
+		if err := encodeConstantTypeTags(e, t.Typ); err != nil {
+			return err
+		}
+	case *TArray:
+		e.one()
+		e.bits(ConstTagWidth, ProtoListOneTag)
+		e.one()
+		e.bits(ConstTagWidth, ProtoArrayTag)
 		if err := encodeConstantTypeTags(e, t.Typ); err != nil {
 			return err
 		}
@@ -451,6 +468,9 @@ func encodeConstantTypeTags(e *encoder, typ Typ) error {
 		if err := encodeConstantTypeTags(e, t.Second); err != nil {
 			return err
 		}
+	case *TValue:
+		e.one()
+		e.bits(ConstTagWidth, ValueTag)
 	default:
 		return errors.New("unsupported constant type")
 	}
@@ -477,6 +497,17 @@ func encodeConstantValue(e *encoder, constant IConstant) error {
 		return EncodeList(e, c.List, func(e *encoder, item IConstant) error {
 			return encodeConstantValue(e, item)
 		})
+	case *ProtoArray:
+		return EncodeList(e, c.Array, func(e *encoder, item IConstant) error {
+			return encodeConstantValue(e, item)
+		})
+	case *Value:
+		if err := validateValueEntries(c.Entries); err != nil {
+			return err
+		}
+		return EncodeList(e, c.Entries, func(e *encoder, item IConstant) error {
+			return encodeConstantValue(e, item)
+		})
 	case *ProtoPair:
 		if err := encodeConstantValue(e, c.First); err != nil {
 			return err
@@ -488,6 +519,12 @@ func encodeConstantValue(e *encoder, constant IConstant) error {
 			return err
 		}
 		return e.bytes(cborBytes)
+	case *Bls12_381G1Element:
+		return errors.New("cannot encode bls12_381_G1_element constants")
+	case *Bls12_381G2Element:
+		return errors.New("cannot encode bls12_381_G2_element constants")
+	case *Bls12_381MlResult:
+		return errors.New("cannot encode bls12_381_mlresult constants")
 	default:
 		return errors.New("unsupported constant value")
 	}

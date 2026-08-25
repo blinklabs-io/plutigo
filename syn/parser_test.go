@@ -12,6 +12,13 @@ func TestParsePrettyRoundTrip(t *testing.T) {
 		`(program 1.2.0 (lam x x))`,
 		`(program 1.2.0 (con data (Constr -1 [])))`,
 		`(program 1.2.0 (con data (Constr 1208925819614629174706176 [])))`,
+		`(program 1.3.0 (con (array integer) []))`,
+		`(program 1.3.0 (con value []))`,
+		`(program 1.3.0 (con value [(#01, [(#02, 1)])]))`,
+		`(program 1.3.0 (con (array value) [[(#01, [(#02, 1)])]]))`,
+		`(program 1.3.0 (con (list bls12_381_G1_element) []))`,
+		`(program 1.3.0 (con (list bls12_381_G2_element) []))`,
+		`(program 1.3.0 (con (list bls12_381_mlresult) []))`,
 	}
 
 	for _, input := range programs {
