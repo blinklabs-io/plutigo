@@ -4661,6 +4661,113 @@ func TestDataBuiltinsRejectMalformedElements(t *testing.T) {
 	}
 }
 
+// newValueDataBoundaryInput builds a normalized value with one policy and the
+// requested number of distinct token entries. The count matches Plutus's
+// totalSize, which is the number of (policy, token) pairs.
+func newValueDataBoundaryInput(tokenCount int) *Constant {
+	tokens := make([]syn.IConstant, tokenCount)
+	for i := range tokens {
+		tokens[i] = &syn.ProtoPair{
+			FstType: &syn.TByteString{},
+			SndType: &syn.TInteger{},
+			First: &syn.ByteString{Inner: []byte{
+				byte(i >> 24),
+				byte(i >> 16),
+				byte(i >> 8),
+				byte(i),
+			}},
+			Second: &syn.Integer{Inner: big.NewInt(1)},
+		}
+	}
+
+	return &Constant{&syn.ProtoList{
+		LTyp: &syn.TPair{
+			First: &syn.TByteString{},
+			Second: &syn.TList{Typ: &syn.TPair{
+				First:  &syn.TByteString{},
+				Second: &syn.TInteger{},
+			}},
+		},
+		List: []syn.IConstant{
+			&syn.ProtoPair{
+				FstType: &syn.TByteString{},
+				SndType: &syn.TList{Typ: &syn.TPair{
+					First:  &syn.TByteString{},
+					Second: &syn.TInteger{},
+				}},
+				First: &syn.ByteString{Inner: []byte{}},
+				Second: &syn.ProtoList{
+					LTyp: &syn.TPair{
+						First:  &syn.TByteString{},
+						Second: &syn.TInteger{},
+					},
+					List: tokens,
+				},
+			},
+		},
+	}}
+}
+
+// TestValueDataEntryLimit follows the upstream Plutus boundary: valueData
+// accepts exactly 40,000 entries and rejects larger values. The reference
+// implementation is PlutusCore.Value.valueDataMaxSize/valueData:
+// https://github.com/IntersectMBO/plutus/blob/master/plutus-core/plutus-core/src/PlutusCore/Value.hs
+func TestValueDataEntryLimit(t *testing.T) {
+	const maxEntries = 40_000
+	tests := []struct {
+		name       string
+		entries    int
+		wantErr    bool
+		wantOutput int
+	}{
+		{name: "below limit", entries: maxEntries - 1, wantOutput: maxEntries - 1},
+		{name: "at limit", entries: maxEntries, wantOutput: maxEntries},
+		{name: "above limit", entries: maxEntries + 1, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachineV4()
+			b := newTestBuiltin(builtin.ValueData)
+			b = b.ApplyArg(newValueDataBoundaryInput(tt.entries))
+
+			val, err := evalBuiltinWithError(t, m, b)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected oversized valueData input to fail")
+				}
+				var builtinErr *BuiltinError
+				if !errors.As(err, &builtinErr) {
+					t.Fatalf("expected BuiltinError, got %T: %v", err, err)
+				}
+				if builtinErr.Code != ErrCodeInvalidArgument {
+					t.Fatalf("expected ErrCodeInvalidArgument, got %d", builtinErr.Code)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("valueData(%d entries) returned error: %v", tt.entries, err)
+			}
+			result := expectMaterializedData(t, val)
+			resultMap, ok := result.Inner.(*data.Map)
+			if !ok {
+				t.Fatalf("expected data map, got %T", result.Inner)
+			}
+			if len(resultMap.Pairs) != 1 {
+				t.Fatalf("expected one policy entry, got %d", len(resultMap.Pairs))
+			}
+			tokens, ok := resultMap.Pairs[0][1].(*data.Map)
+			if !ok {
+				t.Fatalf("expected token data map, got %T", resultMap.Pairs[0][1])
+			}
+			if len(tokens.Pairs) != tt.wantOutput {
+				t.Fatalf("expected %d token entries, got %d", tt.wantOutput, len(tokens.Pairs))
+			}
+		})
+	}
+}
+
 func TestBigIntMod256Byte(t *testing.T) {
 	hugePlus5 := new(big.Int).Lsh(big.NewInt(1), 4096)
 	hugePlus5.Add(hugePlus5, big.NewInt(5))
