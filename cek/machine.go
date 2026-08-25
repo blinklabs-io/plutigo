@@ -1,6 +1,7 @@
 package cek
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math"
@@ -139,6 +140,8 @@ type Machine[T syn.Eval] struct {
 	budgetTemplate         ExBudget
 	lastRunRemaining       ExBudget
 	hasRun                 bool
+
+	lastRunEnvHighWatermark int
 }
 
 const (
@@ -936,12 +939,20 @@ func (m *Machine[T]) finishReturn(ret *Return[T]) (syn.Term[T], error) {
 }
 
 func (m *Machine[T]) finishValue(value Value[T]) (syn.Term[T], error) {
+	return m.finishValueContext(context.Background(), false, value)
+}
+
+func (m *Machine[T]) finishValueContext(
+	ctx context.Context,
+	checkCancellation bool,
+	value Value[T],
+) (syn.Term[T], error) {
 	if m.unbudgetedTotal > 0 {
 		if err := m.spendUnbudgetedSteps(); err != nil {
 			return nil, err
 		}
 	}
-	return dischargeValue[T](value)
+	return dischargeValueContext[T](ctx, checkCancellation, value)
 }
 
 // Run executes a Plutus term using the CEK (Control, Environment, Kontinuation) abstract machine.
@@ -955,6 +966,28 @@ func (m *Machine[T]) finishValue(value Value[T]) (syn.Term[T], error) {
 // budget restoration and frame-stack reset (the latter also defends against
 // tests or other callers that tamper with the frame stack between runs).
 func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
+	return m.runContext(context.Background(), false, term)
+}
+
+// RunContext executes a Plutus term using the CEK machine.
+func (m *Machine[T]) RunContext(
+	ctx context.Context,
+	term syn.Term[T],
+) (syn.Term[T], error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return m.runContext(ctx, true, term)
+}
+
+func (m *Machine[T]) runContext(
+	ctx context.Context,
+	checkCancellation bool,
+	term syn.Term[T],
+) (syn.Term[T], error) {
 	firstRun := !m.hasRun
 	if m.hasRun {
 		if m.valueArenaChunkSize <= 0 {
@@ -976,6 +1009,7 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 	m.unbudgetedTotal = 0
 	defer func() {
 		nextChunkSize := nextValueArenaChunkSize(m.valueArenaHighWatermark())
+		m.lastRunEnvHighWatermark = m.envChunkPos
 		m.lastRunRemaining = m.ExBudget
 		m.hasRun = true
 		m.resetFrameStack()
@@ -1011,7 +1045,12 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 				),
 			}
 		}
-		dbResult, err := runStackNoSlippageDeBruijn(dbMachine, dbTerm)
+		dbResult, err := runStackNoSlippageDeBruijn(
+			ctx,
+			checkCancellation,
+			dbMachine,
+			dbTerm,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -1027,7 +1066,7 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 		}
 		return result, nil
 	}
-	return m.runStack(term)
+	return m.runStack(ctx, checkCancellation, term)
 }
 
 // compute handles the Compute state of the CEK machine.
@@ -1804,13 +1843,28 @@ func dischargeDepthLimitError() *BudgetError {
 }
 
 func dischargeValue[T syn.Eval](value Value[T]) (syn.Term[T], error) {
-	return dischargeValueDepth[T](value, 0)
+	return dischargeValueContext[T](context.Background(), false, value)
+}
+
+func dischargeValueContext[T syn.Eval](
+	ctx context.Context,
+	checkCancellation bool,
+	value Value[T],
+) (syn.Term[T], error) {
+	return dischargeValueDepth[T](ctx, checkCancellation, value, 0)
 }
 
 func dischargeValueDepth[T syn.Eval](
+	ctx context.Context,
+	checkCancellation bool,
 	value Value[T],
 	depth int,
 ) (syn.Term[T], error) {
+	if checkCancellation {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+	}
 	if depth > maxDischargeDepth {
 		return nil, dischargeDepthLimitError()
 	}
@@ -1857,7 +1911,12 @@ func dischargeValueDepth[T syn.Eval](
 
 		// Add applications for each argument
 		for arg := range v.Args.Iter() {
-			discharged, err := dischargeValueDepth[T](arg, depth+1)
+			discharged, err := dischargeValueDepth[T](
+				ctx,
+				checkCancellation,
+				arg,
+				depth+1,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -1870,7 +1929,14 @@ func dischargeValueDepth[T syn.Eval](
 		return forcedTerm, nil
 	case *Delay[T]:
 		// Discharge delayed computation with environment
-		body, err := withEnv(0, v.Env, v.AST.Term, depth+1)
+		body, err := withEnv(
+			ctx,
+			checkCancellation,
+			0,
+			v.Env,
+			v.AST.Term,
+			depth+1,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -1878,7 +1944,14 @@ func dischargeValueDepth[T syn.Eval](
 
 	case *Lambda[T]:
 		// Discharge lambda with environment (lamCnt=1 to account for parameter)
-		body, err := withEnv(1, v.Env, v.AST.Body, depth+1)
+		body, err := withEnv(
+			ctx,
+			checkCancellation,
+			1,
+			v.Env,
+			v.AST.Body,
+			depth+1,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -1892,7 +1965,12 @@ func dischargeValueDepth[T syn.Eval](
 		fields := make([]syn.Term[T], len(v.Fields))
 
 		for i, f := range v.Fields {
-			discharged, err := dischargeValueDepth[T](f, depth+1)
+			discharged, err := dischargeValueDepth[T](
+				ctx,
+				checkCancellation,
+				f,
+				depth+1,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -1926,11 +2004,18 @@ func dischargeValueDepth[T syn.Eval](
 // The function handles variable lookup with proper de Bruijn index adjustment,
 // recursively processing complex terms while maintaining environment bindings.
 func withEnv[T syn.Eval](
+	ctx context.Context,
+	checkCancellation bool,
 	lamCnt int,
 	env *Env[T],
 	term syn.Term[T],
 	depth int,
 ) (syn.Term[T], error) {
+	if checkCancellation {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+	}
 	if depth > maxDischargeDepth {
 		return nil, dischargeDepthLimitError()
 	}
@@ -1945,14 +2030,26 @@ func withEnv[T syn.Eval](
 		value, ok := lookupEnv(env, t.Name.LookupIndex()-lamCnt)
 		if ok {
 			// Variable found in environment, discharge its value
-			return dischargeValueDepth[T](value, depth+1)
+			return dischargeValueDepth[T](
+				ctx,
+				checkCancellation,
+				value,
+				depth+1,
+			)
 		}
 		// Free variable (shouldn't happen in well-formed terms)
 		return t, nil
 
 	case *syn.Lambda[T]:
 		// Lambda: increase lambda count for body processing
-		body, err := withEnv(lamCnt+1, env, t.Body, depth+1)
+		body, err := withEnv(
+			ctx,
+			checkCancellation,
+			lamCnt+1,
+			env,
+			t.Body,
+			depth+1,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -1963,11 +2060,25 @@ func withEnv[T syn.Eval](
 
 	case *syn.Apply[T]:
 		// Application: process both function and argument
-		fn, err := withEnv(lamCnt, env, t.Function, depth+1)
+		fn, err := withEnv(
+			ctx,
+			checkCancellation,
+			lamCnt,
+			env,
+			t.Function,
+			depth+1,
+		)
 		if err != nil {
 			return nil, err
 		}
-		arg, err := withEnv(lamCnt, env, t.Argument, depth+1)
+		arg, err := withEnv(
+			ctx,
+			checkCancellation,
+			lamCnt,
+			env,
+			t.Argument,
+			depth+1,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -1978,7 +2089,14 @@ func withEnv[T syn.Eval](
 
 	case *syn.Delay[T]:
 		// Delay: process delayed term
-		inner, err := withEnv(lamCnt, env, t.Term, depth+1)
+		inner, err := withEnv(
+			ctx,
+			checkCancellation,
+			lamCnt,
+			env,
+			t.Term,
+			depth+1,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -1986,7 +2104,14 @@ func withEnv[T syn.Eval](
 
 	case *syn.Force[T]:
 		// Force: process term to be forced
-		inner, err := withEnv(lamCnt, env, t.Term, depth+1)
+		inner, err := withEnv(
+			ctx,
+			checkCancellation,
+			lamCnt,
+			env,
+			t.Term,
+			depth+1,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -1996,7 +2121,14 @@ func withEnv[T syn.Eval](
 		// Constructor: recursively process all fields
 		fields := make([]syn.Term[T], len(t.Fields))
 		for i, f := range t.Fields {
-			d, err := withEnv(lamCnt, env, f, depth+1)
+			d, err := withEnv(
+				ctx,
+				checkCancellation,
+				lamCnt,
+				env,
+				f,
+				depth+1,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -2011,13 +2143,27 @@ func withEnv[T syn.Eval](
 		// Case expression: process scrutinee and all branches
 		branches := make([]syn.Term[T], len(t.Branches))
 		for i, b := range t.Branches {
-			d, err := withEnv(lamCnt, env, b, depth+1)
+			d, err := withEnv(
+				ctx,
+				checkCancellation,
+				lamCnt,
+				env,
+				b,
+				depth+1,
+			)
 			if err != nil {
 				return nil, err
 			}
 			branches[i] = d
 		}
-		constr, err := withEnv(lamCnt, env, t.Constr, depth+1)
+		constr, err := withEnv(
+			ctx,
+			checkCancellation,
+			lamCnt,
+			env,
+			t.Constr,
+			depth+1,
+		)
 		if err != nil {
 			return nil, err
 		}

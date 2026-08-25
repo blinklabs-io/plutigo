@@ -3,6 +3,7 @@
 package cek
 
 import (
+	"context"
 	"math"
 
 	"github.com/blinklabs-io/plutigo/syn"
@@ -550,13 +551,22 @@ func (m *Machine[T]) runStackNoSlippage(term syn.Term[T]) (syn.Term[T], error) {
 	}
 }
 
-func (m *Machine[T]) runStack(term syn.Term[T]) (syn.Term[T], error) {
+func (m *Machine[T]) runStack(
+	ctx context.Context,
+	checkCancellation bool,
+	term syn.Term[T],
+) (syn.Term[T], error) {
 	var currentEnv *Env[T]
 	currentTerm := term
 	var currentValue Value[T]
 	returning := false
 
 	for {
+		if checkCancellation {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
 		if !returning {
 			if currentTerm == nil {
 				return nil, internalError("stack machine current term is nil")
@@ -742,7 +752,11 @@ func (m *Machine[T]) runStack(term syn.Term[T]) (syn.Term[T], error) {
 			return nil, internalError("stack machine current value is nil")
 		}
 		if len(m.frameStack) == 0 {
-			return m.finishValue(currentValue)
+			return m.finishValueContext(
+				ctx,
+				checkCancellation,
+				currentValue,
+			)
 		}
 		frameIdx := len(m.frameStack) - 1
 		frame := &m.frameStack[frameIdx]

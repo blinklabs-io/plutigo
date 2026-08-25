@@ -125,6 +125,12 @@ func main() {
 }
 ```
 
+Use `machine.RunContext(ctx, program.Term)` when the caller has a cancellation
+scope. Cancellation is cooperative and synchronous: the call returns only
+after CEK evaluation and result discharge have stopped, and it does not start
+an evaluator goroutine. A builtin already executing must return before the
+machine can observe cancellation.
+
 ## Plutus Version Support
 
 plutigo supports all major Plutus protocol versions:
