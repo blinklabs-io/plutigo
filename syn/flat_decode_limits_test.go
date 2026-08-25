@@ -2,6 +2,7 @@ package syn
 
 import (
 	"bytes"
+	"math/big"
 	"math/bits"
 	"strings"
 	"testing"
@@ -217,5 +218,194 @@ func TestWord64Boundary(t *testing.T) {
 	}
 	if got != ^uint64(0) {
 		t.Fatalf("word64 = %d, want %d", got, ^uint64(0))
+	}
+}
+
+func TestBigWordSmallLargeValue(t *testing.T) {
+	values := []struct {
+		name string
+		word *big.Int
+	}{
+		{name: "zero", word: new(big.Int)},
+		{name: "uint64 max", word: new(big.Int).SetUint64(^uint64(0))},
+		{name: "above uint64", word: new(big.Int).Lsh(big.NewInt(1), 64)},
+		{
+			name: "crosses several machine words",
+			word: new(big.Int).Sub(
+				new(big.Int).Lsh(big.NewInt(1), 129),
+				big.NewInt(1),
+			),
+		},
+		{
+			name: "large",
+			word: new(big.Int).Sub(
+				new(big.Int).Lsh(big.NewInt(1), 4096),
+				big.NewInt(1),
+			),
+		},
+	}
+	alignments := []struct {
+		name       string
+		prefixBits byte
+		prefix     byte
+	}{
+		{name: "aligned"},
+		{name: "one bit", prefixBits: 1, prefix: 1},
+		{name: "unaligned", prefixBits: 3, prefix: 5},
+		{name: "seven bits", prefixBits: 7, prefix: 0x55},
+	}
+
+	for _, value := range values {
+		t.Run(value.name, func(t *testing.T) {
+			for _, alignment := range alignments {
+				t.Run(alignment.name, func(t *testing.T) {
+					e := newEncoder()
+					if alignment.prefixBits != 0 {
+						e.bits(alignment.prefixBits, alignment.prefix)
+					}
+					e.bigWord(value.word)
+					if e.usedBits != 0 {
+						e.nextWord()
+					}
+
+					d := newDecoder(e.buffer)
+					if alignment.prefixBits != 0 {
+						prefix, err := d.bits8(alignment.prefixBits)
+						if err != nil {
+							t.Fatalf("decode prefix: %v", err)
+						}
+						if prefix != alignment.prefix {
+							t.Fatalf("prefix = %d, want %d", prefix, alignment.prefix)
+						}
+					}
+
+					small, large, err := d.bigWordSmall()
+					if err != nil {
+						t.Fatalf("decode big word: %v", err)
+					}
+					got := large
+					if got == nil {
+						got = new(big.Int).SetUint64(small)
+					}
+					if got.Cmp(value.word) != 0 {
+						t.Fatalf(
+							"decoded word differs: bit length = %d, want %d",
+							got.BitLen(), value.word.BitLen(),
+						)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestBigWordSmallLargeValueAllocations(t *testing.T) {
+	const continuationGroups = 2048
+	encoded := append(
+		bytes.Repeat([]byte{0xff}, continuationGroups),
+		0x7f,
+	)
+
+	d := newDecoder(encoded)
+	_, decoded, err := d.bigWordSmall()
+	if err != nil {
+		t.Fatalf("decode big word: %v", err)
+	}
+	if decoded == nil {
+		t.Fatal("decoded large word is nil")
+	}
+	wantBitLen := len(encoded) * 7
+	if decoded.BitLen() != wantBitLen {
+		t.Fatalf("decoded bit length = %d, want %d", decoded.BitLen(), wantBitLen)
+	}
+
+	var decodedBitLen int
+	allocs := testing.AllocsPerRun(5, func() {
+		d := newDecoder(encoded)
+		_, decoded, _ := d.bigWordSmall()
+		if decoded != nil {
+			decodedBitLen = decoded.BitLen()
+		}
+	})
+	if decodedBitLen != wantBitLen {
+		t.Fatalf("measured decode bit length = %d, want %d", decodedBitLen, wantBitLen)
+	}
+	if allocs > 32 {
+		t.Fatalf("large integer decode allocated %.0f objects, want at most 32", allocs)
+	}
+}
+
+func TestBigWordSmallTruncatedError(t *testing.T) {
+	tests := []struct {
+		name       string
+		prefixBits byte
+		prefix     byte
+		want       string
+	}{
+		{name: "aligned", want: "end of buffer"},
+		{
+			name:       "unaligned",
+			prefixBits: 3,
+			prefix:     5,
+			want:       "NotEnoughBits(8)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newEncoder()
+			if tt.prefixBits != 0 {
+				e.bits(tt.prefixBits, tt.prefix)
+			}
+			e.bits(8, 0x80)
+			if e.usedBits != 0 {
+				e.nextWord()
+			}
+
+			d := newDecoder(e.buffer)
+			if tt.prefixBits != 0 {
+				if _, err := d.bits8(tt.prefixBits); err != nil {
+					t.Fatalf("decode prefix: %v", err)
+				}
+			}
+			_, _, err := d.bigWordSmall()
+			if err == nil {
+				t.Fatal("truncated big word decoded without error")
+			}
+			if err.Error() != tt.want {
+				t.Fatalf("decode error = %q, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+var benchmarkBigWordSmall *big.Int
+
+func BenchmarkBigWordSmallLargeValue(b *testing.B) {
+	tests := []struct {
+		name               string
+		continuationGroups int
+	}{
+		{name: "128_groups", continuationGroups: 128},
+		{name: "2048_groups", continuationGroups: 2048},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			encoded := append(
+				bytes.Repeat([]byte{0xff}, tt.continuationGroups),
+				0x7f,
+			)
+			b.SetBytes(int64(len(encoded)))
+			b.ReportAllocs()
+			for b.Loop() {
+				d := newDecoder(encoded)
+				_, word, err := d.bigWordSmall()
+				if err != nil {
+					b.Fatalf("decode big word: %v", err)
+				}
+				benchmarkBigWordSmall = word
+			}
+		})
 	}
 }

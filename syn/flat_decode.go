@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"math/bits"
 	"unicode/utf8"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -1781,9 +1782,7 @@ func (d *decoder) integer() (*big.Int, error) {
 }
 
 func (d *decoder) bigWordSmall() (uint64, *big.Int, error) {
-	var small uint64
-	var bigWord *big.Int
-	shift := uint(0)
+	var accumulator bigWordAccumulator
 
 	if d.usedBits == 0 {
 		for {
@@ -1793,27 +1792,10 @@ func (d *decoder) bigWordSmall() (uint64, *big.Int, error) {
 			word8 := d.buffer[d.pos]
 			d.pos++
 
-			chunk := uint64(word8 & 0x7F)
-			if bigWord == nil {
-				if canAccumulateUint64(chunk, shift) {
-					small |= chunk << shift
-				} else {
-					bigWord = new(big.Int).SetUint64(small)
-					if chunk != 0 {
-						part := new(big.Int).SetUint64(chunk)
-						part.Lsh(part, shift)
-						bigWord.Or(bigWord, part)
-					}
-				}
-			} else if chunk != 0 {
-				part := new(big.Int).SetUint64(chunk)
-				part.Lsh(part, shift)
-				bigWord.Or(bigWord, part)
-			}
-
-			shift += 7
+			accumulator.add(uint64(word8 & 0x7F))
 			if word8&0x80 == 0 {
-				return small, bigWord, nil
+				small, word := accumulator.value()
+				return small, word, nil
 			}
 		}
 	}
@@ -1824,38 +1806,86 @@ func (d *decoder) bigWordSmall() (uint64, *big.Int, error) {
 			return 0, nil, err
 		}
 
-		chunk := uint64(word8 & 0x7F)
-		if bigWord == nil {
-			if canAccumulateUint64(chunk, shift) {
-				small |= chunk << shift
-			} else {
-				bigWord = new(big.Int).SetUint64(small)
-				if chunk != 0 {
-					part := new(big.Int).SetUint64(chunk)
-					part.Lsh(part, shift)
-					bigWord.Or(bigWord, part)
-				}
-			}
-		} else if chunk != 0 {
-			part := new(big.Int).SetUint64(chunk)
-			part.Lsh(part, shift)
-			bigWord.Or(bigWord, part)
-		}
-
-		shift += 7
+		accumulator.add(uint64(word8 & 0x7F))
 		if word8&0x80 == 0 {
-			return small, bigWord, nil
+			small, word := accumulator.value()
+			return small, word, nil
 		}
 	}
 }
 
-func canAccumulateUint64(chunk uint64, shift uint) bool {
+// bigWordAccumulator packs little-endian base-128 groups directly into the
+// native-word representation consumed by big.Int.SetBits. Each input group is
+// written once, avoiding repeated operations over the growing integer.
+type bigWordAccumulator struct {
+	small uint64
+	words []big.Word
+	group int
+}
+
+func (a *bigWordAccumulator) add(chunk uint64) {
+	if a.words == nil && canAccumulateUint64(chunk, a.group) {
+		if chunk != 0 {
+			a.small |= chunk << uint(a.group*7)
+		}
+		a.group++
+		return
+	}
+
+	if a.words == nil {
+		a.words = make([]big.Word, 64/bits.UintSize)
+		a.words[0] = big.Word(a.small)
+		if bits.UintSize == 32 {
+			a.words[1] = big.Word(a.small >> 32)
+		}
+	}
+	if chunk != 0 {
+		a.words = accumulateBigWordChunk(a.words, a.group, chunk)
+	}
+	a.group++
+}
+
+func (a *bigWordAccumulator) value() (uint64, *big.Int) {
+	if a.words == nil {
+		return a.small, nil
+	}
+	return a.small, new(big.Int).SetBits(a.words)
+}
+
+func accumulateBigWordChunk(
+	words []big.Word,
+	group int,
+	chunk uint64,
+) []big.Word {
+	groupRemainder := group % bits.UintSize
+	bitInBlock := groupRemainder * 7
+	wordIndex := (group/bits.UintSize)*7 + bitInBlock/bits.UintSize
+	shift := uint(bitInBlock % bits.UintSize)
+	crossesWord := int(shift)+7 > bits.UintSize
+	requiredWords := wordIndex + 1
+	if crossesWord {
+		requiredWords++
+	}
+	for len(words) < requiredWords {
+		words = append(words, 0)
+	}
+
+	wordChunk := big.Word(chunk)
+	words[wordIndex] |= wordChunk << shift
+	if crossesWord {
+		words[wordIndex+1] |= wordChunk >> uint(bits.UintSize-int(shift))
+	}
+	return words
+}
+
+func canAccumulateUint64(chunk uint64, group int) bool {
 	if chunk == 0 {
 		return true
 	}
-	if shift >= 64 {
+	if group >= 10 {
 		return false
 	}
+	shift := uint(group * 7)
 	return chunk <= (math.MaxUint64 >> shift)
 }
 
@@ -1863,49 +1893,14 @@ func canAccumulateUint64(chunk uint64, shift uint) bool {
 // It is byte-alignment agnostic. Reads 8 bits at a time, using the 7 least
 // significant bits for the integer, continuing if the MSB is 1, stopping if 0.
 func (d *decoder) bigWord() (*big.Int, error) {
-	finalWord := new(big.Int)
-	shift := uint(0)
-
-	if d.usedBits == 0 {
-		for {
-			if d.pos >= len(d.buffer) {
-				return nil, errors.New("end of buffer")
-			}
-			word8 := d.buffer[d.pos]
-			d.pos++
-
-			finalWord.Or(finalWord, new(big.Int).Lsh(new(big.Int).SetInt64(int64(word8&0x7F)), shift))
-			shift += 7
-			if word8&0x80 == 0 {
-				return finalWord, nil
-			}
-		}
+	small, word, err := d.bigWordSmall()
+	if err != nil {
+		return nil, err
 	}
-
-	for {
-		word8, err := d.bits8(8)
-		if err != nil {
-			return nil, err
-		}
-		// Get 7 least significant bits: word8 & 0x7F
-		word7 := word8 & 0x7F
-
-		// Shift and OR into finalWord
-		part := new(big.Int).SetInt64(int64(word7))
-		shiftedPart := new(big.Int).Lsh(part, shift)
-		finalWord.Or(finalWord, shiftedPart)
-
-		// Increment shift by 7
-		shift += 7
-
-		// Check MSB: word8 & 0x80
-		leadingBit := word8 & 0x80
-		if leadingBit == 0 {
-			break
-		}
+	if word == nil {
+		return new(big.Int).SetUint64(small), nil
 	}
-
-	return finalWord, nil
+	return word, nil
 }
 
 func unzigzagUint64(n uint64) (int64, bool) {
