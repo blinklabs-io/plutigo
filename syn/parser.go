@@ -1202,8 +1202,10 @@ func (p *Parser) parseTypeSpec() (Typ, error) {
 	}
 	defer p.leave()
 
-	// Check for invalid bare list or pair
-	if p.curToken.Type == lex.TokenList || p.curToken.Type == lex.TokenPair {
+	// Check for invalid bare composite types.
+	if p.curToken.Type == lex.TokenList ||
+		p.curToken.Type == lex.TokenArray ||
+		p.curToken.Type == lex.TokenPair {
 		return nil, fmt.Errorf(
 			"expected left parenthesis for %d type, got %v (literal: %s) at position %d",
 			p.curToken.Type,
