@@ -534,6 +534,18 @@ func TestDecodeRejectsExcessiveNesting(t *testing.T) {
 	assertDecodeLimitError(t, err, "nesting depth")
 }
 
+func TestDirectUnmarshalRejectsExcessiveNesting(t *testing.T) {
+	encoded := nestedListCBOR(MaxDecodeNestingDepth + 1)
+
+	var byteString ByteString
+	err := byteString.UnmarshalCBOR(encoded)
+	assertDefaultNestingDepthLimit(t, err)
+
+	var integer Integer
+	err = integer.UnmarshalCBOR(encoded)
+	assertDefaultNestingDepthLimit(t, err)
+}
+
 func TestDecodeRejectsExcessiveNodeCount(t *testing.T) {
 	encoded := []byte{0x84, 0x00, 0x00, 0x00, 0x00}
 	limits := decodeLimits{maxDepth: MaxDecodeNestingDepth, maxNodes: 4}
@@ -566,6 +578,30 @@ func assertDecodeLimitError(t *testing.T, err error, limit string) {
 	}
 	if limitErr.Limit != limit {
 		t.Fatalf("DecodeLimitError limit = %q, want %q", limitErr.Limit, limit)
+	}
+}
+
+func assertDefaultNestingDepthLimit(t *testing.T, err error) {
+	t.Helper()
+	assertDecodeLimitError(t, err, "nesting depth")
+
+	var limitErr *DecodeLimitError
+	if !errors.As(err, &limitErr) {
+		t.Fatalf("expected DecodeLimitError, got %T: %v", err, err)
+	}
+	if limitErr.Max != MaxDecodeNestingDepth {
+		t.Fatalf(
+			"DecodeLimitError max = %d, want %d",
+			limitErr.Max,
+			MaxDecodeNestingDepth,
+		)
+	}
+	if limitErr.Actual != MaxDecodeNestingDepth+1 {
+		t.Fatalf(
+			"DecodeLimitError actual = %d, want %d",
+			limitErr.Actual,
+			MaxDecodeNestingDepth+1,
+		)
 	}
 }
 

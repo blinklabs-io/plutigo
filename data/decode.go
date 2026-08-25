@@ -143,11 +143,7 @@ func cborUnmarshal(dataBytes []byte, dest any) error {
 }
 
 func validateCBORByteStringLeaves(data []byte) error {
-	// The CBOR decoder already enforces its own nesting limit. Use input-sized
-	// bounds here so direct UnmarshalCBOR methods get the bytestring rule without
-	// changing the package's independent Data nesting and node limits.
-	limits := decodeLimits{maxDepth: len(data) + 1, maxNodes: len(data) + 1}
-	rest, err := skipCBORItemWithState(data, newDecodeStateWithLimits(limits))
+	rest, err := skipCBORItemWithState(data, newDecodeState())
 	if err != nil {
 		return err
 	}
