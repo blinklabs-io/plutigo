@@ -90,6 +90,7 @@ go get github.com/blinklabs-io/plutigo
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/blinklabs-io/plutigo/cek"
@@ -114,10 +115,14 @@ func main() {
 	program, _ := syn.NameToDeBruijn(pprogram)
 
 	// Create a machine using the default cost model at protocol major 200.
-	ctx := cek.NewDefaultEvalContext(program.Version, cek.ProtoVersion{Major: 200})
-	machine := cek.NewMachine[syn.DeBruijn](program.Version, 0, ctx)
+	evalCtx := cek.NewDefaultEvalContext(
+		program.Version,
+		cek.ProtoVersion{Major: 200},
+	)
+	machine := cek.NewMachine[syn.DeBruijn](program.Version, 0, evalCtx)
 
-	term, _ := machine.Run(program.Term)
+	runCtx := context.Background()
+	term, _ := machine.RunContext(runCtx, program.Term)
 
 	prettyTerm := syn.PrettyTerm[syn.DeBruijn](term)
 
@@ -125,7 +130,7 @@ func main() {
 }
 ```
 
-Use `machine.RunContext(ctx, program.Term)` when the caller has a cancellation
+Pass the caller's `context.Context` as `runCtx` when it has a cancellation
 scope. Cancellation is cooperative and synchronous: the call returns only
 after CEK evaluation and result discharge have stopped, and it does not start
 an evaluator goroutine. A builtin already executing must return before the
