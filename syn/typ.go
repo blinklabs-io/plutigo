@@ -30,6 +30,12 @@ type TList struct {
 
 func (t TList) isTyp() {}
 
+type TArray struct {
+	Typ
+}
+
+func (t TArray) isTyp() {}
+
 type TPair struct {
 	First  Typ
 	Second Typ
@@ -93,6 +99,9 @@ func EqualType(a, b Typ) bool {
 		return ok
 	case *TList:
 		tb, ok := b.(*TList)
+		return ok && EqualType(ta.Typ, tb.Typ)
+	case *TArray:
+		tb, ok := b.(*TArray)
 		return ok && EqualType(ta.Typ, tb.Typ)
 	case *TPair:
 		tb, ok := b.(*TPair)

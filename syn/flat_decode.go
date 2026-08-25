@@ -1,6 +1,7 @@
 package syn
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math"
@@ -710,7 +711,9 @@ type constantArena struct {
 	units       arenaChunks[Unit]
 	bools       arenaChunks[Bool]
 	protoLists  arenaChunks[ProtoList]
+	protoArrays arenaChunks[ProtoArray]
 	protoPairs  arenaChunks[ProtoPair]
+	values      arenaChunks[Value]
 	datas       arenaChunks[Data]
 	lists       arenaSlices[IConstant]
 	bytes       arenaSlices[byte]
@@ -725,7 +728,9 @@ func (a *constantArena) reset() {
 	a.units.reset(1)
 	a.bools.reset(1)
 	a.protoLists.reset(decodeRetainVarCap)
+	a.protoArrays.reset(decodeRetainVarCap)
 	a.protoPairs.reset(decodeRetainVarCap)
+	a.values.reset(decodeRetainVarCap)
 	a.datas.reset(decodeRetainVarCap)
 	a.lists.reset(decodeRetainVarCap)
 	resetByteSlices(&a.bytes, decodeRetainBytesCap)
@@ -768,6 +773,19 @@ func (a *constantArena) allocProtoList(typ Typ, items []IConstant) *ProtoList {
 	value := a.protoLists.alloc()
 	value.LTyp = typ
 	value.List = items
+	return value
+}
+
+func (a *constantArena) allocProtoArray(typ Typ, items []IConstant) *ProtoArray {
+	value := a.protoArrays.alloc()
+	value.ATyp = typ
+	value.Array = items
+	return value
+}
+
+func (a *constantArena) allocValue(entries []IConstant) *Value {
+	value := a.values.alloc()
+	value.Entries = entries
 	return value
 }
 
@@ -981,6 +999,12 @@ func decodeConstantValueWithArena(
 			return nil, err
 		}
 		return arena.allocProtoList(t.Typ, items), nil
+	case *TArray:
+		items, err := decodeConstantListWithArena(d, t.Typ, arena)
+		if err != nil {
+			return nil, err
+		}
+		return arena.allocProtoArray(t.Typ, items), nil
 	case *TPair:
 		first, err := decodeConstantValueWithArena(d, t.First, arena)
 		if err != nil {
@@ -1001,6 +1025,21 @@ func decodeConstantValueWithArena(
 			return nil, err
 		}
 		return arena.allocData(pd), nil
+	case *TValue:
+		entries, err := decodeConstantListWithArena(d, valueEntryType, arena)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateValueEntries(entries); err != nil {
+			return nil, err
+		}
+		return arena.allocValue(entries), nil
+	case *TBls12_381G1Element:
+		return nil, errors.New("cannot decode bls12_381_G1_element constants")
+	case *TBls12_381G2Element:
+		return nil, errors.New("cannot decode bls12_381_G2_element constants")
+	case *TBls12_381MlResult:
+		return nil, errors.New("cannot decode bls12_381_mlresult constants")
 	default:
 		return nil, errors.New("unknown constant constructor")
 	}
@@ -1113,6 +1152,15 @@ func decodeConstantValue(d *decoder, typ Typ) (IConstant, error) {
 			List: items,
 		}
 
+	case *TArray:
+		items, err := DecodeList(d, func(d *decoder) (IConstant, error) {
+			return decodeConstantValue(d, t.Typ)
+		})
+		if err != nil {
+			return nil, err
+		}
+		constant = &ProtoArray{ATyp: t.Typ, Array: items}
+
 	// ProtoPair
 	case *TPair:
 		first, err := decodeConstantValue(d, t.First)
@@ -1144,11 +1192,94 @@ func decodeConstantValue(d *decoder, typ Typ) (IConstant, error) {
 
 		constant = &Data{pd}
 
+	case *TValue:
+		entries, err := DecodeList(d, func(d *decoder) (IConstant, error) {
+			return decodeConstantValue(d, valueEntryType)
+		})
+		if err != nil {
+			return nil, err
+		}
+		if err := validateValueEntries(entries); err != nil {
+			return nil, err
+		}
+		constant = &Value{Entries: entries}
+
+	case *TBls12_381G1Element:
+		return nil, errors.New("cannot decode bls12_381_G1_element constants")
+	case *TBls12_381G2Element:
+		return nil, errors.New("cannot decode bls12_381_G2_element constants")
+	case *TBls12_381MlResult:
+		return nil, errors.New("cannot decode bls12_381_mlresult constants")
+
 	default:
 		return nil, errors.New("unknown constant constructor")
 	}
 
 	return constant, nil
+}
+
+func validateValueEntries(entries []IConstant) error {
+	quantityLimit := new(big.Int).Lsh(big.NewInt(1), 127)
+	maxQuantity := new(big.Int).Sub(new(big.Int).Set(quantityLimit), big.NewInt(1))
+	minQuantity := new(big.Int).Neg(new(big.Int).Set(quantityLimit))
+
+	var previousPolicy []byte
+	for policyIndex, entry := range entries {
+		policy, ok := entry.(*ProtoPair)
+		if !ok {
+			return fmt.Errorf("value policy entry %d is not a pair", policyIndex)
+		}
+		policyID, ok := policy.First.(*ByteString)
+		if !ok {
+			return fmt.Errorf("value policy entry %d has a non-bytestring key", policyIndex)
+		}
+		if len(policyID.Inner) > 32 {
+			return fmt.Errorf("value policy entry %d key exceeds 32 bytes", policyIndex)
+		}
+		if policyIndex > 0 && bytes.Compare(previousPolicy, policyID.Inner) >= 0 {
+			return errors.New("value policy keys must be strictly ascending")
+		}
+
+		tokens, ok := policy.Second.(*ProtoList)
+		if !ok {
+			return fmt.Errorf("value policy entry %d has a non-list payload", policyIndex)
+		}
+		if len(tokens.List) == 0 {
+			return fmt.Errorf("value policy entry %d has no tokens", policyIndex)
+		}
+
+		var previousToken []byte
+		for tokenIndex, entry := range tokens.List {
+			token, ok := entry.(*ProtoPair)
+			if !ok {
+				return fmt.Errorf("value token entry %d:%d is not a pair", policyIndex, tokenIndex)
+			}
+			tokenID, ok := token.First.(*ByteString)
+			if !ok {
+				return fmt.Errorf("value token entry %d:%d has a non-bytestring key", policyIndex, tokenIndex)
+			}
+			if len(tokenID.Inner) > 32 {
+				return fmt.Errorf("value token entry %d:%d key exceeds 32 bytes", policyIndex, tokenIndex)
+			}
+			if tokenIndex > 0 && bytes.Compare(previousToken, tokenID.Inner) >= 0 {
+				return errors.New("value token keys must be strictly ascending")
+			}
+
+			quantity, ok := token.Second.(*Integer)
+			if !ok || quantity.Inner == nil {
+				return fmt.Errorf("value token entry %d:%d has a non-integer quantity", policyIndex, tokenIndex)
+			}
+			if quantity.Inner.Sign() == 0 {
+				return fmt.Errorf("value token entry %d:%d has a zero quantity", policyIndex, tokenIndex)
+			}
+			if quantity.Inner.Cmp(minQuantity) < 0 || quantity.Inner.Cmp(maxQuantity) > 0 {
+				return fmt.Errorf("value token entry %d:%d quantity is out of range", policyIndex, tokenIndex)
+			}
+			previousToken = tokenID.Inner
+		}
+		previousPolicy = policyID.Inner
+	}
+	return nil
 }
 
 var (
@@ -1158,6 +1289,18 @@ var (
 	cachedTUnit       Typ = &TUnit{}
 	cachedTBool       Typ = &TBool{}
 	cachedTData       Typ = &TData{}
+	cachedTBlsG1      Typ = &TBls12_381G1Element{}
+	cachedTBlsG2      Typ = &TBls12_381G2Element{}
+	cachedTBlsMl      Typ = &TBls12_381MlResult{}
+	cachedTValue      Typ = &TValue{}
+)
+
+var (
+	valueTokenType = &TPair{First: &TByteString{}, Second: &TInteger{}}
+	valueEntryType = &TPair{
+		First:  &TByteString{},
+		Second: &TList{Typ: valueTokenType},
+	}
 )
 
 type constantTagSeq struct {
@@ -1218,6 +1361,14 @@ func decodeConstantTypeAt(tags *constantTagSeq, idx int) (Typ, int, error) {
 		return cachedTBool, idx, nil
 	case DataTag:
 		return cachedTData, idx, nil
+	case Bls12_381G1Tag:
+		return cachedTBlsG1, idx, nil
+	case Bls12_381G2Tag:
+		return cachedTBlsG2, idx, nil
+	case Bls12_381MlTag:
+		return cachedTBlsMl, idx, nil
+	case ValueTag:
+		return cachedTValue, idx, nil
 	// NOTE: this also covers ProtoPairOneTag, but it's the same value as ProtoListOneTag.
 	case ProtoListOneTag:
 		if idx >= tags.len() {
@@ -1230,6 +1381,12 @@ func decodeConstantTypeAt(tags *constantTagSeq, idx int) (Typ, int, error) {
 				return nil, next, err
 			}
 			return &TList{Typ: subType}, next, nil
+		case ProtoArrayTag:
+			subType, next, err := decodeConstantTypeAt(tags, idx+1)
+			if err != nil {
+				return nil, next, err
+			}
+			return &TArray{Typ: subType}, next, nil
 		case ProtoPairTwoTag:
 			idx++
 			if idx >= tags.len() || tags.at(idx) != ProtoPairThreeTag {

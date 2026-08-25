@@ -29,6 +29,11 @@ const (
 	UnitTag           byte = 3
 	BoolTag           byte = 4
 	DataTag           byte = 8
+	Bls12_381G1Tag    byte = 9
+	Bls12_381G2Tag    byte = 10
+	Bls12_381MlTag    byte = 11
+	ProtoArrayTag     byte = 12
+	ValueTag          byte = 13
 	ProtoListOneTag   byte = 7
 	ProtoListTwoTag   byte = 5
 	ProtoPairOneTag   byte = 7

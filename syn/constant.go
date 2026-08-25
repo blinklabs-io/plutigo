@@ -134,6 +134,27 @@ func (pl ProtoList) Typ() Typ {
 	return &TList{Typ: pl.LTyp}
 }
 
+type ProtoArray struct {
+	ATyp  Typ
+	Array []IConstant
+}
+
+func (ProtoArray) isConstant() {}
+
+func (pa ProtoArray) Typ() Typ {
+	return &TArray{Typ: pa.ATyp}
+}
+
+type Value struct {
+	Entries []IConstant
+}
+
+func (Value) isConstant() {}
+
+func (Value) Typ() Typ {
+	return &TValue{}
+}
+
 type ProtoPair struct {
 	FstType Typ
 	SndType Typ

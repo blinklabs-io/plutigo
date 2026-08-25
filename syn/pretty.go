@@ -251,8 +251,9 @@ func (pp *PrettyPrinter) printConstant(c *Constant, inCollection bool) {
 		pp.write(con.Inner.String())
 	case *ByteString:
 		if !inCollection {
-			pp.write("bytestring #")
+			pp.write("bytestring ")
 		}
+		pp.write("#")
 
 		for _, b := range con.Inner {
 			fmt.Fprintf(&pp.builder, "%02x", b)
@@ -290,23 +291,19 @@ func (pp *PrettyPrinter) printConstant(c *Constant, inCollection bool) {
 			pp.write(") ")
 		}
 
-		if len(con.List) == 0 {
-			pp.write("[]")
-		} else {
-			pp.write("[\n")
-			pp.increaseIndent()
-			for i, item := range con.List {
-				pp.writeIndent()
-				pp.printConstant(&Constant{Con: item}, true)
-				if i < len(con.List)-1 {
-					pp.write(",")
-				}
-				pp.write("\n")
-			}
-			pp.decreaseIndent()
-			pp.writeIndent()
-			pp.write("]")
+		pp.printConstantCollection(con.List)
+	case *ProtoArray:
+		if !inCollection {
+			pp.write("(array ")
+			pp.printType(con.ATyp)
+			pp.write(") ")
 		}
+		pp.printConstantCollection(con.Array)
+	case *Value:
+		if !inCollection {
+			pp.write("value ")
+		}
+		pp.printConstantCollection(con.Entries)
 	case *ProtoPair:
 		if !inCollection {
 			pp.write("(pair ")
@@ -333,8 +330,9 @@ func (pp *PrettyPrinter) printConstant(c *Constant, inCollection bool) {
 		}
 	case *Bls12_381G1Element:
 		if !inCollection {
-			pp.write("bls12_381_G1_element 0x")
+			pp.write("bls12_381_G1_element ")
 		}
+		pp.write("0x")
 
 		affine := new(bls.G1Affine).FromJacobian(con.Inner)
 
@@ -343,8 +341,9 @@ func (pp *PrettyPrinter) printConstant(c *Constant, inCollection bool) {
 		}
 	case *Bls12_381G2Element:
 		if !inCollection {
-			pp.write("bls12_381_G2_element 0x")
+			pp.write("bls12_381_G2_element ")
 		}
+		pp.write("0x")
 
 		affine := new(bls.G2Affine).FromJacobian(con.Inner)
 
@@ -358,6 +357,26 @@ func (pp *PrettyPrinter) printConstant(c *Constant, inCollection bool) {
 	if !inCollection {
 		pp.write(")")
 	}
+}
+
+func (pp *PrettyPrinter) printConstantCollection(items []IConstant) {
+	if len(items) == 0 {
+		pp.write("[]")
+		return
+	}
+	pp.write("[\n")
+	pp.increaseIndent()
+	for i, item := range items {
+		pp.writeIndent()
+		pp.printConstant(&Constant{Con: item}, true)
+		if i < len(items)-1 {
+			pp.write(",")
+		}
+		pp.write("\n")
+	}
+	pp.decreaseIndent()
+	pp.writeIndent()
+	pp.write("]")
 }
 
 // printType formats a Typ interface
@@ -375,8 +394,18 @@ func (pp *PrettyPrinter) printType(typ Typ) {
 		pp.write("bool")
 	case *TData:
 		pp.write("data")
+	case *TBls12_381G1Element:
+		pp.write("bls12_381_G1_element")
+	case *TBls12_381G2Element:
+		pp.write("bls12_381_G2_element")
+	case *TBls12_381MlResult:
+		pp.write("bls12_381_mlresult")
 	case *TList:
 		pp.write("(list ")
+		pp.printType(t.Typ)
+		pp.write(")")
+	case *TArray:
+		pp.write("(array ")
 		pp.printType(t.Typ)
 		pp.write(")")
 	case *TPair:
@@ -385,6 +414,8 @@ func (pp *PrettyPrinter) printType(typ Typ) {
 		pp.write(" ")
 		pp.printType(t.Second)
 		pp.write(")")
+	case *TValue:
+		pp.write("value")
 	default:
 		pp.write(fmt.Sprintf("unknown type: %v", typ))
 	}

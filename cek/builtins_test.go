@@ -518,14 +518,14 @@ func TestLengthOfArrayBuiltin(t *testing.T) {
 	m := newTestMachineV4() // V4 builtin
 	b := newTestBuiltin(builtin.LengthOfArray)
 
-	// Create a ProtoList with 3 elements
+	// Create an array with 3 elements.
 	list := []syn.IConstant{
 		&syn.Integer{Inner: big.NewInt(1)},
 		&syn.Integer{Inner: big.NewInt(2)},
 		&syn.Integer{Inner: big.NewInt(3)},
 	}
-	protoList := &syn.ProtoList{List: list}
-	arrayVal := &Constant{protoList}
+	array := &syn.ProtoArray{ATyp: &syn.TInteger{}, Array: list}
+	arrayVal := &Constant{array}
 
 	b = b.ApplyArg(arrayVal)
 

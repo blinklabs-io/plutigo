@@ -4298,34 +4298,44 @@ func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 // Functions: lengthOfArray, listToArray, indexArray
 // ============================================================================
 
-func lengthOfArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
-	b.Args.Extract(&m.argHolder, b.ArgCount)
-	// The tests use (con (array t) [ ... ]) which is parsed to a ProtoList.
-	lstConst, ok := m.argHolder[0].(*Constant)
+func unwrapArray[T syn.Eval](value Value[T]) (syn.Typ, []syn.IConstant, error) {
+	constant, ok := value.(*Constant)
 	if !ok {
-		return nil, &BuiltinError{
-			Code:    ErrCodeInvalidArgument,
-			Builtin: "lengthOfArray",
-			Message: "expected constant",
+		return nil, nil, &TypeError{
+			Code:     ErrCodeTypeMismatch,
+			Expected: "Array",
+			Got:      fmt.Sprintf("%T", value),
+			Message:  "type mismatch",
 		}
 	}
 
-	switch c := lstConst.Constant.(type) {
-	case *syn.ProtoList:
-		if err := m.CostOne(&b.Func, func() ExMem { return listExMem(c.List)() }); err != nil {
-			return nil, err
-		}
-		l := big.NewInt(int64(len(c.List)))
-		return &Constant{&syn.Integer{Inner: l}}, nil
+	switch array := constant.Constant.(type) {
+	case *syn.ProtoArray:
+		return array.ATyp, array.Array, nil
 	default:
-		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "lengthOfArray", Message: "expected array/list constant"}
+		return nil, nil, &TypeError{
+			Code:     ErrCodeTypeMismatch,
+			Expected: "Array",
+			Got:      fmt.Sprintf("%T", constant.Constant),
+			Message:  "type mismatch",
+		}
 	}
+}
+
+func lengthOfArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+	_, items, err := unwrapArray[T](m.argHolder[0])
+	if err != nil {
+		return nil, err
+	}
+	if err := m.CostOne(&b.Func, func() ExMem { return listExMem(items)() }); err != nil {
+		return nil, err
+	}
+	return &Constant{&syn.Integer{Inner: big.NewInt(int64(len(items)))}}, nil
 }
 
 func listToArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-	// Convert a list constant to an array constant representation; both are
-	// represented as ProtoList in this implementation, so return as-is.
 	lst, err := unwrapList[T](nil, m.argHolder[0])
 	if err != nil {
 		return nil, err
@@ -4334,13 +4344,13 @@ func listToArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	if err := m.CostOne(&b.Func, func() ExMem { return listLengthExMem(lst.List)() }); err != nil {
 		return nil, err
 	}
-	return &Constant{&syn.ProtoList{LTyp: lst.LTyp, List: lst.List}}, nil
+	return &Constant{&syn.ProtoArray{ATyp: lst.LTyp, Array: lst.List}}, nil
 }
 
 func indexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 	// Args: (con (array t) arr) (con integer idx)
-	lst, err := unwrapList[T](nil, m.argHolder[0])
+	_, items, err := unwrapArray[T](m.argHolder[0])
 	if err != nil {
 		return nil, err
 	}
@@ -4353,7 +4363,7 @@ func indexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	// Spend budget
 	err = m.CostTwo(
 		&b.Func,
-		func() ExMem { return listExMem(lst.List)() },
+		func() ExMem { return listExMem(items)() },
 		bigIntExMem(idx),
 	)
 	if err != nil {
@@ -4385,15 +4395,15 @@ func indexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 	i := int(idx64)
-	if i >= len(lst.List) {
+	if i >= len(items) {
 		return nil, &BuiltinError{
 			Code:    ErrCodeOutOfBounds,
 			Builtin: "indexArray",
-			Message: fmt.Sprintf("index %d out of bounds for array of length %d", i, len(lst.List)),
+			Message: fmt.Sprintf("index %d out of bounds for array of length %d", i, len(items)),
 		}
 	}
 
-	return &Constant{lst.List[i]}, nil
+	return &Constant{items[i]}, nil
 }
 
 // ============================================================================
@@ -4402,10 +4412,19 @@ func indexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 // Helpers: valueToMap, mapToValue
 // ============================================================================
 
-// Helper: converts a ProtoList representation of Value to map[string]map[string]*big.Int
-func valueToMap[T syn.Eval](c *syn.ProtoList) map[string]map[string]*big.Int {
+func valueEntries(constant syn.IConstant) ([]syn.IConstant, bool) {
+	switch value := constant.(type) {
+	case *syn.Value:
+		return value.Entries, true
+	default:
+		return nil, false
+	}
+}
+
+// valueToMap converts a Value payload to map[string]map[string]*big.Int.
+func valueToMap(entries []syn.IConstant) map[string]map[string]*big.Int {
 	out := make(map[string]map[string]*big.Int)
-	for _, entry := range c.List {
+	for _, entry := range entries {
 		pair, ok := entry.(*syn.ProtoPair)
 		if !ok {
 			continue
@@ -4449,8 +4468,9 @@ func valueToMap[T syn.Eval](c *syn.ProtoList) map[string]map[string]*big.Int {
 	return out
 }
 
-// Helper: convert map back to ProtoList canonical order: empty policy entries removed, token lists sorted by key
-func mapToValueProto(mapp map[string]map[string]*big.Int) *syn.ProtoList {
+// mapToValue converts a map back to canonical Value order: empty policy
+// entries are removed and policy/token keys are sorted.
+func mapToValue(mapp map[string]map[string]*big.Int) *syn.Value {
 	res := make([]syn.IConstant, 0)
 	// deterministically sort policies
 	policies := make([]string, 0, len(mapp))
@@ -4458,13 +4478,6 @@ func mapToValueProto(mapp map[string]map[string]*big.Int) *syn.ProtoList {
 		policies = append(policies, p)
 	}
 	sort.Strings(policies)
-	// value element type: (pair bytestring (list (pair bytestring integer)))
-	valType := &syn.TPair{
-		First: &syn.TByteString{},
-		Second: &syn.TList{
-			Typ: &syn.TPair{First: &syn.TByteString{}, Second: &syn.TInteger{}},
-		},
-	}
 	for _, policy := range policies {
 		tokens := mapp[policy]
 		if len(tokens) == 0 {
@@ -4513,7 +4526,7 @@ func mapToValueProto(mapp map[string]map[string]*big.Int) *syn.ProtoList {
 		})
 	}
 
-	return &syn.ProtoList{LTyp: valType, List: res}
+	return &syn.Value{Entries: res}
 }
 
 func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -4541,12 +4554,12 @@ func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 
-	plist, ok := valConst.Constant.(*syn.ProtoList)
+	entries, ok := valueEntries(valConst.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
 			Builtin: "insertCoin",
-			Message: "expected value proto list",
+			Message: "expected value constant",
 		}
 	}
 	// Spend budget for insertCoin (4 args: policy, token, amount, value)
@@ -4555,7 +4568,7 @@ func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		byteArrayExMem(policyBs),
 		byteArrayExMem(tokenBs),
 		bigIntExMem(amt),
-		valueListSizeExMem(plist.List),
+		valueListSizeExMem(entries),
 	); err != nil {
 		return nil, err
 	}
@@ -4590,7 +4603,7 @@ func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 
-	vm := valueToMap[T](plist)
+	vm := valueToMap(entries)
 	pol := string(policyBs)
 	if _, ok := vm[pol]; !ok {
 		vm[pol] = make(map[string]*big.Int)
@@ -4606,7 +4619,7 @@ func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		vm[pol][string(tokenBs)] = new(big.Int).Set(amt)
 	}
 
-	return &Constant{mapToValueProto(vm)}, nil
+	return &Constant{mapToValue(vm)}, nil
 }
 
 func lookupCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -4628,12 +4641,12 @@ func lookupCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected value constant",
 		}
 	}
-	plist, ok := valConst.Constant.(*syn.ProtoList)
+	entries, ok := valueEntries(valConst.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
 			Builtin: "lookupCoin",
-			Message: "expected value proto list",
+			Message: "expected value constant",
 		}
 	}
 	// Spend budget for lookupCoin (3 args: policy, token, value)
@@ -4641,11 +4654,11 @@ func lookupCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	if err := m.CostThree(&b.Func,
 		byteArrayExMem(policyBs),
 		byteArrayExMem(tokenBs),
-		valueListSizeExMem(plist.List),
+		valueListSizeExMem(entries),
 	); err != nil {
 		return nil, err
 	}
-	vm := valueToMap[T](plist)
+	vm := valueToMap(entries)
 	if tokens, ok := vm[string(policyBs)]; ok {
 		if amt, ok2 := tokens[string(tokenBs)]; ok2 {
 			return &Constant{&syn.Integer{Inner: amt}}, nil
@@ -4670,23 +4683,23 @@ func scaleValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected value constant",
 		}
 	}
-	plist, ok := valConst.Constant.(*syn.ProtoList)
+	entries, ok := valueEntries(valConst.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
 			Builtin: "scaleValue",
-			Message: "expected value proto list",
+			Message: "expected value constant",
 		}
 	}
 	// Spend budget for scaleValue (2 args: factor, value)
 	// Cost model uses linear_in_y (the value size with minus-one formula)
 	if err := m.CostTwo(&b.Func,
 		bigIntExMem(factor),
-		valueListSizeMinusOneExMem(plist.List),
+		valueListSizeMinusOneExMem(entries),
 	); err != nil {
 		return nil, err
 	}
-	vm := valueToMap[T](plist)
+	vm := valueToMap(entries)
 	if vm == nil {
 		vm = make(map[string]map[string]*big.Int)
 	}
@@ -4717,7 +4730,7 @@ func scaleValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			toks[t] = prod
 		}
 	}
-	return &Constant{mapToValueProto(vm)}, nil
+	return &Constant{mapToValue(vm)}, nil
 }
 
 func unionValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -4738,32 +4751,32 @@ func unionValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected value constant for b",
 		}
 	}
-	aList, ok := aConst.Constant.(*syn.ProtoList)
+	aEntries, ok := valueEntries(aConst.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
 			Builtin: "unionValue",
-			Message: "expected proto list for a",
+			Message: "expected value constant for a",
 		}
 	}
-	bList, ok := bConst.Constant.(*syn.ProtoList)
+	bEntries, ok := valueEntries(bConst.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
 			Builtin: "unionValue",
-			Message: "expected proto list for b",
+			Message: "expected value constant for b",
 		}
 	}
 	// Spend budget for unionValue (2 args: value a, value b)
 	// Cost model uses with_interaction_in_x_and_y (outer count only - number of policies)
 	if err := m.CostTwo(&b.Func,
-		valueOuterCountExMem(aList.List),
-		valueOuterCountExMem(bList.List),
+		valueOuterCountExMem(aEntries),
+		valueOuterCountExMem(bEntries),
 	); err != nil {
 		return nil, err
 	}
-	am := valueToMap[T](aList)
-	bm := valueToMap[T](bList)
+	am := valueToMap(aEntries)
+	bm := valueToMap(bEntries)
 	// sum
 	limit := new(big.Int).Lsh(big.NewInt(1), 127)
 	limitMinusOne := new(big.Int).Sub(limit, big.NewInt(1))
@@ -4795,7 +4808,7 @@ func unionValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			am[pol][t] = cur
 		}
 	}
-	return &Constant{mapToValueProto(am)}, nil
+	return &Constant{mapToValue(am)}, nil
 }
 
 func valueContains[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -4817,33 +4830,33 @@ func valueContains[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected required value constant",
 		}
 	}
-	valList, ok := valConst.Constant.(*syn.ProtoList)
+	valEntries, ok := valueEntries(valConst.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
 			Builtin: "valueContains",
-			Message: "expected proto list for value",
+			Message: "expected value constant",
 		}
 	}
-	reqList, ok := reqConst.Constant.(*syn.ProtoList)
+	reqEntries, ok := valueEntries(reqConst.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
 			Builtin: "valueContains",
-			Message: "expected proto list for required value",
+			Message: "expected required value constant",
 		}
 	}
 	// Spend budget for valueContains (2 args: value, required value)
 	// Cost model uses const_above_diagonal with linear_in_x_and_y (token count)
 	if err := m.CostTwo(&b.Func,
-		valueInnerCountExMem(valList.List),
-		valueInnerCountExMem(reqList.List),
+		valueInnerCountExMem(valEntries),
+		valueInnerCountExMem(reqEntries),
 	); err != nil {
 		return nil, err
 	}
 
-	vm := valueToMap[T](valList)
-	rm := valueToMap[T](reqList)
+	vm := valueToMap(valEntries)
+	rm := valueToMap(reqEntries)
 	// Neither value nor required value may contain negative amounts
 	for _, tokens := range rm {
 		for _, amt := range tokens {
@@ -4886,7 +4899,7 @@ func valueContains[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return &Constant{&syn.Bool{Inner: true}}, nil
 }
 
-// valueData converts a Value (ProtoList) to a Data (Map)
+// valueData converts a Value to a Data Map.
 // The Value format is: [(policy_bs, [(token_bs, amount_int), ...]), ...]
 // The Data format is: Map [(B policy, Map [(B token, I amount), ...]), ...]
 func valueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -4901,24 +4914,24 @@ func valueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 
-	plist, ok := valConst.Constant.(*syn.ProtoList)
+	valueItems, ok := valueEntries(valConst.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
 			Builtin: "valueData",
-			Message: "expected value proto list",
+			Message: "expected value constant",
 		}
 	}
 
 	// Spend budget for valueData (1 arg: value)
 	// Cost model uses linear_in_x with max(outer, inner) size
-	if err := m.CostOne(&b.Func, valueMaxCountExMem(plist.List)); err != nil {
+	if err := m.CostOne(&b.Func, valueMaxCountExMem(valueItems)); err != nil {
 		return nil, err
 	}
 
 	// Convert value to data map
-	entries := make([][2]data.PlutusData, 0, len(plist.List))
-	for _, entry := range plist.List {
+	entries := make([][2]data.PlutusData, 0, len(valueItems))
+	for _, entry := range valueItems {
 		pair, ok := entry.(*syn.ProtoPair)
 		if !ok {
 			continue
@@ -4959,7 +4972,7 @@ func valueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return &Constant{&syn.Data{Inner: &data.Map{Pairs: entries}}}, nil
 }
 
-// unValueData converts a Data (Map) to a Value (ProtoList)
+// unValueData converts a Data Map to a Value.
 // The Data format is: Map [(B policy, Map [(B token, I amount), ...]), ...]
 // The Value format is: [(policy_bs, [(token_bs, amount_int), ...]), ...]
 // The input must be well-formed: keys in ascending order, no duplicates,
@@ -5160,12 +5173,5 @@ func unValueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		})
 	}
 
-	// Type for Value: list (pair bytestring (list (pair bytestring integer)))
-	valType := &syn.TPair{
-		First: &syn.TByteString{},
-		Second: &syn.TList{
-			Typ: &syn.TPair{First: &syn.TByteString{}, Second: &syn.TInteger{}},
-		},
-	}
-	return &Constant{&syn.ProtoList{LTyp: valType, List: result}}, nil
+	return &Constant{&syn.Value{Entries: result}}, nil
 }
