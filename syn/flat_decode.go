@@ -56,16 +56,6 @@ func (d *DeBruijnDecoder) Decode(bytes []byte) (*Program[DeBruijn], error) {
 }
 
 func Decode[T Binder](bytes []byte) (*Program[T], error) {
-	var zero T
-	switch any(zero).(type) {
-	case DeBruijn:
-		program, err := decodeDeBruijn(bytes)
-		if err != nil {
-			return nil, err
-		}
-		return any(program).(*Program[T]), nil
-	}
-
 	return decodeProgram[T](bytes, nil)
 }
 

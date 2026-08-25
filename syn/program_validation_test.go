@@ -10,7 +10,7 @@ import (
 
 func TestDecodeWithContextPreservesAndValidatesProgramVersion(t *testing.T) {
 	program := &Program[DeBruijn]{
-		Version: lang.LanguageVersionV2,
+		Version: uplcVersion110,
 		Term:    &Error{},
 	}
 	encoded, err := Encode(program)
@@ -29,7 +29,7 @@ func TestDecodeWithContextPreservesAndValidatesProgramVersion(t *testing.T) {
 		t.Fatalf("decoded version = %v, want %v", decoded.Version, program.Version)
 	}
 
-	program.Version = lang.LanguageVersionV3
+	program.Version = lang.LanguageVersion{1, 2, 0}
 	encoded, err = Encode(program)
 	if err != nil {
 		t.Fatalf("Encode() with unsupported version failed: %v", err)
@@ -56,14 +56,14 @@ func TestValidateProgramUsesLedgerLanguageAndProtocol(t *testing.T) {
 			name:       "V2 batch two builtin at Vasil protocol",
 			language:   lang.LanguageVersionV2,
 			protocol:   10,
-			programVer: lang.LanguageVersionV1,
+			programVer: uplcVersion100,
 			term:       &Builtin{DefaultFunction: builtin.SerialiseData},
 		},
 		{
 			name:       "dead branch builtin is still rejected",
 			language:   lang.LanguageVersionV1,
 			protocol:   10,
-			programVer: lang.LanguageVersionV1,
+			programVer: uplcVersion100,
 			term: &Delay[DeBruijn]{Term: &Builtin{
 				DefaultFunction: builtin.SerialiseData,
 			}},
@@ -73,7 +73,7 @@ func TestValidateProgramUsesLedgerLanguageAndProtocol(t *testing.T) {
 			name:       "PLC 1.1 is not available to V2 before van Rossem",
 			language:   lang.LanguageVersionV2,
 			protocol:   10,
-			programVer: lang.LanguageVersionV2,
+			programVer: uplcVersion110,
 			term:       &Error{},
 			wantErr:    "UPLC version 1.1.0 is not available",
 		},
@@ -81,7 +81,7 @@ func TestValidateProgramUsesLedgerLanguageAndProtocol(t *testing.T) {
 			name:       "constructors require PLC 1.1",
 			language:   lang.LanguageVersionV3,
 			protocol:   9,
-			programVer: lang.LanguageVersionV1,
+			programVer: uplcVersion100,
 			term:       &Constr[DeBruijn]{Tag: 0},
 			wantErr:    "constr is not available",
 		},
@@ -89,7 +89,7 @@ func TestValidateProgramUsesLedgerLanguageAndProtocol(t *testing.T) {
 			name:       "PLC 1.1 constructors are accepted",
 			language:   lang.LanguageVersionV3,
 			protocol:   9,
-			programVer: lang.LanguageVersionV2,
+			programVer: uplcVersion110,
 			term:       &Constr[DeBruijn]{Tag: 0},
 		},
 	}
@@ -124,17 +124,17 @@ func TestValidateProgramVersionMatrix(t *testing.T) {
 		version  lang.LanguageVersion
 		wantErr  bool
 	}{
-		{"V1 at Alonzo with PLC 1.0", lang.LanguageVersionV1, 5, lang.LanguageVersionV1, false},
-		{"V1 at zero protocol", lang.LanguageVersionV1, 0, lang.LanguageVersionV1, true},
-		{"V1 before van Rossem with PLC 1.1", lang.LanguageVersionV1, 10, lang.LanguageVersionV2, true},
-		{"V1 at van Rossem with PLC 1.1", lang.LanguageVersionV1, 11, lang.LanguageVersionV2, false},
-		{"V2 at Vasil with PLC 1.0", lang.LanguageVersionV2, 7, lang.LanguageVersionV1, false},
-		{"V2 before van Rossem with PLC 1.1", lang.LanguageVersionV2, 10, lang.LanguageVersionV2, true},
-		{"V2 at van Rossem with PLC 1.1", lang.LanguageVersionV2, 11, lang.LanguageVersionV2, false},
-		{"V3 at Chang with PLC 1.0", lang.LanguageVersionV3, 9, lang.LanguageVersionV1, false},
-		{"V3 at Chang with PLC 1.1", lang.LanguageVersionV3, 9, lang.LanguageVersionV2, false},
-		{"V4 before Dijkstra", lang.LanguageVersionV4, 11, lang.LanguageVersionV1, true},
-		{"V4 at Dijkstra with PLC 1.1", lang.LanguageVersionV4, 12, lang.LanguageVersionV2, false},
+		{"V1 at Alonzo with PLC 1.0", lang.LanguageVersionV1, 5, uplcVersion100, false},
+		{"V1 at zero protocol", lang.LanguageVersionV1, 0, uplcVersion100, true},
+		{"V1 before van Rossem with PLC 1.1", lang.LanguageVersionV1, 10, uplcVersion110, true},
+		{"V1 at van Rossem with PLC 1.1", lang.LanguageVersionV1, 11, uplcVersion110, false},
+		{"V2 at Vasil with PLC 1.0", lang.LanguageVersionV2, 7, uplcVersion100, false},
+		{"V2 before van Rossem with PLC 1.1", lang.LanguageVersionV2, 10, uplcVersion110, true},
+		{"V2 at van Rossem with PLC 1.1", lang.LanguageVersionV2, 11, uplcVersion110, false},
+		{"V3 at Chang with PLC 1.0", lang.LanguageVersionV3, 9, uplcVersion100, false},
+		{"V3 at Chang with PLC 1.1", lang.LanguageVersionV3, 9, uplcVersion110, false},
+		{"V4 before Dijkstra", lang.LanguageVersionV4, 11, uplcVersion100, true},
+		{"V4 at Dijkstra with PLC 1.1", lang.LanguageVersionV4, 12, uplcVersion110, false},
 	}
 
 	for _, tt := range tests {
@@ -155,7 +155,7 @@ func TestValidateProgramVersionMatrix(t *testing.T) {
 
 func TestDecodeWithContextRejectsDeadBranchBuiltin(t *testing.T) {
 	program := &Program[DeBruijn]{
-		Version: lang.LanguageVersionV1,
+		Version: uplcVersion100,
 		Term: &Apply[DeBruijn]{
 			Function: &Builtin{DefaultFunction: builtin.IfThenElse},
 			Argument: &Delay[DeBruijn]{Term: &Builtin{
@@ -178,7 +178,7 @@ func TestDecodeWithContextRejectsDeadBranchBuiltin(t *testing.T) {
 
 func TestDecodeWithContextRejectsSyntaxBeforeProgramVersion(t *testing.T) {
 	program := &Program[DeBruijn]{
-		Version: lang.LanguageVersionV1,
+		Version: uplcVersion100,
 		Term:    &Constr[DeBruijn]{Tag: 0},
 	}
 	encoded, err := Encode(program)

@@ -18,6 +18,11 @@ type ProgramContext struct {
 	ProtocolMajor  uint
 }
 
+var (
+	uplcVersion100 = lang.LanguageVersion{1, 0, 0}
+	uplcVersion110 = lang.LanguageVersion{1, 1, 0}
+)
+
 // ValidateProgram checks a decoded program against the selected ledger
 // language and protocol version. Validation walks every term, including
 // branches which evaluation might not reach.
@@ -140,7 +145,7 @@ func plutusVersionForLedgerLanguage(version lang.LanguageVersion) (builtin.Plutu
 }
 
 func validateProgramVersion(version lang.LanguageVersion, context ProgramContext) error {
-	if version != lang.LanguageVersionV1 && version != lang.LanguageVersionV2 {
+	if version != uplcVersion100 && version != uplcVersion110 {
 		return fmt.Errorf(
 			"unsupported UPLC program version %s; supported versions are 1.0.0 and 1.1.0",
 			formatVersion(version),
@@ -168,7 +173,7 @@ func validateProgramVersion(version lang.LanguageVersion, context ProgramContext
 			context.ProtocolMajor,
 		)
 	}
-	if version == lang.LanguageVersionV2 &&
+	if version == uplcVersion110 &&
 		(plutusVersion == builtin.PlutusV1 || plutusVersion == builtin.PlutusV2) &&
 		context.ProtocolMajor < builtin.VanRossemProtoVersion {
 		return fmt.Errorf(
@@ -181,7 +186,7 @@ func validateProgramVersion(version lang.LanguageVersion, context ProgramContext
 }
 
 func supportsConstructors(version lang.LanguageVersion) bool {
-	return version == lang.LanguageVersionV2
+	return version == uplcVersion110
 }
 
 func formatVersion(version lang.LanguageVersion) string {
