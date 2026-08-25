@@ -4608,12 +4608,11 @@ func TestBigIntMod256Byte(t *testing.T) {
 	}
 }
 
-// TestConsByteStringVariantABBigInt verifies that under the pre-Chang
-// semantics variants (A/B used by V1/V2), consByteString reduces an
-// arbitrarily large first argument modulo 256 (floored), rather than failing
-// because it does not fit in an int64. The V3+ variant (C) still requires the
-// value to be in 0-255.
-func TestConsByteStringVariantABBigInt(t *testing.T) {
+// TestConsByteStringVariantABDBigInt verifies that under the V1/V2 semantics
+// variants (A/B/D), consByteString reduces an arbitrarily large first argument
+// modulo 256 (floored), rather than failing because it does not fit in an
+// int64. The V3+ variants (C/E) still require the value to be in 0-255.
+func TestConsByteStringVariantABDBigInt(t *testing.T) {
 	twoPow64Plus5, _ := new(big.Int).SetString("18446744073709551621", 10)     // 2^64 + 5
 	negTwoPow64Plus5, _ := new(big.Int).SetString("-18446744073709551621", 10) // -(2^64 + 5)
 	twoPow4096Plus5 := new(big.Int).Lsh(big.NewInt(1), 4096)
@@ -4643,6 +4642,20 @@ func TestConsByteStringVariantABBigInt(t *testing.T) {
 			expected: []byte{0xfb, 0xff},
 		},
 		{
+			name:     "variant D reduces large positive mod 256",
+			variant:  SemanticsVariantD,
+			first:    twoPow64Plus5,
+			rest:     []byte{0xff},
+			expected: []byte{0x05, 0xff},
+		},
+		{
+			name:     "variant D floored-reduces large negative mod 256",
+			variant:  SemanticsVariantD,
+			first:    negTwoPow64Plus5,
+			rest:     []byte{0xff},
+			expected: []byte{0xfb, 0xff},
+		},
+		{
 			name:     "variant B reduces huge positive mod 256",
 			variant:  SemanticsVariantB,
 			first:    twoPow4096Plus5,
@@ -4659,6 +4672,13 @@ func TestConsByteStringVariantABBigInt(t *testing.T) {
 		{
 			name:      "variant C rejects out-of-range",
 			variant:   SemanticsVariantC,
+			first:     twoPow64Plus5,
+			rest:      []byte{0xff},
+			expectErr: true,
+		},
+		{
+			name:      "variant E rejects out-of-range",
+			variant:   SemanticsVariantE,
 			first:     twoPow64Plus5,
 			rest:      []byte{0xff},
 			expectErr: true,

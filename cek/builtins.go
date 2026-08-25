@@ -991,10 +991,11 @@ func consByteString[T syn.Eval](
 	var firstByte byte
 
 	switch m.semantics {
-	case SemanticsVariantA, SemanticsVariantB:
-		// Pre-Chang semantics reduce the first argument modulo 256 (floored)
-		// for any integer. Use the low byte directly so the post-costing work
-		// remains constant even for very large integer inputs.
+	case SemanticsVariantA, SemanticsVariantB, SemanticsVariantD:
+		// V1/V2 semantics reduce the first argument modulo 256 (floored) for
+		// any integer, including after the Van Rossem protocol upgrade. Use the
+		// low byte directly so the post-costing work remains constant even for
+		// very large integer inputs.
 		firstByte = bigIntMod256Byte(arg1)
 	default:
 		// consByteString requires the integer to be in the range 0-255 in V3+
