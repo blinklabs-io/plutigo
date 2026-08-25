@@ -48,6 +48,13 @@ func TestParsePrettyRoundTrip(t *testing.T) {
 	}
 }
 
+func TestParseRejectsBareArrayType(t *testing.T) {
+	_, err := Parse(`(program 1.3.0 (con array integer []))`)
+	if err == nil {
+		t.Fatal("expected bare array type to be rejected")
+	}
+}
+
 func FuzzParse(f *testing.F) {
 	for _, input := range fuzzProgramSeeds() {
 		f.Add(input)
