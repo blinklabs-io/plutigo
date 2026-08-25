@@ -579,20 +579,12 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 				Message: "data is not a constr",
 			}
 		}
-		// constr.Tag is a uint, whose width is platform-dependent. Compare via
-		// uint64 so this builds on 32-bit targets (where the untyped MaxInt64
-		// constant would otherwise overflow the uint comparison type). On 32-bit
-		// a uint tag can never exceed MaxInt64, so the guard is a no-op there; on
-		// 64-bit it behaves exactly as before.
-		if uint64(constr.Tag) > math.MaxInt64 {
-			return nil, true, &BuiltinError{
-				Code:    ErrCodeOverflow,
-				Builtin: "unConstrData",
-				Message: "constructor tag too large for integer conversion",
-			}
+		tag := constr.Tag
+		if tag == nil {
+			tag = new(big.Int)
 		}
 		return m.allocPairValue(
-			m.int64Constant(int64(constr.Tag)),
+			m.allocConstant(m.allocIntegerConstant(tag)),
 			m.allocDataListValue(constr.Fields),
 		), true, nil
 	case builtin.UnMapData:
@@ -1990,24 +1982,27 @@ func chooseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 }
 
-func validateConstrTag(arg *big.Int) (uint, error) {
-	// Keep constrData tags within the same range that unConstrData can decode
-	// back into an integer without overflow.
-	if arg.Sign() < 0 {
-		return 0, &BuiltinError{
+func validateConstrTag(
+	semantics SemanticsVariant,
+	arg *big.Int,
+) (*big.Int, error) {
+	if (semantics == SemanticsVariantD || semantics == SemanticsVariantE) &&
+		arg.Sign() < 0 {
+		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
 			Builtin: "constrData",
 			Message: "constructor tag must be non-negative",
 		}
 	}
-	if !arg.IsInt64() || arg.BitLen() > bits.UintSize {
-		return 0, &BuiltinError{
+	if (semantics == SemanticsVariantD || semantics == SemanticsVariantE) &&
+		!arg.IsUint64() {
+		return nil, &BuiltinError{
 			Code:    ErrCodeOverflow,
 			Builtin: "constrData",
-			Message: "constructor tag too large for unConstrData",
+			Message: "constructor tag does not fit in Word64",
 		}
 	}
-	return uint(arg.Uint64()), nil
+	return new(big.Int).Set(arg), nil
 }
 
 func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -2024,7 +2019,7 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 
-		tag, tagErr := validateConstrTag(arg1)
+		tag, tagErr := validateConstrTag(m.semantics, arg1)
 		if tagErr != nil {
 			return nil, tagErr
 		}
@@ -2059,7 +2054,7 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		dataList[i] = itemData.Inner
 	}
 
-	tag, tagErr := validateConstrTag(arg1)
+	tag, tagErr := validateConstrTag(m.semantics, arg1)
 	if tagErr != nil {
 		return nil, tagErr
 	}

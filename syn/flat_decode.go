@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"math/bits"
 	"unicode/utf8"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -235,7 +234,7 @@ func decodeTermDeBruijnWithArena(
 		}
 		return arena.allocBuiltin(fn), nil
 	case ConstrTag:
-		constrTag, err := d.word()
+		constrTag, err := d.word64()
 		if err != nil {
 			return nil, err
 		}
@@ -340,7 +339,7 @@ func decodeTermWithArena[T Binder](d *decoder, arena *termArena[T]) (Term[T], er
 
 		term = arena.allocBuiltin(fn)
 	case ConstrTag:
-		constrTag, err := d.word()
+		constrTag, err := d.word64()
 		if err != nil {
 			return nil, err
 		}
@@ -668,7 +667,7 @@ func (a *termArena[T]) allocApply(function Term[T], argument Term[T]) *Apply[T] 
 	return apply
 }
 
-func (a *termArena[T]) allocConstr(tag uint, fields []Term[T]) *Constr[T] {
+func (a *termArena[T]) allocConstr(tag uint64, fields []Term[T]) *Constr[T] {
 	constr := a.constrs.alloc()
 	constr.Tag = tag
 	constr.Fields = fields
@@ -1429,7 +1428,18 @@ func (d *decoder) bit() (bool, error) {
 // so on. If the most significant bit was instead 0 we stop decoding
 // any more bits.
 func (d *decoder) word() (uint, error) {
-	var finalWord uint
+	word, err := d.word64()
+	if err != nil {
+		return 0, err
+	}
+	if word > math.MaxUint {
+		return 0, errors.New("varint overflows machine word")
+	}
+	return uint(word), nil
+}
+
+func (d *decoder) word64() (uint64, error) {
+	var finalWord uint64
 	shl := 0
 
 	if d.usedBits == 0 {
@@ -1440,8 +1450,8 @@ func (d *decoder) word() (uint, error) {
 			word8 := d.buffer[d.pos]
 			d.pos++
 
-			word7 := uint(word8 & 127)
-			if err := checkWordShift(word7, shl); err != nil {
+			word7 := uint64(word8 & 127)
+			if err := checkWord64Shift(word7, shl); err != nil {
 				return 0, err
 			}
 			finalWord |= word7 << shl
@@ -1458,8 +1468,8 @@ func (d *decoder) word() (uint, error) {
 			return 0, err
 		}
 
-		word7 := uint(word8 & 127)
-		if err := checkWordShift(word7, shl); err != nil {
+		word7 := uint64(word8 & 127)
+		if err := checkWord64Shift(word7, shl); err != nil {
 			return 0, err
 		}
 		finalWord |= word7 << shl
@@ -1476,18 +1486,16 @@ func (d *decoder) word() (uint, error) {
 	return finalWord, nil
 }
 
-// checkWordShift reports an overflow error if placing the 7-bit group word7 at
-// bit offset shl would discard any set bit beyond the machine word width. Go
-// defines shifts of >= the integer width as yielding 0, so without this guard
-// a varint with too many continuation bytes would be silently truncated to a
-// wrong value (and differently on 32-bit vs 64-bit targets) rather than
-// rejected.
-func checkWordShift(word7 uint, shl int) error {
+// checkWord64Shift reports an overflow error if placing the 7-bit group word7
+// at bit offset shl would discard any set bit beyond 64 bits. Go defines shifts
+// of >= the integer width as yielding 0, so without this guard a varint with too
+// many continuation bytes would be silently truncated rather than rejected.
+func checkWord64Shift(word7 uint64, shl int) error {
 	if word7 == 0 {
 		return nil
 	}
-	if shl >= bits.UintSize || word7>>(bits.UintSize-shl) != 0 {
-		return errors.New("varint overflows machine word")
+	if shl >= 64 || word7>>(64-shl) != 0 {
+		return errors.New("varint overflows uint64")
 	}
 	return nil
 }

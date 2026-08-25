@@ -451,7 +451,7 @@ func (b *Builtin[T]) IsArrow() bool {
 }
 
 type Constr[T syn.Eval] struct {
-	Tag    uint
+	Tag    uint64
 	Fields []Value[T]
 }
 

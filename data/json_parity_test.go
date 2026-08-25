@@ -322,27 +322,17 @@ func TestDecodeJSONParityErrorMessages(t *testing.T) {
 		{
 			name: "constr tag error beats fields content error",
 			json: `{"constructor":"x","fields":[{"bad":1}]}`,
-			want: `failed to unmarshal Constr constructor tag: json: cannot unmarshal string into Go value of type uint`,
+			want: `failed to unmarshal Constr constructor tag: math/big: cannot unmarshal "\"x\"" into a *big.Int`,
 		},
 		{
 			name: "constr tag error when fields come first",
 			json: `{"fields":[{"bad":1}],"constructor":"x"}`,
-			want: `failed to unmarshal Constr constructor tag: json: cannot unmarshal string into Go value of type uint`,
-		},
-		{
-			name: "negative constructor tag",
-			json: `{"constructor":-1,"fields":[]}`,
-			want: `failed to unmarshal Constr constructor tag: json: cannot unmarshal number -1 into Go value of type uint`,
+			want: `failed to unmarshal Constr constructor tag: math/big: cannot unmarshal "\"x\"" into a *big.Int`,
 		},
 		{
 			name: "fractional constructor tag",
 			json: `{"constructor":1.5,"fields":[]}`,
-			want: `failed to unmarshal Constr constructor tag: json: cannot unmarshal number 1.5 into Go value of type uint`,
-		},
-		{
-			name: "overflowing constructor tag",
-			json: `{"constructor":18446744073709551616,"fields":[]}`,
-			want: `failed to unmarshal Constr constructor tag: json: cannot unmarshal number 18446744073709551616 into Go value of type uint`,
+			want: `failed to unmarshal Constr constructor tag: math/big: cannot unmarshal "1.5" into a *big.Int`,
 		},
 		{
 			name: "null int value",

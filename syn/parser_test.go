@@ -10,6 +10,8 @@ func TestParsePrettyRoundTrip(t *testing.T) {
 		`(program 1.2.0 (con integer 42))`,
 		`(program 1.2.0 [(builtin addInteger) (con integer 1) (con integer 2)])`,
 		`(program 1.2.0 (lam x x))`,
+		`(program 1.2.0 (con data (Constr -1 [])))`,
+		`(program 1.2.0 (con data (Constr 1208925819614629174706176 [])))`,
 	}
 
 	for _, input := range programs {

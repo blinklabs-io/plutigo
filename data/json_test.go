@@ -175,6 +175,16 @@ func TestPlutusDataJSONConstr(t *testing.T) {
 			data: NewConstr(999, NewInteger(big.NewInt(6)), NewInteger(big.NewInt(7))),
 			json: `{"constructor":999,"fields":[{"int":6},{"int":7}]}`,
 		},
+		{
+			name: "negative tag",
+			data: NewConstrFromBigInt(big.NewInt(-1)),
+			json: `{"constructor":-1,"fields":[]}`,
+		},
+		{
+			name: "tag above Word64",
+			data: NewConstrFromBigInt(new(big.Int).Lsh(big.NewInt(1), 80)),
+			json: `{"constructor":1208925819614629174706176,"fields":[]}`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -184,6 +194,21 @@ func TestPlutusDataJSONConstr(t *testing.T) {
 			}
 			if string(got) != tt.json {
 				t.Errorf("Marshal:\n  got:  %s\n  want: %s", got, tt.json)
+			}
+			decoded, err := DecodeJSON(got)
+			if err != nil {
+				t.Fatalf("DecodeJSON error: %v", err)
+			}
+			if !tt.data.Equal(decoded) {
+				t.Errorf("DecodeJSON: got %v, want %v", decoded, tt.data)
+			}
+
+			var direct Constr
+			if err := json.Unmarshal(got, &direct); err != nil {
+				t.Fatalf("Constr.UnmarshalJSON error: %v", err)
+			}
+			if !tt.data.Equal(&direct) {
+				t.Errorf("Constr.UnmarshalJSON: got %v, want %v", &direct, tt.data)
 			}
 		})
 	}

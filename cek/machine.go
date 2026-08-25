@@ -490,7 +490,7 @@ func (m *Machine[T]) allocDelay(term *syn.Delay[T], env *Env[T]) *Delay[T] {
 	return delay
 }
 
-func (m *Machine[T]) allocConstr(tag uint, fields []Value[T]) *Constr[T] {
+func (m *Machine[T]) allocConstr(tag uint64, fields []Value[T]) *Constr[T] {
 	constr := allocArenaSlot(&m.constrChunks, &m.constrChunkPos, m.valueArenaChunkSize)
 	constr.Tag = tag
 	constr.Fields = fields
