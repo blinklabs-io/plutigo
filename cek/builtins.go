@@ -4295,7 +4295,7 @@ func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 // ============================================================================
 // ARRAY OPERATIONS (V4)
-// Functions: lengthOfArray, listToArray, indexArray
+// Functions: lengthOfArray, listToArray, indexArray, multiIndexArray
 // ============================================================================
 
 func unwrapArray[T syn.Eval](value Value[T]) (syn.Typ, []syn.IConstant, error) {
@@ -4406,6 +4406,76 @@ func indexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return &Constant{items[i]}, nil
 }
 
+const multiIndexArrayMaximumIndexCount = 1024
+
+func multiIndexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+	// Args: (con (array t) arr) (con (list integer) indices)
+	arrayType, items, err := unwrapArray[T](m.argHolder[0])
+	if err != nil {
+		return nil, err
+	}
+	indices, err := unwrapList[T](&syn.TInteger{}, m.argHolder[1])
+	if err != nil {
+		return nil, err
+	}
+
+	if err := m.CostTwo(
+		&b.Func,
+		func() ExMem { return listExMem(items)() },
+		func() ExMem { return listLengthExMem(indices.List)() },
+	); err != nil {
+		return nil, err
+	}
+
+	result := make([]syn.IConstant, 0, len(indices.List))
+	for i, indexValue := range indices.List {
+		if i >= multiIndexArrayMaximumIndexCount {
+			return nil, &BuiltinError{
+				Code:    ErrCodeOutOfBounds,
+				Builtin: "multiIndexArray",
+				Message: fmt.Sprintf("too many indices (maximum is %d)", multiIndexArrayMaximumIndexCount),
+			}
+		}
+
+		index, ok := indexValue.(*syn.Integer)
+		if !ok {
+			return nil, &TypeError{
+				Code:     ErrCodeTypeMismatch,
+				Expected: "Integer",
+				Got:      fmt.Sprintf("%T", indexValue),
+				Message:  "type mismatch",
+			}
+		}
+		if index.Inner.Sign() < 0 {
+			return nil, &BuiltinError{
+				Code:    ErrCodeOutOfBounds,
+				Builtin: "multiIndexArray",
+				Message: "negative index",
+			}
+		}
+		if !index.Inner.IsInt64() {
+			return nil, &BuiltinError{
+				Code:    ErrCodeOverflow,
+				Builtin: "multiIndexArray",
+				Message: "index too large",
+			}
+		}
+
+		index64 := index.Inner.Int64()
+		if index64 > int64(math.MaxInt) || int(index64) >= len(items) {
+			return nil, &BuiltinError{
+				Code:    ErrCodeOutOfBounds,
+				Builtin: "multiIndexArray",
+				Message: fmt.Sprintf("index %d out of bounds for array of length %d", index64, len(items)),
+			}
+		}
+		result = append(result, items[int(index64)])
+	}
+
+	return &Constant{&syn.ProtoList{LTyp: arrayType, List: result}}, nil
+}
+
 // ============================================================================
 // VALUE OPERATIONS (V4)
 // Functions: insertCoin, lookupCoin, scaleValue, unionValue, valueContains
@@ -4419,6 +4489,76 @@ func valueEntries(constant syn.IConstant) ([]syn.IConstant, bool) {
 	default:
 		return nil, false
 	}
+}
+
+// policies returns the policy IDs from a canonical Value. Value constants are
+// validated in ascending policy order during decoding, matching the upstream
+// ordered-map representation.
+func policies[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+	value, ok := m.argHolder[0].(*Constant)
+	if !ok {
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "policies",
+			Message: "expected value constant",
+		}
+	}
+	entries, ok := valueEntries(value.Constant)
+	if !ok {
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "policies",
+			Message: "expected value constant",
+		}
+	}
+	if err := m.CostOne(&b.Func, valueOuterCountExMem(entries)); err != nil {
+		return nil, err
+	}
+	result := make([]syn.IConstant, 0, len(entries))
+	for _, entry := range entries {
+		pair, ok := entry.(*syn.ProtoPair)
+		if !ok {
+			return nil, &InternalError{
+				Code:    ErrCodeInternalError,
+				Message: "invalid value policy entry",
+			}
+		}
+		policy, ok := pair.First.(*syn.ByteString)
+		if !ok {
+			return nil, &InternalError{
+				Code:    ErrCodeInternalError,
+				Message: "invalid value policy key",
+			}
+		}
+		result = append(result, &syn.ByteString{Inner: append([]byte(nil), policy.Inner...)})
+	}
+	return &Constant{&syn.ProtoList{LTyp: &syn.TByteString{}, List: result}}, nil
+}
+
+func assetCount[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+	value, ok := m.argHolder[0].(*Constant)
+	if !ok {
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "assetCount",
+			Message: "expected value constant",
+		}
+	}
+	entries, ok := valueEntries(value.Constant)
+	if !ok {
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "assetCount",
+			Message: "expected value constant",
+		}
+	}
+	count := valueInnerCountExMem(entries)()
+	if err := m.CostOne(&b.Func, func() ExMem { return count }); err != nil {
+		return nil, err
+	}
+	return &Constant{&syn.Integer{Inner: big.NewInt(int64(count))}}, nil
 }
 
 // valueToMap converts a Value payload to map[string]map[string]*big.Int.

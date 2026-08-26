@@ -149,9 +149,11 @@ var builtinIntroducedIn = [TotalBuiltinCount]PlutusVersion{
 	// Value/Data conversion builtins
 	ValueData:   PlutusV4,
 	UnValueData: PlutusV4,
-
 	// Unreleased builtins - defined but not yet available on mainnet
-	DropList: PlutusVUnreleased,
+	DropList:        PlutusVUnreleased,
+	MultiIndexArray: PlutusVUnreleased,
+	Policies:        PlutusVUnreleased,
+	AssetCount:      PlutusVUnreleased,
 }
 
 // VanRossemProtoVersion is the Cardano protocol major version at which batch 6

@@ -1141,6 +1141,27 @@ var DefaultBuiltinCosts = BuiltinCosts{
 		mem: &ConstantCost{32},
 		cpu: &ConstantCost{232010},
 	},
+	builtin.MultiIndexArray: &CostingFunc[Arguments]{
+		mem: &LinearInY{LinearCost{
+			intercept: 4,
+			slope:     3,
+		}},
+		cpu: &QuadraticInYModel{QuadraticFunction{
+			coeff0: 326163,
+			coeff1: 12304,
+			coeff2: 2,
+		}},
+	},
+	// Upstream uses unimplementedCostingFun for Policies: a prohibitive fixed
+	// cost until a measured model is published.
+	builtin.Policies: &CostingFunc[Arguments]{
+		mem: &ConstantCost{100000000000},
+		cpu: &ConstantCost{100000000000},
+	},
+	builtin.AssetCount: &CostingFunc[Arguments]{
+		mem: &ConstantCost{0},
+		cpu: &ConstantCost{1},
+	},
 	// Value/coin builtins
 	builtin.InsertCoin: &CostingFunc[Arguments]{
 		mem: &FourLinearInU{LinearCost{

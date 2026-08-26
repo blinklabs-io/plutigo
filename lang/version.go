@@ -18,8 +18,7 @@ func GetParamNamesForVersion(version LanguageVersion) []string {
 	case LanguageVersionV3:
 		return CostModelParamNamesV3
 	case LanguageVersionV4:
-		// V4 uses V3 cost model params as a baseline until official V4 params are published
-		return CostModelParamNamesV3
+		return CostModelParamNamesV4
 	default:
 		return nil
 	}
