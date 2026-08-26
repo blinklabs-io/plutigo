@@ -31,6 +31,10 @@
 //	}
 //	// result is a Value[syn.DeBruijn]
 //
+// [Machine.RunContext] adds cooperative, synchronous cancellation. It does not
+// start a goroutine; a builtin already executing must return before
+// cancellation can be observed.
+//
 // # Performance
 //
 // The machine uses object pooling (sync.Pool) for state objects to reduce
