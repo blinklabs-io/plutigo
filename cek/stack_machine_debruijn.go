@@ -2,6 +2,7 @@
 package cek
 
 import (
+	"context"
 	"math/bits"
 	"unsafe"
 
@@ -195,6 +196,8 @@ func computeKnownImmediateValueNoSlippageDeBruijn(
 }
 
 func runStackNoSlippageDeBruijn(
+	ctx context.Context,
+	checkCancellation bool,
 	m *Machine[syn.DeBruijn],
 	term syn.Term[syn.DeBruijn],
 ) (syn.Term[syn.DeBruijn], error) {
@@ -204,6 +207,11 @@ func runStackNoSlippageDeBruijn(
 	returning := false
 
 	for {
+		if checkCancellation {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
 		if !returning {
 			if currentTerm == nil {
 				return nil, internalError("DeBruijn stack machine current term is nil")
@@ -442,7 +450,11 @@ func runStackNoSlippageDeBruijn(
 			return nil, internalError("DeBruijn stack machine current value is nil")
 		}
 		if len(m.frameStack) == 0 {
-			return m.finishValue(currentValue)
+			return m.finishValueContext(
+				ctx,
+				checkCancellation,
+				currentValue,
+			)
 		}
 		frameIdx := len(m.frameStack) - 1
 		frame := &m.frameStack[frameIdx]
