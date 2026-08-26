@@ -4554,10 +4554,10 @@ func assetCount[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected value constant",
 		}
 	}
-	count := valueInnerCountExMem(entries)()
-	if err := m.CostOne(&b.Func, func() ExMem { return count }); err != nil {
+	if err := m.CostOne(&b.Func, valueInnerCountExMem(entries)); err != nil {
 		return nil, err
 	}
+	count := valueInnerCountExMem(entries)()
 	return &Constant{&syn.Integer{Inner: big.NewInt(int64(count))}}, nil
 }
 
