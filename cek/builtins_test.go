@@ -518,14 +518,14 @@ func TestLengthOfArrayBuiltin(t *testing.T) {
 	m := newTestMachineV4() // V4 builtin
 	b := newTestBuiltin(builtin.LengthOfArray)
 
-	// Create a ProtoList with 3 elements
+	// Create an array with 3 elements.
 	list := []syn.IConstant{
 		&syn.Integer{Inner: big.NewInt(1)},
 		&syn.Integer{Inner: big.NewInt(2)},
 		&syn.Integer{Inner: big.NewInt(3)},
 	}
-	protoList := &syn.ProtoList{List: list}
-	arrayVal := &Constant{protoList}
+	array := &syn.ProtoArray{ATyp: &syn.TInteger{}, Array: list}
+	arrayVal := &Constant{array}
 
 	b = b.ApplyArg(arrayVal)
 
@@ -4680,15 +4680,8 @@ func newValueDataBoundaryInput(tokenCount int) *Constant {
 		}
 	}
 
-	return &Constant{&syn.ProtoList{
-		LTyp: &syn.TPair{
-			First: &syn.TByteString{},
-			Second: &syn.TList{Typ: &syn.TPair{
-				First:  &syn.TByteString{},
-				Second: &syn.TInteger{},
-			}},
-		},
-		List: []syn.IConstant{
+	return &Constant{&syn.Value{
+		Entries: []syn.IConstant{
 			&syn.ProtoPair{
 				FstType: &syn.TByteString{},
 				SndType: &syn.TList{Typ: &syn.TPair{

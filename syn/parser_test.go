@@ -1,6 +1,7 @@
 package syn
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -12,32 +13,48 @@ func TestParsePrettyRoundTrip(t *testing.T) {
 		`(program 1.2.0 (lam x x))`,
 		`(program 1.2.0 (con data (Constr -1 [])))`,
 		`(program 1.2.0 (con data (Constr 1208925819614629174706176 [])))`,
+		`(program 1.3.0 (con (array integer) []))`,
+		`(program 1.3.0 (con value []))`,
+		`(program 1.3.0 (con value [(#01, [(#02, 1)])]))`,
+		`(program 1.3.0 (con (array value) [[(#01, [(#02, 1)])]]))`,
+		`(program 1.3.0 (con (list bls12_381_G1_element) []))`,
+		`(program 1.3.0 (con (list bls12_381_G2_element) []))`,
+		`(program 1.3.0 (con (list bls12_381_mlresult) []))`,
 	}
 
-	for _, input := range programs {
-		parsed, err := Parse(input)
-		if err != nil {
-			t.Fatalf("Failed to parse input %q: %v", input, err)
-		}
+	for i, input := range programs {
+		t.Run(fmt.Sprintf("program-%02d", i), func(t *testing.T) {
+			parsed, err := Parse(input)
+			if err != nil {
+				t.Fatalf("Failed to parse input %q: %v", input, err)
+			}
 
-		pretty := Pretty(parsed)
+			pretty := Pretty(parsed)
 
-		parsedAgain, err := Parse(pretty)
-		if err != nil {
-			t.Errorf("Failed to parse pretty output %q: %v", pretty, err)
-			continue
-		}
+			parsedAgain, err := Parse(pretty)
+			if err != nil {
+				t.Errorf("Failed to parse pretty output %q: %v", pretty, err)
+				return
+			}
 
-		// Check that pretty printing again gives the same result
-		prettyAgain := Pretty(parsedAgain)
-		if pretty != prettyAgain {
-			t.Errorf(
-				"Round-trip failed for input %q: first pretty %q, second %q",
-				input,
-				pretty,
-				prettyAgain,
-			)
-		}
+			// Check that pretty printing again gives the same result
+			prettyAgain := Pretty(parsedAgain)
+			if pretty != prettyAgain {
+				t.Errorf(
+					"Round-trip failed for input %q: first pretty %q, second %q",
+					input,
+					pretty,
+					prettyAgain,
+				)
+			}
+		})
+	}
+}
+
+func TestParseRejectsBareArrayType(t *testing.T) {
+	_, err := Parse(`(program 1.3.0 (con array integer []))`)
+	if err == nil {
+		t.Fatal("expected bare array type to be rejected")
 	}
 }
 

@@ -121,6 +121,10 @@ func iconstantExMem(c syn.IConstant) func() ExMem {
 			ex = unitExMem()
 		case *syn.ProtoList:
 			ex = listExMem(x.List)
+		case *syn.ProtoArray:
+			ex = listLengthExMem(x.Array)
+		case *syn.Value:
+			ex = valueInnerCountExMem(x.Entries)
 		case *syn.ProtoPair:
 			ex = pairExMem(x.First, x.Second)
 		case *syn.Data:

@@ -506,40 +506,23 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 
 		return &Constant{Con: &Data{Inner: dataVal}}, nil
 	case *TList:
-		if err := p.expect(lex.TokenLBracket); err != nil {
+		items, err := p.parseConstantCollection(ts.Typ, "list")
+		if err != nil {
 			return nil, err
 		}
-
-		var items []IConstant
-
-		for p.curToken.Type != lex.TokenRBracket {
-			item, err := p.parseConstantValue(ts.Typ)
-			if err != nil {
-				return nil, err
-			}
-
-			if !EqualType(item.Typ(), ts.Typ) {
-				return nil, fmt.Errorf("list element of type %T does not match expected type %T at position %d", item.Typ(), ts.Typ, p.curToken.Position)
-			}
-
-			items = append(items, item)
-
-			if p.curToken.Type != lex.TokenRBracket {
-				if err := p.expect(lex.TokenComma); err != nil {
-					return nil, err
-				}
-			}
-		}
-
-		if err := p.expect(lex.TokenRBracket); err != nil {
-			return nil, err
-		}
-
 		if err := p.expect(lex.TokenRParen); err != nil {
 			return nil, err
 		}
-
 		return &Constant{Con: &ProtoList{LTyp: ts.Typ, List: items}}, nil
+	case *TArray:
+		items, err := p.parseConstantCollection(ts.Typ, "array")
+		if err != nil {
+			return nil, err
+		}
+		if err := p.expect(lex.TokenRParen); err != nil {
+			return nil, err
+		}
+		return &Constant{Con: &ProtoArray{ATyp: ts.Typ, Array: items}}, nil
 	case *TPair:
 		if err := p.expect(lex.TokenLParen); err != nil {
 			return nil, err
@@ -800,12 +783,46 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			}
 		}
 
-		valType := &TPair{First: &TByteString{}, Second: &TList{Typ: &TPair{First: &TByteString{}, Second: &TInteger{}}}}
-
-		return &Constant{Con: &ProtoList{LTyp: valType, List: items}}, nil
+		return &Constant{Con: &Value{Entries: items}}, nil
 	default:
 		return nil, fmt.Errorf("unexpected type spec %v at position %d", typeSpec, p.curToken.Position)
 	}
+}
+
+func (p *Parser) parseConstantCollection(
+	elementType Typ,
+	collectionName string,
+) ([]IConstant, error) {
+	if err := p.expect(lex.TokenLBracket); err != nil {
+		return nil, err
+	}
+
+	var items []IConstant
+	for p.curToken.Type != lex.TokenRBracket {
+		item, err := p.parseConstantValue(elementType)
+		if err != nil {
+			return nil, err
+		}
+		if !EqualType(item.Typ(), elementType) {
+			return nil, fmt.Errorf(
+				"%s element of type %T does not match expected type %T at position %d",
+				collectionName,
+				item.Typ(),
+				elementType,
+				p.curToken.Position,
+			)
+		}
+		items = append(items, item)
+		if p.curToken.Type != lex.TokenRBracket {
+			if err := p.expect(lex.TokenComma); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if err := p.expect(lex.TokenRBracket); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (p *Parser) parseConstantValue(typ Typ) (IConstant, error) {
@@ -937,36 +954,26 @@ func (p *Parser) parseConstantValue(typ Typ) (IConstant, error) {
 
 		return &Data{Inner: dataVal}, nil
 	case *TList:
-		if err := p.expect(lex.TokenLBracket); err != nil {
+		items, err := p.parseConstantCollection(t.Typ, "list")
+		if err != nil {
 			return nil, err
 		}
-
-		var items []IConstant
-
-		for p.curToken.Type != lex.TokenRBracket {
-			item, err := p.parseConstantValue(t.Typ)
-			if err != nil {
-				return nil, err
-			}
-
-			if !EqualType(item.Typ(), t.Typ) {
-				return nil, fmt.Errorf("list element of type %T does not match expected type %T at position %d", item.Typ(), t.Typ, p.curToken.Position)
-			}
-
-			items = append(items, item)
-
-			if p.curToken.Type != lex.TokenRBracket {
-				if err := p.expect(lex.TokenComma); err != nil {
-					return nil, err
-				}
-			}
-		}
-
-		if err := p.expect(lex.TokenRBracket); err != nil {
-			return nil, err
-		}
-
 		return &ProtoList{LTyp: t.Typ, List: items}, nil
+	case *TArray:
+		items, err := p.parseConstantCollection(t.Typ, "array")
+		if err != nil {
+			return nil, err
+		}
+		return &ProtoArray{ATyp: t.Typ, Array: items}, nil
+	case *TValue:
+		items, err := p.parseConstantCollection(valueEntryType, "value")
+		if err != nil {
+			return nil, err
+		}
+		if err := validateValueEntries(items); err != nil {
+			return nil, err
+		}
+		return &Value{Entries: items}, nil
 	case *TPair:
 		if err := p.expect(lex.TokenLParen); err != nil {
 			return nil, err
@@ -1195,8 +1202,10 @@ func (p *Parser) parseTypeSpec() (Typ, error) {
 	}
 	defer p.leave()
 
-	// Check for invalid bare list or pair
-	if p.curToken.Type == lex.TokenList || p.curToken.Type == lex.TokenPair {
+	// Check for invalid bare composite types.
+	if p.curToken.Type == lex.TokenList ||
+		p.curToken.Type == lex.TokenArray ||
+		p.curToken.Type == lex.TokenPair {
 		return nil, fmt.Errorf(
 			"expected left parenthesis for %d type, got %v (literal: %s) at position %d",
 			p.curToken.Type,
@@ -1257,6 +1266,8 @@ func (p *Parser) parseInnerTypeSpec() (Typ, error) {
 			return &TBls12_381G1Element{}, nil
 		case "bls12_381_G2_element":
 			return &TBls12_381G2Element{}, nil
+		case "bls12_381_mlresult":
+			return &TBls12_381MlResult{}, nil
 		case "value":
 			return &TValue{}, nil
 		default:
@@ -1266,7 +1277,7 @@ func (p *Parser) parseInnerTypeSpec() (Typ, error) {
 				p.curToken.Position,
 			)
 		}
-	case lex.TokenList, lex.TokenArray:
+	case lex.TokenList:
 		p.nextToken()
 
 		// Parse element type, which may be parenthesized (e.g., (list data)) or simple (e.g., data)
@@ -1276,6 +1287,15 @@ func (p *Parser) parseInnerTypeSpec() (Typ, error) {
 		}
 
 		return &TList{Typ: elemType}, nil
+	case lex.TokenArray:
+		p.nextToken()
+
+		elemType, err := p.parseTypeSpec()
+		if err != nil {
+			return nil, err
+		}
+
+		return &TArray{Typ: elemType}, nil
 	case lex.TokenPair:
 		p.nextToken()
 

@@ -335,6 +335,21 @@ func cloneConstant(constant syn.IConstant) syn.IConstant {
 			LTyp: c.LTyp,
 			List: items,
 		}
+	case *syn.ProtoArray:
+		items := make([]syn.IConstant, len(c.Array))
+		for i := range c.Array {
+			items[i] = cloneConstant(c.Array[i])
+		}
+		return &syn.ProtoArray{
+			ATyp:  c.ATyp,
+			Array: items,
+		}
+	case *syn.Value:
+		entries := make([]syn.IConstant, len(c.Entries))
+		for i := range c.Entries {
+			entries[i] = cloneConstant(c.Entries[i])
+		}
+		return &syn.Value{Entries: entries}
 	case *syn.ProtoPair:
 		return &syn.ProtoPair{
 			FstType: c.FstType,
