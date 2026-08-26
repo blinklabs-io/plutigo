@@ -217,3 +217,122 @@ func TestParseWithContextRejectsUnavailableSyntaxAndBuiltin(t *testing.T) {
 		t.Fatalf("ParseWithContext() builtin error = %v", err)
 	}
 }
+
+func TestContextualValidationConstrFieldLimit(t *testing.T) {
+	tests := []struct {
+		name       string
+		protocol   uint
+		fieldCount int
+		wantErr    string
+	}{
+		{
+			name:       "pre-PV11 remains unbounded",
+			protocol:   10,
+			fieldCount: 1025,
+		},
+		{
+			name:       "PV11 below limit",
+			protocol:   11,
+			fieldCount: 1023,
+		},
+		{
+			name:       "PV11 at limit",
+			protocol:   11,
+			fieldCount: 1024,
+		},
+		{
+			name:       "PV11 above limit",
+			protocol:   11,
+			fieldCount: 1025,
+			wantErr:    "constr with 1025 fields is not available in protocol version 11",
+		},
+		{
+			name:       "post-PV11 above limit",
+			protocol:   12,
+			fieldCount: 1025,
+			wantErr:    "constr with 1025 fields is not available in protocol version 12",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fields := make([]Term[DeBruijn], tt.fieldCount)
+			for i := range fields {
+				fields[i] = &Error{}
+			}
+			program := &Program[DeBruijn]{
+				Version: uplcVersion110,
+				Term: &Constr[DeBruijn]{
+					Tag:    0,
+					Fields: fields,
+				},
+			}
+			context := ProgramContext{
+				LedgerLanguage: lang.LanguageVersionV3,
+				ProtocolMajor:  tt.protocol,
+			}
+			encoded, err := Encode(program)
+			if err != nil {
+				t.Fatalf("Encode() failed: %v", err)
+			}
+
+			entryPoints := []struct {
+				name string
+				run  func() (int, error)
+			}{
+				{
+					name: "ValidateProgram",
+					run: func() (int, error) {
+						return len(fields), ValidateProgram(program, context)
+					},
+				},
+				{
+					name: "DecodeWithContext generic",
+					run: func() (int, error) {
+						decoded, err := DecodeWithContext[Name](encoded, context)
+						if err != nil {
+							return 0, err
+						}
+						constr, ok := decoded.Term.(*Constr[Name])
+						if !ok {
+							return -1, nil
+						}
+						return len(constr.Fields), nil
+					},
+				},
+				{
+					name: "DecodeDeBruijnWithContext",
+					run: func() (int, error) {
+						decoded, err := DecodeDeBruijnWithContext(encoded, context)
+						if err != nil {
+							return 0, err
+						}
+						constr, ok := decoded.Term.(*Constr[DeBruijn])
+						if !ok {
+							return -1, nil
+						}
+						return len(constr.Fields), nil
+					},
+				},
+			}
+
+			for _, entryPoint := range entryPoints {
+				t.Run(entryPoint.name, func(t *testing.T) {
+					gotFields, err := entryPoint.run()
+					if tt.wantErr != "" {
+						if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+							t.Fatalf("error = %v, want %q", err, tt.wantErr)
+						}
+						return
+					}
+					if err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+					if gotFields != tt.fieldCount {
+						t.Fatalf("decoded field count = %d, want %d", gotFields, tt.fieldCount)
+					}
+				})
+			}
+		})
+	}
+}
