@@ -56,6 +56,7 @@ const (
 	ed25519VerifyMaxCacheMsg = 64
 	ed25519VerifyCacheShards = 64
 	ed25519VerifyShardLimit  = ed25519VerifyCacheLimit / ed25519VerifyCacheShards
+	valueDataMaxSize         = 40_000
 )
 
 type ed25519VerifyCacheKey struct {
@@ -4914,6 +4915,13 @@ func valueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	// Cost model uses linear_in_x with max(outer, inner) size
 	if err := m.CostOne(&b.Func, valueMaxCountExMem(plist.List)); err != nil {
 		return nil, err
+	}
+	if valueInnerCountExMem(plist.List)() > valueDataMaxSize {
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "valueData",
+			Message: "maximum input size (40000) exceeded",
+		}
 	}
 
 	// Convert value to data map
