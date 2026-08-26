@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"os"
@@ -172,6 +173,277 @@ func TestParseTerm(t *testing.T) {
 
 // ==================== Conformance Test ====================
 
+type conformanceFormat uint8
+
+const (
+	conformanceText conformanceFormat = iota
+	conformanceFlat
+)
+
+type conformanceFailure uint8
+
+const (
+	conformanceSuccess conformanceFailure = iota
+	conformanceParseFailure
+	conformanceEvaluationFailure
+)
+
+type conformanceCase struct {
+	inputPath    string
+	expectedPath string
+	budgetPath   string
+	format       conformanceFormat
+}
+
+func discoverConformanceCases(root string) ([]conformanceCase, error) {
+	cases := make([]conformanceCase, 0)
+	err := filepath.WalkDir(
+		root,
+		func(path string, entry os.DirEntry, err error) error {
+			if err != nil {
+				return fmt.Errorf("access %q: %w", path, err)
+			}
+			if entry.IsDir() {
+				return nil
+			}
+
+			format, ok := conformanceFormatForPath(path)
+			if !ok {
+				return nil
+			}
+
+			budgetPath, err := conformanceBudgetPath(path)
+			if err != nil {
+				return err
+			}
+			expectedPath := path + ".expected"
+			if _, err := os.Stat(expectedPath); err != nil {
+				return fmt.Errorf(
+					"expected result for %q: %w",
+					path,
+					err,
+				)
+			}
+
+			cases = append(cases, conformanceCase{
+				inputPath:    path,
+				expectedPath: expectedPath,
+				budgetPath:   budgetPath,
+				format:       format,
+			})
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if len(cases) == 0 {
+		return nil, fmt.Errorf("no conformance inputs found under %q", root)
+	}
+	return cases, nil
+}
+
+func conformanceFormatForPath(path string) (conformanceFormat, bool) {
+	switch filepath.Ext(path) {
+	case ".uplc":
+		return conformanceText, true
+	case ".flat":
+		return conformanceFlat, true
+	default:
+		return conformanceText, false
+	}
+}
+
+func conformanceBudgetPath(inputPath string) (string, error) {
+	ext := filepath.Ext(inputPath)
+	canonicalPath := strings.TrimSuffix(inputPath, ext) + ".budget.expected"
+	if _, err := os.Stat(canonicalPath); err == nil {
+		return canonicalPath, nil
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("stat budget %q: %w", canonicalPath, err)
+	}
+
+	legacyPath := inputPath + ".budget.expected"
+	if _, err := os.Stat(legacyPath); err == nil {
+		return legacyPath, nil
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("stat budget %q: %w", legacyPath, err)
+	}
+
+	return "", fmt.Errorf(
+		"budget result for %q not found at %q or %q",
+		inputPath,
+		canonicalPath,
+		legacyPath,
+	)
+}
+
+func conformanceExpectedFailure(contents []byte) conformanceFailure {
+	switch strings.TrimSpace(string(contents)) {
+	case "parse error", "parse/decode error":
+		return conformanceParseFailure
+	case "evaluation failure":
+		return conformanceEvaluationFailure
+	default:
+		return conformanceSuccess
+	}
+}
+
+func decodeConformanceProgram(
+	format conformanceFormat,
+	contents []byte,
+) (*syn.Program[syn.DeBruijn], conformanceFailure, error) {
+	if format == conformanceFlat {
+		program, err := syn.Decode[syn.DeBruijn](contents)
+		return program, conformanceParseFailure, err
+	}
+
+	program, err := syn.Parse(string(contents))
+	if err != nil {
+		return nil, conformanceParseFailure, err
+	}
+	dProgram, err := syn.NameToDeBruijn(program)
+	return dProgram, conformanceEvaluationFailure, err
+}
+
+func conformanceLanguageForPath(
+	path string,
+) (lang.LanguageVersion, uint) {
+	if isV4BuiltinTest(path) {
+		return lang.LanguageVersionV4, 12
+	}
+	return lang.LanguageVersionV3, 11
+}
+
+func conformanceFirstByteMismatch(got, want []byte) int {
+	sharedLen := min(len(got), len(want))
+	for i := range sharedLen {
+		if got[i] != want[i] {
+			return i
+		}
+	}
+	return sharedLen
+}
+
+func runConformanceCase(testCase conformanceCase) error {
+	input, err := os.ReadFile(testCase.inputPath)
+	if err != nil {
+		return fmt.Errorf("read program: %w", err)
+	}
+	expected, err := os.ReadFile(testCase.expectedPath)
+	if err != nil {
+		return fmt.Errorf("read expected result: %w", err)
+	}
+	budget, err := os.ReadFile(testCase.budgetPath)
+	if err != nil {
+		return fmt.Errorf("read expected budget: %w", err)
+	}
+
+	expectedFailure := conformanceExpectedFailure(expected)
+	budgetFailure := conformanceExpectedFailure(budget)
+	program, failureStage, err := decodeConformanceProgram(
+		testCase.format,
+		input,
+	)
+	if err != nil {
+		if expectedFailure == failureStage && budgetFailure == failureStage {
+			return nil
+		}
+		return fmt.Errorf("load program: %w", err)
+	}
+	if expectedFailure == conformanceParseFailure {
+		return fmt.Errorf("expected parse/decode failure, program loaded")
+	}
+	if budgetFailure == conformanceParseFailure {
+		return fmt.Errorf("budget expects parse/decode failure, program loaded")
+	}
+
+	plutusVersion, protocolVersion := conformanceLanguageForPath(
+		testCase.inputPath,
+	)
+	initialBudget := cek.ExBudget{
+		Mem: math.MaxInt64,
+		Cpu: math.MaxInt64,
+	}
+	machine := cek.NewMachine[syn.DeBruijn](
+		plutusVersion,
+		200,
+		cek.NewDefaultEvalContext(
+			plutusVersion,
+			cek.ProtoVersion{Major: protocolVersion},
+		),
+	)
+	machine.ExBudget = initialBudget
+
+	result, err := machine.Run(program.Term)
+	if err != nil {
+		if expectedFailure == conformanceEvaluationFailure &&
+			budgetFailure == conformanceEvaluationFailure {
+			return nil
+		}
+		return fmt.Errorf("evaluate program: %w", err)
+	}
+	if expectedFailure == conformanceEvaluationFailure {
+		return fmt.Errorf("expected evaluation failure, evaluation succeeded")
+	}
+	if budgetFailure == conformanceEvaluationFailure {
+		return fmt.Errorf("budget expects evaluation failure, evaluation succeeded")
+	}
+
+	if testCase.format == conformanceFlat {
+		encodedResult, err := syn.Encode(&syn.Program[syn.DeBruijn]{
+			Version: program.Version,
+			Term:    result,
+		})
+		if err != nil {
+			return fmt.Errorf("encode result: %w", err)
+		}
+		if !bytes.Equal(encodedResult, expected) {
+			return fmt.Errorf(
+				"result mismatch at byte %d: got %d bytes, want %d",
+				conformanceFirstByteMismatch(encodedResult, expected),
+				len(encodedResult),
+				len(expected),
+			)
+		}
+	} else {
+		expectedProgram, _, err := decodeConformanceProgram(
+			conformanceText,
+			expected,
+		)
+		if err != nil {
+			return fmt.Errorf("load expected result: %w", err)
+		}
+		prettyResult := syn.PrettyTerm[syn.DeBruijn](result)
+		prettyExpected := syn.PrettyTerm[syn.DeBruijn](
+			expectedProgram.Term,
+		)
+		if prettyResult != prettyExpected {
+			return fmt.Errorf(
+				"result mismatch: got %s, want %s",
+				prettyResult,
+				prettyExpected,
+			)
+		}
+	}
+
+	consumedBudget := initialBudget.Sub(&machine.ExBudget)
+	formattedBudget := fmt.Sprintf(
+		"({cpu: %d\n| mem: %d})",
+		consumedBudget.Cpu,
+		consumedBudget.Mem,
+	)
+	expectedBudget := strings.TrimSpace(string(budget))
+	if formattedBudget != expectedBudget {
+		return fmt.Errorf(
+			"budget mismatch: got %s, want %s",
+			formattedBudget,
+			expectedBudget,
+		)
+	}
+	return nil
+}
+
 func TestConformance(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
@@ -180,191 +452,22 @@ func TestConformance(t *testing.T) {
 
 	testRoot := filepath.Join(filepath.Dir(filename), "conformance")
 	testRoot = filepath.Clean(testRoot)
-
-	if _, err := os.Stat(testRoot); os.IsNotExist(err) {
-		t.Fatalf("Test directory not found: %s", testRoot)
+	cases, err := discoverConformanceCases(testRoot)
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	categories := []string{"builtin", "example", "term"}
-	for _, category := range categories {
-		categoryDir := filepath.Join(testRoot, category)
-
-		err := filepath.Walk(
-			categoryDir,
-			func(path string, info os.FileInfo, err error) error {
-				if err != nil {
-					return fmt.Errorf("error accessing path %q: %w", path, err)
-				}
-
-				if info.IsDir() || !strings.HasSuffix(path, ".uplc") {
-					return nil
-				}
-
-				relPath, err := filepath.Rel(testRoot, path)
-				if err != nil {
-					return fmt.Errorf("could not get relative path: %w", err)
-				}
-				testName := strings.TrimSuffix(relPath, ".uplc")
-
-				t.Run(testName, func(t *testing.T) {
-					// Skip tests for unreleased builtins (never made it to mainnet)
-					if isUnreleasedBuiltinTest(path) {
-						t.Skip("Skipping unreleased builtin test")
-					}
-
-					// Read program file
-					programText, err := os.ReadFile(path)
-					if err != nil {
-						t.Fatalf("Failed to read program file: %v", err)
-					}
-
-					// Read expected file
-					expectedPath := path + ".expected"
-					expectedText, err := os.ReadFile(expectedPath)
-					if err != nil {
-						t.Fatalf("Failed to read expected file: %v", err)
-					}
-
-					// Handle budget file
-					budgetPath := path + ".budget.expected"
-					var expectedBudget string
-					if _, err := os.Stat(budgetPath); err == nil {
-						budgetText, err := os.ReadFile(budgetPath)
-						if err != nil {
-							t.Logf("Failed to read budget file: %v", err)
-						} else {
-							expectedBudget = strings.TrimSpace(string(budgetText))
-						}
-					}
-
-					// Parse program
-
-					program, err := syn.Parse(string(programText))
-					expectedResult := strings.TrimSpace(string(expectedText))
-					if err != nil {
-						if expectedResult == "parse error" {
-							return
-						}
-
-						t.Fatalf(
-							"Parse failed: %v\nInput: %s",
-							err,
-							programText,
-						)
-					}
-
-					// Convert to NamedDeBruijn
-
-					dProgram, err := syn.NameToDeBruijn(program)
-					if err != nil {
-						if expectedResult == "evaluation failure" {
-							return
-						}
-
-						t.Fatalf(
-							"Failed to convert program to DeBruijn: %v",
-							err,
-						)
-					}
-
-					// Evaluate program
-
-					// Tests need a higher budget than the production default; override explicitly
-					initialBudget := cek.ExBudget{
-						Mem: math.MaxInt64,
-						Cpu: math.MaxInt64,
-					}
-
-					// Determine appropriate Plutus version based on test path
-					// V4 builtins require V4; otherwise use V3
-					plutusVersion := lang.LanguageVersionV3
-					protoVersion := uint(11)
-					if isV4BuiltinTest(path) {
-						plutusVersion = lang.LanguageVersionV4
-						protoVersion = 12
-					}
-
-					machine := cek.NewMachine[syn.DeBruijn](
-						plutusVersion,
-						200,
-						cek.NewDefaultEvalContext(
-							plutusVersion,
-							cek.ProtoVersion{Major: protoVersion},
-						),
-					)
-					machine.ExBudget = initialBudget
-
-					result, err := machine.Run(dProgram.Term)
-					if err != nil {
-						if expectedResult == "evaluation failure" {
-							return
-						}
-
-						t.Fatalf("Failed to evaluate program: %v", err)
-					}
-
-					// Parse expected result
-
-					expected, err := syn.Parse(string(expectedText))
-					if err != nil {
-						t.Fatalf(
-							"Failed to parse expected result: %v\nExpected: %s",
-							err,
-							expectedText,
-						)
-					}
-
-					dExpected, err := syn.NameToDeBruijn(expected)
-					if err != nil {
-						t.Fatalf(
-							"Failed to convert program to DeBruijn: %v",
-							err,
-						)
-					}
-
-					// Compare results
-					prettyResult := syn.PrettyTerm[syn.DeBruijn](result)
-					prettyExpected := syn.PrettyTerm[syn.DeBruijn](
-						dExpected.Term,
-					)
-
-					original := syn.Pretty[syn.Name](program)
-
-					if prettyResult != prettyExpected {
-						t.Errorf(
-							"Result mismatch\nGot:\n%s\nWant:\n%s\nProgram:\n%s",
-							prettyResult,
-							prettyExpected,
-							original,
-						)
-					}
-
-					// Compare budgets if budget file was found
-					if expectedBudget != "" {
-						consumedBudget := initialBudget.Sub(
-							&machine.ExBudget,
-						)
-						fmtBudget := fmt.Sprintf(
-							"({cpu: %d\n| mem: %d})",
-							consumedBudget.Cpu,
-							consumedBudget.Mem,
-						)
-
-						if fmtBudget != expectedBudget {
-							t.Errorf(
-								"Budget mismatch\nGot:\n%s\nWant:\n%s",
-								fmtBudget,
-								expectedBudget,
-							)
-						}
-					}
-				})
-
-				return nil
-			},
-		)
+	for _, testCase := range cases {
+		relPath, err := filepath.Rel(testRoot, testCase.inputPath)
 		if err != nil {
-			t.Errorf("Error walking %s directory: %v", category, err)
+			t.Fatalf("could not get relative path: %v", err)
 		}
+		t.Run(filepath.ToSlash(relPath), func(t *testing.T) {
+			if isUnreleasedBuiltinTest(testCase.inputPath) {
+				t.Skip("Skipping unreleased builtin test")
+			}
+			if err := runConformanceCase(testCase); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
