@@ -4768,6 +4768,63 @@ func TestValueDataEntryLimit(t *testing.T) {
 	}
 }
 
+func TestValueDataEntryLimitChargesCostFirst(t *testing.T) {
+	oversizedValue := newValueDataBoundaryInput(valueDataMaxSize + 1)
+	tests := []struct {
+		name       string
+		version    lang.LanguageVersion
+		protoMajor uint
+	}{
+		{name: "V1 PV11", version: lang.LanguageVersionV1, protoMajor: 11},
+		{name: "V2 PV11", version: lang.LanguageVersionV2, protoMajor: 11},
+		{name: "V3 PV11", version: lang.LanguageVersionV3, protoMajor: 11},
+		{name: "V4 PV12", version: lang.LanguageVersionV4, protoMajor: 12},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := NewDefaultEvalContext(
+				tt.version,
+				ProtoVersion{Major: tt.protoMajor},
+			)
+			m := NewMachine[syn.DeBruijn](tt.version, 0, ctx)
+			m.ExBudget = ExBudget{}
+			b := newTestBuiltin(builtin.ValueData).ApplyArg(oversizedValue)
+
+			_, err := evalBuiltinWithError(t, m, b)
+			if err == nil {
+				t.Fatal("expected insufficient budget to reject oversized valueData input")
+			}
+			var budgetErr *BudgetError
+			if !errors.As(err, &budgetErr) {
+				t.Fatalf(
+					"expected valueData cost to be charged before the size check, got %T: %v",
+					err,
+					err,
+				)
+			}
+			if budgetErr.Code != ErrCodeBudgetExhausted {
+				t.Fatalf(
+					"expected ErrCodeBudgetExhausted, got %d",
+					budgetErr.Code,
+				)
+			}
+			if budgetErr.Requested.Cpu <= 0 || budgetErr.Requested.Mem <= 0 {
+				t.Fatalf(
+					"expected positive valueData cost, got %+v",
+					budgetErr.Requested,
+				)
+			}
+			if budgetErr.Available != (ExBudget{}) {
+				t.Fatalf(
+					"expected zero available budget, got %+v",
+					budgetErr.Available,
+				)
+			}
+		})
+	}
+}
+
 func TestBigIntMod256Byte(t *testing.T) {
 	hugePlus5 := new(big.Int).Lsh(big.NewInt(1), 4096)
 	hugePlus5.Add(hugePlus5, big.NewInt(5))
