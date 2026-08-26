@@ -1,10 +1,11 @@
 package lang
 
-// Cost model param names for V3
-// These correspond to string keys in the cost models in alonzo-genesis.json, as well as define
-// the ordering for cost models params provided as a list of integers
-// NOTE: this is generated from https://github.com/IntersectMBO/plutus/blob/3109dc1e6501ecbbed0b7ae27361c255d7a16173/plutus-ledger-api/src/PlutusLedgerApi/V3/ParamName.hs
-var CostModelParamNamesV3 = []string{
+// Cost model parameter names for Plutus V4.
+//
+// This ordering follows the complete PlutusLedgerApi.V4.ParamName declaration,
+// including parameters for builtins not yet implemented by this module.
+// Source: https://github.com/IntersectMBO/plutus/blob/3109dc1e6501ecbbed0b7ae27361c255d7a16173/plutus-ledger-api/src/PlutusLedgerApi/V4/ParamName.hs
+var CostModelParamNamesV4 = []string{
 	"addInteger-cpu-arguments-intercept",
 	"addInteger-cpu-arguments-slope",
 	"addInteger-memory-arguments-intercept",
@@ -256,7 +257,6 @@ var CostModelParamNamesV3 = []string{
 	"byteStringToInteger-cpu-arguments-c2",
 	"byteStringToInteger-memory-arguments-intercept",
 	"byteStringToInteger-memory-arguments-slope",
-	// Plomin
 	"andByteString-cpu-arguments-intercept",
 	"andByteString-cpu-arguments-slope1",
 	"andByteString-cpu-arguments-slope2",
@@ -303,7 +303,6 @@ var CostModelParamNamesV3 = []string{
 	"ripemd_160-cpu-arguments-intercept",
 	"ripemd_160-cpu-arguments-slope",
 	"ripemd_160-memory-arguments",
-	// To be deployed in PV11
 	"expModInteger-cpu-arguments-coefficient00",
 	"expModInteger-cpu-arguments-coefficient11",
 	"expModInteger-cpu-arguments-coefficient12",
@@ -357,4 +356,11 @@ var CostModelParamNamesV3 = []string{
 	"scaleValue-cpu-arguments-slope",
 	"scaleValue-memory-arguments-intercept",
 	"scaleValue-memory-arguments-slope",
+	"multiIndexArray-cpu-arguments-c0",
+	"multiIndexArray-cpu-arguments-c1",
+	"multiIndexArray-cpu-arguments-c2",
+	"multiIndexArray-memory-arguments-intercept",
+	"multiIndexArray-memory-arguments-slope",
+	"assetCount-cpu-arguments",
+	"assetCount-memory-arguments",
 }

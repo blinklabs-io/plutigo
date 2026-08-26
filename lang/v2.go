@@ -3,7 +3,7 @@ package lang
 // Cost model param names for V2
 // These correspond to string keys in the cost models in alonzo-genesis.json, as well as define
 // the ordering for cost models params provided as a list of integers
-// NOTE: this is generated from https://github.com/IntersectMBO/plutus/blob/aee28e0467be0561de5c2f097f639914d8d7a294/plutus-ledger-api/src/PlutusLedgerApi/V2/ParamName.hs
+// NOTE: this is generated from https://github.com/IntersectMBO/plutus/blob/3109dc1e6501ecbbed0b7ae27361c255d7a16173/plutus-ledger-api/src/PlutusLedgerApi/V2/ParamName.hs
 var CostModelParamNamesV2 = []string{
 	"addInteger-cpu-arguments-intercept",
 	"addInteger-cpu-arguments-slope",
@@ -328,11 +328,15 @@ var CostModelParamNamesV2 = []string{
 	"valueContains-cpu-arguments-model-arguments-slope1",
 	"valueContains-cpu-arguments-model-arguments-slope2",
 	"valueContains-memory-arguments",
-	"valueData-cpu-arguments",
-	"valueData-memory-arguments",
-	"unValueData-cpu-arguments-intercept",
-	"unValueData-cpu-arguments-slope",
-	"unValueData-memory-arguments",
+	"valueData-cpu-arguments-intercept",
+	"valueData-cpu-arguments-slope",
+	"valueData-memory-arguments-intercept",
+	"valueData-memory-arguments-slope",
+	"unValueData-cpu-arguments-c0",
+	"unValueData-cpu-arguments-c1",
+	"unValueData-cpu-arguments-c2",
+	"unValueData-memory-arguments-intercept",
+	"unValueData-memory-arguments-slope",
 	"scaleValue-cpu-arguments-intercept",
 	"scaleValue-cpu-arguments-slope",
 	"scaleValue-memory-arguments-intercept",

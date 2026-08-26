@@ -143,6 +143,11 @@ const (
 	ValueData   DefaultFunction = 98
 	UnValueData DefaultFunction = 99
 	ScaleValue  DefaultFunction = 100
+
+	// Multi-index array
+	MultiIndexArray DefaultFunction = 101
+	Policies        DefaultFunction = 102
+	AssetCount      DefaultFunction = 103
 )
 
 var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
@@ -273,9 +278,12 @@ var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
 	"valueContains": ValueContains,
 
 	// Value/Data conversion builtins
-	"valueData":   ValueData,
-	"unValueData": UnValueData,
-	"scaleValue":  ScaleValue,
+	"valueData":       ValueData,
+	"unValueData":     UnValueData,
+	"scaleValue":      ScaleValue,
+	"multiIndexArray": MultiIndexArray,
+	"policies":        Policies,
+	"assetCount":      AssetCount,
 }
 
 var defaultFunctionForceCount = [TotalBuiltinCount]uint{
@@ -397,9 +405,12 @@ var defaultFunctionForceCount = [TotalBuiltinCount]uint{
 	UnionValue:                  0,
 	ValueContains:               0,
 	// Value/Data conversion
-	ValueData:   0,
-	UnValueData: 0,
-	ScaleValue:  0,
+	ValueData:       0,
+	UnValueData:     0,
+	ScaleValue:      0,
+	MultiIndexArray: 1,
+	Policies:        0,
+	AssetCount:      0,
 }
 
 func (f DefaultFunction) ForceCount() uint {
@@ -525,9 +536,12 @@ var defaultFunctionArity = [TotalBuiltinCount]uint{
 	UnionValue:                  2,
 	ValueContains:               2,
 	// Value/Data conversion
-	ValueData:   1,
-	UnValueData: 1,
-	ScaleValue:  2,
+	ValueData:       1,
+	UnValueData:     1,
+	ScaleValue:      2,
+	MultiIndexArray: 2,
+	Policies:        1,
+	AssetCount:      1,
 }
 
 func (f DefaultFunction) Arity() uint {
@@ -653,9 +667,12 @@ var defaultFunctionToString = [TotalBuiltinCount]string{
 	UnionValue:                  "unionValue",
 	ValueContains:               "valueContains",
 	// Value/Data conversion
-	ValueData:   "valueData",
-	UnValueData: "unValueData",
-	ScaleValue:  "scaleValue",
+	ValueData:       "valueData",
+	UnValueData:     "unValueData",
+	ScaleValue:      "scaleValue",
+	MultiIndexArray: "multiIndexArray",
+	Policies:        "policies",
+	AssetCount:      "assetCount",
 }
 
 func (f DefaultFunction) String() string {
@@ -666,7 +683,7 @@ func (f DefaultFunction) String() string {
 const MinDefaultFunction = 0
 
 // MaxDefaultFunction is the largest DefaultFunction tag value
-const MaxDefaultFunction = 100
+const MaxDefaultFunction = 103
 
 // TotalBuiltinCount is the total number of builtin functions
 const TotalBuiltinCount = MaxDefaultFunction + 1

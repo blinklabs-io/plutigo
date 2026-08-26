@@ -63,6 +63,10 @@ func TestBuiltinAvailability(t *testing.T) {
 		{"insertCoin in V4", InsertCoin, PlutusV4, true},
 		{"valueContains in V3", ValueContains, PlutusV3, false},
 		{"valueContains in V4", ValueContains, PlutusV4, true},
+		{"multiIndexArray in V3", MultiIndexArray, PlutusV3, false},
+		{"multiIndexArray in V4", MultiIndexArray, PlutusV4, false},
+		{"policies in V4", Policies, PlutusV4, false},
+		{"assetCount in V4", AssetCount, PlutusV4, false},
 		{
 			"bls12_381_G1_multiScalarMul in V3",
 			Bls12_381_G1_MultiScalarMul,
@@ -87,6 +91,18 @@ func TestBuiltinAvailability(t *testing.T) {
 				t.Errorf("IsAvailableIn() = %v, want %v", got, tt.available)
 			}
 		})
+	}
+}
+
+func TestBatch7BuiltinsRemainUnavailableAtEveryProtocolVersion(t *testing.T) {
+	for _, fn := range []DefaultFunction{MultiIndexArray, Policies, AssetCount} {
+		for _, version := range []PlutusVersion{PlutusV1, PlutusV2, PlutusV3, PlutusV4} {
+			for _, protocolVersion := range []uint{0, 5, 11, 12} {
+				if fn.IsAvailableInWithProto(version, protocolVersion) {
+					t.Fatalf("%s is available in Plutus V%d at protocol version %d", fn, version, protocolVersion)
+				}
+			}
+		}
 	}
 }
 
@@ -124,6 +140,7 @@ func TestBuiltinAvailabilityWithProto(t *testing.T) {
 		// Plutus V4 is introduced at PV12 with batches 1 through 6.
 		{"batch 1 in V4 at PV11", AddInteger, PlutusV4, 11, false},
 		{"batch 6 in V4 at PV12", DropList, PlutusV4, 12, true},
+		{"batch 7 in V4 at PV12", MultiIndexArray, PlutusV4, 12, false},
 	}
 
 	for _, tt := range tests {

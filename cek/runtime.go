@@ -184,8 +184,11 @@ func newBuiltins[T syn.Eval]() Builtins[T] {
 		builtin.UnionValue:    unionValue[T],
 		builtin.ValueContains: valueContains[T],
 		// Value/Data conversion
-		builtin.ValueData:   valueData[T],
-		builtin.UnValueData: unValueData[T],
+		builtin.ValueData:       valueData[T],
+		builtin.UnValueData:     unValueData[T],
+		builtin.MultiIndexArray: multiIndexArray[T],
+		builtin.Policies:        policies[T],
+		builtin.AssetCount:      assetCount[T],
 	}
 }
 
