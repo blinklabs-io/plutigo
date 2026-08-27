@@ -201,14 +201,21 @@ func (c *Case) validate() (decodedCase, error) {
 	if c.ProtocolVersion.Major == 0 {
 		return decodedCase{}, errors.New("protocol major version must be positive")
 	}
-	if _, err := c.Language.Version(); err != nil {
+	languageVersion, err := c.Language.Version()
+	if err != nil {
 		return decodedCase{}, err
 	}
 	flatProgram, err := decodeHex("flat program", c.FlatProgramHex)
 	if err != nil {
 		return decodedCase{}, err
 	}
-	program, err := syn.Decode[syn.DeBruijn](flatProgram)
+	program, err := syn.DecodeDeBruijnWithContext(
+		flatProgram,
+		syn.ProgramContext{
+			LedgerLanguage: languageVersion,
+			ProtocolMajor:  c.ProtocolVersion.Major,
+		},
+	)
 	if err != nil {
 		return decodedCase{}, fmt.Errorf("decode FLAT program: %w", err)
 	}

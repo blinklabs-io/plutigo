@@ -46,21 +46,31 @@ func decodeDeBruijn(bytes []byte) (*Program[DeBruijn], error) {
 	d := newDecoder(bytes)
 	arena := newTermArena[DeBruijn]()
 	consts := &constantArena{}
-	return decodeDeBruijnProgram(d, arena, consts)
+	return decodeDeBruijnProgram(d, arena, consts, nil)
 }
 
 func (d *DeBruijnDecoder) Decode(bytes []byte) (*Program[DeBruijn], error) {
 	d.decoder.reset(bytes)
 	d.arena.reset()
 	d.consts.reset()
-	return decodeDeBruijnProgram(&d.decoder, &d.arena, &d.consts)
+	return decodeDeBruijnProgram(&d.decoder, &d.arena, &d.consts, nil)
 }
 
 func Decode[T Binder](bytes []byte) (*Program[T], error) {
+	return decodeProgram[T](bytes, nil)
+}
+
+func decodeWithContext[T Binder](bytes []byte, context ProgramContext) (*Program[T], error) {
+	return decodeProgram[T](bytes, &context)
+}
+
+func decodeProgram[T Binder](bytes []byte, context *ProgramContext) (*Program[T], error) {
 	var zero T
-	switch any(zero).(type) {
-	case DeBruijn:
-		program, err := decodeDeBruijn(bytes)
+	if _, ok := any(zero).(DeBruijn); ok {
+		d := newDecoder(bytes)
+		arena := newTermArena[DeBruijn]()
+		consts := &constantArena{}
+		program, err := decodeDeBruijnProgram(d, arena, consts, context)
 		if err != nil {
 			return nil, err
 		}
@@ -69,47 +79,21 @@ func Decode[T Binder](bytes []byte) (*Program[T], error) {
 
 	d := newDecoder(bytes)
 	arena := newTermArena[T]()
-
-	major, err := d.word()
+	version, err := decodeProgramVersion(d, context)
 	if err != nil {
 		return nil, err
 	}
-
-	minor, err := d.word()
-	if err != nil {
-		return nil, err
-	}
-
-	patch, err := d.word()
-	if err != nil {
-		return nil, err
-	}
-
-	if major > math.MaxUint32 || minor > math.MaxUint32 ||
-		patch > math.MaxUint32 {
-		return nil, errors.New("version numbers too large")
-	}
-
 	terms, err := decodeTermWithArena[T](d, arena)
 	if err != nil {
 		return nil, err
 	}
-
-	version := lang.LanguageVersion{uint32(major), uint32(minor), uint32(patch)}
-
-	program := &Program[T]{
-		Version: version,
-		Term:    terms,
-	}
-
+	program := &Program[T]{Version: version, Term: terms}
 	if err := d.filler(); err != nil {
 		return nil, err
 	}
-
 	if err := d.ensureFullyConsumed(); err != nil {
 		return nil, err
 	}
-
 	return program, nil
 }
 
@@ -117,25 +101,11 @@ func decodeDeBruijnProgram(
 	d *decoder,
 	arena *termArena[DeBruijn],
 	consts *constantArena,
+	context *ProgramContext,
 ) (*Program[DeBruijn], error) {
-	major, err := d.word()
+	version, err := decodeProgramVersion(d, context)
 	if err != nil {
 		return nil, err
-	}
-
-	minor, err := d.word()
-	if err != nil {
-		return nil, err
-	}
-
-	patch, err := d.word()
-	if err != nil {
-		return nil, err
-	}
-
-	if major > math.MaxUint32 || minor > math.MaxUint32 ||
-		patch > math.MaxUint32 {
-		return nil, errors.New("version numbers too large")
 	}
 
 	terms, err := decodeTermDeBruijnWithArena(d, arena, consts, 0)
@@ -144,7 +114,7 @@ func decodeDeBruijnProgram(
 	}
 
 	program := &Program[DeBruijn]{
-		Version: lang.LanguageVersion{uint32(major), uint32(minor), uint32(patch)},
+		Version: version,
 		Term:    terms,
 	}
 
@@ -161,6 +131,35 @@ func decodeDeBruijnProgram(
 
 func DecodeTerm[T Binder](d *decoder) (Term[T], error) {
 	return decodeTermWithArena(d, newTermArena[T]())
+}
+
+func decodeProgramVersion(
+	d *decoder,
+	context *ProgramContext,
+) (lang.LanguageVersion, error) {
+	major, err := d.word()
+	if err != nil {
+		return lang.LanguageVersion{}, err
+	}
+	minor, err := d.word()
+	if err != nil {
+		return lang.LanguageVersion{}, err
+	}
+	patch, err := d.word()
+	if err != nil {
+		return lang.LanguageVersion{}, err
+	}
+	if major > math.MaxUint32 || minor > math.MaxUint32 ||
+		patch > math.MaxUint32 {
+		return lang.LanguageVersion{}, errors.New("version numbers too large")
+	}
+	version := lang.LanguageVersion{uint32(major), uint32(minor), uint32(patch)}
+	if context != nil {
+		if err := validateProgramVersion(version, *context); err != nil {
+			return lang.LanguageVersion{}, err
+		}
+	}
+	return version, nil
 }
 
 func decodeTermDeBruijnWithArena(

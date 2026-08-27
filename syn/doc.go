@@ -53,6 +53,9 @@
 //
 //   - Text format via [Parse] and [PrettyTerm]
 //   - FLAT binary format via [Decode] (used on-chain)
+//   - Validated text and FLAT entry points via [ParseWithContext] and
+//     [DecodeWithContext], which require the selected ledger language and
+//     protocol version
 //
 // # Binder Interface
 //
