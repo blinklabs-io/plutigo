@@ -4092,6 +4092,32 @@ func TestIntegerToByteStringBuiltin(t *testing.T) {
 	}
 }
 
+// TestIntegerToByteStringRejectsUnrepresentableSize verifies that a size
+// outside int64 is rejected before it can be narrowed to int. The ordering is
+// required for 32-bit targets, where narrowing first would turn a large size
+// into a small value and could incorrectly produce an output.
+func TestIntegerToByteStringRejectsUnrepresentableSize(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.IntegerToByteString)
+	b = b.ApplyArg(&Constant{&syn.Bool{Inner: true}})
+	b = b.ApplyArg(&Constant{&syn.Integer{
+		Inner: new(big.Int).Lsh(big.NewInt(1), 63),
+	}})
+	b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(1)}})
+
+	value, err := evalBuiltinWithError(t, m, b)
+	if value != nil {
+		t.Fatalf("expected no value, got %v", value)
+	}
+	var builtinErr *BuiltinError
+	if !errors.As(err, &builtinErr) {
+		t.Fatalf("expected BuiltinError, got %T: %v", err, err)
+	}
+	if builtinErr.Code != ErrCodeOverflow {
+		t.Fatalf("error code = %v, want %v", builtinErr.Code, ErrCodeOverflow)
+	}
+}
+
 func TestByteStringToIntegerBuiltin(t *testing.T) {
 	tests := []struct {
 		name     string
