@@ -221,6 +221,40 @@ func TestWord64Boundary(t *testing.T) {
 	}
 }
 
+// TestDecodeConstrTagPreservesWord64 verifies that constructor tags retain
+// their complete FLAT word on every architecture. In particular, a tag with
+// bit 32 set must not be narrowed through uint on 32-bit targets.
+func TestDecodeConstrTagPreservesWord64(t *testing.T) {
+	const tag = uint64(1)<<32 | 7
+
+	encoded, err := Encode(&Program[DeBruijn]{
+		Version: lang.LanguageVersionV3,
+		Term:    &Constr[DeBruijn]{Tag: tag},
+	})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+
+	for name, decode := range map[string]func([]byte) (*Program[DeBruijn], error){
+		"generic decoder":  Decode[DeBruijn],
+		"debruijn decoder": DecodeDeBruijn,
+	} {
+		t.Run(name, func(t *testing.T) {
+			program, err := decode(encoded)
+			if err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			constr, ok := program.Term.(*Constr[DeBruijn])
+			if !ok {
+				t.Fatalf("decoded term has type %T, want *Constr", program.Term)
+			}
+			if constr.Tag != tag {
+				t.Fatalf("constructor tag = %d, want %d", constr.Tag, tag)
+			}
+		})
+	}
+}
+
 func TestBigWordSmallLargeValue(t *testing.T) {
 	values := []struct {
 		name string
