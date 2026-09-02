@@ -393,7 +393,29 @@ func (i *Integer) UnmarshalCBOR(data []byte) error {
 }
 
 func (i Integer) MarshalCBOR() ([]byte, error) {
-	return cborMarshal(i.Inner)
+	// Plutus encodes an integer inside the Word64 range, or its negative
+	// mirror, as a plain CBOR integer, and any other integer as a CBOR bignum
+	// whose magnitude byte string obeys the same MaxByteStringLeafSize
+	// chunking rule as a Plutus byte string. See PlutusCore.Data.encodeInteger.
+	if i.Inner == nil {
+		return cborMarshal(i.Inner)
+	}
+	tag := byte(cborTagPositiveBignum)
+	magnitude := i.Inner
+	if i.Inner.Sign() < 0 {
+		// A negative bignum encodes -1 - i, which is big.Int.Not for a
+		// negative operand.
+		tag = byte(cborTagNegativeBignum)
+		magnitude = new(big.Int).Not(i.Inner)
+	}
+	if magnitude.BitLen() <= 64 {
+		return cborMarshal(i.Inner)
+	}
+	body, err := marshalDataByteString(magnitude.Bytes())
+	if err != nil {
+		return nil, err
+	}
+	return append([]byte{tag}, body...), nil
 }
 
 func (i Integer) Clone() PlutusData {
@@ -438,23 +460,27 @@ func (b *ByteString) UnmarshalCBOR(data []byte) error {
 }
 
 func (b ByteString) MarshalCBOR() ([]byte, error) {
-	// Haskell's Plutus encodes ByteStrings <= 64 bytes as definite-length,
-	// and ByteStrings > 64 bytes as indefinite-length with 64-byte chunks.
-	if len(b.Inner) <= MaxByteStringLeafSize {
-		if b.Inner == nil {
+	return marshalDataByteString(b.Inner)
+}
+
+// marshalDataByteString encodes a byte string the way Plutus' Data encoding
+// does: definite-length up to MaxByteStringLeafSize bytes, and otherwise an
+// indefinite-length byte string split into chunks of that size. This applies
+// both to a ByteString and to the magnitude of a bignum-encoded Integer. See
+// PlutusCore.Data.encodeBs.
+func marshalDataByteString(b []byte) ([]byte, error) {
+	if len(b) <= MaxByteStringLeafSize {
+		if b == nil {
 			return cborMarshal([]byte{})
 		}
-		return cborMarshal(b.Inner)
+		return cborMarshal(b)
 	}
-	// Indefinite-length byte string with 64-byte chunks
+	// Indefinite-length byte string with MaxByteStringLeafSize chunks
 	var buf bytes.Buffer
 	buf.WriteByte(0x5f) // Start indefinite-length byte string
-	for i := 0; i < len(b.Inner); i += MaxByteStringLeafSize {
-		end := i + MaxByteStringLeafSize
-		if end > len(b.Inner) {
-			end = len(b.Inner)
-		}
-		chunk, err := cborMarshal(b.Inner[i:end])
+	for i := 0; i < len(b); i += MaxByteStringLeafSize {
+		end := min(i+MaxByteStringLeafSize, len(b))
+		chunk, err := cborMarshal(b[i:end])
 		if err != nil {
 			return nil, fmt.Errorf("failed to encode byte string chunk: %w", err)
 		}

@@ -25,6 +25,11 @@ const (
 	CborIndefFlag uint8 = 0x1f
 
 	MaxByteStringLeafSize = 64
+
+	// CBOR bignum tags, used for any integer outside the Word64 range and its
+	// negative mirror.
+	cborTagPositiveBignum = 0xc2
+	cborTagNegativeBignum = 0xc3
 	MaxDecodeNestingDepth = 256
 	MaxDecodeNodes        = 1_000_000
 )
