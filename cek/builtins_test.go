@@ -5515,3 +5515,25 @@ func TestDropListUnListDataEndToEnd(t *testing.T) {
 		)
 	}
 }
+
+// TestSerialiseDataBuiltinChunksBignum drives the serialiseData builtin, the
+// path a validator uses, over an integer whose magnitude exceeds
+// MaxByteStringLeafSize. The magnitude must be emitted as an
+// indefinite-length byte string of 64-byte chunks, matching the reference
+// implementation.
+func TestSerialiseDataBuiltinChunksBignum(t *testing.T) {
+	m := newTestMachine()
+	b := newTestBuiltin(builtin.SerialiseData)
+
+	// 2^512, whose magnitude is 65 bytes.
+	n := new(big.Int).Lsh(big.NewInt(1), 512)
+	b = b.ApplyArg(&Constant{&syn.Data{Inner: &data.Integer{Inner: n}}})
+
+	val := evalBuiltin(t, m, b)
+	bs := expectByteString(t, expectConstant(t, val))
+
+	const want = "c25f5840010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004100ff"
+	if got := hex.EncodeToString(bs.Inner); got != want {
+		t.Fatalf("serialiseData(2^512):\n got %s\nwant %s", got, want)
+	}
+}

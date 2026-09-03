@@ -1105,3 +1105,88 @@ func contains(s, substr string) bool {
 	}
 	return false
 }
+
+// TestIntegerEncodeBignumChunking pins the Plutus rule that a bignum's
+// magnitude byte string is chunked at MaxByteStringLeafSize exactly like any
+// other Data byte string, so serialiseData output matches the reference
+// implementation. See PlutusCore.Data.encodeInteger and encodeBs.
+func TestIntegerEncodeBignumChunking(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{
+			name:  "max word64 stays a plain integer",
+			value: "18446744073709551615",
+			want:  "1bffffffffffffffff",
+		},
+		{
+			name:  "min negative word64 mirror stays a plain integer",
+			value: "-18446744073709551616",
+			want:  "3bffffffffffffffff",
+		},
+		{
+			name:  "positive bignum with a short magnitude is definite-length",
+			value: "18446744073709551616",
+			want:  "c249010000000000000000",
+		},
+		{
+			name:  "negative bignum with a short magnitude is definite-length",
+			value: "-18446744073709551617",
+			want:  "c349010000000000000000",
+		},
+		{
+			name:  "positive bignum with a 64-byte magnitude is definite-length",
+			value: "6703903964971298549787012499102923063739682910296196688861780721860882015036773488400937149083451713845015929093243025426876941405973284973216824503042048",
+			want:  "c2584080000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+		},
+		{
+			name:  "positive bignum with a 65-byte magnitude is chunked",
+			value: "13407807929942597099574024998205846127479365820592393377723561443721764030073546976801874298166903427690031858186486050853753882811946569946433649006084096",
+			want:  "c25f5840010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004100ff",
+		},
+		{
+			name:  "negative bignum with a 65-byte magnitude is chunked",
+			value: "-13407807929942597099574024998205846127479365820592393377723561443721764030073546976801874298166903427690031858186486050853753882811946569946433649006084097",
+			want:  "c35f5840010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004100ff",
+		},
+		{
+			// First price entry of the Plutus V3 withdrawal-oracle redeemer in
+			// preview transaction
+			// e8691d7c4003815928bc9de9017a3388d7fc0a168383c08d14633732a7c0bb33,
+			// whose 101-byte magnitude spans two chunks. The oracle validator
+			// verifies an Ed25519 signature over serialiseData of this payload,
+			// so a definite-length magnitude makes the signature check fail.
+			name:  "preview oracle payload entry is chunked",
+			value: "14307982583752985658271223448243037119817804983377071162983785513529273357775729074921515035965054912256372993647494147331015372835925768221100844299446692925637888529339416296811677652394714000000000000000000000000000000000000000000000000000",
+			want:  "c25f5840022550c33979cc6deb880a0a98f5af61ad8f42412df920e76ca5a75353579ae4ed4ca74ecea3059ffecf8388c02786f18842b7b7347bc03763bc3c9eeb048a835825f09f4d60db400f1d750ed8bce177cb85f1d98970f3d7668d1887c077997790000000000000ff",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n, ok := new(big.Int).SetString(tt.value, 10)
+			if !ok {
+				t.Fatalf("invalid big.Int literal %q", tt.value)
+			}
+			encoded, err := Encode(NewInteger(n))
+			if err != nil {
+				t.Fatalf("Encode: %v", err)
+			}
+			if got := hex.EncodeToString(encoded); got != tt.want {
+				t.Fatalf("Encode(%s):\n got %s\nwant %s", tt.name, got, tt.want)
+			}
+			decoded, err := Decode(encoded)
+			if err != nil {
+				t.Fatalf("Decode: %v", err)
+			}
+			roundTripped, ok := decoded.(*Integer)
+			if !ok {
+				t.Fatalf("Decode returned %T, want *Integer", decoded)
+			}
+			if roundTripped.Inner.Cmp(n) != 0 {
+				t.Fatalf("round trip got %s, want %s", roundTripped.Inner, n)
+			}
+		})
+	}
+}
