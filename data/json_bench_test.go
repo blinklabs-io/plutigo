@@ -24,20 +24,6 @@ func deepNestedJSONWithSiblings(depth, siblingHexLen int) string {
 	return sb.String()
 }
 
-// wideFlatJSON builds a single List with many small Integer items.
-func wideFlatJSON(items int) string {
-	var sb strings.Builder
-	sb.WriteString(`{"list":[`)
-	for i := 0; i < items; i++ {
-		if i > 0 {
-			sb.WriteByte(',')
-		}
-		sb.WriteString(`{"int":1}`)
-	}
-	sb.WriteString(`]}`)
-	return sb.String()
-}
-
 func BenchmarkDecodeJSONDeepNested(b *testing.B) {
 	input := []byte(deepNestedJSONWithSiblings(240, 4096))
 	b.SetBytes(int64(len(input)))

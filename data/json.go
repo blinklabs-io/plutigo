@@ -298,7 +298,16 @@ type jsonParseState struct {
 	nodes int
 }
 
-const maxJSONParseNestingDepth = (MaxDecodeNestingDepth + 1) * 3
+const (
+	maxJSONParseNestingDepth = (MaxDecodeNestingDepth + 1) * 3
+
+	// A canonical detailed-schema Map pair occupies five jsonValue nodes (the
+	// pair object plus two scalar PlutusData objects), while it represents two
+	// PlutusData nodes. Keep the parser cap large enough to admit every
+	// semantically bounded canonical datum, but separate from the semantic
+	// cap because the syntax tree necessarily contains structural nodes too.
+	maxJSONParseNodes = MaxDecodeNodes * 5 / 2
+)
 
 func (st *jsonParseState) enterValue() error {
 	if st.depth >= maxJSONParseNestingDepth {
@@ -310,11 +319,11 @@ func (st *jsonParseState) enterValue() error {
 	st.depth++
 
 	st.nodes++
-	if st.nodes > MaxDecodeNodes {
+	if st.nodes > maxJSONParseNodes {
 		st.depth--
 		return fmt.Errorf(
 			"PlutusData JSON tree exceeds max node count %d",
-			MaxDecodeNodes,
+			maxJSONParseNodes,
 		)
 	}
 	return nil

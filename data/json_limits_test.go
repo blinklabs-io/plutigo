@@ -29,6 +29,19 @@ func nestedMapKeyJSON(depth int) string {
 	return sb.String()
 }
 
+func wideFlatJSON(items int) string {
+	var sb strings.Builder
+	sb.WriteString(`{"list":[`)
+	for i := 0; i < items; i++ {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString(`{"int":1}`)
+	}
+	sb.WriteString(`]}`)
+	return sb.String()
+}
+
 // TestDecodeJSONDepthLimit verifies the JSON PlutusData decoder enforces the
 // same nesting-depth limit as the CBOR decoder, rather than recursing
 // arbitrarily deep on untrusted input.
@@ -97,22 +110,26 @@ func TestDecodeJSONMapPairRejectsUnknownFieldBeforeValueDecode(t *testing.T) {
 	}
 }
 
-// TestDecodeJSONNodeLimit verifies the JSON parser enforces a node-count cap
-// before it allocates a complete jsonValue tree for an unrecognized payload.
+// TestDecodeJSONParserNodeAllowance verifies parser accounting leaves room
+// for JSON structural nodes in an otherwise valid datum below the semantic
+// PlutusData node limit.
+func TestDecodeJSONParserNodeAllowance(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a 500K-item document; skipped in -short mode")
+	}
+
+	_, err := DecodeJSON([]byte(wideFlatJSON(MaxDecodeNodes / 2)))
+	if err != nil {
+		t.Fatalf("DecodeJSON rejected a semantically bounded flat list: %v", err)
+	}
+}
+
+// TestDecodeJSONNodeLimit verifies the JSON parser enforces its node-count cap
+// before it allocates a complete tree for a datum exceeding the semantic cap.
 func TestDecodeJSONNodeLimit(t *testing.T) {
 	if testing.Short() {
-		t.Skip("builds a >1M-node document; skipped in -short mode")
+		t.Skip("builds a >2.5M-node document; skipped in -short mode")
 	}
-	var sb strings.Builder
-	sb.WriteString(`{"unknown":[`)
-	n := MaxDecodeNodes + 10
-	for i := 0; i < n; i++ {
-		if i > 0 {
-			sb.WriteByte(',')
-		}
-		sb.WriteString(`{"int":0}`)
-	}
-	sb.WriteString(`]}`)
 
 	tests := []struct {
 		name             string
@@ -121,7 +138,7 @@ func TestDecodeJSONNodeLimit(t *testing.T) {
 	}{
 		{
 			"parser rejects before building the full tree",
-			sb.String(),
+			wideFlatJSON(maxJSONParseNodes / 2),
 			"PlutusData JSON tree exceeds max node count",
 		},
 	}
@@ -143,4 +160,25 @@ func TestDecodeJSONNodeLimit(t *testing.T) {
 			}
 		})
 	}
+}
+
+func FuzzDecodeJSON(f *testing.F) {
+	for _, input := range []string{
+		`{"int":0}`,
+		`{"list":[{"int":1},{"bytes":"ab"}]}`,
+		`{"map":[{"k":{"int":1},"v":{"int":2}}]}`,
+		`{"constructor":0,"fields":[{"int":1}]}`,
+		`{"int":`,
+		nestedListJSON(MaxDecodeNestingDepth),
+		nestedListJSON(maxJSONParseNestingDepth),
+	} {
+		f.Add([]byte(input))
+	}
+
+	f.Fuzz(func(t *testing.T, input []byte) {
+		if len(input) > 16*1024 {
+			t.Skip()
+		}
+		_, _ = DecodeJSON(input)
+	})
 }
