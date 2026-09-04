@@ -1,6 +1,7 @@
 package cek
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -160,6 +161,39 @@ func internalError(message string) *InternalError {
 	return &InternalError{
 		Code:    ErrCodeInternalError,
 		Message: message,
+	}
+}
+
+// normalizeEvalError preserves an error that already carries evaluator
+// classification and gives unexpected implementation errors a stable type for
+// callers. Errors from the execution context are intentionally left intact so
+// errors.Is continues to identify cancellation and deadlines.
+func normalizeEvalError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var evalErr EvalError
+	if errors.As(err, &evalErr) {
+		return err
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	return internalError(err.Error())
+}
+
+func normalizeBuiltinError(fn string, err error) error {
+	if err == nil {
+		return nil
+	}
+	var evalErr EvalError
+	if errors.As(err, &evalErr) {
+		return err
+	}
+	return &BuiltinError{
+		Code:    ErrCodeBuiltinFailure,
+		Builtin: fn,
+		Message: err.Error(),
 	}
 }
 

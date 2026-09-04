@@ -1,6 +1,8 @@
 package cek
 
 import (
+	"bytes"
+	"errors"
 	"math/big"
 	"testing"
 
@@ -77,6 +79,62 @@ func TestBuiltinAddInteger(t *testing.T) {
 	out := runTerm(t, m, app2)
 	if out == nil {
 		t.Fatal("expected non-nil output for builtin addInteger")
+	}
+}
+
+func TestRunPreservesEvaluatorErrorClasses(t *testing.T) {
+	invalidG1 := bytes.Repeat([]byte{0}, 48)
+	tests := []struct {
+		name        string
+		term        syn.Term[syn.DeBruijn]
+		wantScript  bool
+		wantBuiltin bool
+		wantType    bool
+	}{
+		{
+			name:       "deliberate script failure",
+			term:       &syn.Error{},
+			wantScript: true,
+		},
+		{
+			name: "invalid BLS point is a builtin failure",
+			term: &syn.Force[syn.DeBruijn]{
+				Term: &syn.Apply[syn.DeBruijn]{
+					Function: &syn.Builtin{DefaultFunction: builtin.Bls12_381_G1_Uncompress},
+					Argument: &syn.Constant{Con: &syn.ByteString{Inner: invalidG1}},
+				},
+			},
+			wantBuiltin: true,
+		},
+		{
+			name: "invalid application is a type failure",
+			term: &syn.Apply[syn.DeBruijn]{
+				Function: &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(1)}},
+				Argument: &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(2)}},
+			},
+			wantType: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := newTestMachineFlow().Run(tt.term)
+			if err == nil {
+				t.Fatal("Run returned nil error")
+			}
+			var scriptErr *ScriptError
+			var builtinErr *BuiltinError
+			var typeErr *TypeError
+			if got := errors.As(err, &scriptErr); got != tt.wantScript {
+				t.Errorf("ScriptError match = %v, want %v (%T: %v)", got, tt.wantScript, err, err)
+			}
+			if got := errors.As(err, &builtinErr); got != tt.wantBuiltin {
+				t.Errorf("BuiltinError match = %v, want %v (%T: %v)", got, tt.wantBuiltin, err, err)
+			}
+			if got := errors.As(err, &typeErr); got != tt.wantType {
+				t.Errorf("TypeError match = %v, want %v (%T: %v)", got, tt.wantType, err, err)
+			}
+		})
 	}
 }
 
