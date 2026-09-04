@@ -17,6 +17,18 @@ func nestedListJSON(depth int) string {
 	return sb.String()
 }
 
+func nestedMapKeyJSON(depth int) string {
+	var sb strings.Builder
+	for i := 0; i < depth; i++ {
+		sb.WriteString(`{"map":[{"k":`)
+	}
+	sb.WriteString(`{"int":0}`)
+	for i := 0; i < depth; i++ {
+		sb.WriteString(`,"v":{"int":0}}]}`)
+	}
+	return sb.String()
+}
+
 // TestDecodeJSONDepthLimit verifies the JSON PlutusData decoder enforces the
 // same nesting-depth limit as the CBOR decoder, rather than recursing
 // arbitrarily deep on untrusted input.
@@ -28,9 +40,9 @@ func TestDecodeJSONDepthLimit(t *testing.T) {
 	}{
 		{"within limit decodes", nestedListJSON(100), ""},
 		{
-			"beyond limit is rejected",
-			nestedListJSON(MaxDecodeNestingDepth + 50),
-			"depth",
+			"parser rejects nesting before building the full tree",
+			nestedListJSON(MaxDecodeNestingDepth * 2),
+			"PlutusData JSON tree nesting exceeds max depth",
 		},
 	}
 
@@ -53,9 +65,27 @@ func TestDecodeJSONDepthLimit(t *testing.T) {
 	}
 }
 
+func TestDecodeJSONMapDepthBoundary(t *testing.T) {
+	t.Run("exactly at PlutusData limit decodes", func(t *testing.T) {
+		if _, err := DecodeJSON([]byte(nestedMapKeyJSON(MaxDecodeNestingDepth - 1))); err != nil {
+			t.Fatalf("expected success at depth limit, got: %v", err)
+		}
+	})
+	t.Run("one past PlutusData limit preserves semantic error", func(t *testing.T) {
+		_, err := DecodeJSON([]byte(nestedMapKeyJSON(MaxDecodeNestingDepth)))
+		if err == nil {
+			t.Fatal("expected depth error, got nil")
+		}
+		want := "PlutusData JSON nesting exceeds max depth 256"
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected error containing %q, got: %v", want, err)
+		}
+	})
+}
+
 func TestDecodeJSONMapPairRejectsUnknownFieldBeforeValueDecode(t *testing.T) {
 	input := `{"map":[{"k":{"int":1},"junk":` +
-		nestedListJSON(MaxDecodeNestingDepth+50) +
+		nestedListJSON(100) +
 		`,"v":{"int":2}}]}`
 
 	_, err := DecodeJSON([]byte(input))
@@ -67,13 +97,14 @@ func TestDecodeJSONMapPairRejectsUnknownFieldBeforeValueDecode(t *testing.T) {
 	}
 }
 
-// TestDecodeJSONNodeLimit verifies the JSON decoder enforces a node-count cap.
+// TestDecodeJSONNodeLimit verifies the JSON parser enforces a node-count cap
+// before it allocates a complete jsonValue tree for an unrecognized payload.
 func TestDecodeJSONNodeLimit(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a >1M-node document; skipped in -short mode")
 	}
 	var sb strings.Builder
-	sb.WriteString(`{"list":[`)
+	sb.WriteString(`{"unknown":[`)
 	n := MaxDecodeNodes + 10
 	for i := 0; i < n; i++ {
 		if i > 0 {
@@ -88,7 +119,11 @@ func TestDecodeJSONNodeLimit(t *testing.T) {
 		input            string
 		wantErrSubstring string
 	}{
-		{"beyond limit is rejected", sb.String(), "node"},
+		{
+			"parser rejects before building the full tree",
+			sb.String(),
+			"PlutusData JSON tree exceeds max node count",
+		},
 	}
 
 	for _, tt := range tests {
