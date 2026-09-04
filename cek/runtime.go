@@ -208,7 +208,8 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			),
 		}
 	}
-	return fn(m, b)
+	value, err := fn(m, b)
+	return value, normalizeBuiltinError(b.Func.String(), err)
 }
 
 func (m *Machine[T]) evalBuiltinAppReady(

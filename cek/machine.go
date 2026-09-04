@@ -1052,7 +1052,7 @@ func (m *Machine[T]) runContext(
 			dbTerm,
 		)
 		if err != nil {
-			return nil, err
+			return nil, normalizeEvalError(err)
 		}
 		result, ok := any(dbResult).(syn.Term[T])
 		if !ok {
@@ -1066,7 +1066,8 @@ func (m *Machine[T]) runContext(
 		}
 		return result, nil
 	}
-	return m.runStack(ctx, checkCancellation, term)
+	result, err := m.runStack(ctx, checkCancellation, term)
+	return result, normalizeEvalError(err)
 }
 
 // compute handles the Compute state of the CEK machine.
