@@ -301,12 +301,10 @@ type jsonParseState struct {
 const (
 	maxJSONParseNestingDepth = (MaxDecodeNestingDepth + 1) * 3
 
-	// A canonical detailed-schema Map pair occupies five jsonValue nodes (the
-	// pair object plus two scalar PlutusData objects), while it represents two
-	// PlutusData nodes. Keep the parser cap large enough to admit every
-	// semantically bounded canonical datum, but separate from the semantic
-	// cap because the syntax tree necessarily contains structural nodes too.
-	maxJSONParseNodes = MaxDecodeNodes * 5 / 2
+	// A canonical detailed-schema Map pair with constructor values occupies
+	// seven jsonValue nodes while representing two PlutusData nodes. Keep the
+	// parser cap above that worst-case structural multiplier.
+	maxJSONParseNodes = MaxDecodeNodes * 4
 )
 
 func (st *jsonParseState) enterValue() error {

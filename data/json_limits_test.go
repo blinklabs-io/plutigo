@@ -42,6 +42,19 @@ func wideFlatJSON(items int) string {
 	return sb.String()
 }
 
+func wideEmptyConstrListJSON(items int) string {
+	var sb strings.Builder
+	sb.WriteString(`{"list":[`)
+	for i := 0; i < items; i++ {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString(`{"constructor":0,"fields":[]}`)
+	}
+	sb.WriteString(`]}`)
+	return sb.String()
+}
+
 // TestDecodeJSONDepthLimit verifies the JSON PlutusData decoder enforces the
 // same nesting-depth limit as the CBOR decoder, rather than recursing
 // arbitrarily deep on untrusted input.
@@ -121,6 +134,16 @@ func TestDecodeJSONParserNodeAllowance(t *testing.T) {
 	_, err := DecodeJSON([]byte(wideFlatJSON(MaxDecodeNodes / 2)))
 	if err != nil {
 		t.Fatalf("DecodeJSON rejected a semantically bounded flat list: %v", err)
+	}
+}
+
+func TestDecodeJSONParserNodeAllowanceRejectsValidConstrList(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a ~1M-item document; skipped in -short mode")
+	}
+
+	if _, err := DecodeJSON([]byte(wideEmptyConstrListJSON(MaxDecodeNodes - 10))); err != nil {
+		t.Fatalf("DecodeJSON rejected a semantically bounded Constr list: %v", err)
 	}
 }
 
