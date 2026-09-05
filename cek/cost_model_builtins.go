@@ -25,6 +25,12 @@ func (b *BuiltinCosts) Clone() BuiltinCosts {
 		return ret
 	}
 	for i, costingFunc := range b {
+		// A nil entry stays nil: update already treats one as "no existing
+		// cost info for builtin", so cloning must not invent a zero-valued
+		// CostingFunc where the source had none.
+		if costingFunc == nil {
+			continue
+		}
 		ret[i] = costingFunc.clone()
 	}
 	return ret

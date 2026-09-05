@@ -191,11 +191,10 @@ func (x WithInteractionInXAndY) cloneArguments() Arguments {
 	return &c
 }
 
-// clone returns a CostingFunc sharing no mutable state with cf.
+// clone returns a CostingFunc sharing no mutable state with cf. cf must not be
+// nil; BuiltinCosts.Clone leaves a nil entry nil rather than calling this, so
+// cloning neither introduces a nil entry nor removes one.
 func (cf *CostingFunc[T]) clone() *CostingFunc[T] {
-	if cf == nil {
-		return nil
-	}
 	ret := &CostingFunc[T]{}
 	if any(cf.mem) != nil {
 		if cloned, ok := cf.mem.cloneArguments().(T); ok {
