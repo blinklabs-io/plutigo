@@ -287,6 +287,50 @@ func (st *jsonDecodeState) enterNode() error {
 	return nil
 }
 
+// jsonParseState bounds the jsonValue tree while it is being built. A
+// detailed-schema PlutusData value occupies at most three JSON nesting levels:
+// a data object, an enclosing array, and (for Maps) a key/value-pair object.
+// The additional value preserves the existing PlutusData-depth error for
+// one-level-over inputs; arbitrary JSON nesting still cannot grow the parser
+// stack beyond this bound.
+type jsonParseState struct {
+	depth int
+	nodes int
+}
+
+const (
+	maxJSONParseNestingDepth = (MaxDecodeNestingDepth + 1) * 3
+
+	// A canonical detailed-schema Map pair with constructor values occupies
+	// seven jsonValue nodes while representing two PlutusData nodes. Keep the
+	// parser cap above that worst-case structural multiplier.
+	maxJSONParseNodes = MaxDecodeNodes * 4
+)
+
+func (st *jsonParseState) enterValue() error {
+	if st.depth >= maxJSONParseNestingDepth {
+		return fmt.Errorf(
+			"PlutusData JSON tree nesting exceeds max depth %d",
+			maxJSONParseNestingDepth,
+		)
+	}
+	st.depth++
+
+	st.nodes++
+	if st.nodes > maxJSONParseNodes {
+		st.depth--
+		return fmt.Errorf(
+			"PlutusData JSON tree exceeds max node count %d",
+			maxJSONParseNodes,
+		)
+	}
+	return nil
+}
+
+func (st *jsonParseState) leaveValue() {
+	st.depth--
+}
+
 // jsonValueKind identifies the syntactic kind of a parsed JSON value.
 type jsonValueKind uint8
 
@@ -339,7 +383,7 @@ func unmarshalPlutusDataJSON(data json.RawMessage) (PlutusData, error) {
 func parsePlutusDataJSONTree(data []byte) (jsonValue, error) {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
-	root, err := parsePlutusDataJSONValue(dec, data)
+	root, err := parsePlutusDataJSONValue(dec, data, &jsonParseState{})
 	if err != nil {
 		return jsonValue{}, normalizeJSONStreamError(err)
 	}
@@ -352,7 +396,13 @@ func parsePlutusDataJSONTree(data []byte) (jsonValue, error) {
 func parsePlutusDataJSONValue(
 	dec *json.Decoder,
 	data []byte,
+	st *jsonParseState,
 ) (jsonValue, error) {
+	if err := st.enterValue(); err != nil {
+		return jsonValue{}, err
+	}
+	defer st.leaveValue()
+
 	start := jsonValueStart(data, dec.InputOffset())
 	tok, err := dec.Token()
 	if err != nil {
@@ -364,7 +414,7 @@ func parsePlutusDataJSONValue(
 		case '[':
 			var items []jsonValue
 			for dec.More() {
-				item, err := parsePlutusDataJSONValue(dec, data)
+				item, err := parsePlutusDataJSONValue(dec, data, st)
 				if err != nil {
 					return jsonValue{}, err
 				}
@@ -395,7 +445,7 @@ func parsePlutusDataJSONValue(
 						keyTok,
 					)
 				}
-				val, err := parsePlutusDataJSONValue(dec, data)
+				val, err := parsePlutusDataJSONValue(dec, data, st)
 				if err != nil {
 					return jsonValue{}, err
 				}
