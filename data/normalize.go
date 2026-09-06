@@ -3,10 +3,15 @@ package data
 import "math/big"
 
 // Normalize returns a deep copy of pd with every Constr, Map, and List node's
-// definite/indefinite-length CBOR array encoding reset to the package default
-// (see MarshalCBOR on each type: indefinite for non-empty, definite for
-// empty), discarding whatever encoding style the value originally carried
-// from Decode.
+// definite/indefinite-length CBOR encoding reset to the package default,
+// discarding whatever encoding style the value originally carried from
+// Decode.
+//
+// The default is per type, and Map is not like the other two: Constr and
+// List encode indefinite when non-empty and definite when empty, while Map
+// always encodes definite, matching Haskell's canonical CBOR. See MarshalCBOR
+// on each type. So normalizing a map decoded from indefinite-length bytes
+// moves it to definite, the opposite direction from the others.
 //
 // Decode preserves the original wire's definite/indefinite-length choice on
 // each node so that re-encoding a decoded value reproduces the original

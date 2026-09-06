@@ -29,37 +29,42 @@ func mustEncodeHex(t *testing.T, pd PlutusData) string {
 }
 
 // TestNormalizeResetsDefiniteLengthEncoding is the regression test for the
-// mainnet Plutus divergence. Decode preserves the wire's definite-length
-// array choice, so re-encoding a decoded value reproduces the original
-// definite-length bytes. cardano-ledger always rebuilds script-visible
-// values fresh, which is this package's default (indefinite for non-empty),
-// so a script calling serialiseData on pass-through decoded data observed
-// different bytes than the reference implementation and rejected canonical
+// mainnet Plutus divergence. Decode preserves whichever definite/indefinite
+// encoding each node carried on the wire, so re-encoding a decoded value
+// reproduces the original bytes. cardano-ledger always rebuilds
+// script-visible values fresh, i.e. at this package's default, so a script
+// calling serialiseData on pass-through decoded data observed different
+// bytes than the reference implementation and rejected canonical
 // transactions.
 //
-// Each case decodes definite-length input, asserts the round-trip really is
-// byte-identical to that definite input (proving the fidelity that causes
-// the bug, so the test cannot silently pass for the wrong reason), then
-// asserts Normalize re-encodes to the indefinite-length default. Without
-// Normalize the final assertion fails: the value still carries
-// useIndef=false from Decode.
+// Each case decodes wire bytes whose encoding differs from the default,
+// asserts the round-trip really is byte-identical to that input (proving the
+// fidelity that causes the bug, so the test cannot silently pass for the
+// wrong reason), then asserts Normalize re-encodes to the default. Without
+// Normalize the final assertion fails: the value still carries the wire's
+// useIndef from Decode.
+//
+// Note the direction is not the same for every type. Constr and List default
+// to indefinite when non-empty, so their rows go definite -> indefinite; Map
+// always defaults to definite, so its row goes indefinite -> definite. The
+// field is named wire rather than definite for that reason.
 func TestNormalizeResetsDefiniteLengthEncoding(t *testing.T) {
 	tests := []struct {
 		name       string
-		definite   string
+		wire       string
 		wantNormal string
 	}{
 		{
 			// Constr tag 0 (CBOR tag 121 = d879), one field: integer 1.
 			// 81 = definite array(1); 9f..ff = indefinite.
 			name:       "constr one field",
-			definite:   "d8798101",
+			wire:       "d8798101",
 			wantNormal: "d8799f01ff",
 		},
 		{
 			// 82 = definite array(2); 9f..ff = indefinite.
 			name:       "list two items",
-			definite:   "820102",
+			wire:       "820102",
 			wantNormal: "9f0102ff",
 		},
 		{
@@ -69,28 +74,28 @@ func TestNormalizeResetsDefiniteLengthEncoding(t *testing.T) {
 			// reverse: indefinite (bf..ff) on the wire must normalize
 			// back to definite (a1).
 			name:       "map one pair, indefinite on the wire",
-			definite:   "bf0102ff",
+			wire:       "bf0102ff",
 			wantNormal: "a10102",
 		},
 		{
 			// Definite list holding a definite constr: Normalize must
 			// recurse, not just reset the outermost node.
 			name:       "nested list of constr",
-			definite:   "81d8798101",
+			wire:       "81d8798101",
 			wantNormal: "9fd8799f01ffff",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			decoded := mustDecodeHex(t, tc.definite)
+			decoded := mustDecodeHex(t, tc.wire)
 
 			// Guard: if this stops holding, Decode no longer preserves
 			// wire encoding and the rest of this test proves nothing.
-			if got := mustEncodeHex(t, decoded); got != tc.definite {
+			if got := mustEncodeHex(t, decoded); got != tc.wire {
 				t.Fatalf(
 					"precondition failed: decode/encode round-trip = %s, want the original %s",
-					got, tc.definite,
+					got, tc.wire,
 				)
 			}
 
