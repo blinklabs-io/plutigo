@@ -72,6 +72,59 @@ func TestBuiltinCostsCloneDoesNotAliasSource(t *testing.T) {
 	}
 }
 
+// TestBuiltinCostsCloneDoesNotAliasNestedTwoArgumentModel covers the model
+// stored inside ConstantOrTwoArguments. A shallow copy of that nested model
+// would still let an update to the clone change the source.
+func TestBuiltinCostsCloneDoesNotAliasNestedTwoArgumentModel(t *testing.T) {
+	source, err := buildBuiltinCosts(lang.LanguageVersionV1, SemanticsVariantA)
+	if err != nil {
+		t.Fatalf("build source costs: %v", err)
+	}
+	cloned := source.Clone()
+
+	sourceModel, ok := source[builtin.DivideInteger].cpu.(*ConstAboveDiagonalModel)
+	if !ok {
+		t.Fatalf(
+			"divideInteger source cpu model is %T, want *ConstAboveDiagonalModel",
+			source[builtin.DivideInteger].cpu,
+		)
+	}
+	clonedModel, ok := cloned[builtin.DivideInteger].cpu.(*ConstAboveDiagonalModel)
+	if !ok {
+		t.Fatalf(
+			"divideInteger cloned cpu model is %T, want *ConstAboveDiagonalModel",
+			cloned[builtin.DivideInteger].cpu,
+		)
+	}
+	sourceNested, ok := sourceModel.model.(*MultipliedSizesModel)
+	if !ok {
+		t.Fatalf(
+			"divideInteger source nested model is %T, want *MultipliedSizesModel",
+			sourceModel.model,
+		)
+	}
+	clonedNested, ok := clonedModel.model.(*MultipliedSizesModel)
+	if !ok {
+		t.Fatalf(
+			"divideInteger cloned nested model is %T, want *MultipliedSizesModel",
+			clonedModel.model,
+		)
+	}
+	if sourceNested == clonedNested {
+		t.Fatal("clone shares the nested two-argument model with its source")
+	}
+
+	before := sourceNested.intercept
+	clonedNested.intercept++
+	if sourceNested.intercept != before {
+		t.Fatalf(
+			"updating the cloned nested model changed its source: intercept %d -> %d",
+			before,
+			sourceNested.intercept,
+		)
+	}
+}
+
 // TestBuildBuiltinCostsAreIndependent covers the production entry point rather
 // than Clone directly: two cost models built from the same defaults must not
 // see each other's protocol parameters.
@@ -127,16 +180,16 @@ func TestDefaultBuiltinCostsSurviveCostModelConstruction(t *testing.T) {
 }
 
 // TestNewEvalContextIsRaceFree drives the exported entry point Dingo calls per
-// script evaluation. Without independent cost models this reports a data race
-// under -race and returns differing costs without it.
+// script evaluation. Each worker evaluates the same builtin operation so the
+// test covers concurrent cost-model use rather than only reading a model field.
 func TestNewEvalContextIsRaceFree(t *testing.T) {
 	params := make([]int64, len(lang.GetParamNamesForVersion(lang.LanguageVersionV3)))
 	for i := range params {
 		params[i] = int64(i + 1)
 	}
 	var wg sync.WaitGroup
-	intercepts := make([]int64, 16)
-	for i := range intercepts {
+	budgets := make([]ExBudget, 16)
+	for i := range budgets {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -150,17 +203,33 @@ func TestNewEvalContextIsRaceFree(t *testing.T) {
 				return
 			}
 			costingFunc := ctx.CostModel.builtinCosts[builtin.AddInteger]
-			if model, ok := costingFunc.cpu.(*MaxSizeModel); ok {
-				intercepts[idx] = model.intercept
+			if costingFunc == nil {
+				t.Errorf("AddInteger has no costing function")
+				return
 			}
+			mem, ok := costingFunc.mem.(TwoArgument)
+			if !ok {
+				t.Errorf("AddInteger memory model is %T, want TwoArgument", costingFunc.mem)
+				return
+			}
+			cpu, ok := costingFunc.cpu.(TwoArgument)
+			if !ok {
+				t.Errorf("AddInteger cpu model is %T, want TwoArgument", costingFunc.cpu)
+				return
+			}
+			budgets[idx] = CostPair(
+				CostingFunc[TwoArgument]{mem: mem, cpu: cpu},
+				func() ExMem { return 3 },
+				func() ExMem { return 5 },
+			)
 		}(i)
 	}
 	wg.Wait()
-	for i, got := range intercepts {
-		if got != intercepts[0] {
+	for i, got := range budgets {
+		if got != budgets[0] {
 			t.Errorf(
-				"concurrent NewEvalContext produced differing costs: [0]=%d [%d]=%d",
-				intercepts[0],
+				"concurrent AddInteger evaluation produced differing budgets: [0]=%+v [%d]=%+v",
+				budgets[0],
 				i,
 				got,
 			)

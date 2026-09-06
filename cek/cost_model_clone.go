@@ -14,6 +14,8 @@
 
 package cek
 
+import "fmt"
+
 // Deep copying for cost models.
 //
 // BuiltinCosts is an array of *CostingFunc, and each CostingFunc holds its cpu
@@ -38,7 +40,7 @@ func cloneTwoArgument(model TwoArgument) TwoArgument {
 	}
 	cloned, ok := model.cloneArguments().(TwoArgument)
 	if !ok {
-		return model
+		panic(fmt.Sprintf("cost model clone returned %T, want TwoArgument", model))
 	}
 	return cloned
 }
@@ -197,17 +199,19 @@ func (x WithInteractionInXAndY) cloneArguments() Arguments {
 func (cf *CostingFunc[T]) clone() *CostingFunc[T] {
 	ret := &CostingFunc[T]{}
 	if any(cf.mem) != nil {
-		if cloned, ok := cf.mem.cloneArguments().(T); ok {
+		clonedArgs := cf.mem.cloneArguments()
+		if cloned, ok := clonedArgs.(T); ok {
 			ret.mem = cloned
 		} else {
-			ret.mem = cf.mem
+			panic(fmt.Sprintf("cost model clone returned incompatible type %T", clonedArgs))
 		}
 	}
 	if any(cf.cpu) != nil {
-		if cloned, ok := cf.cpu.cloneArguments().(T); ok {
+		clonedArgs := cf.cpu.cloneArguments()
+		if cloned, ok := clonedArgs.(T); ok {
 			ret.cpu = cloned
 		} else {
-			ret.cpu = cf.cpu
+			panic(fmt.Sprintf("cost model clone returned incompatible type %T", clonedArgs))
 		}
 	}
 	return ret
