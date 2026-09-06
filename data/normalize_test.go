@@ -1,0 +1,164 @@
+package data
+
+import (
+	"encoding/hex"
+	"math/big"
+	"testing"
+)
+
+func mustDecodeHex(t *testing.T, s string) PlutusData {
+	t.Helper()
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		t.Fatalf("bad fixture hex %q: %v", s, err)
+	}
+	pd, err := Decode(b)
+	if err != nil {
+		t.Fatalf("Decode(%s): %v", s, err)
+	}
+	return pd
+}
+
+func mustEncodeHex(t *testing.T, pd PlutusData) string {
+	t.Helper()
+	b, err := Encode(pd)
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	return hex.EncodeToString(b)
+}
+
+// TestNormalizeResetsDefiniteLengthEncoding is the regression test for the
+// mainnet Plutus divergence. Decode preserves the wire's definite-length
+// array choice, so re-encoding a decoded value reproduces the original
+// definite-length bytes. cardano-ledger always rebuilds script-visible
+// values fresh, which is this package's default (indefinite for non-empty),
+// so a script calling serialiseData on pass-through decoded data observed
+// different bytes than the reference implementation and rejected canonical
+// transactions.
+//
+// Each case decodes definite-length input, asserts the round-trip really is
+// byte-identical to that definite input (proving the fidelity that causes
+// the bug, so the test cannot silently pass for the wrong reason), then
+// asserts Normalize re-encodes to the indefinite-length default. Without
+// Normalize the final assertion fails: the value still carries
+// useIndef=false from Decode.
+func TestNormalizeResetsDefiniteLengthEncoding(t *testing.T) {
+	tests := []struct {
+		name       string
+		definite   string
+		wantNormal string
+	}{
+		{
+			// Constr tag 0 (CBOR tag 121 = d879), one field: integer 1.
+			// 81 = definite array(1); 9f..ff = indefinite.
+			name:       "constr one field",
+			definite:   "d8798101",
+			wantNormal: "d8799f01ff",
+		},
+		{
+			// 82 = definite array(2); 9f..ff = indefinite.
+			name:       "list two items",
+			definite:   "820102",
+			wantNormal: "9f0102ff",
+		},
+		{
+			// Map is the one container whose package default is
+			// DEFINITE ("to match Haskell's canonical CBOR", see
+			// Map.MarshalCBOR), so the meaningful direction here is the
+			// reverse: indefinite (bf..ff) on the wire must normalize
+			// back to definite (a1).
+			name:       "map one pair, indefinite on the wire",
+			definite:   "bf0102ff",
+			wantNormal: "a10102",
+		},
+		{
+			// Definite list holding a definite constr: Normalize must
+			// recurse, not just reset the outermost node.
+			name:       "nested list of constr",
+			definite:   "81d8798101",
+			wantNormal: "9fd8799f01ffff",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			decoded := mustDecodeHex(t, tc.definite)
+
+			// Guard: if this stops holding, Decode no longer preserves
+			// wire encoding and the rest of this test proves nothing.
+			if got := mustEncodeHex(t, decoded); got != tc.definite {
+				t.Fatalf(
+					"precondition failed: decode/encode round-trip = %s, want the original %s",
+					got, tc.definite,
+				)
+			}
+
+			if got := mustEncodeHex(t, Normalize(decoded)); got != tc.wantNormal {
+				t.Errorf("Normalize round-trip = %s, want %s", got, tc.wantNormal)
+			}
+		})
+	}
+}
+
+// TestNormalizeEmptyStaysDefinite pins the other half of the package
+// default: empty containers encode definite-length, so Normalize must not
+// turn them indefinite.
+func TestNormalizeEmptyStaysDefinite(t *testing.T) {
+	tests := []struct {
+		name  string
+		input PlutusData
+		want  string
+	}{
+		{"empty constr", &Constr{Tag: big.NewInt(0)}, "d87980"},
+		{"empty list", &List{}, "80"},
+		{"empty map", &Map{}, "a0"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := mustEncodeHex(t, Normalize(tc.input)); got != tc.want {
+				t.Errorf("Normalize = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestNormalizeDoesNotMutateInput guards the deep copy. The callers added
+// alongside Normalize hand it values that are still referenced elsewhere
+// (witness datums reused across redeemers, for example), so mutating in
+// place would corrupt the script-data hash computed from the original
+// preserved bytes.
+func TestNormalizeDoesNotMutateInput(t *testing.T) {
+	const definite = "81d8798101"
+
+	decoded := mustDecodeHex(t, definite)
+	normalized := Normalize(decoded)
+
+	if got := mustEncodeHex(t, decoded); got != definite {
+		t.Errorf("input mutated by Normalize: re-encodes to %s, want %s", got, definite)
+	}
+	if normalized == decoded {
+		t.Error("Normalize returned the same pointer; it must return a copy")
+	}
+}
+
+// TestNormalizeLeafPassthrough documents that Integer and ByteString carry
+// no encoding-style state, so Normalize returns them untouched.
+func TestNormalizeLeafPassthrough(t *testing.T) {
+	tests := []struct {
+		name  string
+		input PlutusData
+	}{
+		{"integer", &Integer{Inner: big.NewInt(42)}},
+		{"bytestring", &ByteString{Inner: []byte{0xde, 0xad}}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := Normalize(tc.input); got != tc.input {
+				t.Errorf("Normalize(%s) returned a copy; leaves should pass through", tc.name)
+			}
+		})
+	}
+}
