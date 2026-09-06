@@ -200,3 +200,114 @@ func TestNormalizeLeafPassthrough(t *testing.T) {
 		})
 	}
 }
+
+// TestNormalizeValueFormContainers covers containers held by value rather
+// than by pointer. The value forms satisfy PlutusData -- isPlutusData,
+// Clone, Equal and String all take value receivers -- so a caller can put
+// one in a PlutusData, even though nothing in this package produces one.
+// Before value forms were handled, Normalize fell through to the default
+// case and returned such a node unchanged: the wire encoding survived,
+// silently, with no error. Each case builds the value form carrying a
+// non-default useIndef and asserts Normalize both resets the encoding and
+// converts to the pointer form, as Clone does.
+func TestNormalizeValueFormContainers(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      PlutusData
+		wantNormal string
+	}{
+		{
+			// Constr defaults to indefinite when non-empty, so a value
+			// form pinned definite must come back indefinite.
+			name: "constr",
+			input: Constr{
+				Tag:      big.NewInt(0),
+				Fields:   []PlutusData{&Integer{Inner: big.NewInt(1)}},
+				useIndef: useIndefPtr(false),
+			},
+			wantNormal: "d8799f01ff",
+		},
+		{
+			// List defaults to indefinite when non-empty.
+			name: "list",
+			input: List{
+				Items: []PlutusData{
+					&Integer{Inner: big.NewInt(1)},
+					&Integer{Inner: big.NewInt(2)},
+				},
+				useIndef: useIndefPtr(false),
+			},
+			wantNormal: "9f0102ff",
+		},
+		{
+			// Map is the exception: it always defaults to definite, so a
+			// value form pinned indefinite must come back definite.
+			name: "map",
+			input: Map{
+				Pairs: [][2]PlutusData{{
+					&Integer{Inner: big.NewInt(1)},
+					&Integer{Inner: big.NewInt(2)},
+				}},
+				useIndef: useIndefPtr(true),
+			},
+			wantNormal: "a10102",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			normalized := Normalize(tc.input)
+			if got := mustEncodeHex(t, normalized); got != tc.wantNormal {
+				t.Errorf(
+					"Normalize(value-form %s) = %s, want %s",
+					tc.name, got, tc.wantNormal,
+				)
+			}
+			switch normalized.(type) {
+			case *Constr, *List, *Map:
+			default:
+				t.Errorf(
+					"Normalize(value-form %s) returned %T, want a pointer form",
+					tc.name, normalized,
+				)
+			}
+		})
+	}
+}
+
+// TestNormalizeValueFormDoesNotAliasInput checks that normalizing a value
+// form does not reach back into the caller's node. Normalize copies the
+// value into a local before taking its address, but the copy still shares
+// the Fields backing array, so the deep copy in the pointer branch is what
+// keeps the input intact.
+func TestNormalizeValueFormDoesNotAliasInput(t *testing.T) {
+	field := &Integer{Inner: big.NewInt(1)}
+	input := Constr{
+		Tag:      big.NewInt(2),
+		Fields:   []PlutusData{field},
+		useIndef: useIndefPtr(false),
+	}
+
+	normalized := Normalize(input)
+
+	if got := mustEncodeHex(t, input); got != "d87b8101" {
+		t.Errorf("input re-encoded as %s after Normalize, want d87b8101", got)
+	}
+	if input.Fields[0] != field {
+		t.Error("Normalize replaced a field in the caller's value")
+	}
+	if input.useIndef == nil || *input.useIndef {
+		t.Error("Normalize cleared useIndef on the caller's value")
+	}
+
+	c, ok := normalized.(*Constr)
+	if !ok {
+		t.Fatalf("Normalize returned %T, want *Constr", normalized)
+	}
+	if c.Tag == input.Tag {
+		t.Error("Normalize aliased the Tag pointer instead of copying it")
+	}
+	if c.Tag.Cmp(input.Tag) != 0 {
+		t.Errorf("Tag = %v, want %v", c.Tag, input.Tag)
+	}
+}

@@ -31,7 +31,9 @@ import "math/big"
 // Every container node is rebuilt, so resetting the encoding never writes
 // through to the input. Integer and ByteString leaves are returned as-is:
 // they hold no encoding state, and this package treats their contents as
-// read-only.
+// read-only. Container nodes held in their value form rather than as a
+// pointer are normalized too, and come back as pointers, the same
+// conversion Clone makes.
 func Normalize(pd PlutusData) PlutusData {
 	switch v := pd.(type) {
 	case *Constr:
@@ -59,6 +61,22 @@ func Normalize(pd PlutusData) PlutusData {
 			items[i] = Normalize(item)
 		}
 		return &List{Items: items}
+	// The value forms satisfy PlutusData as well: isPlutusData, Clone, Equal
+	// and String all take value receivers. Nothing in this package produces
+	// one -- Decode and Clone both yield pointers, and Equal only ever
+	// asserts to the pointer forms -- but a caller can construct one, and
+	// falling through to the default case would hand it back with its
+	// original encoding intact and no error. A silently unnormalized node is
+	// the one result this function must never return, so delegate to the
+	// pointer branches above. v is already a copy, so taking its address
+	// aliases nothing the caller holds, and that branch deep-copies from
+	// there. Like Clone, this converts a value form to a pointer form.
+	case Constr:
+		return Normalize(&v)
+	case Map:
+		return Normalize(&v)
+	case List:
+		return Normalize(&v)
 	default:
 		// Integer and ByteString carry no encoding-style state.
 		return pd
