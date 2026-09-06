@@ -1,5 +1,7 @@
 package data
 
+import "math/big"
+
 // Normalize returns a deep copy of pd with every Constr, Map, and List node's
 // definite/indefinite-length CBOR array encoding reset to the package default
 // (see MarshalCBOR on each type: indefinite for non-empty, definite for
@@ -20,6 +22,11 @@ package data
 // compares serialised bytes (via SerialiseData) sees that difference.
 // Callers building script-visible values from decoded data (redeemer data,
 // inline or witness datums) should call Normalize first.
+//
+// Every container node is rebuilt, so resetting the encoding never writes
+// through to the input. Integer and ByteString leaves are returned as-is:
+// they hold no encoding state, and this package treats their contents as
+// read-only.
 func Normalize(pd PlutusData) PlutusData {
 	switch v := pd.(type) {
 	case *Constr:
@@ -27,7 +34,14 @@ func Normalize(pd PlutusData) PlutusData {
 		for i, f := range v.Fields {
 			fields[i] = Normalize(f)
 		}
-		return &Constr{Tag: v.Tag, Fields: fields}
+		// Copy the tag rather than aliasing it: big.Int is mutable, so
+		// sharing the pointer would let a write through one value reach
+		// the other. A nil tag stays nil; MarshalCBOR treats it as zero.
+		tag := v.Tag
+		if tag != nil {
+			tag = new(big.Int).Set(tag)
+		}
+		return &Constr{Tag: tag, Fields: fields}
 	case *Map:
 		pairs := make([][2]PlutusData, len(v.Pairs))
 		for i, p := range v.Pairs {

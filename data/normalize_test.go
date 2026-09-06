@@ -143,6 +143,39 @@ func TestNormalizeDoesNotMutateInput(t *testing.T) {
 	}
 }
 
+// TestNormalizeCopiesConstrTag guards the one mutable field a container
+// node owns. big.Int is mutable, so aliasing the tag would let a write
+// through the normalized value reach the original.
+func TestNormalizeCopiesConstrTag(t *testing.T) {
+	original := &Constr{Tag: big.NewInt(3), Fields: []PlutusData{}}
+
+	normalized, ok := Normalize(original).(*Constr)
+	if !ok {
+		t.Fatalf("Normalize returned %T, want *Constr", Normalize(original))
+	}
+	if normalized.Tag == original.Tag {
+		t.Fatal("normalized Constr aliases the original's Tag pointer")
+	}
+
+	normalized.Tag.SetInt64(9)
+	if original.Tag.Int64() != 3 {
+		t.Errorf("mutating the normalized tag changed the original to %d, want 3", original.Tag.Int64())
+	}
+}
+
+// TestNormalizeNilConstrTagStaysNil pins the nil case: MarshalCBOR treats a
+// nil tag as zero, so Normalize must not turn nil into a non-nil zero and
+// must not panic trying to copy it.
+func TestNormalizeNilConstrTagStaysNil(t *testing.T) {
+	normalized, ok := Normalize(&Constr{}).(*Constr)
+	if !ok {
+		t.Fatal("Normalize did not return a *Constr")
+	}
+	if normalized.Tag != nil {
+		t.Errorf("nil Tag became %v, want nil", normalized.Tag)
+	}
+}
+
 // TestNormalizeLeafPassthrough documents that Integer and ByteString carry
 // no encoding-style state, so Normalize returns them untouched.
 func TestNormalizeLeafPassthrough(t *testing.T) {
