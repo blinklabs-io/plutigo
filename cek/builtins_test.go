@@ -4669,13 +4669,13 @@ func TestBLSMultiScalarMulValidatesUnpairedScalar(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			evaluate := func(secondScalar *big.Int) (Value[syn.DeBruijn], error) {
+			evaluate := func(secondScalar syn.IConstant) (Value[syn.DeBruijn], error) {
 				b := newTestBuiltin(tt.builtinFunc)
 				b = b.ApplyArg(&Constant{&syn.ProtoList{
 					LTyp: &syn.TInteger{},
 					List: []syn.IConstant{
 						&syn.Integer{Inner: big.NewInt(1)},
-						&syn.Integer{Inner: secondScalar},
+						secondScalar,
 					},
 				}})
 				b = b.ApplyArg(&Constant{&syn.ProtoList{
@@ -4685,13 +4685,13 @@ func TestBLSMultiScalarMulValidatesUnpairedScalar(t *testing.T) {
 				return evalBuiltinWithError(t, newTestMachineV4(), b)
 			}
 
-			val, err := evaluate(big.NewInt(2))
+			val, err := evaluate(&syn.Integer{Inner: big.NewInt(2)})
 			if err != nil {
 				t.Fatalf("valid length mismatch returned error: %v", err)
 			}
 			tt.checkResult(t, val)
 
-			_, err = evaluate(limit)
+			_, err = evaluate(&syn.Integer{Inner: limit})
 			var builtinErr *BuiltinError
 			if !errors.As(err, &builtinErr) {
 				t.Fatalf("expected BuiltinError for unpaired out-of-range scalar, got %v", err)
@@ -4703,6 +4703,21 @@ func TestBLSMultiScalarMulValidatesUnpairedScalar(t *testing.T) {
 				t.Fatalf("expected builtin %q, got %q", tt.builtinName, builtinErr.Builtin)
 			}
 			if builtinErr.Message != "scalar is outside the signed 4096-bit range" {
+				t.Fatalf("unexpected error message: %q", builtinErr.Message)
+			}
+
+			_, err = evaluate(&syn.Integer{})
+			builtinErr = nil
+			if !errors.As(err, &builtinErr) {
+				t.Fatalf("expected BuiltinError for unpaired malformed scalar, got %v", err)
+			}
+			if builtinErr.Code != ErrCodeInvalidArgument {
+				t.Fatalf("expected ErrCodeInvalidArgument, got %d", builtinErr.Code)
+			}
+			if builtinErr.Builtin != tt.builtinName {
+				t.Fatalf("expected builtin %q, got %q", tt.builtinName, builtinErr.Builtin)
+			}
+			if builtinErr.Message != "expected integer list" {
 				t.Fatalf("unexpected error message: %q", builtinErr.Message)
 			}
 		})

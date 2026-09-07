@@ -57,7 +57,7 @@ func validateBLSMSMScalars(
 ) error {
 	for _, scalar := range scalars {
 		integer, ok := scalar.(*syn.Integer)
-		if !ok {
+		if !ok || integer == nil || integer.Inner == nil {
 			return &BuiltinError{
 				Code:    ErrCodeInvalidArgument,
 				Builtin: builtinName,
