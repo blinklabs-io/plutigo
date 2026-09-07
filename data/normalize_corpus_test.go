@@ -3,8 +3,10 @@ package data
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -139,8 +141,13 @@ func TestNormalizeIsIdentityOnReferenceEncodedArguments(t *testing.T) {
 // evaluator boundary.
 //
 // The ScriptContext is the last argument in every case: [datum, redeemer,
-// context] for a spend, [redeemer, context] for mint and reward, and
-// [context] alone for PlutusV3.
+// context] for a PlutusV1/V2 spend, [redeemer, context] for other V1/V2
+// purposes, and [context] alone for PlutusV3. That position is verified
+// per case rather than assumed. A case with an unexpected argument count
+// would otherwise slide the check onto a submitter-supplied datum or
+// redeemer -- values a submitter is free to encode canonically -- and the
+// test would report having verified node-constructed contexts while
+// actually proving the strong claim on the wrong data.
 func TestNormalizeIsIdentityOnNodeConstructedScriptContexts(t *testing.T) {
 	buf, err := os.ReadFile(filepath.Clean(corpusPath))
 	if err != nil {
@@ -151,10 +158,25 @@ func TestNormalizeIsIdentityOnNodeConstructedScriptContexts(t *testing.T) {
 		t.Fatalf("parse corpus: %v", err)
 	}
 
-	checked := 0
+	// decoded counts contexts that reached the comparison, identity counts
+	// the ones that matched. Kept separate so the vacuity guard can tell
+	// "nothing decoded" apart from "everything failed the check" -- the
+	// latter being precisely the failure this test exists to report.
+	decoded := 0
+	identity := 0
 	for _, tc := range corpus.Cases {
-		if len(tc.ArgumentsHex) == 0 {
-			t.Errorf("%s: case has no arguments", tc.ID)
+		wantArgs, err := scriptContextArgCount(tc.ID, tc.Language)
+		if err != nil {
+			t.Errorf("%s: %v", tc.ID, err)
+			continue
+		}
+		if len(tc.ArgumentsHex) != wantArgs {
+			t.Errorf(
+				"%s (%s): expected %d arguments, got %d;"+
+					" the last argument may not be the ScriptContext,"+
+					" so this case is not safe to check",
+				tc.ID, tc.Language, wantArgs, len(tc.ArgumentsHex),
+			)
 			continue
 		}
 		ctxHex := tc.ArgumentsHex[len(tc.ArgumentsHex)-1]
@@ -167,6 +189,18 @@ func TestNormalizeIsIdentityOnNodeConstructedScriptContexts(t *testing.T) {
 			t.Errorf("%s: ScriptContext did not decode: %v", tc.ID, err)
 			continue
 		}
+		// Every ScriptContext is a Constr in all Plutus versions. A bare
+		// leaf here would mean the position check above let something
+		// through that is not a context at all.
+		if _, ok := pd.(*Constr); !ok {
+			t.Errorf(
+				"%s (%s): last argument decoded as %T, not a Constr;"+
+					" it is not a ScriptContext",
+				tc.ID, tc.Language, pd,
+			)
+			continue
+		}
+		decoded++
 		got, err := Encode(Normalize(pd))
 		if err != nil {
 			t.Fatalf("%s: encode normalized context: %v", tc.ID, err)
@@ -179,11 +213,44 @@ func TestNormalizeIsIdentityOnNodeConstructedScriptContexts(t *testing.T) {
 			)
 			continue
 		}
-		checked++
+		identity++
 	}
 
-	if checked == 0 {
-		t.Fatal("no ScriptContext was verified; the check proved nothing")
+	if decoded == 0 {
+		t.Fatal("no ScriptContext decoded; the check proved nothing")
 	}
-	t.Logf("Normalize is byte-identity on %d node-constructed ScriptContexts", checked)
+	t.Logf(
+		"Normalize is byte-identity on %d of %d node-constructed ScriptContexts",
+		identity, decoded,
+	)
+}
+
+// scriptContextArgCount returns how many arguments a case must have for
+// its last one to be the ScriptContext. PlutusV3 unified the arguments
+// into a single ScriptContext value; before that a spend script also
+// received its datum, and every other purpose received only the redeemer
+// alongside the context.
+//
+// The purpose is the part of the corpus case ID between "#" and ":", as
+// in "<txid>#spend:1".
+func scriptContextArgCount(id, language string) (int, error) {
+	if language == "PlutusV3" {
+		return 1, nil
+	}
+	_, rest, ok := strings.Cut(id, "#")
+	if !ok {
+		return 0, fmt.Errorf("case ID %q has no purpose suffix", id)
+	}
+	purpose, _, ok := strings.Cut(rest, ":")
+	if !ok {
+		return 0, fmt.Errorf("case ID %q has no purpose index", id)
+	}
+	switch purpose {
+	case "spend":
+		return 3, nil
+	case "mint", "reward", "cert", "vote", "propose":
+		return 2, nil
+	default:
+		return 0, fmt.Errorf("unrecognized script purpose %q", purpose)
+	}
 }
