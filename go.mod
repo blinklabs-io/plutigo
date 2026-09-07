@@ -1,8 +1,6 @@
 module github.com/blinklabs-io/plutigo
 
-go 1.25.7
-
-toolchain go1.25.8
+go 1.26.0
 
 require (
 	github.com/btcsuite/btcd/btcec/v2 v2.5.0
@@ -11,7 +9,7 @@ require (
 	github.com/consensys/gnark-crypto v0.21.0
 	github.com/fxamacker/cbor/v2 v2.9.3
 	github.com/minio/sha256-simd v1.0.1
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 )
 
 require (
