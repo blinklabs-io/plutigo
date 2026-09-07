@@ -69,7 +69,15 @@ func TestNormalizeIsIdentityOnReferenceEncodedArguments(t *testing.T) {
 		len(corpus.Cases),
 	)
 
-	checked := 0
+	// decoded counts arguments that reached the comparison at all, and is
+	// what proves the oracle is non-vacuous. identity counts the ones that
+	// round-tripped unchanged. They must be tracked separately: if every
+	// argument decoded but every comparison failed, a single counter would
+	// still read zero and the vacuity guard below would report that nothing
+	// decoded -- false, and it would bury the real failure this test exists
+	// to surface.
+	decoded := 0
+	identity := 0
 	for _, tc := range corpus.Cases {
 		for i, argHex := range tc.ArgumentsHex {
 			raw, err := hex.DecodeString(argHex)
@@ -79,12 +87,12 @@ func TestNormalizeIsIdentityOnReferenceEncodedArguments(t *testing.T) {
 			pd, err := Decode(raw)
 			if err != nil {
 				// Not every script argument is required to be
-				// PlutusData this package can decode; skip rather
-				// than fail, but keep counting what was checked so a
-				// corpus that stopped decoding entirely cannot make
-				// this test silently vacuous.
+				// PlutusData this package can decode; skip rather than
+				// fail. The vacuity guard below catches a corpus that
+				// stopped decoding entirely.
 				continue
 			}
+			decoded++
 			got, err := Encode(Normalize(pd))
 			if err != nil {
 				t.Fatalf("%s arg %d: encode normalized: %v", tc.ID, i, err)
@@ -98,15 +106,18 @@ func TestNormalizeIsIdentityOnReferenceEncodedArguments(t *testing.T) {
 				)
 				continue
 			}
-			checked++
+			identity++
 		}
 	}
 
-	if checked == 0 {
+	if decoded == 0 {
 		t.Fatal(
 			"no corpus argument decoded as PlutusData;" +
 				" the oracle proved nothing",
 		)
 	}
-	t.Logf("Normalize is byte-identity on %d reference-encoded arguments", checked)
+	t.Logf(
+		"Normalize is byte-identity on %d of %d reference-encoded arguments",
+		identity, decoded,
+	)
 }
