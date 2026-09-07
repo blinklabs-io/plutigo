@@ -15,11 +15,13 @@
 package cek
 
 import (
+	"math/big"
 	"sync"
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/lang"
+	"github.com/blinklabs-io/plutigo/syn"
 )
 
 // addIntegerCpuIntercept reads the one cost value the tests below drive, so a
@@ -188,6 +190,7 @@ func TestNewEvalContextIsRaceFree(t *testing.T) {
 		params[i] = int64(i + 1)
 	}
 	var wg sync.WaitGroup
+	results := make([]string, 16)
 	budgets := make([]ExBudget, 16)
 	for i := range budgets {
 		wg.Add(1)
@@ -202,36 +205,37 @@ func TestNewEvalContextIsRaceFree(t *testing.T) {
 				t.Errorf("NewEvalContext: %v", err)
 				return
 			}
-			costingFunc := ctx.CostModel.builtinCosts[builtin.AddInteger]
-			if costingFunc == nil {
-				t.Errorf("AddInteger has no costing function")
-				return
-			}
-			mem, ok := costingFunc.mem.(TwoArgument)
-			if !ok {
-				t.Errorf("AddInteger memory model is %T, want TwoArgument", costingFunc.mem)
-				return
-			}
-			cpu, ok := costingFunc.cpu.(TwoArgument)
-			if !ok {
-				t.Errorf("AddInteger cpu model is %T, want TwoArgument", costingFunc.cpu)
-				return
-			}
-			budgets[idx] = CostPair(
-				CostingFunc[TwoArgument]{mem: mem, cpu: cpu},
-				func() ExMem { return 3 },
-				func() ExMem { return 5 },
+			machine := NewMachine[syn.DeBruijn](
+				lang.LanguageVersionV3,
+				0,
+				ctx,
 			)
+			builtinValue := (&Builtin[syn.DeBruijn]{
+				Func: builtin.AddInteger,
+			}).ApplyArg(&Constant{
+				Constant: &syn.Integer{Inner: big.NewInt(17)},
+			}).ApplyArg(&Constant{
+				Constant: &syn.Integer{Inner: big.NewInt(25)},
+			})
+			result, err := machine.evalBuiltinApp(builtinValue)
+			if err != nil {
+				t.Errorf("evaluate AddInteger: %v", err)
+				return
+			}
+			results[idx] = result.String()
+			budgets[idx] = machine.ExBudget
 		}(i)
 	}
 	wg.Wait()
-	for i, got := range budgets {
-		if got != budgets[0] {
+	for i := range budgets {
+		if results[i] != results[0] || budgets[i] != budgets[0] {
 			t.Errorf(
-				"concurrent AddInteger evaluation produced differing budgets: [0]=%+v [%d]=%+v",
+				"concurrent AddInteger evaluation produced differing results or budgets: [0]=%s/%+v [%d]=%s/%+v",
+				results[0],
 				budgets[0],
 				i,
-				got,
+				results[i],
+				budgets[i],
 			)
 		}
 	}
