@@ -51,6 +51,30 @@ func validBLSMSMScalar(scalar *big.Int) bool {
 	return scalar.Cmp(blsMSMScalarLimit) < 0
 }
 
+func validateBLSMSMScalars(
+	scalars []syn.IConstant,
+	builtinName string,
+) error {
+	for _, scalar := range scalars {
+		integer, ok := scalar.(*syn.Integer)
+		if !ok {
+			return &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: builtinName,
+				Message: "expected integer list",
+			}
+		}
+		if !validBLSMSMScalar(integer.Inner) {
+			return &BuiltinError{
+				Code:    ErrCodeInvalidArgument,
+				Builtin: builtinName,
+				Message: "scalar is outside the signed 4096-bit range",
+			}
+		}
+	}
+	return nil
+}
+
 const (
 	ed25519VerifyCacheLimit  = 4096
 	ed25519VerifyMaxCacheMsg = 64
@@ -2681,6 +2705,12 @@ func bls12381G1MultiScalarMul[T syn.Eval](
 	if err != nil {
 		return nil, err
 	}
+	if err := validateBLSMSMScalars(
+		ints.List,
+		"bls12_381_G1_multiScalarMul",
+	); err != nil {
+		return nil, err
+	}
 
 	// Compute multi-scalar multiplication: sum_i (n_i * p_i)
 	res := new(bls.G1Jac)
@@ -2694,13 +2724,6 @@ func bls12381G1MultiScalarMul[T syn.Eval](
 				Code:    ErrCodeInvalidArgument,
 				Builtin: "bls12_381_G1_multiScalarMul",
 				Message: "expected integer list",
-			}
-		}
-		if !validBLSMSMScalar(ni.Inner) {
-			return nil, &BuiltinError{
-				Code:    ErrCodeInvalidArgument,
-				Builtin: "bls12_381_G1_multiScalarMul",
-				Message: "scalar is outside the signed 4096-bit range",
 			}
 		}
 		pi, ok := elems.List[i].(*syn.Bls12_381G1Element)
@@ -2747,6 +2770,12 @@ func bls12381G2MultiScalarMul[T syn.Eval](
 	if err != nil {
 		return nil, err
 	}
+	if err := validateBLSMSMScalars(
+		ints.List,
+		"bls12_381_G2_multiScalarMul",
+	); err != nil {
+		return nil, err
+	}
 
 	// Compute multi-scalar multiplication: sum_i (n_i * p_i)
 	res := new(bls.G2Jac)
@@ -2760,13 +2789,6 @@ func bls12381G2MultiScalarMul[T syn.Eval](
 				Code:    ErrCodeInvalidArgument,
 				Builtin: "bls12_381_G2_multiScalarMul",
 				Message: "expected integer list",
-			}
-		}
-		if !validBLSMSMScalar(ni.Inner) {
-			return nil, &BuiltinError{
-				Code:    ErrCodeInvalidArgument,
-				Builtin: "bls12_381_G2_multiScalarMul",
-				Message: "scalar is outside the signed 4096-bit range",
 			}
 		}
 		pi, ok := elems.List[i].(*syn.Bls12_381G2Element)
