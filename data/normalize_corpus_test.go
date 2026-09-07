@@ -27,28 +27,27 @@ type corpusFile struct {
 	} `json:"cases"`
 }
 
-// TestNormalizeIsIdentityOnReferenceEncodedArguments is the empirical proof
-// that this package's default encoding is the one cardano-ledger produces,
-// which is the entire premise Normalize rests on.
+// TestNormalizeIsIdentityOnReferenceEncodedArguments checks this package's
+// default encoding against every script argument cardano-node passed to a
+// real mainnet evaluation, as captured in replay/testdata/mainnet.json.
 //
-// The arguments in replay/testdata/mainnet.json were captured from
-// cardano-node (via Ogmios) for real mainnet script evaluations. That
-// matters because Haskell's Data type carries no definite/indefinite
-// fidelity of its own -- it is a plain algebraic data type -- so anything
-// the node emits for a Data value is necessarily its canonical encoding,
-// not a replay of some original wire bytes. These bytes are therefore a
-// reference-implementation oracle for the canonical form.
+// Normalize resets every container to the package default, so on input
+// already in that form it must be a byte-exact no-op. If a default were
+// wrong in either direction -- a non-empty Constr or List defaulting to
+// definite, an empty one defaulting to indefinite, or a Map defaulting to
+// indefinite -- re-encoding would differ from the captured bytes and this
+// test would fail. No round-trip test against hand-written fixtures can
+// rule that out, because such a test only shows Normalize is
+// self-consistent, not that it normalizes toward the right encoding.
 //
-// Normalize resets every container to this package's default. So on input
-// that is already canonical, Normalize must be a byte-exact no-op. If any
-// default were wrong in either direction -- a non-empty Constr or List
-// defaulting to definite, an empty one defaulting to indefinite, or a Map
-// defaulting to indefinite -- re-encoding would differ from the captured
-// bytes and this test would fail.
-//
-// This is the test that would have caught a Normalize that "worked" while
-// normalizing toward the wrong encoding, which no round-trip test against
-// hand-written fixtures can rule out.
+// Be careful about what this proves on its own. Redeemers and datums
+// reach the node as submitter-supplied bytes, so finding them already in
+// canonical form is also consistent with the node having passed those
+// bytes through untouched -- a submitter is free to encode canonically.
+// This test therefore pins agreement with the reference for these values;
+// it is not by itself evidence that the node re-encodes what it receives.
+// TestNormalizeIsIdentityOnNodeConstructedScriptContexts below carries
+// that stronger claim, on the arguments that can actually support it.
 func TestNormalizeIsIdentityOnReferenceEncodedArguments(t *testing.T) {
 	buf, err := os.ReadFile(filepath.Clean(corpusPath))
 	if err != nil {
@@ -120,4 +119,71 @@ func TestNormalizeIsIdentityOnReferenceEncodedArguments(t *testing.T) {
 		"Normalize is byte-identity on %d of %d reference-encoded arguments",
 		identity, decoded,
 	)
+}
+
+// TestNormalizeIsIdentityOnNodeConstructedScriptContexts pins the stronger
+// half of the claim above, on the only corpus arguments that can support
+// it.
+//
+// Redeemers and datums start life as submitter-supplied bytes, so finding
+// them already in canonical form proves nothing about what the node does
+// -- the submitter may simply have encoded them that way. The
+// ScriptContext is different in kind: the node builds it from ledger
+// state, so no submitter bytes influence it and there is no original
+// encoding to preserve. Its encoding is therefore purely the reference
+// implementation's canonical Data encoder.
+//
+// Normalize being a byte-identity on those contexts is a direct check
+// that this package's defaults are that canonical encoder, which is the
+// premise Normalize depends on and the reason it is safe to apply at the
+// evaluator boundary.
+//
+// The ScriptContext is the last argument in every case: [datum, redeemer,
+// context] for a spend, [redeemer, context] for mint and reward, and
+// [context] alone for PlutusV3.
+func TestNormalizeIsIdentityOnNodeConstructedScriptContexts(t *testing.T) {
+	buf, err := os.ReadFile(filepath.Clean(corpusPath))
+	if err != nil {
+		t.Fatalf("read corpus %s: %v", corpusPath, err)
+	}
+	var corpus corpusFile
+	if err := json.Unmarshal(buf, &corpus); err != nil {
+		t.Fatalf("parse corpus: %v", err)
+	}
+
+	checked := 0
+	for _, tc := range corpus.Cases {
+		if len(tc.ArgumentsHex) == 0 {
+			t.Errorf("%s: case has no arguments", tc.ID)
+			continue
+		}
+		ctxHex := tc.ArgumentsHex[len(tc.ArgumentsHex)-1]
+		raw, err := hex.DecodeString(ctxHex)
+		if err != nil {
+			t.Fatalf("%s: bad context hex: %v", tc.ID, err)
+		}
+		pd, err := Decode(raw)
+		if err != nil {
+			t.Errorf("%s: ScriptContext did not decode: %v", tc.ID, err)
+			continue
+		}
+		got, err := Encode(Normalize(pd))
+		if err != nil {
+			t.Fatalf("%s: encode normalized context: %v", tc.ID, err)
+		}
+		if hex.EncodeToString(got) != ctxHex {
+			t.Errorf(
+				"%s (%s): Normalize altered a node-constructed ScriptContext;"+
+					" this package's defaults are not the reference encoder",
+				tc.ID, tc.Language,
+			)
+			continue
+		}
+		checked++
+	}
+
+	if checked == 0 {
+		t.Fatal("no ScriptContext was verified; the check proved nothing")
+	}
+	t.Logf("Normalize is byte-identity on %d node-constructed ScriptContexts", checked)
 }
