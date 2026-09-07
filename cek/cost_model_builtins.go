@@ -8,15 +8,30 @@ import (
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/lang"
-	"github.com/jinzhu/copier"
 )
 
 type BuiltinCosts [builtin.TotalBuiltinCount]*CostingFunc[Arguments]
 
+// Clone returns builtin costs sharing no mutable state with b.
+//
+// BuiltinCosts is an array of pointers, so a struct copy aliases every
+// CostingFunc and every model inside it. update writes through those pointers,
+// which made building any cost model from protocol parameters mutate whatever
+// it was cloned from -- in practice the package-level DefaultBuiltinCosts, and
+// concurrently every other evaluation in the process.
 func (b *BuiltinCosts) Clone() BuiltinCosts {
 	var ret BuiltinCosts
-	if err := copier.CopyWithOption(&ret, b, copier.Option{DeepCopy: true}); err != nil {
-		panic(fmt.Sprintf("failure cloning BuiltinCosts: %s", err))
+	if b == nil {
+		return ret
+	}
+	for i, costingFunc := range b {
+		// A nil entry stays nil: update already treats one as "no existing
+		// cost info for builtin", so cloning must not invent a zero-valued
+		// CostingFunc where the source had none.
+		if costingFunc == nil {
+			continue
+		}
+		ret[i] = costingFunc.clone()
 	}
 	return ret
 }
@@ -1424,6 +1439,11 @@ func CostSextuple[T SixArgument](
 type Arguments interface {
 	isArguments()
 	HasConstants() []bool
+	// cloneArguments returns a copy sharing no mutable state with the
+	// receiver. BuiltinCosts.update mutates these models in place, so a cost
+	// model built from protocol parameters must own every model it can write
+	// to. See cost_model_clone.go.
+	cloneArguments() Arguments
 }
 
 var (

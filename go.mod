@@ -10,7 +10,6 @@ require (
 	github.com/cloudflare/circl v1.6.5
 	github.com/consensys/gnark-crypto v0.21.0
 	github.com/fxamacker/cbor/v2 v2.9.3
-	github.com/jinzhu/copier v0.4.0
 	github.com/minio/sha256-simd v1.0.1
 	golang.org/x/crypto v0.55.0
 )
