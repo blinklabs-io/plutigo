@@ -1,8 +1,6 @@
 module github.com/blinklabs-io/plutigo
 
-go 1.25.7
-
-toolchain go1.25.8
+go 1.26.0
 
 require (
 	github.com/btcsuite/btcd/btcec/v2 v2.5.0
