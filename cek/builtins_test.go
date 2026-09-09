@@ -4620,6 +4620,110 @@ func TestBLSMSMScalarBounds(t *testing.T) {
 	}
 }
 
+func TestBLSMultiScalarMulValidatesUnpairedScalar(t *testing.T) {
+	limit := new(big.Int).Lsh(big.NewInt(1), 4095)
+	g1Gen, g2Gen, _, _ := bls.Generators()
+	tests := []struct {
+		name        string
+		builtinFunc builtin.DefaultFunction
+		builtinName string
+		elemType    syn.Typ
+		elem        syn.IConstant
+		checkResult func(*testing.T, Value[syn.DeBruijn])
+	}{
+		{
+			name:        "G1",
+			builtinFunc: builtin.Bls12_381_G1_MultiScalarMul,
+			builtinName: "bls12_381_G1_multiScalarMul",
+			elemType:    &syn.TBls12_381G1Element{},
+			elem:        &syn.Bls12_381G1Element{Inner: &g1Gen},
+			checkResult: func(t *testing.T, val Value[syn.DeBruijn]) {
+				t.Helper()
+				got, ok := expectConstant(t, val).Constant.(*syn.Bls12_381G1Element)
+				if !ok {
+					t.Fatalf("expected G1 result, got %T", val)
+				}
+				if !got.Inner.Equal(&g1Gen) {
+					t.Fatal("valid length mismatch should use the paired G1 prefix")
+				}
+			},
+		},
+		{
+			name:        "G2",
+			builtinFunc: builtin.Bls12_381_G2_MultiScalarMul,
+			builtinName: "bls12_381_G2_multiScalarMul",
+			elemType:    &syn.TBls12_381G2Element{},
+			elem:        &syn.Bls12_381G2Element{Inner: &g2Gen},
+			checkResult: func(t *testing.T, val Value[syn.DeBruijn]) {
+				t.Helper()
+				got, ok := expectConstant(t, val).Constant.(*syn.Bls12_381G2Element)
+				if !ok {
+					t.Fatalf("expected G2 result, got %T", val)
+				}
+				if !got.Inner.Equal(&g2Gen) {
+					t.Fatal("valid length mismatch should use the paired G2 prefix")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			evaluate := func(secondScalar syn.IConstant) (Value[syn.DeBruijn], error) {
+				b := newTestBuiltin(tt.builtinFunc)
+				b = b.ApplyArg(&Constant{&syn.ProtoList{
+					LTyp: &syn.TInteger{},
+					List: []syn.IConstant{
+						&syn.Integer{Inner: big.NewInt(1)},
+						secondScalar,
+					},
+				}})
+				b = b.ApplyArg(&Constant{&syn.ProtoList{
+					LTyp: tt.elemType,
+					List: []syn.IConstant{tt.elem},
+				}})
+				return evalBuiltinWithError(t, newTestMachineV4(), b)
+			}
+
+			val, err := evaluate(&syn.Integer{Inner: big.NewInt(2)})
+			if err != nil {
+				t.Fatalf("valid length mismatch returned error: %v", err)
+			}
+			tt.checkResult(t, val)
+
+			_, err = evaluate(&syn.Integer{Inner: limit})
+			var builtinErr *BuiltinError
+			if !errors.As(err, &builtinErr) {
+				t.Fatalf("expected BuiltinError for unpaired out-of-range scalar, got %v", err)
+			}
+			if builtinErr.Code != ErrCodeInvalidArgument {
+				t.Fatalf("expected ErrCodeInvalidArgument, got %d", builtinErr.Code)
+			}
+			if builtinErr.Builtin != tt.builtinName {
+				t.Fatalf("expected builtin %q, got %q", tt.builtinName, builtinErr.Builtin)
+			}
+			if builtinErr.Message != "scalar is outside the signed 4096-bit range" {
+				t.Fatalf("unexpected error message: %q", builtinErr.Message)
+			}
+
+			_, err = evaluate(&syn.Integer{})
+			builtinErr = nil
+			if !errors.As(err, &builtinErr) {
+				t.Fatalf("expected BuiltinError for unpaired malformed scalar, got %v", err)
+			}
+			if builtinErr.Code != ErrCodeInvalidArgument {
+				t.Fatalf("expected ErrCodeInvalidArgument, got %d", builtinErr.Code)
+			}
+			if builtinErr.Builtin != tt.builtinName {
+				t.Fatalf("expected builtin %q, got %q", tt.builtinName, builtinErr.Builtin)
+			}
+			if builtinErr.Message != "expected integer list" {
+				t.Fatalf("unexpected error message: %q", builtinErr.Message)
+			}
+		})
+	}
+}
+
 // TestDataBuiltinsRejectMalformedElements verifies constrData/listData/mapData
 // return a typed error rather than panicking when handed a list whose declared
 // element type is Data (or pair-of-Data) but whose actual elements are not.
