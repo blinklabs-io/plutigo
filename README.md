@@ -153,7 +153,7 @@ must use the ledger language rather than infer it from the UPLC program header.
 
 ### Prerequisites
 
-- Go 1.25+ (Go 1.26+ recommended for ~10% better performance)
+- Go 1.26+
 - make
 
 ### Setup
