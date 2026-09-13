@@ -25,12 +25,16 @@ import (
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
-// BenchmarkNewEvalContext measures cost-model construction for each language
-// version's full-length parameter list, at proto-major versions selected to
-// exercise the semantics variant that version reaches (cek/semantics.go).
-// V1 and V3 use the real preview-network cost models; V2 has no real fixture
-// in this repository (see cost_model_fixtures_test.go), so it uses a
-// synthetic full-length list of the same shape.
+// BenchmarkNewEvalContext measures cost-model construction at proto-major
+// versions selected to exercise the semantics variant that version reaches
+// (cek/semantics.go). costModelFromList stops at the input length, so a
+// short list understates construction cost; most cases therefore use a
+// synthetic full-length list for their version (see synthCostModelParams).
+// V1 uses the real preview-network cost model padded to full length by
+// v1ParamsFromRealMap. The two real-fixture V3 cases keep
+// realPreviewV3CostModelParams, which predates 99 of V3's 350 parameters, so
+// they measure less work than the FullLength case below; they stay for
+// comparability with the benchmark table published for plutigo#402.
 func BenchmarkNewEvalContext(b *testing.B) {
 	cases := []struct {
 		name         string
@@ -67,6 +71,18 @@ func BenchmarkNewEvalContext(b *testing.B) {
 			lang.LanguageVersionV3,
 			ProtoVersion{Major: 11},
 			realPreviewV3CostModelParams,
+		},
+		{
+			"V3/VariantC/FullLength",
+			lang.LanguageVersionV3,
+			ProtoVersion{Major: 10},
+			synthCostModelParams(lang.CostModelParamNamesV3),
+		},
+		{
+			"V4/VariantC",
+			lang.LanguageVersionV4,
+			ProtoVersion{Major: 10},
+			synthCostModelParams(lang.CostModelParamNamesV4),
 		},
 	}
 
