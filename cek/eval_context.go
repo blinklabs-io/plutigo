@@ -5,7 +5,26 @@ import (
 	"log"
 )
 
-// EvalContext contains the cost model and semantics variant for a script evaluation
+// EvalContext contains the cost model and semantics variant for a script evaluation.
+//
+// A *EvalContext is immutable after construction and safe to share and reuse
+// concurrently across any number of goroutines and evaluations: NewMachine
+// only reads from it (cek/machine.go), and nothing on the evaluation path --
+// [Machine.Run], [Machine.RunContext], or anything they call -- ever writes
+// through it. The only code that mutates a CostModel's MachineCosts or
+// BuiltinCosts is their unexported update methods, and those run solely
+// during construction, from costModelFromList/costModelFromMap
+// (cek/cost_model.go); no reachable step of evaluation calls them.
+//
+// This makes it safe, and recommended, to build one EvalContext per distinct
+// (LanguageVersion, ProtoVersion.Major, cost model parameter list) and cache
+// it for reuse across every redeemer evaluation that shares that key, rather
+// than calling [NewEvalContext] again per evaluation. ProtoVersion.Minor is
+// not part of the key: [GetSemantics] switches only on Major, and EvalContext
+// does not retain a ProtoVersion at all (only ProtoMajor). See
+// TestEvalContextReuseIsRaceFree for a -race-covered proof of concurrent
+// reuse, and TestCostModelConstructionIsolation for the concurrent
+// *construction* isolation this guarantee builds on.
 type EvalContext struct {
 	CostModel        CostModel
 	SemanticsVariant SemanticsVariant
@@ -33,7 +52,13 @@ func NewDefaultEvalContext(
 }
 
 // NewEvalContext returns a new EvalContext based on the provided language version, protocol version, and
-// cost models from protocol parameters
+// cost models from protocol parameters.
+//
+// The returned *EvalContext is immutable after construction (see the type's
+// doc comment) and reusable across evaluations and goroutines. Callers that
+// evaluate many redeemers under the same (version, protoVersion.Major,
+// costModelParams) should call NewEvalContext once and cache the result keyed
+// on that tuple, rather than rebuilding it per evaluation.
 func NewEvalContext(
 	version LanguageVersion,
 	protoVersion ProtoVersion,
