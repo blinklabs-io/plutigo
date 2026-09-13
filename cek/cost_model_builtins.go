@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strings"
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/lang"
@@ -37,7 +36,7 @@ func (b *BuiltinCosts) Clone() BuiltinCosts {
 }
 
 func (b *BuiltinCosts) update(param string, val int64) error {
-	paramParts := strings.Split(param, "-")
+	paramParts := splitParamName(param)
 	if len(paramParts) < 3 {
 		return errors.New("invalid param format: " + param)
 	}
