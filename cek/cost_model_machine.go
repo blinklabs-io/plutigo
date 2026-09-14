@@ -3,7 +3,6 @@ package cek
 import (
 	"errors"
 	"fmt"
-	"strings"
 )
 
 type MachineCosts struct {
@@ -21,7 +20,7 @@ type MachineCosts struct {
 }
 
 func (mc *MachineCosts) update(param string, val int64) error {
-	paramParts := strings.Split(param, "-")
+	paramParts := splitParamName(param)
 	if len(paramParts) != 2 {
 		return errors.New("malformed machine cost update param: " + param)
 	}
