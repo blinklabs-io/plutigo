@@ -537,6 +537,40 @@ func TestChooseDataBuiltinV4ValueBranch(t *testing.T) {
 	}
 }
 
+func TestChooseDataBuiltinArityMatchesLanguageVersion(t *testing.T) {
+	arg := &Constant{&syn.String{Inner: "arg"}}
+
+	v4 := newTestMachineV4().allocBuiltin(
+		builtin.ChooseData,
+		builtin.ChooseData.ForceCount(),
+		0,
+		nil,
+	)
+	for i := uint(0); i < builtin.ChooseData.Arity(); i++ {
+		v4 = v4.ApplyArg(arg)
+	}
+	if v4.IsReady() || !v4.IsArrow() {
+		t.Fatalf("V4 ChooseData should require its Value branch after %d args", v4.ArgCount)
+	}
+	v4 = v4.ApplyArg(arg)
+	if !v4.IsReady() || v4.IsArrow() {
+		t.Fatalf("V4 ChooseData should be ready after %d args", v4.ArgCount)
+	}
+
+	v3 := newTestMachine().allocBuiltin(
+		builtin.ChooseData,
+		builtin.ChooseData.ForceCount(),
+		0,
+		nil,
+	)
+	for i := uint(0); i < builtin.ChooseData.Arity(); i++ {
+		v3 = v3.ApplyArg(arg)
+	}
+	if !v3.IsReady() || v3.IsArrow() {
+		t.Fatalf("V3 ChooseData should be ready after %d args", v3.ArgCount)
+	}
+}
+
 func TestLengthOfArrayBuiltin(t *testing.T) {
 	m := newTestMachineV4() // V4 builtin
 	b := newTestBuiltin(builtin.LengthOfArray)

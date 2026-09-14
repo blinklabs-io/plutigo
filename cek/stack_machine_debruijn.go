@@ -180,7 +180,7 @@ func computeKnownImmediateValueNoSlippageDeBruijn(
 		if !m.spendStepNoSlippage(ExBuiltin) {
 			return nil, m.budgetErrorForStep(ExBuiltin)
 		}
-		return m.builtinValues[t.DefaultFunction], nil
+		return m.builtinNoArgValues[t.DefaultFunction][0], nil
 	case *syn.Constr[syn.DeBruijn]:
 		if !m.spendStepNoSlippage(ExConstr) {
 			return nil, m.budgetErrorForStep(ExConstr)
@@ -342,7 +342,7 @@ func runStackNoSlippageDeBruijn(
 					}
 					var err error
 					currentTerm, currentEnv, currentValue, returning, err = m.forceEvaluateStack(
-						m.builtinValues[builtinTerm.DefaultFunction],
+						m.builtinNoArgValues[builtinTerm.DefaultFunction][0],
 					)
 					if err != nil {
 						return nil, err
@@ -378,7 +378,7 @@ func runStackNoSlippageDeBruijn(
 					return nil, m.budgetErrorForStep(ExBuiltin)
 				}
 
-				currentValue = m.builtinValues[t.DefaultFunction]
+				currentValue = m.builtinNoArgValues[t.DefaultFunction][0]
 				returning = true
 			case *syn.Constr[syn.DeBruijn]:
 				if !m.spendStepNoSlippage(ExConstr) {

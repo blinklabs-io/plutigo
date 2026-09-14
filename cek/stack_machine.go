@@ -151,7 +151,7 @@ func (m *Machine[T]) computeKnownImmediateValue(
 		if err := m.stepAndMaybeSpend(ExBuiltin); err != nil {
 			return nil, err
 		}
-		return m.builtinValues[t.DefaultFunction], nil
+		return m.builtinNoArgValues[t.DefaultFunction][0], nil
 	case *syn.Constr[T]:
 		if err := m.stepAndMaybeSpend(ExConstr); err != nil {
 			return nil, err
@@ -225,7 +225,7 @@ func (m *Machine[T]) computeKnownImmediateValueNoSlippage(
 		if !m.spendStepNoSlippage(ExBuiltin) {
 			return nil, m.budgetErrorForStep(ExBuiltin)
 		}
-		return m.builtinValues[t.DefaultFunction], nil
+		return m.builtinNoArgValues[t.DefaultFunction][0], nil
 	case *syn.Constr[T]:
 		if !m.spendStepNoSlippage(ExConstr) {
 			return nil, m.budgetErrorForStep(ExConstr)
@@ -373,7 +373,7 @@ func (m *Machine[T]) runStackNoSlippage(term syn.Term[T]) (syn.Term[T], error) {
 					return nil, m.budgetErrorForStep(ExBuiltin)
 				}
 
-				currentValue = m.builtinValues[t.DefaultFunction]
+				currentValue = m.builtinNoArgValues[t.DefaultFunction][0]
 				returning = true
 			case *syn.Constr[T]:
 				if !m.spendStepNoSlippage(ExConstr) {
@@ -684,7 +684,7 @@ func (m *Machine[T]) runStack(term syn.Term[T]) (syn.Term[T], error) {
 					return nil, err
 				}
 
-				currentValue = m.builtinValues[t.DefaultFunction]
+				currentValue = m.builtinNoArgValues[t.DefaultFunction][0]
 				returning = true
 			case *syn.Constr[T]:
 				if err := m.stepAndMaybeSpend(ExConstr); err != nil {

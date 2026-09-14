@@ -408,6 +408,7 @@ type Builtin[T syn.Eval] struct {
 	Forces   uint
 	ArgCount uint
 	Args     *BuiltinArgs[T]
+	arity    uint
 }
 
 func (b Builtin[T]) String() string {
@@ -430,6 +431,7 @@ func (b *Builtin[T]) ConsumeForce() *Builtin[T] {
 		Forces:   b.Forces + 1,
 		ArgCount: b.ArgCount,
 		Args:     b.Args,
+		arity:    b.arity,
 	}
 }
 
@@ -439,15 +441,23 @@ func (b *Builtin[T]) ApplyArg(arg Value[T]) *Builtin[T] {
 		Forces:   b.Forces,
 		ArgCount: b.ArgCount + 1,
 		Args:     b.Args.Extend(arg),
+		arity:    b.arity,
 	}
 }
 
+func (b *Builtin[T]) effectiveArity() uint {
+	if b.arity != 0 {
+		return b.arity
+	}
+	return b.Func.Arity()
+}
+
 func (b *Builtin[T]) IsReady() bool {
-	return b.Func.Arity() == b.ArgCount && b.Func.ForceCount() == b.Forces
+	return b.effectiveArity() == b.ArgCount && b.Func.ForceCount() == b.Forces
 }
 
 func (b *Builtin[T]) IsArrow() bool {
-	return b.Func.Arity() > b.ArgCount
+	return b.effectiveArity() > b.ArgCount
 }
 
 type Constr[T syn.Eval] struct {

@@ -16,11 +16,15 @@ const IntegerToByteStringMaximumOutputLength = 8192
 
 type Builtins[T syn.Eval] [builtin.TotalBuiltinCount]func(*Machine[T], *Builtin[T]) (Value[T], error)
 
-func (m *Machine[T]) builtinArity(fn builtin.DefaultFunction) uint {
-	if fn == builtin.ChooseData && m.version == lang.LanguageVersionV4 {
+func builtinArityForVersion(fn builtin.DefaultFunction, version lang.LanguageVersion) uint {
+	if fn == builtin.ChooseData && version == lang.LanguageVersionV4 {
 		return fn.Arity() + 1
 	}
 	return fn.Arity()
+}
+
+func (m *Machine[T]) builtinArity(fn builtin.DefaultFunction) uint {
+	return builtinArityForVersion(fn, m.version)
 }
 
 var (
@@ -226,6 +230,7 @@ func (m *Machine[T]) evalBuiltinAppReady(
 		Forces:   forces,
 		ArgCount: argCount,
 		Args:     args,
+		arity:    m.builtinArity(fn),
 	}
 	return m.evalBuiltinApp(&ready)
 }
