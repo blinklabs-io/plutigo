@@ -55,7 +55,9 @@
 //   - FLAT binary format via [Decode] (used on-chain)
 //   - Validated text and FLAT entry points via [ParseWithContext] and
 //     [DecodeWithContext], which require the selected ledger language and
-//     protocol version
+//     protocol version. These perform decode-time (phase-1) well-formedness
+//     checks only; callers about to execute a decoded program through the CEK
+//     machine must separately call [ValidateTermVersionForExecution]
 //
 // # Binder Interface
 //
