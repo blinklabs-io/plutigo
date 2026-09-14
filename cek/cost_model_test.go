@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/builtin"
+	dataPkg "github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 )
@@ -34,6 +35,22 @@ func TestV4ValueCostModelsMatchPlutusSpec(t *testing.T) {
 	}
 	if unValueDataMem.intercept != 1 || unValueDataMem.slope != 11 {
 		t.Fatalf("unValueData memory model = (%d, %d), want (1, 11)", unValueDataMem.intercept, unValueDataMem.slope)
+	}
+}
+
+func TestDataNodeCountIncludesValueInner(t *testing.T) {
+	value, err := dataPkg.NewValue(&dataPkg.Map{Pairs: [][2]dataPkg.PlutusData{{
+		dataPkg.NewByteString([]byte{0xaa}),
+		&dataPkg.Map{Pairs: [][2]dataPkg.PlutusData{{
+			dataPkg.NewByteString([]byte{0xbb}),
+			dataPkg.NewInteger(big.NewInt(1)),
+		}}},
+	}}})
+	if err != nil {
+		t.Fatalf("construct Value: %v", err)
+	}
+	if got, want := dataNodeCountExMem(value)(), ExMem(6); got != want {
+		t.Fatalf("dataNodeCountExMem(Value) = %d, want %d", got, want)
 	}
 }
 

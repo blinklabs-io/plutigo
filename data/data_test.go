@@ -8,7 +8,17 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/fxamacker/cbor/v2"
 )
+
+func mustNewValue(inner *Map) PlutusData {
+	value, err := NewValue(inner)
+	if err != nil {
+		panic(err)
+	}
+	return value
+}
 
 var testDefs = []struct {
 	Data    PlutusData
@@ -116,6 +126,16 @@ var testDefs = []struct {
 			},
 		),
 		CborHex: "a1d8799f00190196ffd8799f1b17f2495b03141751ff",
+	},
+	{
+		Data: mustNewValue(NewMapDefIndef(false, [][2]PlutusData{{
+			NewByteString([]byte{0xaa}),
+			NewMapDefIndef(false, [][2]PlutusData{{
+				NewByteString([]byte{0xbb}),
+				NewInteger(big.NewInt(1)),
+			}}),
+		}}).(*Map)),
+		CborHex: "d90579a141aaa141bb01",
 	},
 	{
 		Data: NewConstrDefIndef(
@@ -1008,6 +1028,28 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 		if !reflect.DeepEqual(decodedWrapper.Data, testDef.Data) {
 			t.Errorf("round-trip failed for %v", testDef.Data)
 		}
+	}
+}
+
+func TestValueRejectsNonCanonicalMapShape(t *testing.T) {
+	inner := &Map{Pairs: [][2]PlutusData{{
+		NewByteString([]byte{0xaa}),
+		NewInteger(big.NewInt(1)),
+	}}}
+	if _, err := NewValue(inner); err == nil {
+		t.Fatal("expected Value construction to reject a non-map policy value")
+	}
+
+	encoded, err := cborMarshal(cbor.Tag{Number: valueCBORTag, Content: inner})
+	if err != nil {
+		t.Fatalf("marshal invalid Value: %v", err)
+	}
+	var value Value
+	if err := value.UnmarshalCBOR(encoded); err == nil {
+		t.Fatal("expected Value CBOR decoding to reject a non-map policy value")
+	}
+	if _, err := NewDecoder().Decode(encoded); err == nil {
+		t.Fatal("expected arena Value decoding to reject a non-map policy value")
 	}
 }
 

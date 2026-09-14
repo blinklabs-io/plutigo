@@ -152,7 +152,7 @@ func (m *Machine[T]) computeKnownImmediateValue(
 		if err := m.stepAndMaybeSpend(ExBuiltin); err != nil {
 			return nil, err
 		}
-		return m.builtinValues[t.DefaultFunction], nil
+		return m.builtinNoArgValues[t.DefaultFunction][0], nil
 	case *syn.Constr[T]:
 		if err := m.stepAndMaybeSpend(ExConstr); err != nil {
 			return nil, err
@@ -226,7 +226,7 @@ func (m *Machine[T]) computeKnownImmediateValueNoSlippage(
 		if !m.spendStepNoSlippage(ExBuiltin) {
 			return nil, m.budgetErrorForStep(ExBuiltin)
 		}
-		return m.builtinValues[t.DefaultFunction], nil
+		return m.builtinNoArgValues[t.DefaultFunction][0], nil
 	case *syn.Constr[T]:
 		if !m.spendStepNoSlippage(ExConstr) {
 			return nil, m.budgetErrorForStep(ExConstr)
@@ -374,7 +374,7 @@ func (m *Machine[T]) runStackNoSlippage(term syn.Term[T]) (syn.Term[T], error) {
 					return nil, m.budgetErrorForStep(ExBuiltin)
 				}
 
-				currentValue = m.builtinValues[t.DefaultFunction]
+				currentValue = m.builtinNoArgValues[t.DefaultFunction][0]
 				returning = true
 			case *syn.Constr[T]:
 				if !m.spendStepNoSlippage(ExConstr) {
@@ -694,7 +694,7 @@ func (m *Machine[T]) runStack(
 					return nil, err
 				}
 
-				currentValue = m.builtinValues[t.DefaultFunction]
+				currentValue = m.builtinNoArgValues[t.DefaultFunction][0]
 				returning = true
 			case *syn.Constr[T]:
 				if err := m.stepAndMaybeSpend(ExConstr); err != nil {
@@ -905,7 +905,7 @@ func (m *Machine[T]) applyEvaluateStack(
 		// Cache the per-builtin force/arity table lookups so we don't repeat
 		// them for each branch below.
 		forceCount := f.Func.ForceCount()
-		arity := f.Func.Arity()
+		arity := m.builtinArity(f.Func)
 		if forceCount <= f.Forces && arity > f.ArgCount {
 			nextArgCount := f.ArgCount + 1
 			if forceCount == f.Forces {
@@ -984,7 +984,7 @@ func (m *Machine[T]) forceEvaluateStack(
 		forceCount := v.Func.ForceCount()
 		if forceCount > v.Forces {
 			nextForces := v.Forces + 1
-			if forceCount == nextForces && v.Func.Arity() == v.ArgCount {
+			if forceCount == nextForces && m.builtinArity(v.Func) == v.ArgCount {
 				resolved, err := m.evalBuiltinAppReady(
 					v.Func,
 					nextForces,

@@ -380,6 +380,102 @@ func NewMapDefIndef(useIndef bool, pairs [][2]PlutusData) PlutusData {
 	return &Map{Pairs: tmpPairs, useIndef: useIndefPtr(useIndef)}
 }
 
+// Value is the Plutus V4 Data constructor for the built-in Value type.
+// Its payload uses the same nested map representation as V1-V3 valueData.
+type Value struct {
+	Inner *Map
+}
+
+func (Value) isPlutusData() {}
+
+const valueCBORTag uint64 = 1401
+
+func (v *Value) UnmarshalCBOR(encoded []byte) error {
+	tag, content, err := decodeCBORTag(encoded)
+	if err != nil {
+		return err
+	}
+	if tag != valueCBORTag {
+		return fmt.Errorf("unexpected CBOR tag for PlutusData Value: %d", tag)
+	}
+	inner, rest, err := decodeMapNext(content)
+	if err != nil {
+		return err
+	}
+	if len(rest) > 0 {
+		return fmt.Errorf("unexpected %d trailing bytes", len(rest))
+	}
+	value := Value{Inner: inner}
+	if err := value.Validate(); err != nil {
+		return err
+	}
+	v.Inner = inner
+	return nil
+}
+
+func (v Value) MarshalCBOR() ([]byte, error) {
+	if v.Inner == nil {
+		return nil, errors.New("cannot encode a nil PlutusData Value")
+	}
+	if err := v.Validate(); err != nil {
+		return nil, err
+	}
+	return cborMarshal(cbor.Tag{Number: valueCBORTag, Content: v.Inner})
+}
+
+func (v Value) Clone() PlutusData {
+	if v.Inner == nil {
+		return &Value{}
+	}
+	return &Value{Inner: v.Inner.Clone().(*Map)}
+}
+
+func (v Value) Equal(pd PlutusData) bool {
+	other, ok := pd.(*Value)
+	if !ok || (v.Inner == nil) != (other.Inner == nil) {
+		return false
+	}
+	return v.Inner == nil || v.Inner.Equal(other.Inner)
+}
+
+func (v Value) String() string {
+	return fmt.Sprintf("Value{%v}", v.Inner)
+}
+
+// Validate checks that a Value uses the canonical policy/token map shape.
+func (v Value) Validate() error {
+	if v.Inner == nil {
+		return errors.New("Value must contain a map")
+	}
+	for _, policy := range v.Inner.Pairs {
+		if _, ok := policy[0].(*ByteString); !ok {
+			return fmt.Errorf("Value policy key must be a bytestring, got %T", policy[0])
+		}
+		tokens, ok := policy[1].(*Map)
+		if !ok {
+			return fmt.Errorf("Value policy value must be a map, got %T", policy[1])
+		}
+		for _, token := range tokens.Pairs {
+			if _, ok := token[0].(*ByteString); !ok {
+				return fmt.Errorf("Value token key must be a bytestring, got %T", token[0])
+			}
+			if _, ok := token[1].(*Integer); !ok {
+				return fmt.Errorf("Value token quantity must be an integer, got %T", token[1])
+			}
+		}
+	}
+	return nil
+}
+
+// NewValue creates a validated Plutus V4 Data Value constructor.
+func NewValue(inner *Map) (*Value, error) {
+	value := &Value{Inner: inner}
+	if err := value.Validate(); err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
 // Integer
 
 type Integer struct {

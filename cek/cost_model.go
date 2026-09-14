@@ -395,7 +395,10 @@ func dataNodeCountExMem(d data.PlutusData) func() ExMem {
 				for _, pair := range n.Pairs {
 					stack = append(stack, pair[0], pair[1])
 				}
-				// Integer and ByteString are leaf nodes, just counted
+			case *data.Value:
+				if n.Inner != nil {
+					stack = append(stack, n.Inner)
+				}
 			}
 		}
 		return ExMem(count)
@@ -422,6 +425,10 @@ func dataExMem(x data.PlutusData) func() ExMem {
 			case *data.Map:
 				for _, pair := range dat.Pairs {
 					costStack = append(costStack, pair[0], pair[1])
+				}
+			case *data.Value:
+				if dat.Inner != nil {
+					costStack = append(costStack, dat.Inner)
 				}
 			case *data.Integer:
 				acc += bigIntExMem(dat.Inner)()
@@ -473,6 +480,10 @@ func equalsDataExMem(
 				for _, pair := range dat.Pairs {
 					costStackX = append(costStackX, pair[0], pair[1])
 				}
+			case *data.Value:
+				if dat.Inner != nil {
+					costStackX = append(costStackX, dat.Inner)
+				}
 			case *data.Integer:
 				xAcc += bigIntExMem(dat.Inner)()
 			case *data.ByteString:
@@ -495,6 +506,10 @@ func equalsDataExMem(
 			case *data.Map:
 				for _, pair := range dat.Pairs {
 					costStackY = append(costStackY, pair[0], pair[1])
+				}
+			case *data.Value:
+				if dat.Inner != nil {
+					costStackY = append(costStackY, dat.Inner)
 				}
 			case *data.Integer:
 				yAcc += bigIntExMem(dat.Inner)()

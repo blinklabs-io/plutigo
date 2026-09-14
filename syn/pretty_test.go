@@ -4,6 +4,9 @@ import (
 	"math/big"
 	"strings"
 	"testing"
+
+	"github.com/blinklabs-io/plutigo/data"
+	"github.com/blinklabs-io/plutigo/lang"
 )
 
 func TestPrettyTerm(t *testing.T) {
@@ -53,5 +56,22 @@ func TestPrettyPrinterReset(t *testing.T) {
 
 	if pp.indent != 0 {
 		t.Errorf("expected indent 0 after Reset, got %d", pp.indent)
+	}
+}
+
+func TestPrettyInvalidValueIsNotSilentlyRewritten(t *testing.T) {
+	program := &Program[DeBruijn]{
+		Version: lang.LanguageVersionV4,
+		Term: &Constant{Con: &Data{Inner: &data.Value{
+			Inner: &data.Map{Pairs: [][2]data.PlutusData{{
+				data.NewByteString([]byte{0xaa}),
+				data.NewInteger(big.NewInt(1)),
+			}}},
+		}}},
+	}
+
+	pretty := Pretty(program)
+	if !strings.Contains(pretty, "Value{invalid:") {
+		t.Fatalf("invalid Value pretty output = %q, want explicit invalid marker", pretty)
 	}
 }

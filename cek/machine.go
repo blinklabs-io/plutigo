@@ -20,25 +20,13 @@ const debug = false
 // DebugBudget enables verbose budget logging for debugging cost calculation issues
 const DebugBudget = false
 
-var (
-	sharedBuiltinTable           = newBuiltins[syn.DeBruijn]()
-	sharedBuiltinValueTable      = newBuiltinValueTable[syn.DeBruijn]()
-	sharedBuiltinNoArgValueTable = newBuiltinNoArgValueTable[syn.DeBruijn]()
-)
+var sharedBuiltinTable = newBuiltins[syn.DeBruijn]()
 
 // Machine is only instantiated with syn.DeBruijn in this codebase. These
 // helpers reuse shared syn.DeBruijn builtin tables across Machine[T] instances,
 // and NewMachine panics if T does not match syn.DeBruijn.
 func getSharedBuiltins[T syn.Eval]() *Builtins[T] {
 	return (*Builtins[T])(unsafe.Pointer(&sharedBuiltinTable))
-}
-
-func getSharedBuiltinValues[T syn.Eval]() *[builtin.TotalBuiltinCount]*Builtin[T] {
-	return (*[builtin.TotalBuiltinCount]*Builtin[T])(unsafe.Pointer(&sharedBuiltinValueTable))
-}
-
-func getSharedBuiltinNoArgValues[T syn.Eval]() *[builtin.TotalBuiltinCount][3]*Builtin[T] {
-	return (*[builtin.TotalBuiltinCount][3]*Builtin[T])(unsafe.Pointer(&sharedBuiltinNoArgValueTable))
 }
 
 // See getSharedBuiltins for the syn.DeBruijn invariant behind this cast.
@@ -67,7 +55,6 @@ type Machine[T syn.Eval] struct {
 	stepCostCpu        [9]int64
 	stepCostMem        [9]int64
 	builtins           *Builtins[T]
-	builtinValues      *[builtin.TotalBuiltinCount]*Builtin[T]
 	builtinNoArgValues *[builtin.TotalBuiltinCount][3]*Builtin[T]
 	oneArgCosts        [builtin.TotalBuiltinCount]oneArgCost
 	twoArgCosts        [builtin.TotalBuiltinCount]twoArgCost
@@ -294,28 +281,6 @@ func (m *Machine[T]) getFrameCases() *FrameCases[T] {
 	f := m.freeFrameCases[n-1]
 	m.freeFrameCases = m.freeFrameCases[:n-1]
 	return f
-}
-
-func newBuiltinValueTable[T syn.Eval]() [builtin.TotalBuiltinCount]*Builtin[T] {
-	var ret [builtin.TotalBuiltinCount]*Builtin[T]
-	for i := 0; i < int(builtin.TotalBuiltinCount); i++ {
-		ret[i] = &Builtin[T]{Func: builtin.DefaultFunction(i)}
-	}
-	return ret
-}
-
-func newBuiltinNoArgValueTable[T syn.Eval]() [builtin.TotalBuiltinCount][3]*Builtin[T] {
-	var ret [builtin.TotalBuiltinCount][3]*Builtin[T]
-	for i := 0; i < int(builtin.TotalBuiltinCount); i++ {
-		fn := builtin.DefaultFunction(i)
-		for forces := 0; forces < len(ret[i]); forces++ {
-			ret[i][forces] = &Builtin[T]{
-				Func:   fn,
-				Forces: uint(forces),
-			}
-		}
-	}
-	return ret
 }
 
 // allocArenaSlot allocates one slot of S from a chunked arena.
@@ -636,7 +601,22 @@ func (m *Machine[T]) allocBuiltin(
 	builtinValue.Forces = forces
 	builtinValue.ArgCount = argCount
 	builtinValue.Args = args
+	builtinValue.arity = m.builtinArity(fn)
 	return builtinValue
+}
+
+func newBuiltinNoArgValues[T syn.Eval](version lang.LanguageVersion) *[builtin.TotalBuiltinCount][3]*Builtin[T] {
+	values := new([builtin.TotalBuiltinCount][3]*Builtin[T])
+	for fn := builtin.DefaultFunction(0); fn < builtin.TotalBuiltinCount; fn++ {
+		for forces := uint(0); forces < 3; forces++ {
+			values[fn][forces] = &Builtin[T]{
+				Func:   fn,
+				Forces: forces,
+				arity:  builtinArityForVersion(fn, version),
+			}
+		}
+	}
+	return values
 }
 
 func (m *Machine[T]) putFrameCases(f *FrameCases[T]) {
@@ -694,8 +674,7 @@ func NewMachine[T syn.Eval](
 		stepCostCpu:        stepCostCpu,
 		stepCostMem:        stepCostMem,
 		builtins:           chooseBuiltins[T](version, evalContext.ProtoMajor),
-		builtinValues:      getSharedBuiltinValues[T](),
-		builtinNoArgValues: getSharedBuiltinNoArgValues[T](),
+		builtinNoArgValues: newBuiltinNoArgValues[T](version),
 		oneArgCosts:        newOneArgCostCache(evalContext.CostModel.builtinCosts),
 		twoArgCosts:        newTwoArgCostCache(evalContext.CostModel.builtinCosts),
 		threeArgCosts:      newThreeArgCostCache(evalContext.CostModel.builtinCosts),
@@ -1226,7 +1205,7 @@ func (m *Machine[T]) compute(
 			return nil, err
 		}
 
-		state, err = m.returnValueState(context, m.builtinValues[t.DefaultFunction])
+		state, err = m.returnValueState(context, m.builtinNoArgValues[t.DefaultFunction][0])
 		if err != nil {
 			return nil, err
 		}
@@ -1358,7 +1337,7 @@ func (m *Machine[T]) computeImmediateValue(
 		if err := m.stepAndMaybeSpend(ExBuiltin); err != nil {
 			return nil, true, err
 		}
-		return m.builtinValues[t.DefaultFunction], true, nil
+		return m.builtinNoArgValues[t.DefaultFunction][0], true, nil
 	case *syn.Constr[T]:
 		if len(t.Fields) != 0 {
 			return nil, false, nil
@@ -1694,7 +1673,7 @@ func (m *Machine[T]) forceEvaluate(
 		if v.NeedsForce() {
 			var resolved Value[T]
 			nextForces := v.Forces + 1
-			if v.Func.ForceCount() == nextForces && v.Func.Arity() == v.ArgCount {
+			if v.Func.ForceCount() == nextForces && m.builtinArity(v.Func) == v.ArgCount {
 				// Builtin has all arguments, evaluate it
 				var err error
 
@@ -1758,10 +1737,10 @@ func (m *Machine[T]) applyEvaluate(
 		state = comp
 	case *Builtin[T]:
 		// Apply builtin function
-		if !f.NeedsForce() && f.IsArrow() {
+		if !f.NeedsForce() && f.ArgCount < m.builtinArity(f.Func) {
 			var resolved Value[T]
 			nextArgCount := f.ArgCount + 1
-			if f.Func.Arity() == nextArgCount && f.Func.ForceCount() == f.Forces {
+			if m.builtinArity(f.Func) == nextArgCount && f.Func.ForceCount() == f.Forces {
 				// Builtin has all arguments, evaluate it
 				var err error
 

@@ -514,6 +514,63 @@ func TestChooseDataBuiltin(t *testing.T) {
 	}
 }
 
+func TestChooseDataBuiltinV4ValueBranch(t *testing.T) {
+	m := newTestMachineV4()
+	b := newTestBuiltin(builtin.ChooseData)
+	dataVal := &Constant{&syn.Data{Inner: &data.Value{Inner: &data.Map{}}}}
+	branches := []Value[syn.DeBruijn]{
+		&Constant{&syn.String{Inner: "constr"}},
+		&Constant{&syn.String{Inner: "map"}},
+		&Constant{&syn.String{Inner: "list"}},
+		&Constant{&syn.String{Inner: "integer"}},
+		&Constant{&syn.String{Inner: "bytes"}},
+		&Constant{&syn.String{Inner: "value"}},
+	}
+	b = b.ApplyArg(dataVal)
+	for _, branch := range branches {
+		b = b.ApplyArg(branch)
+	}
+
+	str := expectString(t, expectConstant(t, evalBuiltin(t, m, b)))
+	if str.Inner != "value" {
+		t.Fatalf("expected 'value', got %v", str.Inner)
+	}
+}
+
+func TestChooseDataBuiltinArityMatchesLanguageVersion(t *testing.T) {
+	tests := []struct {
+		name       string
+		newMachine func() *Machine[syn.DeBruijn]
+		readyAfter bool
+	}{
+		{name: "V3", newMachine: newTestMachine, readyAfter: true},
+		{name: "V4", newMachine: newTestMachineV4, readyAfter: false},
+	}
+	arg := &Constant{&syn.String{Inner: "arg"}}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			value := tt.newMachine().allocBuiltin(
+				builtin.ChooseData,
+				builtin.ChooseData.ForceCount(),
+				0,
+				nil,
+			)
+			for i := uint(0); i < builtin.ChooseData.Arity(); i++ {
+				value = value.ApplyArg(arg)
+			}
+			if value.IsReady() != tt.readyAfter || value.IsArrow() != !tt.readyAfter {
+				t.Fatalf("ChooseData after %d args: ready=%v arrow=%v, want ready=%v arrow=%v", value.ArgCount, value.IsReady(), value.IsArrow(), tt.readyAfter, !tt.readyAfter)
+			}
+			if !tt.readyAfter {
+				value = value.ApplyArg(arg)
+				if !value.IsReady() || value.IsArrow() {
+					t.Fatalf("V4 ChooseData should be ready after %d args", value.ArgCount)
+				}
+			}
+		})
+	}
+}
+
 func TestLengthOfArrayBuiltin(t *testing.T) {
 	m := newTestMachineV4() // V4 builtin
 	b := newTestBuiltin(builtin.LengthOfArray)
