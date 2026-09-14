@@ -16,6 +16,13 @@ const IntegerToByteStringMaximumOutputLength = 8192
 
 type Builtins[T syn.Eval] [builtin.TotalBuiltinCount]func(*Machine[T], *Builtin[T]) (Value[T], error)
 
+func (m *Machine[T]) builtinArity(fn builtin.DefaultFunction) uint {
+	if fn == builtin.ChooseData && m.version == lang.LanguageVersionV4 {
+		return fn.Arity() + 1
+	}
+	return fn.Arity()
+}
+
 var (
 	availableBuiltinsV10 = buildAvailableBuiltins(lang.LanguageVersionV1, 0)
 	availableBuiltinsV20 = buildAvailableBuiltins(lang.LanguageVersionV2, 0)

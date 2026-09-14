@@ -1654,7 +1654,7 @@ func (m *Machine[T]) forceEvaluate(
 		if v.NeedsForce() {
 			var resolved Value[T]
 			nextForces := v.Forces + 1
-			if v.Func.ForceCount() == nextForces && v.Func.Arity() == v.ArgCount {
+			if v.Func.ForceCount() == nextForces && m.builtinArity(v.Func) == v.ArgCount {
 				// Builtin has all arguments, evaluate it
 				var err error
 
@@ -1718,10 +1718,10 @@ func (m *Machine[T]) applyEvaluate(
 		state = comp
 	case *Builtin[T]:
 		// Apply builtin function
-		if !f.NeedsForce() && f.IsArrow() {
+		if !f.NeedsForce() && f.ArgCount < m.builtinArity(f.Func) {
 			var resolved Value[T]
 			nextArgCount := f.ArgCount + 1
-			if f.Func.Arity() == nextArgCount && f.Func.ForceCount() == f.Forces {
+			if m.builtinArity(f.Func) == nextArgCount && f.Func.ForceCount() == f.Forces {
 				// Builtin has all arguments, evaluate it
 				var err error
 

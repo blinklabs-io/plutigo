@@ -514,6 +514,29 @@ func TestChooseDataBuiltin(t *testing.T) {
 	}
 }
 
+func TestChooseDataBuiltinV4ValueBranch(t *testing.T) {
+	m := newTestMachineV4()
+	b := newTestBuiltin(builtin.ChooseData)
+	dataVal := &Constant{&syn.Data{Inner: data.NewValue(&data.Map{})}}
+	branches := []Value[syn.DeBruijn]{
+		&Constant{&syn.String{Inner: "constr"}},
+		&Constant{&syn.String{Inner: "map"}},
+		&Constant{&syn.String{Inner: "list"}},
+		&Constant{&syn.String{Inner: "integer"}},
+		&Constant{&syn.String{Inner: "bytes"}},
+		&Constant{&syn.String{Inner: "value"}},
+	}
+	b = b.ApplyArg(dataVal)
+	for _, branch := range branches {
+		b = b.ApplyArg(branch)
+	}
+
+	str := expectString(t, expectConstant(t, evalBuiltin(t, m, b)))
+	if str.Inner != "value" {
+		t.Fatalf("expected 'value', got %v", str.Inner)
+	}
+}
+
 func TestLengthOfArrayBuiltin(t *testing.T) {
 	m := newTestMachineV4() // V4 builtin
 	b := newTestBuiltin(builtin.LengthOfArray)

@@ -538,6 +538,8 @@ func (l *Lexer) NextToken() Token {
 				tok.Type = TokenConstr
 			case "Constr":
 				tok.Type = TokenPlutusConstr
+			case "V":
+				tok.Type = TokenPlutusValue
 			default:
 				tok.Type = TokenIdentifier
 			}

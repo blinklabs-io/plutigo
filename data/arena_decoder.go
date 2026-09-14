@@ -272,6 +272,12 @@ func (d *Decoder) decodePrimitive(data []byte) (PlutusData, error) {
 			return nil, fmt.Errorf("unexpected constructor tag in scalar decoder: %d", tagNumber)
 		case tagNumber == 2 || tagNumber == 3:
 			return d.decodeInteger(data)
+		case tagNumber == valueCBORTag:
+			var tmpValue Value
+			if err := tmpValue.UnmarshalCBOR(data); err != nil {
+				return nil, err
+			}
+			return &tmpValue, nil
 		default:
 			return nil, fmt.Errorf("unknown CBOR tag for PlutusData: %d", tagNumber)
 		}

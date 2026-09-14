@@ -327,6 +327,66 @@ func NewMapDefIndef(useIndef bool, pairs [][2]PlutusData) PlutusData {
 	return &Map{Pairs: tmpPairs, useIndef: useIndefPtr(useIndef)}
 }
 
+// Value is the Plutus V4 Data constructor for the built-in Value type.
+// Its payload uses the same nested map representation as V1-V3 valueData.
+type Value struct {
+	Inner *Map
+}
+
+func (Value) isPlutusData() {}
+
+const valueCBORTag uint64 = 1401
+
+func (v *Value) UnmarshalCBOR(encoded []byte) error {
+	tag, content, err := decodeCBORTag(encoded)
+	if err != nil {
+		return err
+	}
+	if tag != valueCBORTag {
+		return fmt.Errorf("unexpected CBOR tag for PlutusData Value: %d", tag)
+	}
+	inner, rest, err := decodeMapNext(content)
+	if err != nil {
+		return err
+	}
+	if len(rest) > 0 {
+		return fmt.Errorf("unexpected %d trailing bytes", len(rest))
+	}
+	v.Inner = inner
+	return nil
+}
+
+func (v Value) MarshalCBOR() ([]byte, error) {
+	if v.Inner == nil {
+		return nil, errors.New("cannot encode a nil PlutusData Value")
+	}
+	return cborMarshal(cbor.Tag{Number: valueCBORTag, Content: v.Inner})
+}
+
+func (v Value) Clone() PlutusData {
+	if v.Inner == nil {
+		return &Value{}
+	}
+	return &Value{Inner: v.Inner.Clone().(*Map)}
+}
+
+func (v Value) Equal(pd PlutusData) bool {
+	other, ok := pd.(*Value)
+	if !ok || (v.Inner == nil) != (other.Inner == nil) {
+		return false
+	}
+	return v.Inner == nil || v.Inner.Equal(other.Inner)
+}
+
+func (v Value) String() string {
+	return fmt.Sprintf("Value{%v}", v.Inner)
+}
+
+// NewValue creates a Plutus V4 Data Value constructor.
+func NewValue(inner *Map) PlutusData {
+	return &Value{Inner: inner}
+}
+
 // Integer
 
 type Integer struct {

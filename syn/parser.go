@@ -1134,6 +1134,8 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 		}
 
 		return data.NewMap(pairs), nil
+	case lex.TokenPlutusValue:
+		return p.parsePlutusValue()
 	case lex.TokenPlutusConstr:
 		p.nextToken()
 
@@ -1194,11 +1196,100 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 		return data.NewConstr(tag, fields...), nil
 	default:
 		return nil, fmt.Errorf(
-			"expected PlutusData constructor (I, B, List, Map, Constr), got %v at position %d",
+			"expected PlutusData constructor (I, B, List, Map, V, Constr), got %v at position %d",
 			p.curToken.Type,
 			p.curToken.Position,
 		)
 	}
+}
+
+func (p *Parser) parsePlutusValue() (data.PlutusData, error) {
+	p.nextToken()
+	if err := p.expect(lex.TokenLBracket); err != nil {
+		return nil, err
+	}
+	pairs := make([][2]data.PlutusData, 0)
+	for p.curToken.Type != lex.TokenRBracket {
+		if err := p.expect(lex.TokenLParen); err != nil {
+			return nil, err
+		}
+		policy, err := p.parseValueBytes()
+		if err != nil {
+			return nil, err
+		}
+		if err := p.expect(lex.TokenComma); err != nil {
+			return nil, err
+		}
+		if err := p.expect(lex.TokenLBracket); err != nil {
+			return nil, err
+		}
+		tokens := make([][2]data.PlutusData, 0)
+		for p.curToken.Type != lex.TokenRBracket {
+			if err := p.expect(lex.TokenLParen); err != nil {
+				return nil, err
+			}
+			token, err := p.parseValueBytes()
+			if err != nil {
+				return nil, err
+			}
+			if err := p.expect(lex.TokenComma); err != nil {
+				return nil, err
+			}
+			if p.curToken.Type != lex.TokenNumber {
+				return nil, fmt.Errorf(
+					"expected Value quantity, got %v at position %d",
+					p.curToken.Type,
+					p.curToken.Position,
+				)
+			}
+			quantity, ok := p.curToken.Value.(*big.Int)
+			if !ok {
+				return nil, fmt.Errorf("invalid Value quantity at position %d", p.curToken.Position)
+			}
+			p.nextToken()
+			if err := p.expect(lex.TokenRParen); err != nil {
+				return nil, err
+			}
+			tokens = append(tokens, [2]data.PlutusData{token, data.NewInteger(quantity)})
+			if p.curToken.Type != lex.TokenRBracket {
+				if err := p.expect(lex.TokenComma); err != nil {
+					return nil, err
+				}
+			}
+		}
+		if err := p.expect(lex.TokenRBracket); err != nil {
+			return nil, err
+		}
+		if err := p.expect(lex.TokenRParen); err != nil {
+			return nil, err
+		}
+		pairs = append(pairs, [2]data.PlutusData{policy, data.NewMap(tokens)})
+		if p.curToken.Type != lex.TokenRBracket {
+			if err := p.expect(lex.TokenComma); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if err := p.expect(lex.TokenRBracket); err != nil {
+		return nil, err
+	}
+	return data.NewValue(&data.Map{Pairs: pairs}), nil
+}
+
+func (p *Parser) parseValueBytes() (data.PlutusData, error) {
+	if p.curToken.Type != lex.TokenByteString {
+		return nil, fmt.Errorf(
+			"expected Value bytestring, got %v at position %d",
+			p.curToken.Type,
+			p.curToken.Position,
+		)
+	}
+	value, ok := p.curToken.Value.([]byte)
+	if !ok {
+		return nil, fmt.Errorf("invalid Value bytestring at position %d", p.curToken.Position)
+	}
+	p.nextToken()
+	return data.NewByteString(value), nil
 }
 
 func (p *Parser) parseTypeSpec() (Typ, error) {

@@ -891,7 +891,7 @@ func (m *Machine[T]) applyEvaluateStack(
 		// Cache the per-builtin force/arity table lookups so we don't repeat
 		// them for each branch below.
 		forceCount := f.Func.ForceCount()
-		arity := f.Func.Arity()
+		arity := m.builtinArity(f.Func)
 		if forceCount <= f.Forces && arity > f.ArgCount {
 			nextArgCount := f.ArgCount + 1
 			if forceCount == f.Forces {
@@ -970,7 +970,7 @@ func (m *Machine[T]) forceEvaluateStack(
 		forceCount := v.Func.ForceCount()
 		if forceCount > v.Forces {
 			nextForces := v.Forces + 1
-			if forceCount == nextForces && v.Func.Arity() == v.ArgCount {
+			if forceCount == nextForces && m.builtinArity(v.Func) == v.ArgCount {
 				resolved, err := m.evalBuiltinAppReady(
 					v.Func,
 					nextForces,

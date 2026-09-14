@@ -36,6 +36,7 @@ const (
 	TokenPlutusList   // List
 	TokenMap          // Map
 	TokenPlutusConstr // Constr
+	TokenPlutusValue  // V
 )
 
 type Token struct {

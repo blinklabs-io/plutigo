@@ -6,10 +6,10 @@ import (
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
-type argHolder[T syn.Eval] [6]Value[T]
+type argHolder[T syn.Eval] [7]Value[T]
 
 func newArgHolder[T syn.Eval]() argHolder[T] {
-	return argHolder[T]([6]Value[T]{})
+	return argHolder[T]([7]Value[T]{})
 }
 
 type BuiltinArgs[T syn.Eval] struct {
@@ -45,6 +45,10 @@ func (b *BuiltinArgs[T]) Extend(data Value[T]) *BuiltinArgs[T] {
 // Callers must ensure count does not exceed the current arg chain length.
 func (b *BuiltinArgs[T]) Extract(holder *argHolder[T], count uint) {
 	switch count {
+	case 7:
+		holder[6] = b.data
+		b = b.next
+		fallthrough
 	case 6:
 		holder[5] = b.data
 		b = b.next

@@ -441,6 +441,8 @@ func (pp *PrettyPrinter) printPlutusData(pd data.PlutusData) {
 			pp.writeIndent()
 			pp.write("]")
 		}
+	case *data.Value:
+		pp.printPlutusValue(d)
 	case *data.Constr:
 		pp.write(fmt.Sprintf("Constr %d ", d.Tag))
 		if len(d.Fields) == 0 {
@@ -462,6 +464,48 @@ func (pp *PrettyPrinter) printPlutusData(pd data.PlutusData) {
 		}
 	default:
 		pp.write(fmt.Sprintf("unknown PlutusData: %v", pd))
+	}
+}
+
+func (pp *PrettyPrinter) printPlutusValue(value *data.Value) {
+	pp.write("V [")
+	if value.Inner != nil {
+		for i, policy := range value.Inner.Pairs {
+			if i > 0 {
+				pp.write(", ")
+			}
+			pp.write("(")
+			pp.printValueAtom(policy[0])
+			pp.write(", [")
+			if tokens, ok := policy[1].(*data.Map); ok {
+				for j, token := range tokens.Pairs {
+					if j > 0 {
+						pp.write(", ")
+					}
+					pp.write("(")
+					pp.printValueAtom(token[0])
+					pp.write(", ")
+					pp.printValueAtom(token[1])
+					pp.write(")")
+				}
+			}
+			pp.write("])")
+		}
+	}
+	pp.write("]")
+}
+
+func (pp *PrettyPrinter) printValueAtom(pd data.PlutusData) {
+	switch value := pd.(type) {
+	case *data.ByteString:
+		pp.write("#")
+		for _, b := range value.Inner {
+			fmt.Fprintf(&pp.builder, "%02x", b)
+		}
+	case *data.Integer:
+		pp.write(value.Inner.String())
+	default:
+		pp.printPlutusData(pd)
 	}
 }
 

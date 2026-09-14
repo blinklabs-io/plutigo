@@ -117,6 +117,16 @@ var testDefs = []struct {
 		CborHex: "a1d8799f00190196ffd8799f1b17f2495b03141751ff",
 	},
 	{
+		Data: NewValue(NewMapDefIndef(false, [][2]PlutusData{{
+			NewByteString([]byte{0xaa}),
+			NewMapDefIndef(false, [][2]PlutusData{{
+				NewByteString([]byte{0xbb}),
+				NewInteger(big.NewInt(1)),
+			}}),
+		}}).(*Map)),
+		CborHex: "d90579a141aaa141bb01",
+	},
+	{
 		Data: NewConstrDefIndef(
 			true,
 			0,
