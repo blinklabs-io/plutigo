@@ -30,7 +30,9 @@ const (
 	// negative mirror.
 	cborTagPositiveBignum = 0xc2
 	cborTagNegativeBignum = 0xc3
-	MaxDecodeNestingDepth = 256
+	// MaxDecodeNestingDepth matches the CBOR nesting boundary used by the
+	// Cardano decoder for transaction-sized payloads.
+	MaxDecodeNestingDepth = 16384
 	MaxDecodeNodes        = 1_000_000
 )
 
@@ -115,8 +117,8 @@ func (s *decodeState) checkAdditionalNodes(n int) error {
 
 func init() {
 	decOptions := cbor.DecOptions{
-		// This defaults to 32, but there are blocks in the wild using >64 nested levels
-		MaxNestedLevels: 256,
+		// This defaults to 32, but there are blocks in the wild using >64 nested levels.
+		MaxNestedLevels: MaxDecodeNestingDepth,
 	}
 	var err error
 	decMode, err = decOptions.DecMode()

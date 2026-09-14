@@ -1,6 +1,7 @@
 package data
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -102,7 +103,7 @@ func TestDecodeJSONMapDepthBoundary(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected depth error, got nil")
 		}
-		want := "PlutusData JSON nesting exceeds max depth 256"
+		want := fmt.Sprintf("PlutusData JSON nesting exceeds max depth %d", MaxDecodeNestingDepth)
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("expected error containing %q, got: %v", want, err)
 		}
