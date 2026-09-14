@@ -39,6 +39,39 @@ func TestParsePrettyRoundTrip(t *testing.T) {
 	}
 }
 
+func TestParsePrettyRoundTripPlutusValue(t *testing.T) {
+	input := `(program 1.3.0 (con data (V [(#aa, [(#bb, 1), (#cc, -2)])])))`
+
+	parsed, err := Parse(input)
+	if err != nil {
+		t.Fatalf("failed to parse Plutus Value: %v", err)
+	}
+
+	pretty := Pretty(parsed)
+	parsedAgain, err := Parse(pretty)
+	if err != nil {
+		t.Fatalf("failed to parse pretty-printed Plutus Value %q: %v", pretty, err)
+	}
+	if prettyAgain := Pretty(parsedAgain); prettyAgain != pretty {
+		t.Fatalf("Plutus Value pretty-print is not stable: %q != %q", prettyAgain, pretty)
+	}
+}
+
+func TestParsePlutusValueRejectsMalformedInput(t *testing.T) {
+	tests := []string{
+		`(program 1.3.0 (con data (V [(#aa [(#bb, 1)])])))`,
+		`(program 1.3.0 (con data (V [(#aa, [(#bb, nope)])])))`,
+		`(program 1.3.0 (con data (V [(#aa, [(#bb, 1)])]))`,
+	}
+	for _, input := range tests {
+		t.Run(input, func(t *testing.T) {
+			if _, err := Parse(input); err == nil {
+				t.Fatal("expected malformed Plutus Value to fail parsing")
+			}
+		})
+	}
+}
+
 func FuzzParse(f *testing.F) {
 	for _, input := range fuzzProgramSeeds() {
 		f.Add(input)

@@ -207,6 +207,7 @@ type Decoder struct {
 	bigInts     arenaChunks[big.Int]
 	integers    arenaChunks[Integer]
 	byteStrings arenaChunks[ByteString]
+	values      arenaChunks[Value]
 	constrs     arenaChunks[Constr]
 	lists       arenaChunks[List]
 	maps        arenaChunks[Map]
@@ -225,6 +226,7 @@ func (d *Decoder) Reset() {
 	resetBigIntChunks(&d.bigInts, dataDecodeRetainCap)
 	d.integers.reset(dataDecodeRetainCap)
 	d.byteStrings.reset(dataDecodeRetainCap)
+	d.values.reset(dataDecodeRetainCap)
 	d.constrs.reset(dataDecodeRetainCap)
 	d.lists.reset(dataDecodeRetainCap)
 	d.maps.reset(dataDecodeRetainCap)
@@ -255,7 +257,7 @@ func (d *Decoder) decode(data []byte, state *decodeState) (PlutusData, error) {
 	return v, nil
 }
 
-func (d *Decoder) decodePrimitive(data []byte) (PlutusData, error) {
+func (d *Decoder) decodePrimitive(data []byte, state *decodeState) (PlutusData, error) {
 	cborType := data[0] & CborTypeMask
 	switch cborType {
 	case CborTypeUnsignedInt, CborTypeNegativeInt:
@@ -273,11 +275,20 @@ func (d *Decoder) decodePrimitive(data []byte) (PlutusData, error) {
 		case tagNumber == 2 || tagNumber == 3:
 			return d.decodeInteger(data)
 		case tagNumber == valueCBORTag:
-			var tmpValue Value
-			if err := tmpValue.UnmarshalCBOR(data); err != nil {
+			_, content, err := decodeCBORTag(data)
+			if err != nil {
 				return nil, err
 			}
-			return &tmpValue, nil
+			inner, rest, err := d.decodeMapNextEntered(content, state)
+			if err != nil {
+				return nil, err
+			}
+			if len(rest) > 0 {
+				return nil, fmt.Errorf("unexpected %d trailing bytes", len(rest))
+			}
+			value := d.values.alloc()
+			value.Inner = inner
+			return value, nil
 		default:
 			return nil, fmt.Errorf("unknown CBOR tag for PlutusData: %d", tagNumber)
 		}
@@ -333,7 +344,7 @@ func (d *Decoder) decodeNextPlutusData(
 	if err != nil {
 		return nil, nil, err
 	}
-	tmp, err := d.decodePrimitive(item)
+	tmp, err := d.decodePrimitive(item, state)
 	if err != nil {
 		return nil, nil, err
 	}
