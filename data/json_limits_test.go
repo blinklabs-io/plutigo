@@ -1,6 +1,7 @@
 package data
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -92,13 +93,19 @@ func TestDecodeJSONDepthLimit(t *testing.T) {
 }
 
 func TestDecodeJSONMapDepthBoundary(t *testing.T) {
-	// Over-limit rejection is covered by TestDecodeJSONDepthLimit. Do not
-	// construct a one-level-over nested map here: the parser must walk that
-	// entire 16K-level map before the semantic depth check can fire, which
-	// makes the race-enabled suite needlessly slow.
 	t.Run("exactly at PlutusData limit decodes", func(t *testing.T) {
 		if _, err := DecodeJSON([]byte(nestedMapKeyJSON(MaxDecodeNestingDepth - 1))); err != nil {
 			t.Fatalf("expected success at depth limit, got: %v", err)
+		}
+	})
+	t.Run("one past PlutusData limit preserves semantic error", func(t *testing.T) {
+		_, err := DecodeJSON([]byte(nestedMapKeyJSON(MaxDecodeNestingDepth)))
+		if err == nil {
+			t.Fatal("expected depth error, got nil")
+		}
+		want := fmt.Sprintf("PlutusData JSON nesting exceeds max depth %d", MaxDecodeNestingDepth)
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected error containing %q, got: %v", want, err)
 		}
 	})
 }

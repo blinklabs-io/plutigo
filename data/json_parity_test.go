@@ -1,7 +1,9 @@
 package data
 
 import (
+	"fmt"
 	"math/big"
+	"strings"
 	"testing"
 )
 
@@ -409,13 +411,22 @@ func TestDecodeJSONParityErrorsRejected(t *testing.T) {
 
 func TestDecodeJSONParityDepthBoundary(t *testing.T) {
 	// nestedListJSON(d) produces d nested Lists plus one Integer, so the
-	// deepest PlutusData node sits at depth d+1. Over-limit rejection is
-	// covered by TestDecodeJSONDepthLimit; keeping only the valid boundary here
-	// avoids forcing the race-enabled suite through a full 16K-level failure.
+	// deepest PlutusData node sits at depth d+1.
 	t.Run("exactly at limit decodes", func(t *testing.T) {
 		input := nestedListJSON(MaxDecodeNestingDepth - 1)
 		if _, err := DecodeJSON([]byte(input)); err != nil {
 			t.Fatalf("expected success at depth limit, got: %v", err)
+		}
+	})
+	t.Run("one past limit rejected", func(t *testing.T) {
+		input := nestedListJSON(MaxDecodeNestingDepth)
+		_, err := DecodeJSON([]byte(input))
+		if err == nil {
+			t.Fatal("expected depth error, got nil")
+		}
+		want := fmt.Sprintf("PlutusData JSON nesting exceeds max depth %d", MaxDecodeNestingDepth)
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected error containing %q, got: %v", want, err)
 		}
 	})
 }

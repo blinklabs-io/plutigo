@@ -276,6 +276,20 @@ type jsonDecodeState struct {
 	nodes int
 }
 
+type jsonDepthLimitError struct{}
+
+func (e *jsonDepthLimitError) Error() string {
+	return fmt.Sprintf(
+		"PlutusData JSON nesting exceeds max depth %d",
+		MaxDecodeNestingDepth,
+	)
+}
+
+func isJSONDepthLimitError(err error) bool {
+	_, ok := err.(*jsonDepthLimitError)
+	return ok
+}
+
 func (st *jsonDecodeState) enterNode() error {
 	st.nodes++
 	if st.nodes > MaxDecodeNodes {
@@ -574,10 +588,7 @@ func decodePlutusDataJSONValue(
 ) (PlutusData, error) {
 	st.depth++
 	if st.depth > MaxDecodeNestingDepth {
-		return nil, fmt.Errorf(
-			"PlutusData JSON nesting exceeds max depth %d",
-			MaxDecodeNestingDepth,
-		)
+		return nil, &jsonDepthLimitError{}
 	}
 	defer func() { st.depth-- }()
 
@@ -652,6 +663,9 @@ func decodePlutusDataJSONValue(
 		}
 		items, err := decodePlutusDataJSONArray(data, itemsVal, st, "List item")
 		if err != nil {
+			if isJSONDepthLimitError(err) {
+				return nil, err
+			}
 			return nil, fmt.Errorf("failed to unmarshal List value: %w", err)
 		}
 		return &List{Items: items}, nil
@@ -662,6 +676,9 @@ func decodePlutusDataJSONValue(
 		}
 		pairs, err := decodePlutusDataJSONMap(data, pairsVal, st)
 		if err != nil {
+			if isJSONDepthLimitError(err) {
+				return nil, err
+			}
 			return nil, fmt.Errorf("failed to unmarshal Map value: %w", err)
 		}
 		return &Map{Pairs: pairs}, nil
@@ -679,6 +696,9 @@ func decodePlutusDataJSONValue(
 		}
 		fields, err := decodePlutusDataJSONArray(data, fieldsVal, st, "Constr field")
 		if err != nil {
+			if isJSONDepthLimitError(err) {
+				return nil, err
+			}
 			return nil, fmt.Errorf("failed to unmarshal Constr fields: %w", err)
 		}
 		return &Constr{Tag: &tag, Fields: fields}, nil
@@ -704,6 +724,9 @@ func decodePlutusDataJSONArray(
 		}
 		pd, err := decodePlutusDataJSONValue(data, item, st, true)
 		if err != nil {
+			if isJSONDepthLimitError(err) {
+				return nil, err
+			}
 			return nil, fmt.Errorf("failed to unmarshal %s %d: %w", itemLabel, i, err)
 		}
 		items = append(items, pd)
@@ -771,10 +794,16 @@ func decodePlutusDataJSONMapPair(
 
 	k, err := decodePlutusDataJSONValue(data, kVal, st, true)
 	if err != nil {
+		if isJSONDepthLimitError(err) {
+			return pair, err
+		}
 		return pair, fmt.Errorf("failed to unmarshal Map key %d: %w", index, err)
 	}
 	val, err := decodePlutusDataJSONValue(data, vVal, st, true)
 	if err != nil {
+		if isJSONDepthLimitError(err) {
+			return pair, err
+		}
 		return pair, fmt.Errorf("failed to unmarshal Map value %d: %w", index, err)
 	}
 	pair[0] = k
