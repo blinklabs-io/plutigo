@@ -25,9 +25,15 @@ var (
 
 const maxConstrFieldsPV11 = 1024
 
-// ValidateProgram checks a decoded program against the selected ledger
-// language and protocol version. Validation walks every term, including
-// branches which evaluation might not reach.
+// ValidateProgram is a phase-1, decode-time well-formedness check: language
+// introduction, builtin availability, and structural bounds such as
+// constructor arity. It applies uniformly to witness scripts and to a
+// transaction's own newly-created reference-script outputs, since real
+// cardano-ledger applies the same decode-time gate to both. It does not check
+// whether the program's UPLC term version is legal to *execute* for its
+// ledger language at the current protocol version -- that is a phase-2,
+// execution-time check; see [ValidateTermVersionForExecution]. Validation
+// walks every term, including branches which evaluation might not reach.
 func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 	if program == nil {
 		return errors.New("program is required")
@@ -154,6 +160,17 @@ func plutusVersionForLedgerLanguage(version lang.LanguageVersion) (builtin.Plutu
 	}
 }
 
+// validateProgramVersion is a phase-1, decode-time well-formedness check: it
+// applies uniformly to witness scripts and to a transaction's own
+// newly-created reference-script outputs (real cardano-ledger's
+// deserialiseScript/scriptCBORDecoder gate, applied by
+// validateScriptsWellFormedTxOuts to both). It deliberately excludes the UPLC
+// term-version-vs-ledger-language legality gate: that check only fires when a
+// script is actually about to be run through the CEK machine (real
+// cardano-ledger's mkTermToEvaluate, reached only via
+// evaluateScriptRestricting/evaluateScriptCounting), which a transaction's own
+// stored-but-unexecuted reference-script output can never be. See
+// [ValidateTermVersionForExecution] for that check.
 func validateProgramVersion(version lang.LanguageVersion, context ProgramContext) error {
 	if version != uplcVersion100 && version != uplcVersion110 {
 		return fmt.Errorf(
@@ -182,6 +199,24 @@ func validateProgramVersion(version lang.LanguageVersion, context ProgramContext
 			plutusVersion,
 			context.ProtocolMajor,
 		)
+	}
+	return nil
+}
+
+// ValidateTermVersionForExecution checks whether a program's UPLC term
+// version is legal to *execute* under the given ledger language and protocol
+// version (the "van Rossem" gate: UPLC 1.1.0 sums-of-products are only legal
+// for Plutus V1/V2 at protocol major version 11 and above). Unlike
+// [ValidateProgram], a decode-time structural check applied uniformly to
+// witness scripts and to stored-but-unexecuted reference-script outputs, this
+// check applies only immediately before a script is actually run through the
+// CEK machine: a transaction cannot execute a reference script it is
+// simultaneously creating, so this must never gate decoding or storage, only
+// evaluation.
+func ValidateTermVersionForExecution(version lang.LanguageVersion, context ProgramContext) error {
+	plutusVersion, err := plutusVersionForLedgerLanguage(context.LedgerLanguage)
+	if err != nil {
+		return err
 	}
 	if version == uplcVersion110 &&
 		(plutusVersion == builtin.PlutusV1 || plutusVersion == builtin.PlutusV2) &&

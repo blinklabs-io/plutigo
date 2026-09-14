@@ -209,15 +209,22 @@ func (c *Case) validate() (decodedCase, error) {
 	if err != nil {
 		return decodedCase{}, err
 	}
-	program, err := syn.DecodeDeBruijnWithContext(
-		flatProgram,
-		syn.ProgramContext{
-			LedgerLanguage: languageVersion,
-			ProtocolMajor:  c.ProtocolVersion.Major,
-		},
-	)
+	programContext := syn.ProgramContext{
+		LedgerLanguage: languageVersion,
+		ProtocolMajor:  c.ProtocolVersion.Major,
+	}
+	program, err := syn.DecodeDeBruijnWithContext(flatProgram, programContext)
 	if err != nil {
 		return decodedCase{}, fmt.Errorf("decode FLAT program: %w", err)
+	}
+	// Every replay case is executed through the CEK machine below (evaluate,
+	// in runner.go), unlike a transaction's own stored-but-unexecuted
+	// reference-script output. DecodeDeBruijnWithContext only performs
+	// phase-1 well-formedness checks, so the phase-2, execution-time term
+	// version legality gate must be checked separately here, before this
+	// program is ever handed to the machine.
+	if err := syn.ValidateTermVersionForExecution(program.Version, programContext); err != nil {
+		return decodedCase{}, fmt.Errorf("validate term version for execution: %w", err)
 	}
 	arguments := make([]data.PlutusData, 0, len(c.ArgumentsCBORHex))
 	for i, arg := range c.ArgumentsCBORHex {

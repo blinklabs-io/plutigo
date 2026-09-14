@@ -155,6 +155,34 @@ func TestRunCaseUsesLedgerLanguageInsteadOfUPLCVersion(t *testing.T) {
 	}
 }
 
+// TestRunCaseRejectsPreVanRossemTermVersionAtSetup proves the replay
+// package's combined decode-then-execute path (Case.validate -> evaluate)
+// still refuses to run a PlutusV2 script using UPLC term-version 1.1.0 below
+// protocol major 11 -- gouroboros#2316's fix moved that check off the
+// decode-time path (DecodeDeBruijnWithContext now accepts the program, since
+// it may be a stored, unexecuted reference script), so replay itself must
+// call syn.ValidateTermVersionForExecution before ever handing the decoded
+// program to the CEK machine, since every replay case is in fact executed.
+func TestRunCaseRejectsPreVanRossemTermVersionAtSetup(t *testing.T) {
+	t.Parallel()
+
+	replayCase := baseCaseWithVersion(t, lang.LanguageVersion{1, 1, 0}, &syn.Error{}, nil)
+	replayCase.Language = PlutusV2
+	replayCase.ProtocolVersion = ProtocolVersion{Major: 10}
+	replayCase.Expected = Expected{Success: false}
+
+	result := RunCase(&replayCase)
+	if result.Actual.Success {
+		t.Fatal("RunCase() unexpectedly succeeded executing a pre-van-Rossem UPLC 1.1.0 V2 script")
+	}
+	if !result.Actual.SetupError {
+		t.Fatalf("RunCase() actual = %+v, want setup error rejecting the term version before execution", result.Actual)
+	}
+	if !strings.Contains(result.Actual.Error, "UPLC version 1.1.0 is not available") {
+		t.Fatalf("RunCase() error = %q, want UPLC-version-not-available error", result.Actual.Error)
+	}
+}
+
 func TestRunCaseNeverTreatsSetupFailureAsExpectedScriptFailure(t *testing.T) {
 	replayCase := successfulCase(t)
 	replayCase.FlatProgramHex = "00"

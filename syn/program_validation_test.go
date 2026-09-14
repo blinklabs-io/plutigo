@@ -70,12 +70,17 @@ func TestValidateProgramUsesLedgerLanguageAndProtocol(t *testing.T) {
 			wantErr: "builtin serialiseData is not available",
 		},
 		{
-			name:       "PLC 1.1 is not available to V2 before van Rossem",
+			// The van Rossem term-version gate is phase-2 (execution-time)
+			// only; see TestValidateTermVersionForExecutionMatrix. A
+			// decode-time ValidateProgram/DecodeWithContext call must accept
+			// this combination, since the program may be a stored
+			// reference-script output that is never executed by this
+			// transaction.
+			name:       "PLC 1.1 decodes for V2 before van Rossem",
 			language:   lang.LanguageVersionV2,
 			protocol:   10,
 			programVer: uplcVersion110,
 			term:       &Error{},
-			wantErr:    "UPLC version 1.1.0 is not available",
 		},
 		{
 			name:       "constructors require PLC 1.1",
@@ -126,10 +131,13 @@ func TestValidateProgramVersionMatrix(t *testing.T) {
 	}{
 		{"V1 at Alonzo with PLC 1.0", lang.LanguageVersionV1, 5, uplcVersion100, false},
 		{"V1 at zero protocol", lang.LanguageVersionV1, 0, uplcVersion100, true},
-		{"V1 before van Rossem with PLC 1.1", lang.LanguageVersionV1, 10, uplcVersion110, true},
+		// Decoding (phase 1) no longer rejects PLC 1.1 pre-van-Rossem for
+		// V1/V2: that gate is execution-only. See
+		// TestValidateTermVersionForExecutionMatrix.
+		{"V1 before van Rossem with PLC 1.1 decodes", lang.LanguageVersionV1, 10, uplcVersion110, false},
 		{"V1 at van Rossem with PLC 1.1", lang.LanguageVersionV1, 11, uplcVersion110, false},
 		{"V2 at Vasil with PLC 1.0", lang.LanguageVersionV2, 7, uplcVersion100, false},
-		{"V2 before van Rossem with PLC 1.1", lang.LanguageVersionV2, 10, uplcVersion110, true},
+		{"V2 before van Rossem with PLC 1.1 decodes", lang.LanguageVersionV2, 10, uplcVersion110, false},
 		{"V2 at van Rossem with PLC 1.1", lang.LanguageVersionV2, 11, uplcVersion110, false},
 		{"V3 at Chang with PLC 1.0", lang.LanguageVersionV3, 9, uplcVersion100, false},
 		{"V3 at Chang with PLC 1.1", lang.LanguageVersionV3, 9, uplcVersion110, false},
@@ -150,6 +158,100 @@ func TestValidateProgramVersionMatrix(t *testing.T) {
 				t.Fatalf("ValidateProgram() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+// TestValidateTermVersionForExecutionMatrix proves the van Rossem
+// term-version-vs-ledger-language gate moved to ValidateTermVersionForExecution
+// rather than disappearing: it must still reject PLC 1.1 for V1/V2 below
+// protocol 11, accept it at/after 11, and never fire for V3/V4 regardless of
+// protocol version.
+func TestValidateTermVersionForExecutionMatrix(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		language lang.LanguageVersion
+		protocol uint
+		version  lang.LanguageVersion
+		wantErr  bool
+	}{
+		{"V1 before van Rossem with PLC 1.1 is rejected", lang.LanguageVersionV1, 10, uplcVersion110, true},
+		{"V1 at van Rossem with PLC 1.1 is accepted", lang.LanguageVersionV1, 11, uplcVersion110, false},
+		{"V1 with PLC 1.0 is unaffected", lang.LanguageVersionV1, 10, uplcVersion100, false},
+		{"V2 before van Rossem with PLC 1.1 is rejected", lang.LanguageVersionV2, 10, uplcVersion110, true},
+		{"V2 at van Rossem with PLC 1.1 is accepted", lang.LanguageVersionV2, 11, uplcVersion110, false},
+		{"V3 with PLC 1.1 before protocol 11 is unaffected", lang.LanguageVersionV3, 9, uplcVersion110, false},
+		{"V3 with PLC 1.1 at protocol 11 is unaffected", lang.LanguageVersionV3, 11, uplcVersion110, false},
+		{"V4 with PLC 1.1 is unaffected", lang.LanguageVersionV4, 12, uplcVersion110, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := ValidateTermVersionForExecution(tt.version, ProgramContext{
+				LedgerLanguage: tt.language,
+				ProtocolMajor:  tt.protocol,
+			})
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ValidateTermVersionForExecution() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && (err == nil || !strings.Contains(err.Error(), "UPLC version 1.1.0 is not available")) {
+				t.Fatalf("ValidateTermVersionForExecution() error = %v, want UPLC-version-not-available error", err)
+			}
+		})
+	}
+}
+
+// TestDecodeWithContextAcceptsPreVanRossemV2TermVersion110 is the regression
+// case from gouroboros#2316: a PlutusV2 script using UPLC term-version 1.1.0
+// must decode successfully below protocol major 11, since decode/well-formed
+// checking (phase 1) is applied uniformly to witness scripts and to a
+// transaction's own stored-but-unexecuted reference-script outputs, and real
+// cardano-ledger's phase-1 check never gates the term version. The
+// once-per-invocation gate is [ValidateTermVersionForExecution], exercised
+// separately below.
+func TestDecodeWithContextAcceptsPreVanRossemV2TermVersion110(t *testing.T) {
+	t.Parallel()
+
+	program := &Program[DeBruijn]{
+		Version: uplcVersion110,
+		Term:    &Error{},
+	}
+	encoded, err := Encode(program)
+	if err != nil {
+		t.Fatalf("Encode() failed: %v", err)
+	}
+
+	context := ProgramContext{
+		LedgerLanguage: lang.LanguageVersionV2,
+		ProtocolMajor:  builtin.VanRossemProtoVersion - 1,
+	}
+
+	decoded, err := DecodeWithContext[DeBruijn](encoded, context)
+	if err != nil {
+		t.Fatalf("DecodeWithContext() failed: %v, want success (phase-1 decode must not apply the execution-only van Rossem gate)", err)
+	}
+	if decoded.Version != uplcVersion110 {
+		t.Fatalf("decoded version = %v, want %v", decoded.Version, uplcVersion110)
+	}
+
+	if err := ValidateTermVersionForExecution(decoded.Version, context); err == nil {
+		t.Fatalf("ValidateTermVersionForExecution() succeeded, want rejection below protocol %d", builtin.VanRossemProtoVersion)
+	} else if !strings.Contains(err.Error(), "UPLC version 1.1.0 is not available") {
+		t.Fatalf("ValidateTermVersionForExecution() error = %v, want UPLC-version-not-available error", err)
+	}
+
+	atVanRossem := ProgramContext{
+		LedgerLanguage: lang.LanguageVersionV2,
+		ProtocolMajor:  builtin.VanRossemProtoVersion,
+	}
+	if _, err := DecodeWithContext[DeBruijn](encoded, atVanRossem); err != nil {
+		t.Fatalf("DecodeWithContext() at van Rossem failed: %v", err)
+	}
+	if err := ValidateTermVersionForExecution(uplcVersion110, atVanRossem); err != nil {
+		t.Fatalf("ValidateTermVersionForExecution() at van Rossem failed: %v", err)
 	}
 }
 
