@@ -392,8 +392,9 @@ func dataNodeCountExMem(d data.PlutusData) func() ExMem {
 					stack = append(stack, pair[0], pair[1])
 				}
 			case *data.Value:
-				// Value is a built-in payload and is accounted for as one Data node.
-				// Integer and ByteString are leaf nodes, just counted
+				if n.Inner != nil {
+					stack = append(stack, n.Inner)
+				}
 			}
 		}
 		return ExMem(count)

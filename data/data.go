@@ -352,6 +352,10 @@ func (v *Value) UnmarshalCBOR(encoded []byte) error {
 	if len(rest) > 0 {
 		return fmt.Errorf("unexpected %d trailing bytes", len(rest))
 	}
+	value := Value{Inner: inner}
+	if err := value.Validate(); err != nil {
+		return err
+	}
 	v.Inner = inner
 	return nil
 }
@@ -359,6 +363,9 @@ func (v *Value) UnmarshalCBOR(encoded []byte) error {
 func (v Value) MarshalCBOR() ([]byte, error) {
 	if v.Inner == nil {
 		return nil, errors.New("cannot encode a nil PlutusData Value")
+	}
+	if err := v.Validate(); err != nil {
+		return nil, err
 	}
 	return cborMarshal(cbor.Tag{Number: valueCBORTag, Content: v.Inner})
 }
@@ -382,9 +389,38 @@ func (v Value) String() string {
 	return fmt.Sprintf("Value{%v}", v.Inner)
 }
 
-// NewValue creates a Plutus V4 Data Value constructor.
-func NewValue(inner *Map) PlutusData {
-	return &Value{Inner: inner}
+// Validate checks that a Value uses the canonical policy/token map shape.
+func (v Value) Validate() error {
+	if v.Inner == nil {
+		return errors.New("Value must contain a map")
+	}
+	for _, policy := range v.Inner.Pairs {
+		if _, ok := policy[0].(*ByteString); !ok {
+			return fmt.Errorf("Value policy key must be a bytestring, got %T", policy[0])
+		}
+		tokens, ok := policy[1].(*Map)
+		if !ok {
+			return fmt.Errorf("Value policy value must be a map, got %T", policy[1])
+		}
+		for _, token := range tokens.Pairs {
+			if _, ok := token[0].(*ByteString); !ok {
+				return fmt.Errorf("Value token key must be a bytestring, got %T", token[0])
+			}
+			if _, ok := token[1].(*Integer); !ok {
+				return fmt.Errorf("Value token quantity must be an integer, got %T", token[1])
+			}
+		}
+	}
+	return nil
+}
+
+// NewValue creates a validated Plutus V4 Data Value constructor.
+func NewValue(inner *Map) (*Value, error) {
+	value := &Value{Inner: inner}
+	if err := value.Validate(); err != nil {
+		return nil, err
+	}
+	return value, nil
 }
 
 // Integer

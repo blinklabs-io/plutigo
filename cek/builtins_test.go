@@ -517,7 +517,7 @@ func TestChooseDataBuiltin(t *testing.T) {
 func TestChooseDataBuiltinV4ValueBranch(t *testing.T) {
 	m := newTestMachineV4()
 	b := newTestBuiltin(builtin.ChooseData)
-	dataVal := &Constant{&syn.Data{Inner: data.NewValue(&data.Map{})}}
+	dataVal := &Constant{&syn.Data{Inner: &data.Value{Inner: &data.Map{}}}}
 	branches := []Value[syn.DeBruijn]{
 		&Constant{&syn.String{Inner: "constr"}},
 		&Constant{&syn.String{Inner: "map"}},
@@ -538,36 +538,36 @@ func TestChooseDataBuiltinV4ValueBranch(t *testing.T) {
 }
 
 func TestChooseDataBuiltinArityMatchesLanguageVersion(t *testing.T) {
+	tests := []struct {
+		name       string
+		newMachine func() *Machine[syn.DeBruijn]
+		readyAfter bool
+	}{
+		{name: "V3", newMachine: newTestMachine, readyAfter: true},
+		{name: "V4", newMachine: newTestMachineV4, readyAfter: false},
+	}
 	arg := &Constant{&syn.String{Inner: "arg"}}
-
-	v4 := newTestMachineV4().allocBuiltin(
-		builtin.ChooseData,
-		builtin.ChooseData.ForceCount(),
-		0,
-		nil,
-	)
-	for i := uint(0); i < builtin.ChooseData.Arity(); i++ {
-		v4 = v4.ApplyArg(arg)
-	}
-	if v4.IsReady() || !v4.IsArrow() {
-		t.Fatalf("V4 ChooseData should require its Value branch after %d args", v4.ArgCount)
-	}
-	v4 = v4.ApplyArg(arg)
-	if !v4.IsReady() || v4.IsArrow() {
-		t.Fatalf("V4 ChooseData should be ready after %d args", v4.ArgCount)
-	}
-
-	v3 := newTestMachine().allocBuiltin(
-		builtin.ChooseData,
-		builtin.ChooseData.ForceCount(),
-		0,
-		nil,
-	)
-	for i := uint(0); i < builtin.ChooseData.Arity(); i++ {
-		v3 = v3.ApplyArg(arg)
-	}
-	if !v3.IsReady() || v3.IsArrow() {
-		t.Fatalf("V3 ChooseData should be ready after %d args", v3.ArgCount)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			value := tt.newMachine().allocBuiltin(
+				builtin.ChooseData,
+				builtin.ChooseData.ForceCount(),
+				0,
+				nil,
+			)
+			for i := uint(0); i < builtin.ChooseData.Arity(); i++ {
+				value = value.ApplyArg(arg)
+			}
+			if value.IsReady() != tt.readyAfter || value.IsArrow() != !tt.readyAfter {
+				t.Fatalf("ChooseData after %d args: ready=%v arrow=%v, want ready=%v arrow=%v", value.ArgCount, value.IsReady(), value.IsArrow(), tt.readyAfter, !tt.readyAfter)
+			}
+			if !tt.readyAfter {
+				value = value.ApplyArg(arg)
+				if !value.IsReady() || value.IsArrow() {
+					t.Fatalf("V4 ChooseData should be ready after %d args", value.ArgCount)
+				}
+			}
+		})
 	}
 }
 

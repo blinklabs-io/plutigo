@@ -468,6 +468,10 @@ func (pp *PrettyPrinter) printPlutusData(pd data.PlutusData) {
 }
 
 func (pp *PrettyPrinter) printPlutusValue(value *data.Value) {
+	if err := value.Validate(); err != nil {
+		pp.write(fmt.Sprintf("Value{invalid: %v}", err))
+		return
+	}
 	pp.write("V [")
 	if value.Inner != nil {
 		for i, policy := range value.Inner.Pairs {
@@ -477,17 +481,16 @@ func (pp *PrettyPrinter) printPlutusValue(value *data.Value) {
 			pp.write("(")
 			pp.printValueAtom(policy[0])
 			pp.write(", [")
-			if tokens, ok := policy[1].(*data.Map); ok {
-				for j, token := range tokens.Pairs {
-					if j > 0 {
-						pp.write(", ")
-					}
-					pp.write("(")
-					pp.printValueAtom(token[0])
+			tokens := policy[1].(*data.Map)
+			for j, token := range tokens.Pairs {
+				if j > 0 {
 					pp.write(", ")
-					pp.printValueAtom(token[1])
-					pp.write(")")
 				}
+				pp.write("(")
+				pp.printValueAtom(token[0])
+				pp.write(", ")
+				pp.printValueAtom(token[1])
+				pp.write(")")
 			}
 			pp.write("])")
 		}

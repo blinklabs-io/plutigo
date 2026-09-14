@@ -1273,7 +1273,11 @@ func (p *Parser) parsePlutusValue() (data.PlutusData, error) {
 	if err := p.expect(lex.TokenRBracket); err != nil {
 		return nil, err
 	}
-	return data.NewValue(&data.Map{Pairs: pairs}), nil
+	value, err := data.NewValue(&data.Map{Pairs: pairs})
+	if err != nil {
+		return nil, err
+	}
+	return value, nil
 }
 
 func (p *Parser) parseValueBytes() (data.PlutusData, error) {

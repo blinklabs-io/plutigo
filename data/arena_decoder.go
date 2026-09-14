@@ -286,6 +286,9 @@ func (d *Decoder) decodePrimitive(data []byte, state *decodeState) (PlutusData, 
 			if len(rest) > 0 {
 				return nil, fmt.Errorf("unexpected %d trailing bytes", len(rest))
 			}
+			if err := (&Value{Inner: inner}).Validate(); err != nil {
+				return nil, err
+			}
 			value := d.values.alloc()
 			value.Inner = inner
 			return value, nil
