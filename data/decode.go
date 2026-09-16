@@ -30,11 +30,16 @@ const (
 	// negative mirror.
 	cborTagPositiveBignum = 0xc2
 	cborTagNegativeBignum = 0xc3
-	// MaxDecodeNestingDepth matches the CBOR nesting boundary used by the
-	// Cardano decoder for transaction-sized payloads.
-	MaxDecodeNestingDepth = 16384
 	MaxDecodeNodes        = 1_000_000
 )
+
+// MaxDecodeNestingDepth matches the CBOR nesting boundary used by the Cardano
+// decoder for transaction-sized payloads. It is a var, not a const, so an
+// application that must decode PlutusData nested deeper than this (for example
+// an indexer reading trusted archival data) can raise it. The cached decode
+// mode reads it at first use, so set it before the first decode for the change
+// to take effect.
+var MaxDecodeNestingDepth = 16384
 
 // decMode is cached at package level to avoid recreation on every decode call
 var decMode cbor.DecMode
