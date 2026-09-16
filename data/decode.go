@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sync"
+	"sync/atomic"
 
 	"github.com/fxamacker/cbor/v2"
 )
@@ -30,14 +32,45 @@ const (
 	// negative mirror.
 	cborTagPositiveBignum = 0xc2
 	cborTagNegativeBignum = 0xc3
-	// MaxDecodeNestingDepth matches the CBOR nesting boundary used by the
-	// Cardano decoder for transaction-sized payloads.
-	MaxDecodeNestingDepth = 16384
 	MaxDecodeNodes        = 1_000_000
+
+	minDecodeNestingDepth      = 4
+	maxDecodeNestingDepthLimit = 65535
+	defaultDecodeNestingDepth  = 16384
 )
 
-// decMode is cached at package level to avoid recreation on every decode call
-var decMode cbor.DecMode
+var maxDecodeNestingDepth atomic.Int64
+
+func init() {
+	maxDecodeNestingDepth.Store(defaultDecodeNestingDepth)
+}
+
+// MaxDecodeNestingDepth returns the CBOR nesting boundary used by the Cardano
+// decoder for transaction-sized payloads.
+func MaxDecodeNestingDepth() int {
+	return int(maxDecodeNestingDepth.Load())
+}
+
+// SetMaxDecodeNestingDepth changes the maximum nesting depth accepted by
+// PlutusData decoders.
+func SetMaxDecodeNestingDepth(depth int) error {
+	if depth < minDecodeNestingDepth || depth > maxDecodeNestingDepthLimit {
+		return fmt.Errorf(
+			"decode nesting depth must be between %d and %d: %d",
+			minDecodeNestingDepth,
+			maxDecodeNestingDepthLimit,
+			depth,
+		)
+	}
+	maxDecodeNestingDepth.Store(int64(depth))
+	return nil
+}
+
+var (
+	decMode             cbor.DecMode
+	decModeNestingDepth int
+	decModeMu           sync.Mutex
+)
 
 type DecodeLimitError struct {
 	Limit  string
@@ -66,10 +99,13 @@ type decodeState struct {
 }
 
 func newDecodeState() *decodeState {
-	return newDecodeStateWithLimits(decodeLimits{
-		maxDepth: MaxDecodeNestingDepth,
-		maxNodes: MaxDecodeNodes,
-	})
+	return newDecodeStateWithNestingDepth(MaxDecodeNestingDepth())
+}
+
+func newDecodeStateWithNestingDepth(maxDepth int) *decodeState {
+	return newDecodeStateWithLimits(
+		decodeLimits{maxDepth: maxDepth, maxNodes: MaxDecodeNodes},
+	)
 }
 
 func newDecodeStateWithLimits(limits decodeLimits) *decodeState {
@@ -115,16 +151,24 @@ func (s *decodeState) checkAdditionalNodes(n int) error {
 	return nil
 }
 
-func init() {
+func getDecMode(maxDepth int) cbor.DecMode {
+	decModeMu.Lock()
+	defer decModeMu.Unlock()
+	if decMode != nil && decModeNestingDepth == maxDepth {
+		return decMode
+	}
+
 	decOptions := cbor.DecOptions{
 		// This defaults to 32, but there are blocks in the wild using >64 nested levels.
-		MaxNestedLevels: MaxDecodeNestingDepth,
+		MaxNestedLevels: maxDepth,
 	}
-	var err error
-	decMode, err = decOptions.DecMode()
+	dm, err := decOptions.DecMode()
 	if err != nil {
 		panic("failed to initialize CBOR decoder: " + err.Error())
 	}
+	decMode = dm
+	decModeNestingDepth = maxDepth
+	return decMode
 }
 
 // Decode decodes a CBOR-encoded byte slice into a PlutusData value.
@@ -139,18 +183,22 @@ func Decode(b []byte) (PlutusData, error) {
 
 // cborUnmarshal acts like cbor.Unmarshal but allows us to set our own decoder options
 func cborUnmarshal(dataBytes []byte, dest any) error {
-	dm := decMode
-	if dm == nil {
-		panic("CBOR decoder not initialized")
-	}
-	if err := validateCBORByteStringLeaves(dataBytes); err != nil {
+	return cborUnmarshalWithDepth(dataBytes, dest, MaxDecodeNestingDepth())
+}
+
+func cborUnmarshalWithDepth(dataBytes []byte, dest any, maxDepth int) error {
+	dm := getDecMode(maxDepth)
+	if err := validateCBORByteStringLeaves(dataBytes, maxDepth); err != nil {
 		return err
 	}
 	return dm.Unmarshal(dataBytes, dest)
 }
 
-func validateCBORByteStringLeaves(data []byte) error {
-	rest, err := skipCBORItemWithState(data, newDecodeState())
+func validateCBORByteStringLeaves(data []byte, maxDepth int) error {
+	rest, err := skipCBORItemWithState(
+		data,
+		newDecodeStateWithNestingDepth(maxDepth),
+	)
 	if err != nil {
 		return err
 	}
@@ -177,7 +225,7 @@ func decodeWithState(data []byte, state *decodeState) (PlutusData, error) {
 	return v, nil
 }
 
-func decodePrimitive(data []byte) (PlutusData, error) {
+func decodePrimitive(data []byte, maxDepth int) (PlutusData, error) {
 	if len(data) == 0 {
 		return nil, errors.New("empty data")
 	}
@@ -185,13 +233,13 @@ func decodePrimitive(data []byte) (PlutusData, error) {
 	switch cborType {
 	case CborTypeUnsignedInt, CborTypeNegativeInt:
 		var tmpData Integer
-		if err := cborUnmarshal(data, &tmpData); err != nil {
+		if err := cborUnmarshalWithDepth(data, &tmpData, maxDepth); err != nil {
 			return nil, err
 		}
 		return &tmpData, nil
 	case CborTypeByteString:
 		var tmpData ByteString
-		if err := cborUnmarshal(data, &tmpData); err != nil {
+		if err := cborUnmarshalWithDepth(data, &tmpData, maxDepth); err != nil {
 			return nil, err
 		}
 		return &tmpData, nil
@@ -211,7 +259,7 @@ func decodePrimitive(data []byte) (PlutusData, error) {
 
 		case tagNumber == 2 || tagNumber == 3:
 			var tmpData Integer
-			if err := cborUnmarshal(data, &tmpData); err != nil {
+			if err := cborUnmarshalWithDepth(data, &tmpData, maxDepth); err != nil {
 				return nil, err
 			}
 			return &tmpData, nil
@@ -231,7 +279,7 @@ func decodePrimitive(data []byte) (PlutusData, error) {
 		}
 	}
 	var tmpData any
-	if err := cborUnmarshal(data, &tmpData); err != nil {
+	if err := cborUnmarshalWithDepth(data, &tmpData, maxDepth); err != nil {
 		return nil, err
 	}
 	return nil, fmt.Errorf(
@@ -287,7 +335,10 @@ func decodeCBORUint(data []byte) (uint64, []byte, error) {
 		return 0, nil, err
 	}
 	if cborType != CborTypeUnsignedInt {
-		return 0, nil, fmt.Errorf("expected CBOR type 0x%02x", CborTypeUnsignedInt)
+		return 0, nil, fmt.Errorf(
+			"expected CBOR type 0x%02x",
+			CborTypeUnsignedInt,
+		)
 	}
 	if indefinite {
 		return 0, nil, errors.New("indefinite CBOR integer is not supported")
@@ -328,21 +379,30 @@ func decodeCBORHead(data []byte) (uint8, uint64, []byte, bool, error) {
 		if len(data) < 3 {
 			return 0, 0, nil, false, errors.New("truncated CBOR header")
 		}
-		return cborType, uint64(binary.BigEndian.Uint16(data[1:3])), data[3:], false, nil
+		return cborType, uint64(
+			binary.BigEndian.Uint16(data[1:3]),
+		), data[3:], false, nil
 	case additional == 26:
 		if len(data) < 5 {
 			return 0, 0, nil, false, errors.New("truncated CBOR header")
 		}
-		return cborType, uint64(binary.BigEndian.Uint32(data[1:5])), data[5:], false, nil
+		return cborType, uint64(
+			binary.BigEndian.Uint32(data[1:5]),
+		), data[5:], false, nil
 	case additional == 27:
 		if len(data) < 9 {
 			return 0, 0, nil, false, errors.New("truncated CBOR header")
 		}
-		return cborType, binary.BigEndian.Uint64(data[1:9]), data[9:], false, nil
+		return cborType, binary.BigEndian.Uint64(
+			data[1:9],
+		), data[9:], false, nil
 	case additional == CborIndefFlag:
 		return cborType, 0, data[1:], true, nil
 	default:
-		return 0, 0, nil, false, fmt.Errorf("invalid CBOR header: 0x%02x", data[0])
+		return 0, 0, nil, false, fmt.Errorf(
+			"invalid CBOR header: 0x%02x",
+			data[0],
+		)
 	}
 }
 
@@ -398,7 +458,7 @@ func decodeNextPlutusDataWithState(
 	if err != nil {
 		return nil, nil, err
 	}
-	tmp, err := decodePrimitive(item)
+	tmp, err := decodePrimitive(item, state.limits.maxDepth)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -508,7 +568,9 @@ func skipCBORBytesLike(
 			return rest[1:], nil
 		}
 
-		chunkType, chunkValue, chunkRest, chunkIndef, err := decodeCBORHead(rest)
+		chunkType, chunkValue, chunkRest, chunkIndef, err := decodeCBORHead(
+			rest,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -553,7 +615,9 @@ func skipCBORSequenceWithState(
 	if indefinite {
 		for {
 			if len(rest) == 0 {
-				return nil, errors.New("unterminated indefinite-length CBOR container")
+				return nil, errors.New(
+					"unterminated indefinite-length CBOR container",
+				)
 			}
 			if rest[0] == 0xff {
 				return rest[1:], nil
