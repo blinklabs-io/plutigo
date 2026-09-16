@@ -623,6 +623,18 @@ func TestDecodeRejectsExcessiveNesting(t *testing.T) {
 	assertDecodeLimitError(t, err, "nesting depth")
 }
 
+func TestDirectUnmarshalUsesConfiguredNestingDepth(t *testing.T) {
+	original := MaxDecodeNestingDepth
+	defer func() { MaxDecodeNestingDepth = original }()
+
+	MaxDecodeNestingDepth = original + 2
+	encoded := nestedListCBOR(original + 1)
+	var decoded any
+	if err := cborUnmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("cborUnmarshal did not use configured nesting depth: %v", err)
+	}
+}
+
 func TestDirectUnmarshalRejectsExcessiveNesting(t *testing.T) {
 	encoded := nestedListCBOR(MaxDecodeNestingDepth + 1)
 

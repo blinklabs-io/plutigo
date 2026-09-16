@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sync"
 
 	"github.com/fxamacker/cbor/v2"
 )
@@ -36,13 +37,16 @@ const (
 // MaxDecodeNestingDepth matches the CBOR nesting boundary used by the Cardano
 // decoder for transaction-sized payloads. It is a var, not a const, so an
 // application that must decode PlutusData nested deeper than this (for example
-// an indexer reading trusted archival data) can raise it. The cached decode
-// mode reads it at first use, so set it before the first decode for the change
-// to take effect.
+// an indexer reading trusted archival data) can raise it. The decode mode is
+// cached per configured value, so changes are synchronized and take effect on
+// subsequent decodes.
 var MaxDecodeNestingDepth = 16384
 
-// decMode is cached at package level to avoid recreation on every decode call
-var decMode cbor.DecMode
+var (
+	decMode             cbor.DecMode
+	decModeNestingDepth int
+	decModeMu           sync.Mutex
+)
 
 type DecodeLimitError struct {
 	Limit  string
@@ -120,16 +124,24 @@ func (s *decodeState) checkAdditionalNodes(n int) error {
 	return nil
 }
 
-func init() {
+func getDecMode() cbor.DecMode {
+	decModeMu.Lock()
+	defer decModeMu.Unlock()
+	if decMode != nil && decModeNestingDepth == MaxDecodeNestingDepth {
+		return decMode
+	}
+
 	decOptions := cbor.DecOptions{
 		// This defaults to 32, but there are blocks in the wild using >64 nested levels.
 		MaxNestedLevels: MaxDecodeNestingDepth,
 	}
-	var err error
-	decMode, err = decOptions.DecMode()
+	dm, err := decOptions.DecMode()
 	if err != nil {
 		panic("failed to initialize CBOR decoder: " + err.Error())
 	}
+	decMode = dm
+	decModeNestingDepth = MaxDecodeNestingDepth
+	return decMode
 }
 
 // Decode decodes a CBOR-encoded byte slice into a PlutusData value.
@@ -144,10 +156,7 @@ func Decode(b []byte) (PlutusData, error) {
 
 // cborUnmarshal acts like cbor.Unmarshal but allows us to set our own decoder options
 func cborUnmarshal(dataBytes []byte, dest any) error {
-	dm := decMode
-	if dm == nil {
-		panic("CBOR decoder not initialized")
-	}
+	dm := getDecMode()
 	if err := validateCBORByteStringLeaves(dataBytes); err != nil {
 		return err
 	}
