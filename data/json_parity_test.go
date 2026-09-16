@@ -105,12 +105,16 @@ func TestDecodeJSONParityAccepted(t *testing.T) {
 		{
 			name: "big integer fidelity positive",
 			json: `{"int":123456789012345678901234567890}`,
-			want: NewInteger(bigFromString(t, "123456789012345678901234567890")),
+			want: NewInteger(
+				bigFromString(t, "123456789012345678901234567890"),
+			),
 		},
 		{
 			name: "big integer fidelity negative",
 			json: `{"int":-987654321098765432109876543210}`,
-			want: NewInteger(bigFromString(t, "-987654321098765432109876543210")),
+			want: NewInteger(
+				bigFromString(t, "-987654321098765432109876543210"),
+			),
 		},
 		{
 			name: "surrounding whitespace tolerated",
@@ -153,7 +157,12 @@ func TestDecodeJSONParityAccepted(t *testing.T) {
 				t.Fatalf("DecodeJSON(%s) error: %v", tt.json, err)
 			}
 			if !tt.want.Equal(got) {
-				t.Errorf("DecodeJSON(%s):\n  got:  %v\n  want: %v", tt.json, got, tt.want)
+				t.Errorf(
+					"DecodeJSON(%s):\n  got:  %v\n  want: %v",
+					tt.json,
+					got,
+					tt.want,
+				)
 			}
 		})
 	}
@@ -378,7 +387,12 @@ func TestDecodeJSONParityErrorMessages(t *testing.T) {
 				t.Fatalf("DecodeJSON(%s): expected error, got nil", tt.json)
 			}
 			if err.Error() != tt.want {
-				t.Errorf("DecodeJSON(%s):\n  got:  %s\n  want: %s", tt.json, err, tt.want)
+				t.Errorf(
+					"DecodeJSON(%s):\n  got:  %s\n  want: %s",
+					tt.json,
+					err,
+					tt.want,
+				)
 			}
 		})
 	}
@@ -413,18 +427,21 @@ func TestDecodeJSONParityDepthBoundary(t *testing.T) {
 	// nestedListJSON(d) produces d nested Lists plus one Integer, so the
 	// deepest PlutusData node sits at depth d+1.
 	t.Run("exactly at limit decodes", func(t *testing.T) {
-		input := nestedListJSON(MaxDecodeNestingDepth - 1)
+		input := nestedListJSON(MaxDecodeNestingDepth() - 1)
 		if _, err := DecodeJSON([]byte(input)); err != nil {
 			t.Fatalf("expected success at depth limit, got: %v", err)
 		}
 	})
 	t.Run("one past limit rejected", func(t *testing.T) {
-		input := nestedListJSON(MaxDecodeNestingDepth)
+		input := nestedListJSON(MaxDecodeNestingDepth())
 		_, err := DecodeJSON([]byte(input))
 		if err == nil {
 			t.Fatal("expected depth error, got nil")
 		}
-		want := fmt.Sprintf("PlutusData JSON nesting exceeds max depth %d", MaxDecodeNestingDepth)
+		want := fmt.Sprintf(
+			"PlutusData JSON nesting exceeds max depth %d",
+			MaxDecodeNestingDepth(),
+		)
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("expected error containing %q, got: %v", want, err)
 		}

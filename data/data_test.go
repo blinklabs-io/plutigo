@@ -352,7 +352,11 @@ func TestConstrIntegerTagCBOR(t *testing.T) {
 				t.Fatalf("Decode returned error: %v", err)
 			}
 			if !decoded.Equal(NewConstrFromBigInt(tt.tag)) {
-				t.Fatalf("decoded value = %v, want constructor tag %s", decoded, tt.tag)
+				t.Fatalf(
+					"decoded value = %v, want constructor tag %s",
+					decoded,
+					tt.tag,
+				)
 			}
 
 			arenaDecoded, err := NewDecoder().Decode(encoded)
@@ -360,7 +364,11 @@ func TestConstrIntegerTagCBOR(t *testing.T) {
 				t.Fatalf("arena Decode returned error: %v", err)
 			}
 			if !arenaDecoded.Equal(NewConstrFromBigInt(tt.tag)) {
-				t.Fatalf("arena-decoded value = %v, want constructor tag %s", arenaDecoded, tt.tag)
+				t.Fatalf(
+					"arena-decoded value = %v, want constructor tag %s",
+					arenaDecoded,
+					tt.tag,
+				)
 			}
 		})
 	}
@@ -383,14 +391,22 @@ func TestUseIndefHonored(t *testing.T) {
 		minLen   int
 	}{
 		{
-			name:     "list definite non-empty",
-			data:     NewListDefIndef(false, NewInteger(big.NewInt(1)), NewInteger(big.NewInt(2))),
+			name: "list definite non-empty",
+			data: NewListDefIndef(
+				false,
+				NewInteger(big.NewInt(1)),
+				NewInteger(big.NewInt(2)),
+			),
 			byteIdx:  0,
 			wantByte: 0x82, // definite-length array header for 2 items
 		},
 		{
-			name:     "list indefinite non-empty",
-			data:     NewListDefIndef(true, NewInteger(big.NewInt(1)), NewInteger(big.NewInt(2))),
+			name: "list indefinite non-empty",
+			data: NewListDefIndef(
+				true,
+				NewInteger(big.NewInt(1)),
+				NewInteger(big.NewInt(2)),
+			),
 			byteIdx:  0,
 			wantByte: 0x9f, // indefinite-length array marker
 		},
@@ -468,11 +484,18 @@ func TestByteStringEncode64ByteBoundary(t *testing.T) {
 			bs := ByteString{Inner: data}
 			encoded, err := bs.MarshalCBOR()
 			if err != nil {
-				t.Fatalf("unexpected error encoding %d-byte ByteString: %v", tt.size, err)
+				t.Fatalf(
+					"unexpected error encoding %d-byte ByteString: %v",
+					tt.size,
+					err,
+				)
 			}
 			if tt.wantDefinite {
 				if encoded[0] == 0x5f {
-					t.Errorf("%d-byte ByteString should use definite-length encoding, but got indefinite-length marker 0x5f", tt.size)
+					t.Errorf(
+						"%d-byte ByteString should use definite-length encoding, but got indefinite-length marker 0x5f",
+						tt.size,
+					)
 				}
 			} else {
 				if encoded[0] != 0x5f {
@@ -531,19 +554,31 @@ func TestDecoderReuseMatchesDecode(t *testing.T) {
 
 	t.Run("before-reset", func(t *testing.T) {
 		for _, testDef := range testDefs {
-			testDef := testDef
 			t.Run(testDef.CborHex, func(t *testing.T) {
 				tmpData, err := hex.DecodeString(testDef.CborHex)
 				if err != nil {
-					t.Fatalf("failed to decode hex %s: %v", testDef.CborHex, err)
+					t.Fatalf(
+						"failed to decode hex %s: %v",
+						testDef.CborHex,
+						err,
+					)
 				}
 
 				got, err := decoder.Decode(tmpData)
 				if err != nil {
-					t.Fatalf("decoder.Decode() failed for %s: %v", testDef.CborHex, err)
+					t.Fatalf(
+						"decoder.Decode() failed for %s: %v",
+						testDef.CborHex,
+						err,
+					)
 				}
 				if !got.Equal(testDef.Data) {
-					t.Fatalf("decoder.Decode() mismatch for %s: got %s, want %s", testDef.CborHex, got, testDef.Data)
+					t.Fatalf(
+						"decoder.Decode() mismatch for %s: got %s, want %s",
+						testDef.CborHex,
+						got,
+						testDef.Data,
+					)
 				}
 				decoded = append(decoded, got)
 			})
@@ -552,25 +587,42 @@ func TestDecoderReuseMatchesDecode(t *testing.T) {
 
 	for i, got := range decoded {
 		if !got.Equal(testDefs[i].Data) {
-			t.Fatalf("decoded value %d changed before reset: got %s, want %s", i, got, testDefs[i].Data)
+			t.Fatalf(
+				"decoded value %d changed before reset: got %s, want %s",
+				i,
+				got,
+				testDefs[i].Data,
+			)
 		}
 	}
 
 	decoder.Reset()
 	t.Run("after-reset", func(t *testing.T) {
 		for _, testDef := range testDefs {
-			testDef := testDef
 			t.Run(testDef.CborHex, func(t *testing.T) {
 				tmpData, err := hex.DecodeString(testDef.CborHex)
 				if err != nil {
-					t.Fatalf("failed to decode hex %s after reset: %v", testDef.CborHex, err)
+					t.Fatalf(
+						"failed to decode hex %s after reset: %v",
+						testDef.CborHex,
+						err,
+					)
 				}
 				got, err := decoder.Decode(tmpData)
 				if err != nil {
-					t.Fatalf("decoder.Decode() after reset failed for %s: %v", testDef.CborHex, err)
+					t.Fatalf(
+						"decoder.Decode() after reset failed for %s: %v",
+						testDef.CborHex,
+						err,
+					)
 				}
 				if !got.Equal(testDef.Data) {
-					t.Fatalf("decoder.Decode() after reset mismatch for %s: got %s, want %s", testDef.CborHex, got, testDef.Data)
+					t.Fatalf(
+						"decoder.Decode() after reset mismatch for %s: got %s, want %s",
+						testDef.CborHex,
+						got,
+						testDef.Data,
+					)
 				}
 			})
 		}
@@ -609,7 +661,8 @@ func TestDecoderIndefiniteSmallMapUsesSinglePairArenaAllocation(t *testing.T) {
 }
 
 func TestDecodeRejectsExcessiveNesting(t *testing.T) {
-	encoded := nestedListCBOR(MaxDecodeNestingDepth + 1)
+	maxDepth := MaxDecodeNestingDepth()
+	encoded := nestedListCBOR(maxDepth + 1)
 
 	_, err := Decode(encoded)
 	assertDecodeLimitError(t, err, "nesting depth")
@@ -623,11 +676,31 @@ func TestDecodeRejectsExcessiveNesting(t *testing.T) {
 	assertDecodeLimitError(t, err, "nesting depth")
 }
 
-func TestDirectUnmarshalUsesConfiguredNestingDepth(t *testing.T) {
-	original := MaxDecodeNestingDepth
-	defer func() { MaxDecodeNestingDepth = original }()
+func TestMaxDecodeNestingDepthConfiguration(t *testing.T) {
+	original := MaxDecodeNestingDepth()
+	defer func() { _ = SetMaxDecodeNestingDepth(original) }()
 
-	MaxDecodeNestingDepth = original + 2
+	for _, depth := range []int{3, 65536} {
+		if err := SetMaxDecodeNestingDepth(depth); err == nil {
+			t.Fatalf("SetMaxDecodeNestingDepth(%d) succeeded", depth)
+		}
+	}
+
+	if err := SetMaxDecodeNestingDepth(4); err != nil {
+		t.Fatalf("SetMaxDecodeNestingDepth(4) failed: %v", err)
+	}
+	if got := MaxDecodeNestingDepth(); got != 4 {
+		t.Fatalf("MaxDecodeNestingDepth() = %d, want 4", got)
+	}
+}
+
+func TestDirectUnmarshalUsesConfiguredNestingDepth(t *testing.T) {
+	original := MaxDecodeNestingDepth()
+	defer func() { _ = SetMaxDecodeNestingDepth(original) }()
+
+	if err := SetMaxDecodeNestingDepth(original + 2); err != nil {
+		t.Fatal(err)
+	}
 	encoded := nestedListCBOR(original + 1)
 	var decoded any
 	if err := cborUnmarshal(encoded, &decoded); err != nil {
@@ -636,7 +709,8 @@ func TestDirectUnmarshalUsesConfiguredNestingDepth(t *testing.T) {
 }
 
 func TestDirectUnmarshalRejectsExcessiveNesting(t *testing.T) {
-	encoded := nestedListCBOR(MaxDecodeNestingDepth + 1)
+	maxDepth := MaxDecodeNestingDepth()
+	encoded := nestedListCBOR(maxDepth + 1)
 
 	var byteString ByteString
 	err := byteString.UnmarshalCBOR(encoded)
@@ -649,7 +723,7 @@ func TestDirectUnmarshalRejectsExcessiveNesting(t *testing.T) {
 
 func TestDecodeRejectsExcessiveNodeCount(t *testing.T) {
 	encoded := []byte{0x84, 0x00, 0x00, 0x00, 0x00}
-	limits := decodeLimits{maxDepth: MaxDecodeNestingDepth, maxNodes: 4}
+	limits := decodeLimits{maxDepth: MaxDecodeNestingDepth(), maxNodes: 4}
 
 	_, err := decodeWithState(encoded, newDecodeStateWithLimits(limits))
 	assertDecodeLimitError(t, err, "node count")
@@ -661,7 +735,7 @@ func TestDecodeRejectsExcessiveNodeCount(t *testing.T) {
 
 func nestedListCBOR(depth int) []byte {
 	encoded := make([]byte, depth+1)
-	for i := 0; i < depth; i++ {
+	for i := range depth {
 		encoded[i] = 0x81
 	}
 	encoded[depth] = 0x00
@@ -690,18 +764,18 @@ func assertDefaultNestingDepthLimit(t *testing.T, err error) {
 	if !errors.As(err, &limitErr) {
 		t.Fatalf("expected DecodeLimitError, got %T: %v", err, err)
 	}
-	if limitErr.Max != MaxDecodeNestingDepth {
+	if limitErr.Max != MaxDecodeNestingDepth() {
 		t.Fatalf(
 			"DecodeLimitError max = %d, want %d",
 			limitErr.Max,
-			MaxDecodeNestingDepth,
+			MaxDecodeNestingDepth(),
 		)
 	}
-	if limitErr.Actual != MaxDecodeNestingDepth+1 {
+	if limitErr.Actual != MaxDecodeNestingDepth()+1 {
 		t.Fatalf(
 			"DecodeLimitError actual = %d, want %d",
 			limitErr.Actual,
-			MaxDecodeNestingDepth+1,
+			MaxDecodeNestingDepth()+1,
 		)
 	}
 }
@@ -757,7 +831,10 @@ func TestDecoderResetOverwritesRetainedBigInts(t *testing.T) {
 				t.Fatalf("decoded integer = %d, want %d", got, want)
 			}
 			if !decoded.Equal(NewInteger(big.NewInt(tc.expected))) {
-				t.Fatalf("decoded value changed after overwrite: got %s", decoded)
+				t.Fatalf(
+					"decoded value changed after overwrite: got %s",
+					decoded,
+				)
 			}
 		})
 	}
@@ -802,7 +879,11 @@ func TestDecodeCBORTag(t *testing.T) {
 				t.Fatalf("decodeCBORTag() error = %v", err)
 			}
 			if gotTag != tt.wantTag {
-				t.Fatalf("decodeCBORTag() tag = %d, want %d", gotTag, tt.wantTag)
+				t.Fatalf(
+					"decodeCBORTag() tag = %d, want %d",
+					gotTag,
+					tt.wantTag,
+				)
 			}
 			if hex.EncodeToString(gotContent) != tt.wantContent {
 				t.Fatalf(
@@ -849,10 +930,18 @@ func TestDecodeCBORArray(t *testing.T) {
 				t.Fatalf("decodeCBORArray() error = %v", err)
 			}
 			if gotCount != tt.wantCount {
-				t.Fatalf("decodeCBORArray() count = %d, want %d", gotCount, tt.wantCount)
+				t.Fatalf(
+					"decodeCBORArray() count = %d, want %d",
+					gotCount,
+					tt.wantCount,
+				)
 			}
 			if hex.EncodeToString(gotRest) != tt.wantRest {
-				t.Fatalf("decodeCBORArray() rest = %x, want %s", gotRest, tt.wantRest)
+				t.Fatalf(
+					"decodeCBORArray() rest = %x, want %s",
+					gotRest,
+					tt.wantRest,
+				)
 			}
 			if gotIndef != tt.wantIndef {
 				t.Fatalf(
@@ -904,10 +993,18 @@ func TestSplitCBORItem(t *testing.T) {
 				t.Fatalf("splitCBORItem() error = %v", err)
 			}
 			if hex.EncodeToString(gotItem) != tt.wantItem {
-				t.Fatalf("splitCBORItem() item = %x, want %s", gotItem, tt.wantItem)
+				t.Fatalf(
+					"splitCBORItem() item = %x, want %s",
+					gotItem,
+					tt.wantItem,
+				)
 			}
 			if hex.EncodeToString(gotRest) != tt.wantRest {
-				t.Fatalf("splitCBORItem() rest = %x, want %s", gotRest, tt.wantRest)
+				t.Fatalf(
+					"splitCBORItem() rest = %x, want %s",
+					gotRest,
+					tt.wantRest,
+				)
 			}
 		})
 	}
@@ -941,8 +1038,11 @@ func TestDecodeRejectsOversizedByteStringLeaves(t *testing.T) {
 			input: append([]byte{0x58, 0x41}, byteString...),
 		},
 		{
-			name:  "indefinite bytestring chunk",
-			input: append(append([]byte{0x5f, 0x58, 0x41}, byteString...), 0xff),
+			name: "indefinite bytestring chunk",
+			input: append(
+				append([]byte{0x5f, 0x58, 0x41}, byteString...),
+				0xff,
+			),
 		},
 		{
 			name:  "positive bignum payload",
@@ -977,7 +1077,9 @@ func TestUnmarshalRejectsOversizedByteStringLeaves(t *testing.T) {
 		t.Fatal("ByteString.UnmarshalCBOR accepted an oversized definite leaf")
 	}
 	if err := decoded.UnmarshalCBOR(indefinite); err == nil {
-		t.Fatal("ByteString.UnmarshalCBOR accepted an oversized indefinite chunk")
+		t.Fatal(
+			"ByteString.UnmarshalCBOR accepted an oversized indefinite chunk",
+		)
 	}
 
 	var integer Integer
@@ -993,7 +1095,10 @@ func TestDecodeAcceptsBoundedByteStringChunks(t *testing.T) {
 
 	decoded, err := Decode(indefinite)
 	if err != nil {
-		t.Fatalf("Decode rejected bounded indefinite bytestring chunks: %v", err)
+		t.Fatalf(
+			"Decode rejected bounded indefinite bytestring chunks: %v",
+			err,
+		)
 	}
 	if got := decoded.(*ByteString).Inner; !bytes.Equal(got, byteString) {
 		t.Fatalf("decoded bytes = %x, want %x", got, byteString)
@@ -1061,7 +1166,9 @@ func TestValueRejectsNonCanonicalMapShape(t *testing.T) {
 		t.Fatal("expected Value CBOR decoding to reject a non-map policy value")
 	}
 	if _, err := NewDecoder().Decode(encoded); err == nil {
-		t.Fatal("expected arena Value decoding to reject a non-map policy value")
+		t.Fatal(
+			"expected arena Value decoding to reject a non-map policy value",
+		)
 	}
 }
 
@@ -1096,7 +1203,11 @@ func FuzzDecodeCBOR(f *testing.F) {
 			t.Fatalf("failed to decode marshaled PlutusData: %v", err)
 		}
 		if !wrapper.Data.Equal(decodedAgain.Data) {
-			t.Fatalf("CBOR round-trip mismatch: got %v, want %v", decodedAgain.Data, wrapper.Data)
+			t.Fatalf(
+				"CBOR round-trip mismatch: got %v, want %v",
+				decodedAgain.Data,
+				wrapper.Data,
+			)
 		}
 	})
 }

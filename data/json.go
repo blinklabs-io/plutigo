@@ -165,7 +165,11 @@ func (c Constr) MarshalJSON() ([]byte, error) {
 	for i, field := range c.Fields {
 		raw, err := marshalPlutusDataJSON(field)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal Constr field %d: %w", i, err)
+			return nil, fmt.Errorf(
+				"failed to marshal Constr field %d: %w",
+				i,
+				err,
+			)
 		}
 		fields[i] = raw
 	}
@@ -272,16 +276,19 @@ var discriminatorKeys = []string{"int", "bytes", "list", "map", "constructor"}
 // jsonDecodeState bounds recursion depth and total node count while decoding
 // untrusted PlutusData JSON, mirroring the CBOR decoder's limits.
 type jsonDecodeState struct {
-	depth int
-	nodes int
+	depth    int
+	nodes    int
+	maxDepth int
 }
 
-type jsonDepthLimitError struct{}
+type jsonDepthLimitError struct {
+	maxDepth int
+}
 
 func (e *jsonDepthLimitError) Error() string {
 	return fmt.Sprintf(
 		"PlutusData JSON nesting exceeds max depth %d",
-		MaxDecodeNestingDepth,
+		e.maxDepth,
 	)
 }
 
@@ -308,8 +315,9 @@ func (st *jsonDecodeState) enterNode() error {
 // one-level-over inputs; arbitrary JSON nesting still cannot grow the parser
 // stack beyond this bound.
 type jsonParseState struct {
-	depth int
-	nodes int
+	depth    int
+	nodes    int
+	maxDepth int
 }
 
 // A canonical detailed-schema Map pair with constructor values occupies seven
@@ -317,15 +325,15 @@ type jsonParseState struct {
 // above that worst-case structural multiplier.
 const maxJSONParseNodes = MaxDecodeNodes * 4
 
-// maxJSONParseNestingDepth derives the JSON parser's depth cap from
-// MaxDecodeNestingDepth at call time, so it tracks a raised MaxDecodeNestingDepth.
-func maxJSONParseNestingDepth() int { return (MaxDecodeNestingDepth + 1) * 3 }
+// maxJSONParseNestingDepth derives the JSON parser's structural cap from the
+// configured PlutusData depth limit.
+func maxJSONParseNestingDepth(maxDepth int) int { return (maxDepth + 1) * 3 }
 
 func (st *jsonParseState) enterValue() error {
-	if st.depth >= maxJSONParseNestingDepth() {
+	if st.depth >= maxJSONParseNestingDepth(st.maxDepth) {
 		return fmt.Errorf(
 			"PlutusData JSON tree nesting exceeds max depth %d",
-			maxJSONParseNestingDepth(),
+			maxJSONParseNestingDepth(st.maxDepth),
 		)
 	}
 	st.depth++
@@ -384,20 +392,30 @@ type jsonValue struct {
 // are built from that tree, so decoding does O(size) work instead of
 // re-parsing the remaining subtree at every nesting level.
 func unmarshalPlutusDataJSON(data json.RawMessage) (PlutusData, error) {
-	root, err := parsePlutusDataJSONTree(data)
+	maxDepth := MaxDecodeNestingDepth()
+	root, err := parsePlutusDataJSONTree(data, maxDepth)
 	if err != nil {
 		return nil, fmt.Errorf("PlutusData JSON must be an object: %w", err)
 	}
-	return decodePlutusDataJSONValue(data, root, &jsonDecodeState{}, false)
+	return decodePlutusDataJSONValue(
+		data,
+		root,
+		&jsonDecodeState{maxDepth: maxDepth},
+		false,
+	)
 }
 
 // parsePlutusDataJSONTree parses data into a jsonValue tree in a single
 // pass, rejecting malformed JSON and trailing non-whitespace data exactly
 // like json.Unmarshal does.
-func parsePlutusDataJSONTree(data []byte) (jsonValue, error) {
+func parsePlutusDataJSONTree(data []byte, maxDepth int) (jsonValue, error) {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
-	root, err := parsePlutusDataJSONValue(dec, data, &jsonParseState{})
+	root, err := parsePlutusDataJSONValue(
+		dec,
+		data,
+		&jsonParseState{maxDepth: maxDepth},
+	)
 	if err != nil {
 		return jsonValue{}, normalizeJSONStreamError(err)
 	}
@@ -587,8 +605,8 @@ func decodePlutusDataJSONValue(
 	counted bool,
 ) (PlutusData, error) {
 	st.depth++
-	if st.depth > MaxDecodeNestingDepth {
-		return nil, &jsonDepthLimitError{}
+	if st.depth > st.maxDepth {
+		return nil, &jsonDepthLimitError{maxDepth: st.maxDepth}
 	}
 	defer func() { st.depth-- }()
 
@@ -649,7 +667,10 @@ func decodePlutusDataJSONValue(
 	case hasKey(keys, "bytes"):
 		var s string
 		if err := json.Unmarshal(jsonRawSpan(data, keys["bytes"]), &s); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal ByteString value: %w", err)
+			return nil, fmt.Errorf(
+				"failed to unmarshal ByteString value: %w",
+				err,
+			)
 		}
 		decoded, err := hex.DecodeString(s)
 		if err != nil {
@@ -685,7 +706,10 @@ func decodePlutusDataJSONValue(
 	case hasKey(keys, "constructor"):
 		var tag big.Int
 		if err := json.Unmarshal(jsonRawSpan(data, keys["constructor"]), &tag); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal Constr constructor tag: %w", err)
+			return nil, fmt.Errorf(
+				"failed to unmarshal Constr constructor tag: %w",
+				err,
+			)
 		}
 		fieldsVal, ok := keys["fields"]
 		if !ok {
@@ -694,7 +718,12 @@ func decodePlutusDataJSONValue(
 		if fieldsVal.kind == jsonKindNull {
 			return nil, errors.New("null \"fields\" value in Constr JSON")
 		}
-		fields, err := decodePlutusDataJSONArray(data, fieldsVal, st, "Constr field")
+		fields, err := decodePlutusDataJSONArray(
+			data,
+			fieldsVal,
+			st,
+			"Constr field",
+		)
 		if err != nil {
 			if isJSONDepthLimitError(err) {
 				return nil, err
@@ -703,7 +732,10 @@ func decodePlutusDataJSONValue(
 		}
 		return &Constr{Tag: &tag, Fields: fields}, nil
 	default:
-		return nil, fmt.Errorf("unrecognized PlutusData JSON keys: %v", keysOf(keys))
+		return nil, fmt.Errorf(
+			"unrecognized PlutusData JSON keys: %v",
+			keysOf(keys),
+		)
 	}
 }
 
@@ -727,7 +759,12 @@ func decodePlutusDataJSONArray(
 			if isJSONDepthLimitError(err) {
 				return nil, err
 			}
-			return nil, fmt.Errorf("failed to unmarshal %s %d: %w", itemLabel, i, err)
+			return nil, fmt.Errorf(
+				"failed to unmarshal %s %d: %w",
+				itemLabel,
+				i,
+				err,
+			)
 		}
 		items = append(items, pd)
 	}
@@ -782,7 +819,11 @@ func decodePlutusDataJSONMapPair(
 			}
 			vVal, vSeen = e.val, true
 		default:
-			return pair, fmt.Errorf("unexpected Map pair %d field %q", index, e.key)
+			return pair, fmt.Errorf(
+				"unexpected Map pair %d field %q",
+				index,
+				e.key,
+			)
 		}
 	}
 	if !kSeen {
@@ -797,14 +838,22 @@ func decodePlutusDataJSONMapPair(
 		if isJSONDepthLimitError(err) {
 			return pair, err
 		}
-		return pair, fmt.Errorf("failed to unmarshal Map key %d: %w", index, err)
+		return pair, fmt.Errorf(
+			"failed to unmarshal Map key %d: %w",
+			index,
+			err,
+		)
 	}
 	val, err := decodePlutusDataJSONValue(data, vVal, st, true)
 	if err != nil {
 		if isJSONDepthLimitError(err) {
 			return pair, err
 		}
-		return pair, fmt.Errorf("failed to unmarshal Map value %d: %w", index, err)
+		return pair, fmt.Errorf(
+			"failed to unmarshal Map value %d: %w",
+			index,
+			err,
+		)
 	}
 	pair[0] = k
 	pair[1] = val

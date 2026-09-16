@@ -8,11 +8,11 @@ import (
 
 func nestedListJSON(depth int) string {
 	var sb strings.Builder
-	for i := 0; i < depth; i++ {
+	for range depth {
 		sb.WriteString(`{"list":[`)
 	}
 	sb.WriteString(`{"int":0}`)
-	for i := 0; i < depth; i++ {
+	for range depth {
 		sb.WriteString(`]}`)
 	}
 	return sb.String()
@@ -20,11 +20,11 @@ func nestedListJSON(depth int) string {
 
 func nestedMapKeyJSON(depth int) string {
 	var sb strings.Builder
-	for i := 0; i < depth; i++ {
+	for range depth {
 		sb.WriteString(`{"map":[{"k":`)
 	}
 	sb.WriteString(`{"int":0}`)
-	for i := 0; i < depth; i++ {
+	for range depth {
 		sb.WriteString(`,"v":{"int":0}}]}`)
 	}
 	return sb.String()
@@ -33,7 +33,7 @@ func nestedMapKeyJSON(depth int) string {
 func wideFlatJSON(items int) string {
 	var sb strings.Builder
 	sb.WriteString(`{"list":[`)
-	for i := 0; i < items; i++ {
+	for i := range items {
 		if i > 0 {
 			sb.WriteByte(',')
 		}
@@ -46,7 +46,7 @@ func wideFlatJSON(items int) string {
 func wideEmptyConstrListJSON(items int) string {
 	var sb strings.Builder
 	sb.WriteString(`{"list":[`)
-	for i := 0; i < items; i++ {
+	for i := range items {
 		if i > 0 {
 			sb.WriteByte(',')
 		}
@@ -68,7 +68,7 @@ func TestDecodeJSONDepthLimit(t *testing.T) {
 		{"within limit decodes", nestedListJSON(100), ""},
 		{
 			"parser rejects nesting before building the full tree",
-			nestedListJSON(MaxDecodeNestingDepth * 2),
+			nestedListJSON(MaxDecodeNestingDepth() * 2),
 			"PlutusData JSON tree nesting exceeds max depth",
 		},
 	}
@@ -86,7 +86,11 @@ func TestDecodeJSONDepthLimit(t *testing.T) {
 				t.Fatal("expected error, got nil")
 			}
 			if !strings.Contains(err.Error(), tt.wantErrSubstring) {
-				t.Fatalf("expected error containing %q, got: %v", tt.wantErrSubstring, err)
+				t.Fatalf(
+					"expected error containing %q, got: %v",
+					tt.wantErrSubstring,
+					err,
+				)
 			}
 		})
 	}
@@ -94,20 +98,28 @@ func TestDecodeJSONDepthLimit(t *testing.T) {
 
 func TestDecodeJSONMapDepthBoundary(t *testing.T) {
 	t.Run("exactly at PlutusData limit decodes", func(t *testing.T) {
-		if _, err := DecodeJSON([]byte(nestedMapKeyJSON(MaxDecodeNestingDepth - 1))); err != nil {
+		if _, err := DecodeJSON([]byte(nestedMapKeyJSON(MaxDecodeNestingDepth() - 1))); err != nil {
 			t.Fatalf("expected success at depth limit, got: %v", err)
 		}
 	})
-	t.Run("one past PlutusData limit preserves semantic error", func(t *testing.T) {
-		_, err := DecodeJSON([]byte(nestedMapKeyJSON(MaxDecodeNestingDepth)))
-		if err == nil {
-			t.Fatal("expected depth error, got nil")
-		}
-		want := fmt.Sprintf("PlutusData JSON nesting exceeds max depth %d", MaxDecodeNestingDepth)
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("expected error containing %q, got: %v", want, err)
-		}
-	})
+	t.Run(
+		"one past PlutusData limit preserves semantic error",
+		func(t *testing.T) {
+			_, err := DecodeJSON(
+				[]byte(nestedMapKeyJSON(MaxDecodeNestingDepth())),
+			)
+			if err == nil {
+				t.Fatal("expected depth error, got nil")
+			}
+			want := fmt.Sprintf(
+				"PlutusData JSON nesting exceeds max depth %d",
+				MaxDecodeNestingDepth(),
+			)
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("expected error containing %q, got: %v", want, err)
+			}
+		},
+	)
 }
 
 func TestDecodeJSONMapPairRejectsUnknownFieldBeforeValueDecode(t *testing.T) {
@@ -134,7 +146,10 @@ func TestDecodeJSONParserNodeAllowance(t *testing.T) {
 
 	_, err := DecodeJSON([]byte(wideFlatJSON(MaxDecodeNodes / 2)))
 	if err != nil {
-		t.Fatalf("DecodeJSON rejected a semantically bounded flat list: %v", err)
+		t.Fatalf(
+			"DecodeJSON rejected a semantically bounded flat list: %v",
+			err,
+		)
 	}
 }
 
@@ -144,7 +159,10 @@ func TestDecodeJSONParserNodeAllowanceRejectsValidConstrList(t *testing.T) {
 	}
 
 	if _, err := DecodeJSON([]byte(wideEmptyConstrListJSON(MaxDecodeNodes - 10))); err != nil {
-		t.Fatalf("DecodeJSON rejected a semantically bounded Constr list: %v", err)
+		t.Fatalf(
+			"DecodeJSON rejected a semantically bounded Constr list: %v",
+			err,
+		)
 	}
 }
 
@@ -180,7 +198,11 @@ func TestDecodeJSONNodeLimit(t *testing.T) {
 				t.Fatal("expected error, got nil")
 			}
 			if !strings.Contains(err.Error(), tt.wantErrSubstring) {
-				t.Fatalf("expected error containing %q, got: %v", tt.wantErrSubstring, err)
+				t.Fatalf(
+					"expected error containing %q, got: %v",
+					tt.wantErrSubstring,
+					err,
+				)
 			}
 		})
 	}
@@ -193,8 +215,8 @@ func FuzzDecodeJSON(f *testing.F) {
 		`{"map":[{"k":{"int":1},"v":{"int":2}}]}`,
 		`{"constructor":0,"fields":[{"int":1}]}`,
 		`{"int":`,
-		nestedListJSON(MaxDecodeNestingDepth),
-		nestedListJSON(maxJSONParseNestingDepth()),
+		nestedListJSON(MaxDecodeNestingDepth()),
+		nestedListJSON(maxJSONParseNestingDepth(MaxDecodeNestingDepth())),
 	} {
 		f.Add([]byte(input))
 	}
