@@ -194,7 +194,7 @@ func FuzzDecodeJSON(f *testing.F) {
 		`{"constructor":0,"fields":[{"int":1}]}`,
 		`{"int":`,
 		nestedListJSON(MaxDecodeNestingDepth),
-		nestedListJSON(maxJSONParseNestingDepth),
+		nestedListJSON(maxJSONParseNestingDepth()),
 	} {
 		f.Add([]byte(input))
 	}
