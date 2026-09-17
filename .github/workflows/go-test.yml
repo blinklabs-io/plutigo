@@ -1,37 +1,19 @@
-name: go-test
+# Generated automatically by org-governance-bot. Do not edit manually.
+name: "go-test"
 
 on:
+  pull_request:
   push:
-    tags:
-      - v*
     branches:
       - main
-  pull_request:
-
-permissions:
-  contents: read
+    tags:
+      - v*
 
 jobs:
-  go-test:
-    name: go-test
-    strategy:
-      matrix:
-        go-version: [1.26.x]
-        platform: [ubuntu-latest]
-    runs-on: ${{ matrix.platform }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          submodules: true
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ matrix.go-version }}
-      - name: go-test
-        run: make test
-      - name: Generate coverage report
-        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
-        with:
-          files: ./coverage.out
+  orchestrate:
+    uses: blinklabs-io/actions/.github/workflows/reuseable-go-test.yml@main
+    with:
+      pre-test-command: make test
+      submodules: true
+      test-flags: -race -coverprofile=coverage.out -covermode=atomic
+      upload-coverage: true
