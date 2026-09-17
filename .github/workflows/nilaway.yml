@@ -1,30 +1,19 @@
-name: nilaway
+# Generated automatically by org-governance-bot. Do not edit manually.
+name: "nilaway"
 
 on:
-  workflow_dispatch:
+  pull_request:
   push:
-    tags:
-      - v*
     branches:
       - main
-  pull_request:
-
-permissions:
-  contents: read
+    tags:
+      - v*
+  workflow_dispatch:
 
 jobs:
-  nilaway:
-    name: nilaway
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          submodules: true
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: 1.26.x
-      - name: install nilaway
-        run: go install go.uber.org/nilaway/cmd/nilaway@latest
-      - name: run nilaway
-        run: nilaway -include-pkgs=github.com/blinklabs-io/plutigo -exclude-file-docstrings="<nilaway skip stack-machine>" ./...
+  orchestrate:
+    uses: blinklabs-io/actions/.github/workflows/reuseable-nilaway.yml@main
+    with:
+      exclude-file-docstrings: <nilaway skip stack-machine>
+      include-pkgs: github.com/blinklabs-io/plutigo
+      submodules: true
