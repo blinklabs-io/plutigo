@@ -38,7 +38,7 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 	if program == nil {
 		return errors.New("program is required")
 	}
-	if err := validateProgramVersion(program.Version, context); err != nil {
+	if err := validateLedgerLanguageAvailability(context); err != nil {
 		return err
 	}
 
@@ -109,9 +109,10 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 }
 
 // DecodeWithContext decodes and validates a FLAT-encoded UPLC program before
-// returning it. The encoded program version is checked immediately after its
-// header is read; terms are then checked exhaustively before the program is
-// returned.
+// returning it. Ledger-language availability is checked immediately after the
+// program header is read; terms are then checked exhaustively before the
+// program is returned. The program's own UPLC term version is not checked
+// here; see [ValidateTermVersionForExecution].
 func DecodeWithContext[T Binder](bytes []byte, context ProgramContext) (*Program[T], error) {
 	program, err := decodeWithContext[T](bytes, context)
 	if err != nil {
@@ -145,6 +146,34 @@ func DecodeDeBruijnWithContext(
 	return DecodeWithContext[DeBruijn](bytes, context)
 }
 
+// DecodeDeBruijnForExecution decodes a FLAT-encoded UPLC program that is
+// about to be run through the CEK machine: [DecodeDeBruijnWithContext]
+// followed by [ValidateTermVersionForExecution]. Both steps are required
+// before evaluation, and only the first is correct for a program that is
+// merely being checked for well-formedness, so the two phases stay
+// separately callable; this entry point is the one a caller that intends to
+// execute should reach for.
+//
+// The gate cannot be applied inside the machine itself. cek.Machine.Run
+// takes a term rather than a program, and ledger callers apply the script's
+// arguments to that term before running it, so the program's UPLC version is
+// no longer in hand. cek.NewMachine's version argument is the Plutus ledger
+// language, not the program's UPLC term version, even though both are a
+// [lang.LanguageVersion].
+func DecodeDeBruijnForExecution(
+	bytes []byte,
+	context ProgramContext,
+) (*Program[DeBruijn], error) {
+	program, err := DecodeWithContext[DeBruijn](bytes, context)
+	if err != nil {
+		return nil, err
+	}
+	if err := ValidateTermVersionForExecution(program.Version, context); err != nil {
+		return nil, err
+	}
+	return program, nil
+}
+
 func plutusVersionForLedgerLanguage(version lang.LanguageVersion) (builtin.PlutusVersion, error) {
 	switch version {
 	case lang.LanguageVersionV1:
@@ -160,25 +189,19 @@ func plutusVersionForLedgerLanguage(version lang.LanguageVersion) (builtin.Plutu
 	}
 }
 
-// validateProgramVersion is a phase-1, decode-time well-formedness check: it
-// applies uniformly to witness scripts and to a transaction's own
+// validateLedgerLanguageAvailability is a phase-1, decode-time well-formedness
+// check: the selected Plutus ledger language must exist at the given protocol
+// version. It applies uniformly to witness scripts and to a transaction's own
 // newly-created reference-script outputs (real cardano-ledger's
 // deserialiseScript/scriptCBORDecoder gate, applied by
-// validateScriptsWellFormedTxOuts to both). It deliberately excludes the UPLC
-// term-version-vs-ledger-language legality gate: that check only fires when a
-// script is actually about to be run through the CEK machine (real
-// cardano-ledger's mkTermToEvaluate, reached only via
+// validateScriptsWellFormedTxOuts to both). It deliberately takes no UPLC term
+// version: upstream plutus-ledger-api never gates the program version at
+// decode/well-formedness time, only at execution time (real cardano-ledger's
+// mkTermToEvaluate, reached only via
 // evaluateScriptRestricting/evaluateScriptCounting), which a transaction's own
 // stored-but-unexecuted reference-script output can never be. See
 // [ValidateTermVersionForExecution] for that check.
-func validateProgramVersion(version lang.LanguageVersion, context ProgramContext) error {
-	if version != uplcVersion100 && version != uplcVersion110 {
-		return fmt.Errorf(
-			"unsupported UPLC program version %s; supported versions are 1.0.0 and 1.1.0",
-			formatVersion(version),
-		)
-	}
-
+func validateLedgerLanguageAvailability(context ProgramContext) error {
 	plutusVersion, err := plutusVersionForLedgerLanguage(context.LedgerLanguage)
 	if err != nil {
 		return err
@@ -205,15 +228,28 @@ func validateProgramVersion(version lang.LanguageVersion, context ProgramContext
 
 // ValidateTermVersionForExecution checks whether a program's UPLC term
 // version is legal to *execute* under the given ledger language and protocol
-// version (the "van Rossem" gate: UPLC 1.1.0 sums-of-products are only legal
-// for Plutus V1/V2 at protocol major version 11 and above). Unlike
-// [ValidateProgram], a decode-time structural check applied uniformly to
-// witness scripts and to stored-but-unexecuted reference-script outputs, this
-// check applies only immediately before a script is actually run through the
-// CEK machine: a transaction cannot execute a reference script it is
-// simultaneously creating, so this must never gate decoding or storage, only
-// evaluation.
+// version. Unlike [ValidateProgram], a decode-time structural check applied
+// uniformly to witness scripts and to stored-but-unexecuted reference-script
+// outputs, this check applies only immediately before a script is actually
+// run through the CEK machine: a transaction cannot execute a reference
+// script it is simultaneously creating, so this must never gate decoding or
+// storage, only evaluation.
+//
+// It combines two gates that upstream plutus-ledger-api applies only at
+// execution time (mkTermToEvaluate's plcVersionsAvailableIn): the UPLC
+// program version must be one of {1.0.0, 1.1.0} -- which decode-time
+// well-formedness deliberately does not check -- and, the "van Rossem" gate,
+// UPLC 1.1.0
+// sums-of-products are only legal for Plutus V1/V2 at protocol major version
+// 11 and above.
 func ValidateTermVersionForExecution(version lang.LanguageVersion, context ProgramContext) error {
+	if version != uplcVersion100 && version != uplcVersion110 {
+		return fmt.Errorf(
+			"unsupported UPLC program version %s; supported versions are 1.0.0 and 1.1.0",
+			formatVersion(version),
+		)
+	}
+
 	plutusVersion, err := plutusVersionForLedgerLanguage(context.LedgerLanguage)
 	if err != nil {
 		return err
@@ -230,8 +266,26 @@ func ValidateTermVersionForExecution(version lang.LanguageVersion, context Progr
 	return nil
 }
 
+// supportsConstructors reports whether a UPLC program version is at least
+// 1.1.0, the version constr/case syntax was introduced in. This must be a
+// lexicographic (major, then minor, then patch) comparison, not equality:
+// decode-time validation no longer whitelists specific term versions, so
+// versions above 1.1.0 are reachable here too. lang.LanguageVersion is a
+// plain [3]uint32 array, and Go does not support ordering comparisons on
+// array types directly.
 func supportsConstructors(version lang.LanguageVersion) bool {
-	return version == uplcVersion110
+	return versionAtLeast(version, uplcVersion110)
+}
+
+// versionAtLeast reports whether version is lexicographically greater than
+// or equal to other, comparing major, then minor, then patch in order.
+func versionAtLeast(version, other lang.LanguageVersion) bool {
+	for i := range version {
+		if version[i] != other[i] {
+			return version[i] > other[i]
+		}
+	}
+	return true
 }
 
 func formatVersion(version lang.LanguageVersion) string {

@@ -1,6 +1,8 @@
 package syn
 
 import (
+	"encoding/hex"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -29,17 +31,28 @@ func TestDecodeWithContextPreservesAndValidatesProgramVersion(t *testing.T) {
 		t.Fatalf("decoded version = %v, want %v", decoded.Version, program.Version)
 	}
 
+	// Decode-time well-formedness no longer whitelists specific UPLC term
+	// versions (blinklabs-io/plutigo#414): a program declaring a version
+	// outside {1.0.0, 1.1.0}, such as 1.2.0, must still decode successfully,
+	// since it may be a transaction's own stored-but-unexecuted
+	// reference-script output. Only ValidateTermVersionForExecution gates
+	// term version, and only immediately before execution; see
+	// TestValidateTermVersionForExecutionRejectsRealReferenceScriptVersion
+	// and TestDecodeAcceptsRealNeverExecutedReferenceScriptVersion below.
 	program.Version = lang.LanguageVersion{1, 2, 0}
 	encoded, err = Encode(program)
 	if err != nil {
-		t.Fatalf("Encode() with unsupported version failed: %v", err)
+		t.Fatalf("Encode() with non-whitelisted version failed: %v", err)
 	}
-	_, err = DecodeWithContext[DeBruijn](encoded, ProgramContext{
+	decoded, err = DecodeWithContext[DeBruijn](encoded, ProgramContext{
 		LedgerLanguage: lang.LanguageVersionV3,
 		ProtocolMajor:  9,
 	})
-	if err == nil || !strings.Contains(err.Error(), "unsupported UPLC program version") {
-		t.Fatalf("DecodeWithContext() error = %v, want unsupported-version error", err)
+	if err != nil {
+		t.Fatalf("DecodeWithContext() with non-whitelisted version failed: %v, want success", err)
+	}
+	if decoded.Version != program.Version {
+		t.Fatalf("decoded version = %v, want %v", decoded.Version, program.Version)
 	}
 }
 
@@ -434,6 +447,213 @@ func TestContextualValidationConstrFieldLimit(t *testing.T) {
 						t.Fatalf("decoded field count = %d, want %d", gotFields, tt.fieldCount)
 					}
 				})
+			}
+		})
+	}
+}
+
+// realPreviewReferenceScriptFlatHex is the flat-encoded UPLC body of the
+// PlutusV2Script reference script at output 0 of Preview-testnet
+// transaction f5a0e06f3147c499c324041d16f510db07dd875aa0a80b7b0b2f2e990f9d7e45
+// (block 2423582, abs slot 58083610; 2.2M+ confirmations and
+// valid_contract=true per Koios). This is the transaction's script bytes
+// after stripping the tag-24/double-bytestring CBOR wrapping and the
+// innermost CBOR bytestring header (0x58 0x79, a 121-byte string); see
+// blinklabs-io/plutigo#414. The trailing 0x01 completes the flat format's
+// mandatory byte-aligned filler terminator to the CBOR-declared 121-byte
+// length, which the issue's hex quote (120 bytes) omitted.
+const realPreviewReferenceScriptFlatHex = "593191013330004c011e581c9ba20e5c61a696763941498712fbf454804953dfec55aa34891aabea004c012258205ed4e781bef7635ac63e9672a779f80245f9c98d7f68fcdebcfec207442cb140004c01259f581c8d2a90fab86ad0869ce94cbaad93a1217bc2f2bafb84e3bc27b5b92d4466494147ff0001"
+
+// realPreviewReferenceScriptVersion is this script's declared UPLC term
+// version, decoded from its flat header. It is not a Plutus ledger-language
+// version, and is likely a deliberate test/probe value rather than a
+// version any real compiler would emit -- but that is exactly the
+// well-formed, never-executed content that decode-time validation must not
+// reject.
+var realPreviewReferenceScriptVersion = lang.LanguageVersion{89, 49, 145}
+
+// TestDecodeAcceptsRealNeverExecutedReferenceScriptVersion is the regression
+// case for blinklabs-io/plutigo#414: a real, canonical Preview-testnet
+// transaction carries this reference script, never invoked by any
+// transaction, whose declared UPLC term version is outside {1.0.0, 1.1.0}.
+// Decode-time well-formedness must accept it regardless of protocol
+// version, since upstream plutus-ledger-api only gates program version at
+// execution time (PlutusLedgerApi.Common.Eval.mkTermToEvaluate), which a
+// stored-but-unexecuted reference script never reaches.
+func TestDecodeAcceptsRealNeverExecutedReferenceScriptVersion(t *testing.T) {
+	t.Parallel()
+
+	flatProgram, err := hex.DecodeString(realPreviewReferenceScriptFlatHex)
+	if err != nil {
+		t.Fatalf("failed to decode test fixture hex: %v", err)
+	}
+
+	for _, protocolMajor := range []uint{9, 10, 11} {
+		t.Run(fmt.Sprintf("protocol %d", protocolMajor), func(t *testing.T) {
+			t.Parallel()
+
+			decoded, err := DecodeDeBruijnWithContext(flatProgram, ProgramContext{
+				LedgerLanguage: lang.LanguageVersionV2,
+				ProtocolMajor:  protocolMajor,
+			})
+			if err != nil {
+				t.Fatalf(
+					"DecodeDeBruijnWithContext() failed: %v, want success (a real reference script must decode regardless of its UPLC term version)",
+					err,
+				)
+			}
+			if decoded.Version != realPreviewReferenceScriptVersion {
+				t.Fatalf("decoded version = %v, want %v", decoded.Version, realPreviewReferenceScriptVersion)
+			}
+		})
+	}
+}
+
+// TestValidateTermVersionForExecutionRejectsRealReferenceScriptVersion
+// proves the version gate blinklabs-io/plutigo#414 moves out of decode time
+// still applies before a script is actually run: no longer being rejected
+// at decode time must not make this real reference script's UPLC term
+// version universally executable.
+func TestValidateTermVersionForExecutionRejectsRealReferenceScriptVersion(t *testing.T) {
+	t.Parallel()
+
+	err := ValidateTermVersionForExecution(realPreviewReferenceScriptVersion, ProgramContext{
+		LedgerLanguage: lang.LanguageVersionV2,
+		ProtocolMajor:  9,
+	})
+	if err == nil || !strings.Contains(err.Error(), "unsupported UPLC program version") {
+		t.Fatalf("ValidateTermVersionForExecution() error = %v, want unsupported-version error", err)
+	}
+}
+
+// TestSupportsConstructorsIsLexicographicallyAtLeast110 proves constr/case
+// support is gated by UPLC term version >= 1.1.0 using lexicographic
+// ordering, not by equality to 1.1.0 (blinklabs-io/plutigo#414): a version
+// above 1.1.0, such as the real #414 reference script's 89.49.145, only
+// became reachable here once the decode-time version whitelist was
+// removed, and an equality-only check would have wrongly rejected it.
+func TestSupportsConstructorsIsLexicographicallyAtLeast110(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		version lang.LanguageVersion
+		wantErr bool
+	}{
+		{"below 1.1.0 does not support constructors", lang.LanguageVersion{1, 0, 0}, true},
+		// A larger patch component must not outrank a smaller minor one.
+		{"below 1.1.0 with a higher patch does not support constructors", lang.LanguageVersion{1, 0, 9}, true},
+		{"exactly 1.1.0 supports constructors", lang.LanguageVersion{1, 1, 0}, false},
+		{"above 1.1.0 by patch supports constructors", lang.LanguageVersion{1, 1, 1}, false},
+		{"above 1.1.0 (the real #414 version) supports constructors", realPreviewReferenceScriptVersion, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := ValidateProgram(&Program[DeBruijn]{
+				Version: tt.version,
+				Term:    &Constr[DeBruijn]{Tag: 0},
+			}, ProgramContext{
+				LedgerLanguage: lang.LanguageVersionV3,
+				ProtocolMajor:  9,
+			})
+			if tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "constr is not available") {
+					t.Fatalf("ValidateProgram() error = %v, want constr-not-available error", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ValidateProgram() failed: %v", err)
+			}
+		})
+	}
+}
+
+// TestDecodeDeBruijnForExecutionAppliesExecutionGates proves the
+// execution-decoding entry point applies the phase-2 gates that
+// [DecodeDeBruijnWithContext] deliberately omits, so a consumer that reaches
+// for it cannot decode a program and then hand the CEK machine a term whose
+// UPLC version is illegal to execute. The same bytes must still decode
+// through DecodeDeBruijnWithContext, which is the phase-1 well-formedness
+// path a transaction's own stored-but-unexecuted reference-script output
+// takes.
+func TestDecodeDeBruijnForExecutionAppliesExecutionGates(t *testing.T) {
+	t.Parallel()
+
+	referenceScript, err := hex.DecodeString(realPreviewReferenceScriptFlatHex)
+	if err != nil {
+		t.Fatalf("failed to decode test fixture hex: %v", err)
+	}
+	encode := func(t *testing.T, version lang.LanguageVersion) []byte {
+		t.Helper()
+		encoded, err := Encode(&Program[DeBruijn]{Version: version, Term: &Error{}})
+		if err != nil {
+			t.Fatalf("Encode() failed: %v", err)
+		}
+		return encoded
+	}
+
+	tests := []struct {
+		name     string
+		program  []byte
+		context  ProgramContext
+		wantErr  string
+		wantVers lang.LanguageVersion
+	}{
+		{
+			name:     "executable term version passes",
+			program:  encode(t, uplcVersion100),
+			context:  ProgramContext{LedgerLanguage: lang.LanguageVersionV2, ProtocolMajor: 9},
+			wantVers: uplcVersion100,
+		},
+		{
+			name:    "term version outside the executable set is rejected",
+			program: referenceScript,
+			context: ProgramContext{LedgerLanguage: lang.LanguageVersionV2, ProtocolMajor: 9},
+			wantErr: "unsupported UPLC program version",
+		},
+		{
+			name:    "van Rossem gate still applies",
+			program: encode(t, uplcVersion110),
+			context: ProgramContext{LedgerLanguage: lang.LanguageVersionV2, ProtocolMajor: 10},
+			wantErr: "UPLC version 1.1.0 is not available",
+		},
+		{
+			name:     "van Rossem gate opens at its protocol version",
+			program:  encode(t, uplcVersion110),
+			context:  ProgramContext{LedgerLanguage: lang.LanguageVersionV2, ProtocolMajor: 11},
+			wantVers: uplcVersion110,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Whatever the execution path decides, the well-formedness path
+			// must accept these bytes: the gates below are phase-2 only.
+			if _, err := DecodeDeBruijnWithContext(tt.program, tt.context); err != nil {
+				t.Fatalf("DecodeDeBruijnWithContext() failed: %v, want success", err)
+			}
+
+			program, err := DecodeDeBruijnForExecution(tt.program, tt.context)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("DecodeDeBruijnForExecution() error = %v, want error containing %q", err, tt.wantErr)
+				}
+				if program != nil {
+					t.Fatalf("DecodeDeBruijnForExecution() program = %v, want nil on error", program)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("DecodeDeBruijnForExecution() failed: %v", err)
+			}
+			if program.Version != tt.wantVers {
+				t.Fatalf("decoded version = %v, want %v", program.Version, tt.wantVers)
 			}
 		})
 	}
