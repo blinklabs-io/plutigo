@@ -571,3 +571,90 @@ func TestSupportsConstructorsIsLexicographicallyAtLeast110(t *testing.T) {
 		})
 	}
 }
+
+// TestDecodeDeBruijnForExecutionAppliesExecutionGates proves the
+// execution-decoding entry point applies the phase-2 gates that
+// [DecodeDeBruijnWithContext] deliberately omits, so a consumer that reaches
+// for it cannot decode a program and then hand the CEK machine a term whose
+// UPLC version is illegal to execute. The same bytes must still decode
+// through DecodeDeBruijnWithContext, which is the phase-1 well-formedness
+// path a transaction's own stored-but-unexecuted reference-script output
+// takes.
+func TestDecodeDeBruijnForExecutionAppliesExecutionGates(t *testing.T) {
+	t.Parallel()
+
+	referenceScript, err := hex.DecodeString(realPreviewReferenceScriptFlatHex)
+	if err != nil {
+		t.Fatalf("failed to decode test fixture hex: %v", err)
+	}
+	encode := func(t *testing.T, version lang.LanguageVersion) []byte {
+		t.Helper()
+		encoded, err := Encode(&Program[DeBruijn]{Version: version, Term: &Error{}})
+		if err != nil {
+			t.Fatalf("Encode() failed: %v", err)
+		}
+		return encoded
+	}
+
+	tests := []struct {
+		name     string
+		program  []byte
+		context  ProgramContext
+		wantErr  string
+		wantVers lang.LanguageVersion
+	}{
+		{
+			name:     "executable term version passes",
+			program:  encode(t, uplcVersion100),
+			context:  ProgramContext{LedgerLanguage: lang.LanguageVersionV2, ProtocolMajor: 9},
+			wantVers: uplcVersion100,
+		},
+		{
+			name:    "term version outside the executable set is rejected",
+			program: referenceScript,
+			context: ProgramContext{LedgerLanguage: lang.LanguageVersionV2, ProtocolMajor: 9},
+			wantErr: "unsupported UPLC program version",
+		},
+		{
+			name:    "van Rossem gate still applies",
+			program: encode(t, uplcVersion110),
+			context: ProgramContext{LedgerLanguage: lang.LanguageVersionV2, ProtocolMajor: 10},
+			wantErr: "UPLC version 1.1.0 is not available",
+		},
+		{
+			name:     "van Rossem gate opens at its protocol version",
+			program:  encode(t, uplcVersion110),
+			context:  ProgramContext{LedgerLanguage: lang.LanguageVersionV2, ProtocolMajor: 11},
+			wantVers: uplcVersion110,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Whatever the execution path decides, the well-formedness path
+			// must accept these bytes: the gates below are phase-2 only.
+			if _, err := DecodeDeBruijnWithContext(tt.program, tt.context); err != nil {
+				t.Fatalf("DecodeDeBruijnWithContext() failed: %v, want success", err)
+			}
+
+			program, err := DecodeDeBruijnForExecution(tt.program, tt.context)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("DecodeDeBruijnForExecution() error = %v, want error containing %q", err, tt.wantErr)
+				}
+				if program != nil {
+					t.Fatalf("DecodeDeBruijnForExecution() program = %v, want nil on error", program)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("DecodeDeBruijnForExecution() failed: %v", err)
+			}
+			if program.Version != tt.wantVers {
+				t.Fatalf("decoded version = %v, want %v", program.Version, tt.wantVers)
+			}
+		})
+	}
+}

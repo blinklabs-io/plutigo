@@ -57,7 +57,10 @@
 //     [DecodeWithContext], which require the selected ledger language and
 //     protocol version. These perform decode-time (phase-1) well-formedness
 //     checks only; callers about to execute a decoded program through the CEK
-//     machine must separately call [ValidateTermVersionForExecution]
+//     machine must additionally apply the execution-time (phase-2) term
+//     version gate, either by decoding through
+//     [DecodeDeBruijnForExecution] or by calling
+//     [ValidateTermVersionForExecution] themselves
 //
 // # Binder Interface
 //

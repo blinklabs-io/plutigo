@@ -146,6 +146,34 @@ func DecodeDeBruijnWithContext(
 	return DecodeWithContext[DeBruijn](bytes, context)
 }
 
+// DecodeDeBruijnForExecution decodes a FLAT-encoded UPLC program that is
+// about to be run through the CEK machine: [DecodeDeBruijnWithContext]
+// followed by [ValidateTermVersionForExecution]. Both steps are required
+// before evaluation, and only the first is correct for a program that is
+// merely being checked for well-formedness, so the two phases stay
+// separately callable; this entry point is the one a caller that intends to
+// execute should reach for.
+//
+// The gate cannot be applied inside the machine itself. cek.Machine.Run
+// takes a term rather than a program, and ledger callers apply the script's
+// arguments to that term before running it, so the program's UPLC version is
+// no longer in hand. cek.NewMachine's version argument is the Plutus ledger
+// language, not the program's UPLC term version, even though both are a
+// [lang.LanguageVersion].
+func DecodeDeBruijnForExecution(
+	bytes []byte,
+	context ProgramContext,
+) (*Program[DeBruijn], error) {
+	program, err := DecodeWithContext[DeBruijn](bytes, context)
+	if err != nil {
+		return nil, err
+	}
+	if err := ValidateTermVersionForExecution(program.Version, context); err != nil {
+		return nil, err
+	}
+	return program, nil
+}
+
 func plutusVersionForLedgerLanguage(version lang.LanguageVersion) (builtin.PlutusVersion, error) {
 	switch version {
 	case lang.LanguageVersionV1:
