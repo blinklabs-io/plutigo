@@ -541,7 +541,10 @@ func TestSupportsConstructorsIsLexicographicallyAtLeast110(t *testing.T) {
 		wantErr bool
 	}{
 		{"below 1.1.0 does not support constructors", lang.LanguageVersion{1, 0, 0}, true},
+		// A larger patch component must not outrank a smaller minor one.
+		{"below 1.1.0 with a higher patch does not support constructors", lang.LanguageVersion{1, 0, 9}, true},
 		{"exactly 1.1.0 supports constructors", lang.LanguageVersion{1, 1, 0}, false},
+		{"above 1.1.0 by patch supports constructors", lang.LanguageVersion{1, 1, 1}, false},
 		{"above 1.1.0 (the real #414 version) supports constructors", realPreviewReferenceScriptVersion, false},
 	}
 
