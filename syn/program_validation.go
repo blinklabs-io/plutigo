@@ -38,7 +38,7 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 	if program == nil {
 		return errors.New("program is required")
 	}
-	if err := validateProgramVersion(program.Version, context); err != nil {
+	if err := validateLedgerLanguageAvailability(context); err != nil {
 		return err
 	}
 
@@ -109,9 +109,10 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 }
 
 // DecodeWithContext decodes and validates a FLAT-encoded UPLC program before
-// returning it. The encoded program version is checked immediately after its
-// header is read; terms are then checked exhaustively before the program is
-// returned.
+// returning it. Ledger-language availability is checked immediately after the
+// program header is read; terms are then checked exhaustively before the
+// program is returned. The program's own UPLC term version is not checked
+// here; see [ValidateTermVersionForExecution].
 func DecodeWithContext[T Binder](bytes []byte, context ProgramContext) (*Program[T], error) {
 	program, err := decodeWithContext[T](bytes, context)
 	if err != nil {
@@ -160,18 +161,19 @@ func plutusVersionForLedgerLanguage(version lang.LanguageVersion) (builtin.Plutu
 	}
 }
 
-// validateProgramVersion is a phase-1, decode-time well-formedness check: it
-// applies uniformly to witness scripts and to a transaction's own
+// validateLedgerLanguageAvailability is a phase-1, decode-time well-formedness
+// check: the selected Plutus ledger language must exist at the given protocol
+// version. It applies uniformly to witness scripts and to a transaction's own
 // newly-created reference-script outputs (real cardano-ledger's
 // deserialiseScript/scriptCBORDecoder gate, applied by
-// validateScriptsWellFormedTxOuts to both). It deliberately excludes any
-// check of the UPLC term version itself: upstream plutus-ledger-api never
-// gates the program version at decode/well-formedness time, only at
-// execution time (real cardano-ledger's mkTermToEvaluate, reached only via
+// validateScriptsWellFormedTxOuts to both). It deliberately takes no UPLC term
+// version: upstream plutus-ledger-api never gates the program version at
+// decode/well-formedness time, only at execution time (real cardano-ledger's
+// mkTermToEvaluate, reached only via
 // evaluateScriptRestricting/evaluateScriptCounting), which a transaction's own
 // stored-but-unexecuted reference-script output can never be. See
 // [ValidateTermVersionForExecution] for that check.
-func validateProgramVersion(_ lang.LanguageVersion, context ProgramContext) error {
+func validateLedgerLanguageAvailability(context ProgramContext) error {
 	plutusVersion, err := plutusVersionForLedgerLanguage(context.LedgerLanguage)
 	if err != nil {
 		return err
@@ -207,9 +209,9 @@ func validateProgramVersion(_ lang.LanguageVersion, context ProgramContext) erro
 //
 // It combines two gates that upstream plutus-ledger-api applies only at
 // execution time (mkTermToEvaluate's plcVersionsAvailableIn): the UPLC
-// program version must be one of {1.0.0, 1.1.0} -- decode-time
-// well-formedness deliberately does not check this, see
-// [validateProgramVersion] -- and, the "van Rossem" gate, UPLC 1.1.0
+// program version must be one of {1.0.0, 1.1.0} -- which decode-time
+// well-formedness deliberately does not check -- and, the "van Rossem" gate,
+// UPLC 1.1.0
 // sums-of-products are only legal for Plutus V1/V2 at protocol major version
 // 11 and above.
 func ValidateTermVersionForExecution(version lang.LanguageVersion, context ProgramContext) error {
@@ -239,7 +241,7 @@ func ValidateTermVersionForExecution(version lang.LanguageVersion, context Progr
 // supportsConstructors reports whether a UPLC program version is at least
 // 1.1.0, the version constr/case syntax was introduced in. This must be a
 // lexicographic (major, then minor, then patch) comparison, not equality:
-// once validateProgramVersion no longer whitelists specific term versions,
+// decode-time validation no longer whitelists specific term versions, so
 // versions above 1.1.0 are reachable here too. lang.LanguageVersion is a
 // plain [3]uint32 array, and Go does not support ordering comparisons on
 // array types directly.

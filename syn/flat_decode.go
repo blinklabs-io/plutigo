@@ -155,7 +155,7 @@ func decodeProgramVersion(
 	}
 	version := lang.LanguageVersion{uint32(major), uint32(minor), uint32(patch)}
 	if context != nil {
-		if err := validateProgramVersion(version, *context); err != nil {
+		if err := validateLedgerLanguageAvailability(*context); err != nil {
 			return lang.LanguageVersion{}, err
 		}
 	}
