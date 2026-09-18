@@ -22,11 +22,39 @@ const DebugBudget = false
 
 var sharedBuiltinTable = newBuiltins[syn.DeBruijn]()
 
+var (
+	// Builtin application and forcing never mutate their input; they return a
+	// machine-owned value or another prototype. These values are safe to share.
+	sharedBuiltinNoArgValuesV10 = newBuiltinNoArgValues[syn.DeBruijn](lang.LanguageVersionV1)
+	sharedBuiltinNoArgValuesV20 = newBuiltinNoArgValues[syn.DeBruijn](lang.LanguageVersionV2)
+	sharedBuiltinNoArgValuesV30 = newBuiltinNoArgValues[syn.DeBruijn](lang.LanguageVersionV3)
+	sharedBuiltinNoArgValuesV40 = newBuiltinNoArgValues[syn.DeBruijn](lang.LanguageVersionV4)
+)
+
 // Machine is only instantiated with syn.DeBruijn in this codebase. These
 // helpers reuse shared syn.DeBruijn builtin tables across Machine[T] instances,
 // and NewMachine panics if T does not match syn.DeBruijn.
 func getSharedBuiltins[T syn.Eval]() *Builtins[T] {
 	return (*Builtins[T])(unsafe.Pointer(&sharedBuiltinTable))
+}
+
+func getSharedBuiltinNoArgValues[T syn.Eval](
+	version lang.LanguageVersion,
+) *[builtin.TotalBuiltinCount][3]*Builtin[T] {
+	var values *[builtin.TotalBuiltinCount][3]*Builtin[syn.DeBruijn]
+	switch version {
+	case lang.LanguageVersionV1:
+		values = sharedBuiltinNoArgValuesV10
+	case lang.LanguageVersionV2:
+		values = sharedBuiltinNoArgValuesV20
+	case lang.LanguageVersionV3:
+		values = sharedBuiltinNoArgValuesV30
+	case lang.LanguageVersionV4:
+		values = sharedBuiltinNoArgValuesV40
+	default:
+		return newBuiltinNoArgValues[T](version)
+	}
+	return (*[builtin.TotalBuiltinCount][3]*Builtin[T])(unsafe.Pointer(values))
 }
 
 // See getSharedBuiltins for the syn.DeBruijn invariant behind this cast.
@@ -674,7 +702,7 @@ func NewMachine[T syn.Eval](
 		stepCostCpu:        stepCostCpu,
 		stepCostMem:        stepCostMem,
 		builtins:           chooseBuiltins[T](version, evalContext.ProtoMajor),
-		builtinNoArgValues: newBuiltinNoArgValues[T](version),
+		builtinNoArgValues: getSharedBuiltinNoArgValues[T](version),
 		oneArgCosts:        newOneArgCostCache(evalContext.CostModel.builtinCosts),
 		twoArgCosts:        newTwoArgCostCache(evalContext.CostModel.builtinCosts),
 		threeArgCosts:      newThreeArgCostCache(evalContext.CostModel.builtinCosts),

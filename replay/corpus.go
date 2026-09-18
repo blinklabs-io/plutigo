@@ -140,52 +140,55 @@ func Load(r io.Reader) (*Corpus, error) {
 }
 
 func (c *Corpus) Validate() error {
-	return c.validate()
+	_, err := c.validateCases()
+	return err
 }
 
-func (c *Corpus) validate() error {
+func (c *Corpus) validateCases() ([]decodedCase, error) {
 	if c == nil {
-		return errors.New("replay corpus is required")
+		return nil, errors.New("replay corpus is required")
 	}
 	if c.SchemaVersion != SchemaVersion {
-		return fmt.Errorf(
+		return nil, fmt.Errorf(
 			"unsupported replay corpus schema version %d (want %d)",
 			c.SchemaVersion,
 			SchemaVersion,
 		)
 	}
 	if strings.TrimSpace(c.Network) == "" {
-		return errors.New("replay corpus network is required")
+		return nil, errors.New("replay corpus network is required")
 	}
 	if strings.TrimSpace(c.Reference.Implementation) == "" {
-		return errors.New(
+		return nil, errors.New(
 			"replay corpus reference implementation is required",
 		)
 	}
 	if strings.TrimSpace(c.Reference.Version) == "" {
-		return errors.New("replay corpus reference version is required")
+		return nil, errors.New("replay corpus reference version is required")
 	}
 	if len(c.Cases) == 0 {
-		return errors.New("replay corpus must contain at least one case")
+		return nil, errors.New("replay corpus must contain at least one case")
 	}
 
 	ids := make(map[string]struct{}, len(c.Cases))
+	decodedCases := make([]decodedCase, len(c.Cases))
 	for i := range c.Cases {
 		replayCase := &c.Cases[i]
-		_, err := replayCase.validate()
+		decoded, err := replayCase.validate()
 		if err != nil {
-			return fmt.Errorf("replay case %d: %w", i, err)
+			return nil, fmt.Errorf("replay case %d: %w", i, err)
 		}
 		if _, exists := ids[replayCase.ID]; exists {
-			return fmt.Errorf(
+			return nil, fmt.Errorf(
 				"replay case %d: duplicate id %q",
 				i,
 				replayCase.ID,
 			)
 		}
 		ids[replayCase.ID] = struct{}{}
+		decodedCases[i] = decoded
 	}
-	return nil
+	return decodedCases, nil
 }
 
 func (c *Case) validate() (decodedCase, error) {

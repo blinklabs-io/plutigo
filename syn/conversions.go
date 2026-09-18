@@ -3,71 +3,44 @@ package syn
 import (
 	"errors"
 	"fmt"
-	"math"
 )
 
 func NameToNamedDeBruijn(p *Program[Name]) (*Program[NamedDeBruijn], error) {
-	converter := newConverter()
-
-	t, err := nameToIndex(
-		converter,
-		p.Term,
-		func(s string, d DeBruijn) NamedDeBruijn {
-			return NamedDeBruijn{
-				Text:  s,
-				Index: d,
-			}
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	program := &Program[NamedDeBruijn]{
-		Version: p.Version,
-		Term:    t,
-	}
-
-	return program, nil
+	return convertNameProgram(p, func(s string, d DeBruijn) NamedDeBruijn {
+		return NamedDeBruijn{Text: s, Index: d}
+	})
 }
 
 func NameToDeBruijn(p *Program[Name]) (*Program[DeBruijn], error) {
-	converter := newConverter()
+	return convertNameProgram(p, func(_ string, d DeBruijn) DeBruijn {
+		return d
+	})
+}
 
-	t, err := nameToIndex(
-		converter,
-		p.Term,
-		func(s string, d DeBruijn) DeBruijn {
-			return DeBruijn(d)
-		},
-	)
+func convertNameProgram[T any](
+	p *Program[Name],
+	convertName func(string, DeBruijn) T,
+) (*Program[T], error) {
+	converter := newConverter()
+	t, err := nameToIndex(converter, p.Term, convertName)
 	if err != nil {
 		return nil, err
 	}
 
-	program := &Program[DeBruijn]{
+	return &Program[T]{
 		Version: p.Version,
 		Term:    t,
-	}
-
-	return program, nil
+	}, nil
 }
 
 type converter struct {
-	currentLevel  uint
-	currentUnique Unique
-	levels        []biMap
+	scopes []map[Unique]struct{}
 }
 
 func newConverter() *converter {
 	return &converter{
-		currentLevel:  0,
-		currentUnique: 0,
-		levels: []biMap{
-			{
-				left:  make(map[Unique]uint),
-				right: make(map[uint]Unique),
-			},
+		scopes: []map[Unique]struct{}{
+			make(map[Unique]struct{}),
 		},
 	}
 }
@@ -75,7 +48,7 @@ func newConverter() *converter {
 func nameToIndex[T any](
 	c *converter,
 	term Term[Name],
-	converter func(string, DeBruijn) T,
+	convertName func(string, DeBruijn) T,
 ) (Term[T], error) {
 	var converted Term[T]
 
@@ -87,10 +60,10 @@ func nameToIndex[T any](
 		}
 
 		converted = &Var[T]{
-			Name: converter(t.Name.Text, index),
+			Name: convertName(t.Name.Text, index),
 		}
 	case *Delay[Name]:
-		inner, err := nameToIndex(c, t.Term, converter)
+		inner, err := nameToIndex(c, t.Term, convertName)
 		if err != nil {
 			return nil, err
 		}
@@ -108,7 +81,7 @@ func nameToIndex[T any](
 
 		c.startScope()
 
-		body, err := nameToIndex(c, t.Body, converter)
+		body, err := nameToIndex(c, t.Body, convertName)
 		if err != nil {
 			return nil, err
 		}
@@ -118,16 +91,16 @@ func nameToIndex[T any](
 		c.removeUnique(t.ParameterName.Unique)
 
 		converted = &Lambda[T]{
-			ParameterName: converter(t.ParameterName.Text, index),
+			ParameterName: convertName(t.ParameterName.Text, index),
 			Body:          body,
 		}
 	case *Apply[Name]:
-		f, err := nameToIndex(c, t.Function, converter)
+		f, err := nameToIndex(c, t.Function, convertName)
 		if err != nil {
 			return nil, err
 		}
 
-		arg, err := nameToIndex(c, t.Argument, converter)
+		arg, err := nameToIndex(c, t.Argument, convertName)
 		if err != nil {
 			return nil, err
 		}
@@ -139,7 +112,7 @@ func nameToIndex[T any](
 	case *Constant:
 		converted = t
 	case *Force[Name]:
-		inner, err := nameToIndex(c, t.Term, converter)
+		inner, err := nameToIndex(c, t.Term, convertName)
 		if err != nil {
 			return nil, err
 		}
@@ -152,15 +125,15 @@ func nameToIndex[T any](
 	case *Builtin:
 		converted = t
 	case *Constr[Name]:
-		var fields []Term[T]
+		fields := make([]Term[T], len(t.Fields))
 
-		for _, f := range t.Fields {
-			item, err := nameToIndex(c, f, converter)
+		for i, f := range t.Fields {
+			item, err := nameToIndex(c, f, convertName)
 			if err != nil {
 				return nil, err
 			}
 
-			fields = append(fields, item)
+			fields[i] = item
 		}
 
 		converted = &Constr[T]{
@@ -168,18 +141,18 @@ func nameToIndex[T any](
 			Fields: fields,
 		}
 	case *Case[Name]:
-		var branches []Term[T]
+		branches := make([]Term[T], len(t.Branches))
 
-		for _, b := range t.Branches {
-			item, err := nameToIndex(c, b, converter)
+		for i, b := range t.Branches {
+			item, err := nameToIndex(c, b, convertName)
 			if err != nil {
 				return nil, err
 			}
 
-			branches = append(branches, item)
+			branches[i] = item
 		}
 
-		constr, err := nameToIndex(c, t.Constr, converter)
+		constr, err := nameToIndex(c, t.Constr, convertName)
 		if err != nil {
 			return nil, err
 		}
@@ -195,77 +168,28 @@ func nameToIndex[T any](
 	return converted, nil
 }
 
-// getIndex finds the DeBruijn index for a given name
 func (c *converter) getIndex(name *Name) (DeBruijn, error) {
-	for i := len(c.levels) - 1; i >= 0; i-- {
-		scope := &c.levels[i]
-		if foundLevel, ok := scope.getByUnique(name.Unique); ok {
-			index := c.currentLevel - foundLevel
-
-			if index > math.MaxInt {
-				return 0, errors.New("DeBruijn index too large")
-			}
-
-			return DeBruijn(index), nil
+	for i := len(c.scopes) - 1; i >= 0; i-- {
+		if _, ok := c.scopes[i][name.Unique]; ok {
+			return DeBruijn(len(c.scopes) - 1 - i), nil
 		}
 	}
 
 	return 0, errors.New("FreeUnique")
 }
 
-// getUnique finds the Unique identifier for a given DeBruijn index
-func (c *converter) getUnique(index DeBruijn) (Unique, error) {
-	if index < 0 {
-		return 0, errors.New("negative DeBruijn index")
-	}
-	for i := len(c.levels) - 1; i >= 0; i-- {
-		indexVal := uint(index) //nolint:gosec
-		if c.currentLevel < indexVal {
-			return 0, errors.New("FreeIndex")
-		}
-
-		level := c.currentLevel - indexVal
-
-		if unique, ok := c.levels[i].getByLevel(level); ok {
-			return unique, nil
-		}
-	}
-
-	return 0, errors.New("FreeIndex")
-}
-
-// declareUnique adds a unique identifier to the current scope
 func (c *converter) declareUnique(unique Unique) {
-	scope := &c.levels[c.currentLevel]
-	scope.insert(unique, c.currentLevel)
+	c.scopes[len(c.scopes)-1][unique] = struct{}{}
 }
 
-// removeUnique removes a unique identifier from the current scope
 func (c *converter) removeUnique(unique Unique) {
-	scope := &c.levels[c.currentLevel]
-	scope.remove(unique, c.currentLevel)
+	delete(c.scopes[len(c.scopes)-1], unique)
 }
 
-// declareBinder declares a new binder in the current scope
-//
-//nolint:unused
-func (c *converter) declareBinder() {
-	scope := &c.levels[c.currentLevel]
-	scope.insert(c.currentUnique, c.currentLevel)
-	c.currentUnique++
-}
-
-// startScope begins a new variable scope
 func (c *converter) startScope() {
-	c.currentLevel++
-	c.levels = append(c.levels, biMap{
-		left:  make(map[Unique]uint),
-		right: make(map[uint]Unique),
-	})
+	c.scopes = append(c.scopes, make(map[Unique]struct{}))
 }
 
-// endScope ends the current variable scope
 func (c *converter) endScope() {
-	c.currentLevel--
-	c.levels = c.levels[:len(c.levels)-1]
+	c.scopes = c.scopes[:len(c.scopes)-1]
 }
