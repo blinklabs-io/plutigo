@@ -1241,32 +1241,32 @@ builtin[ 71] keccak_256                               mem=&ConstantCost{c:4} cpu
 builtin[ 72] blake2b_224                              mem=&ConstantCost{c:4} cpu=&LinearCost{slope:8310, intercept:207616}
 builtin[ 73] integerToByteString                      mem=&ThreeLiteralInYorLinearInZ{LinearCost:LinearCost{slope:1, intercept:0}} cpu=&ThreeQuadraticInZ{QuadraticFunction:QuadraticFunction{coeff0:1293828, coeff1:28716, coeff2:63}}
 builtin[ 74] byteStringToInteger                      mem=&LinearInY{LinearCost:LinearCost{slope:1, intercept:0}} cpu=&QuadraticInYModel{QuadraticFunction:QuadraticFunction{coeff0:1006041, coeff1:43623, coeff2:251}}
-builtin[ 75] andByteString                            mem=&ThreeLinearInMaxYZ{LinearCost:LinearCost{slope:1, intercept:0}} cpu=&ThreeLinearInYandZ{TwoVariableLinearSize:TwoVariableLinearSize{intercept:100181, slope1:726, slope2:719}}
-builtin[ 76] orByteString                             mem=&ThreeLinearInMaxYZ{LinearCost:LinearCost{slope:1, intercept:0}} cpu=&ThreeLinearInYandZ{TwoVariableLinearSize:TwoVariableLinearSize{intercept:100181, slope1:726, slope2:719}}
-builtin[ 77] xorByteString                            mem=&ThreeLinearInMaxYZ{LinearCost:LinearCost{slope:1, intercept:0}} cpu=&ThreeLinearInYandZ{TwoVariableLinearSize:TwoVariableLinearSize{intercept:100181, slope1:726, slope2:719}}
-builtin[ 78] complementByteString                     mem=&LinearCost{slope:1, intercept:0} cpu=&LinearCost{slope:680, intercept:107878}
-builtin[ 79] readBit                                  mem=&ConstantCost{c:1} cpu=&ConstantCost{c:95336}
-builtin[ 80] writeBits                                mem=&ThreeLinearInX{LinearCost:LinearCost{slope:1, intercept:0}} cpu=&ThreeLinearInY{LinearCost:LinearCost{slope:18848, intercept:281145}}
-builtin[ 81] replicateByte                            mem=&LinearInX{LinearCost:LinearCost{slope:1, intercept:1}} cpu=&LinearInX{LinearCost:LinearCost{slope:159, intercept:180194}}
-builtin[ 82] shiftByteString                          mem=&LinearInX{LinearCost:LinearCost{slope:1, intercept:0}} cpu=&LinearInX{LinearCost:LinearCost{slope:8942, intercept:158519}}
-builtin[ 83] rotateByteString                         mem=&LinearInX{LinearCost:LinearCost{slope:1, intercept:0}} cpu=&LinearInX{LinearCost:LinearCost{slope:8813, intercept:159378}}
-builtin[ 84] countSetBits                             mem=&ConstantCost{c:1} cpu=&LinearInX{LinearCost:LinearCost{slope:3298, intercept:107490}}
-builtin[ 85] findFirstSetBit                          mem=&ConstantCost{c:1} cpu=&LinearInX{LinearCost:LinearCost{slope:655, intercept:106057}}
-builtin[ 86] ripemd_160                               mem=&ConstantCost{c:3} cpu=&LinearInX{LinearCost:LinearCost{slope:24520, intercept:1964219}}
-builtin[ 87] expModInteger                            mem=&ThreeLinearInZ{LinearCost:LinearCost{slope:1, intercept:0}} cpu=&ExpMod{coeff00:607153, coeff11:231697, coeff12:53144}
-builtin[ 88] dropList                                 mem=&ConstantCost{c:4} cpu=&DropListCost{LinearCost:LinearCost{slope:1957, intercept:116711}}
-builtin[ 89] lengthOfArray                            mem=&ConstantCost{c:10} cpu=&ConstantCost{c:231883}
-builtin[ 90] listToArray                              mem=&LinearCost{slope:1, intercept:7} cpu=&LinearCost{slope:24838, intercept:1000}
-builtin[ 91] indexArray                               mem=&ConstantCost{c:32} cpu=&ConstantCost{c:232010}
-builtin[ 92] bls12_381_G1_multiScalarMul              mem=&ConstantCost{c:18} cpu=&LinearInX{LinearCost:LinearCost{slope:25087669, intercept:321837444}}
-builtin[ 93] bls12_381_G2_multiScalarMul              mem=&ConstantCost{c:36} cpu=&LinearInX{LinearCost:LinearCost{slope:67302824, intercept:617887431}}
-builtin[ 94] insertCoin                               mem=&FourLinearInU{LinearCost:LinearCost{slope:21, intercept:45}} cpu=&FourLinearInU{LinearCost:LinearCost{slope:18413, intercept:356924}}
-builtin[ 95] lookupCoin                               mem=&ConstantCost{c:1} cpu=&ThreeLinearInZ{LinearCost:LinearCost{slope:9444, intercept:219951}}
-builtin[ 96] unionValue                               mem=&AddedSizesModel{AddedSizes:AddedSizes{intercept:24, slope:21}} cpu=&WithInteractionInXAndY{c00:1000, c01:183150, c10:172116, c11:6}
-builtin[ 97] valueContains                            mem=&ConstantCost{c:1} cpu=&ConstAboveDiagonalModel{ConstantOrTwoArguments:ConstantOrTwoArguments{constant:213283, model:&LinearInXAndY{TwoVariableLinearSize:TwoVariableLinearSize{intercept:618401, slope1:1998, slope2:28258}}}}
-builtin[ 98] valueData                                mem=&LinearCost{slope:22, intercept:2} cpu=&LinearCost{slope:38159, intercept:1000}
-builtin[ 99] unValueData                              mem=&LinearCost{slope:11, intercept:1} cpu=&QuadraticInXModel{QuadraticFunction:QuadraticFunction{coeff0:1000, coeff1:95933, coeff2:1}}
-builtin[100] scaleValue                               mem=&LinearInY{LinearCost:LinearCost{slope:21, intercept:12}} cpu=&LinearInY{LinearCost:LinearCost{slope:277577, intercept:1000}}
+builtin[ 75] andByteString                            mem=&ThreeLinearInMaxYZ{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}} cpu=&ThreeLinearInYandZ{TwoVariableLinearSize:TwoVariableLinearSize{intercept:9223372036854775807, slope1:9223372036854775807, slope2:9223372036854775807}}
+builtin[ 76] orByteString                             mem=&ThreeLinearInMaxYZ{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}} cpu=&ThreeLinearInYandZ{TwoVariableLinearSize:TwoVariableLinearSize{intercept:9223372036854775807, slope1:9223372036854775807, slope2:9223372036854775807}}
+builtin[ 77] xorByteString                            mem=&ThreeLinearInMaxYZ{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}} cpu=&ThreeLinearInYandZ{TwoVariableLinearSize:TwoVariableLinearSize{intercept:9223372036854775807, slope1:9223372036854775807, slope2:9223372036854775807}}
+builtin[ 78] complementByteString                     mem=&LinearCost{slope:9223372036854775807, intercept:9223372036854775807} cpu=&LinearCost{slope:9223372036854775807, intercept:9223372036854775807}
+builtin[ 79] readBit                                  mem=&ConstantCost{c:9223372036854775807} cpu=&ConstantCost{c:9223372036854775807}
+builtin[ 80] writeBits                                mem=&ThreeLinearInX{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}} cpu=&ThreeLinearInY{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}}
+builtin[ 81] replicateByte                            mem=&LinearInX{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}} cpu=&LinearInX{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}}
+builtin[ 82] shiftByteString                          mem=&LinearInX{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}} cpu=&LinearInX{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}}
+builtin[ 83] rotateByteString                         mem=&LinearInX{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}} cpu=&LinearInX{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}}
+builtin[ 84] countSetBits                             mem=&ConstantCost{c:9223372036854775807} cpu=&LinearInX{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}}
+builtin[ 85] findFirstSetBit                          mem=&ConstantCost{c:9223372036854775807} cpu=&LinearInX{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}}
+builtin[ 86] ripemd_160                               mem=&ConstantCost{c:9223372036854775807} cpu=&LinearInX{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}}
+builtin[ 87] expModInteger                            mem=&ThreeLinearInZ{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}} cpu=&ExpMod{coeff00:9223372036854775807, coeff11:9223372036854775807, coeff12:9223372036854775807}
+builtin[ 88] dropList                                 mem=&ConstantCost{c:9223372036854775807} cpu=&DropListCost{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}}
+builtin[ 89] lengthOfArray                            mem=&ConstantCost{c:9223372036854775807} cpu=&ConstantCost{c:9223372036854775807}
+builtin[ 90] listToArray                              mem=&LinearCost{slope:9223372036854775807, intercept:9223372036854775807} cpu=&LinearCost{slope:9223372036854775807, intercept:9223372036854775807}
+builtin[ 91] indexArray                               mem=&ConstantCost{c:9223372036854775807} cpu=&ConstantCost{c:9223372036854775807}
+builtin[ 92] bls12_381_G1_multiScalarMul              mem=&ConstantCost{c:9223372036854775807} cpu=&LinearInX{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}}
+builtin[ 93] bls12_381_G2_multiScalarMul              mem=&ConstantCost{c:9223372036854775807} cpu=&LinearInX{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}}
+builtin[ 94] insertCoin                               mem=&FourLinearInU{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}} cpu=&FourLinearInU{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}}
+builtin[ 95] lookupCoin                               mem=&ConstantCost{c:9223372036854775807} cpu=&ThreeLinearInZ{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}}
+builtin[ 96] unionValue                               mem=&AddedSizesModel{AddedSizes:AddedSizes{intercept:9223372036854775807, slope:9223372036854775807}} cpu=&WithInteractionInXAndY{c00:9223372036854775807, c01:9223372036854775807, c10:9223372036854775807, c11:9223372036854775807}
+builtin[ 97] valueContains                            mem=&ConstantCost{c:9223372036854775807} cpu=&ConstAboveDiagonalModel{ConstantOrTwoArguments:ConstantOrTwoArguments{constant:9223372036854775807, model:&LinearInXAndY{TwoVariableLinearSize:TwoVariableLinearSize{intercept:9223372036854775807, slope1:9223372036854775807, slope2:9223372036854775807}}}}
+builtin[ 98] valueData                                mem=&LinearCost{slope:9223372036854775807, intercept:9223372036854775807} cpu=&LinearCost{slope:9223372036854775807, intercept:9223372036854775807}
+builtin[ 99] unValueData                              mem=&LinearCost{slope:9223372036854775807, intercept:9223372036854775807} cpu=&QuadraticInXModel{QuadraticFunction:QuadraticFunction{coeff0:9223372036854775807, coeff1:9223372036854775807, coeff2:9223372036854775807}}
+builtin[100] scaleValue                               mem=&LinearInY{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}} cpu=&LinearInY{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}}
 builtin[101] multiIndexArray                          mem=&LinearInY{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&QuadraticInYModel{QuadraticFunction:QuadraticFunction{coeff0:326163, coeff1:12304, coeff2:2}}
 builtin[102] policies                                 mem=&ConstantCost{c:100000000000} cpu=&ConstantCost{c:100000000000}
 builtin[103] assetCount                               mem=&ConstantCost{c:0} cpu=&ConstantCost{c:1}
