@@ -2,6 +2,7 @@ package cek
 
 import (
 	"fmt"
+	"math"
 	"math/big"
 	"strings"
 	"unicode/utf8"
@@ -41,18 +42,27 @@ func costModelFromList(
 	}
 	cm.builtinCosts = builtinCosts
 	for i, param := range lang.GetParamNamesForVersion(version) {
-		// Stop processing when we reach the end of our input data
-		if i >= len(data) {
-			break
+		// A ledger that has not yet been updated for this software version
+		// supplies fewer parameters than there are names. The reference
+		// implementation costs every missing parameter at maxBound rather than
+		// leaving a compiled-in default in place, so that a builtin the ledger
+		// has not costed cannot run within any budget, and an old builtin with
+		// a newly added parameter cannot be under-costed. Extra values past
+		// the name list are ignored. See plutus-ledger-api
+		// PlutusLedgerApi.Common.ParamName.tagWithParamNames and Note [Cost
+		// model parameters from the ledger's point of view].
+		value := int64(math.MaxInt64)
+		if i < len(data) {
+			value = data[i]
 		}
 		if strings.HasPrefix(param, "cek") {
 			// Update machine cost
-			if err := cm.machineCosts.update(param, data[i]); err != nil {
+			if err := cm.machineCosts.update(param, value); err != nil {
 				return cm, err
 			}
 		} else {
 			// Update builtin cost
-			if err := cm.builtinCosts.update(param, data[i]); err != nil {
+			if err := cm.builtinCosts.update(param, value); err != nil {
 				return cm, err
 			}
 		}
