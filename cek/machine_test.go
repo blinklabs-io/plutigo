@@ -7,6 +7,7 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 )
@@ -42,6 +43,35 @@ func TestNewMachine(t *testing.T) {
 			cap(m.envIndexChunks),
 			cap(m.envChunks),
 		)
+	}
+}
+
+func TestNewMachineSharesImmutableBuiltinPrototypes(t *testing.T) {
+	versions := []lang.LanguageVersion{
+		lang.LanguageVersionV1,
+		lang.LanguageVersionV2,
+		lang.LanguageVersionV3,
+		lang.LanguageVersionV4,
+	}
+	for _, version := range versions {
+		first := NewMachine[syn.DeBruijn](version, 0, nil)
+		second := NewMachine[syn.DeBruijn](version, 0, nil)
+		if first.builtinNoArgValues != second.builtinNoArgValues {
+			t.Fatalf("version %v machines do not share builtin prototypes", version)
+		}
+	}
+
+	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	prototype := machine.builtinNoArgValues[builtin.AddInteger][0]
+	want := *prototype
+	arg := &Constant{Constant: &syn.Integer{Inner: big.NewInt(1)}}
+	args := machine.extendBuiltinArgs(nil, arg)
+	partial := machine.allocBuiltin(builtin.AddInteger, 0, 1, args)
+	if partial == prototype {
+		t.Fatal("partially applied builtin reused immutable prototype")
+	}
+	if got := *prototype; got != want {
+		t.Fatalf("builtin prototype mutated: got %+v, want %+v", got, want)
 	}
 }
 

@@ -382,6 +382,79 @@ func TestNameToDeBruijn(t *testing.T) {
 	}
 }
 
+func TestNameToDeBruijnNestedScopes(t *testing.T) {
+	tests := []struct {
+		name      string
+		outer     Name
+		inner     Name
+		body      Name
+		wantIndex DeBruijn
+	}{
+		{
+			name:      "outer binding",
+			outer:     NewName("outer", 1),
+			inner:     NewName("inner", 2),
+			body:      NewName("outer", 1),
+			wantIndex: 2,
+		},
+		{
+			name:      "reused unique shadows outer binding",
+			outer:     NewName("outer", 1),
+			inner:     NewName("outer", 1),
+			body:      NewName("outer", 1),
+			wantIndex: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			program := NewProgram(
+				lang.LanguageVersionV1,
+				NewLambda(
+					tt.outer,
+					NewLambda(tt.inner, &Var[Name]{Name: tt.body}),
+				),
+			)
+			converted, err := NameToDeBruijn(program)
+			if err != nil {
+				t.Fatalf("NameToDeBruijn() error = %v", err)
+			}
+
+			outer := converted.Term.(*Lambda[DeBruijn])
+			inner := outer.Body.(*Lambda[DeBruijn])
+			body := inner.Body.(*Var[DeBruijn])
+			if body.Name != tt.wantIndex {
+				t.Fatalf("body index = %d, want %d", body.Name, tt.wantIndex)
+			}
+		})
+	}
+
+	t.Run("outer binding restored after reused unique", func(t *testing.T) {
+		name := NewName("value", 1)
+		program := NewProgram(
+			lang.LanguageVersionV1,
+			NewLambda(
+				name,
+				NewApply(
+					NewLambda(name, &Var[Name]{Name: name}),
+					&Var[Name]{Name: name},
+				),
+			),
+		)
+		converted, err := NameToDeBruijn(program)
+		if err != nil {
+			t.Fatalf("NameToDeBruijn() error = %v", err)
+		}
+
+		outer := converted.Term.(*Lambda[DeBruijn])
+		body := outer.Body.(*Apply[DeBruijn])
+		argument := body.Argument.(*Var[DeBruijn])
+		if argument.Name != 1 {
+			t.Fatalf("outer variable index = %d, want 1", argument.Name)
+		}
+	})
+}
+
 func TestNameToDeBruijnComplex(t *testing.T) {
 	// Create a program with delay and force: (lam x (delay (force x)))
 	force := NewForce(NewVar("x", 0))
