@@ -1,0 +1,37 @@
+# Generated automatically by org-governance-bot. Do not edit manually.
+name: "ci"
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - v*
+      - v*.*.*
+  workflow_dispatch:
+
+jobs:
+  go-test:
+    needs: [golangci-lint]
+    uses: blinklabs-io/actions/.github/workflows/reuseable-go-test.yml@main
+    with:
+      pre-test-command: make test
+      submodules: true
+      test-flags: -race -coverprofile=coverage.out -covermode=atomic
+      upload-coverage: true
+  golangci-lint:
+    uses: blinklabs-io/actions/.github/workflows/reuseable-golangci-lint.yml@main
+  nilaway:
+    needs: [golangci-lint]
+    uses: blinklabs-io/actions/.github/workflows/reuseable-nilaway.yml@main
+    with:
+      exclude-file-docstrings: <nilaway skip stack-machine>
+      include-pkgs: github.com/blinklabs-io/plutigo
+      submodules: true
+  publish:
+    needs: [go-test, nilaway]
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    uses: blinklabs-io/actions/.github/workflows/reuseable-go-library-release.yml@main
+    permissions:
+      contents: write
