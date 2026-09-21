@@ -25,6 +25,42 @@ var (
 
 const maxConstrFieldsPV11 = 1024
 
+// maxConstantTypeTagsPV11 bounds the number of 4-bit type tags a constant's
+// type encodes to. It is mbHeader in plutus-ledger-api's MaxBounds, which
+// scriptCBORDecoder applies to defaultUniSize from protocol version 11 on and
+// leaves unbounded before it.
+const maxConstantTypeTagsPV11 = 32
+
+// constantTypeSize counts the type tags a constant type encodes to, mirroring
+// defaultUniSize in PlutusCore.Default.Universe: a type application costs one
+// tag plus its operands, and every other type costs one. A list or array is
+// one application over its proto type, a pair is two. The traversal is
+// iterative because the decoder admits types nested far deeper than the Go
+// stack tolerates.
+func constantTypeSize(typ Typ) int {
+	size := 0
+	pending := []Typ{typ}
+	for len(pending) > 0 {
+		last := len(pending) - 1
+		current := pending[last]
+		pending = pending[:last]
+		switch t := current.(type) {
+		case *TList:
+			size += 2
+			pending = append(pending, t.Typ)
+		case *TArray:
+			size += 2
+			pending = append(pending, t.Typ)
+		case *TPair:
+			size += 3
+			pending = append(pending, t.First, t.Second)
+		default:
+			size++
+		}
+	}
+	return size
+}
+
 // ValidateProgram is a phase-1, decode-time well-formedness check: language
 // introduction, builtin availability, and structural bounds such as
 // constructor arity. It applies uniformly to witness scripts and to a
@@ -57,8 +93,20 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 		}
 
 		switch t := term.(type) {
-		case *Var[T], *Constant, *Error:
+		case *Var[T], *Error:
 			// No version-dependent validation is needed for these terms.
+		case *Constant:
+			if t.Con != nil &&
+				context.ProtocolMajor >= builtin.VanRossemProtoVersion {
+				size := constantTypeSize(t.Con.Typ())
+				if size > maxConstantTypeTagsPV11 {
+					return fmt.Errorf(
+						"constant type of size %d is not available in protocol version %d",
+						size,
+						context.ProtocolMajor,
+					)
+				}
+			}
 		case *Delay[T]:
 			terms = append(terms, t.Term)
 		case *Force[T]:

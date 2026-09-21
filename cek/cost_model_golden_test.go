@@ -195,7 +195,8 @@ func TestCostModelFieldMappingGolden(t *testing.T) {
 
 	// Real preview-network PlutusV3 cost model (conway-genesis.json),
 	// exercised through costModelFromList. It has 251 values for 350 V3
-	// parameter names, so it also pins the existing short-list behavior.
+	// parameter names, so it also pins short-list handling: the 99 missing
+	// parameters must all read as maxBound, not as compiled-in defaults.
 	cmV3, err := costModelFromList(
 		lang.LanguageVersionV3,
 		SemanticsVariantC,

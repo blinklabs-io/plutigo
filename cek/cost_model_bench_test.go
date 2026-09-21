@@ -27,14 +27,12 @@ import (
 
 // BenchmarkNewEvalContext measures cost-model construction at proto-major
 // versions selected to exercise the semantics variant that version reaches
-// (cek/semantics.go). costModelFromList stops at the input length, so a
-// short list understates construction cost; most cases therefore use a
-// synthetic full-length list for their version (see synthCostModelParams).
-// V1 uses the real preview-network cost model padded to full length by
-// v1ParamsFromRealMap. The two real-fixture V3 cases keep
-// realPreviewV3CostModelParams, which predates 99 of V3's 350 parameters, so
-// they measure less work than the FullLength case below; they stay for
-// comparability with the benchmark table published for plutigo#402.
+// (cek/semantics.go). Most cases use a synthetic full-length list for their
+// version (see synthCostModelParams). V1 uses the real preview-network cost
+// model padded to full length by v1ParamsFromRealMap. The two real-fixture V3
+// cases keep realPreviewV3CostModelParams, which predates 99 of V3's 350
+// parameters; they stay for comparability with the benchmark table published
+// for plutigo#402.
 func BenchmarkNewEvalContext(b *testing.B) {
 	cases := []struct {
 		name         string

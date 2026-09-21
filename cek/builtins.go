@@ -1579,15 +1579,19 @@ func verifySchnorrSecp256K1Signature[T syn.Eval](
 		}
 	}
 
+	// BIP-340 verification fails, rather than errors, when r is not a field
+	// element or s is not a scalar, so both return False. Without these
+	// checks r would be carried unnormalized into schnorrVerify's step 9
+	// comparison and s would be silently reduced modulo the group order.
 	r := new(btcec.FieldVal)
-
-	// Overflow is fine - part of CONF tests
-	r.SetByteSlice(signature[0:32])
+	if overflow := r.SetByteSlice(signature[0:32]); overflow {
+		return boolConstant(false), nil
+	}
 
 	s := new(btcec.ModNScalar)
-
-	// Overflow is fine - part of CONF tests
-	s.SetByteSlice(signature[32:])
+	if overflow := s.SetByteSlice(signature[32:]); overflow {
+		return boolConstant(false), nil
+	}
 
 	// Had to copy the code and take out the message size check
 	// since BIP-340 in practice supports any message size even
@@ -1648,17 +1652,13 @@ func schnorrVerify(
 	// 	return signatureError(ecdsa_schnorr.ErrPubKeyNotOnCurve, str)
 	// }
 
-	// Step 3.
+	// Steps 3 and 4.
 	//
-	// Fail if r >= p
+	// Fail if r >= p or s >= n.
 	//
-	// Note this is already handled by the fact r is a field element.
-
-	// Step 4.
-	//
-	// Fail if s >= n
-	//
-	// Note this is already handled by the fact s is a mod n scalar.
+	// Both are rejected by the caller, which is where the signature bytes are
+	// parsed. btcec reduces s modulo the group order and leaves r
+	// unnormalized on overflow, so neither value can be range-checked here.
 
 	// Step 5.
 	//

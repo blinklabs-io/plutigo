@@ -5698,3 +5698,82 @@ func TestSerialiseDataBuiltinChunksBignum(t *testing.T) {
 		t.Fatalf("serialiseData(2^512):\n got %s\nwant %s", got, want)
 	}
 }
+
+// BIP-340 test vector 1 from bips/bip-0340/test-vectors.csv (index 1).
+const (
+	bip340PubKey = "DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659"
+	bip340Msg    = "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89"
+	bip340Sig    = "6896BD60EEAE296DB48A229FF71DFE071BDE413E6D43F917DC8DCF8C78DE3341" +
+		"8906D11AC976ABCCB20B091292BFF4EA897EFCB639EA871CFA95F6DE339E4B0A"
+)
+
+// secp256k1 field prime and group order, the exclusive upper bounds BIP-340
+// verification places on r and s.
+const (
+	secp256k1FieldPrime = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F"
+	secp256k1GroupOrder = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141"
+	allOnes256          = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+)
+
+// TestVerifySchnorrSecp256k1SignatureRange covers the BIP-340 range bounds on r
+// and s. Out-of-range values are a verification failure rather than an
+// evaluation failure, so the builtin must return False and no *BuiltinError;
+// verifyEcdsaSecp256k1Signature is the one that errors on the same condition.
+func TestVerifySchnorrSecp256k1SignatureRange(t *testing.T) {
+	withR := func(t *testing.T, hexVal string) []byte {
+		sig := hexDecode(t, bip340Sig)
+		copy(sig[0:32], hexDecode(t, hexVal))
+		return sig
+	}
+	withS := func(t *testing.T, hexVal string) []byte {
+		sig := hexDecode(t, bip340Sig)
+		copy(sig[32:64], hexDecode(t, hexVal))
+		return sig
+	}
+
+	tests := []struct {
+		name string
+		sig  func(*testing.T) []byte
+		want bool
+	}{
+		{
+			name: "valid",
+			sig:  func(t *testing.T) []byte { return hexDecode(t, bip340Sig) },
+			want: true,
+		},
+		{
+			name: "r_equals_field_prime",
+			sig:  func(t *testing.T) []byte { return withR(t, secp256k1FieldPrime) },
+		},
+		{
+			name: "r_max",
+			sig:  func(t *testing.T) []byte { return withR(t, allOnes256) },
+		},
+		{
+			name: "s_equals_group_order",
+			sig:  func(t *testing.T) []byte { return withS(t, secp256k1GroupOrder) },
+		},
+		{
+			name: "s_max",
+			sig:  func(t *testing.T) []byte { return withS(t, allOnes256) },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.VerifySchnorrSecp256k1Signature)
+			b = b.ApplyArg(&Constant{&syn.ByteString{Inner: hexDecode(t, bip340PubKey)}})
+			b = b.ApplyArg(&Constant{&syn.ByteString{Inner: hexDecode(t, bip340Msg)}})
+			b = b.ApplyArg(&Constant{&syn.ByteString{Inner: tt.sig(t)}})
+
+			val, err := evalBuiltinWithError(t, m, b)
+			if err != nil {
+				t.Fatalf("expected a boolean result, got error: %v", err)
+			}
+			if got := expectBool(t, expectConstant(t, val)).Inner; got != tt.want {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
