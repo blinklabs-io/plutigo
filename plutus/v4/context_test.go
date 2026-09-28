@@ -101,6 +101,7 @@ func TestV4TransactionOutputData(t *testing.T) {
 		got  OutputDatum
 		want Data
 	}{
+		{"nil defaults to none", nil, data.NewConstr(0)},
 		{"none", NoOutputDatum{}, data.NewConstr(0)},
 		{"hash", OutputDatumHash{integer(4)}, data.NewConstr(1, integer(4))},
 		{"inline", InlineOutputDatum{integer(5)}, data.NewConstr(2, integer(5))},

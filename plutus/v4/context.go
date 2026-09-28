@@ -141,7 +141,8 @@ func (d InlineOutputDatum) ToData() Data {
 	return data.NewConstr(2, d.Datum)
 }
 
-// TxOut is a Plutus V4 transaction output.
+// TxOut is a Plutus V4 transaction output. A nil Datum is encoded as
+// NoOutputDatum.
 type TxOut struct {
 	Address         Address
 	Value           Data
@@ -151,14 +152,14 @@ type TxOut struct {
 
 // ToData serializes the four V4 transaction output fields in ledger order.
 func (o TxOut) ToData() Data {
-	var datum Data
+	datum := OutputDatum(NoOutputDatum{})
 	if o.Datum != nil {
-		datum = o.Datum.ToData()
+		datum = o.Datum
 	}
 	return data.NewList(
 		o.Address.ToData(),
 		o.Value,
-		datum,
+		datum.ToData(),
 		o.ReferenceScript.ToData(),
 	)
 }
@@ -554,7 +555,8 @@ func (t TopTxInfo) ToData() Data {
 	)
 }
 
-// ScriptContext is the V4 context provided to a script.
+// ScriptContext is the V4 context provided to a script. ScriptInfo must be a
+// concrete variant because V4 has no absent ScriptInfo constructor.
 type ScriptContext struct {
 	TxInfo     TxInfo
 	Redeemer   Data
