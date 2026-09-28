@@ -104,6 +104,42 @@ func TestV4ValueBuiltinScriptBudgetMatchesCostModel(t *testing.T) {
 				cost.cpu = &QuadraticInXModel{}
 			},
 		},
+		{
+			name:    "multiIndexArray",
+			builtin: builtin.MultiIndexArray,
+			script: `(program 1.3.0
+				[[(force (builtin multiIndexArray)) (con (array integer) [10, 20, 30])]
+					(con (list integer) [2, 0])])`,
+			wantBudget: ExBudget{Mem: 10, Cpu: 350779},
+			zeroCost: func(cost *CostingFunc[Arguments]) {
+				cost.mem = &LinearInY{}
+				cost.cpu = &QuadraticInYModel{}
+			},
+		},
+		{
+			name:    "policies",
+			builtin: builtin.Policies,
+			script: `(program 1.3.0
+				[(builtin policies)
+					(con value [(#aa, [(#bb, 1)]), (#cc, [(#dd, 2)])])])`,
+			wantBudget: ExBudget{Mem: 10, Cpu: 957352},
+			zeroCost: func(cost *CostingFunc[Arguments]) {
+				cost.mem = &LinearCost{}
+				cost.cpu = &LinearCost{}
+			},
+		},
+		{
+			name:    "assetCount",
+			builtin: builtin.AssetCount,
+			script: `(program 1.3.0
+				[(builtin assetCount)
+					(con value [(#aa, [(#bb, 1)]), (#cc, [(#dd, 2)])])])`,
+			wantBudget: ExBudget{Mem: 10, Cpu: 129043},
+			zeroCost: func(cost *CostingFunc[Arguments]) {
+				cost.mem = &ConstantCost{}
+				cost.cpu = &ConstantCost{}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -120,8 +156,8 @@ func TestV4ValueBuiltinScriptBudgetMatchesCostModel(t *testing.T) {
 				ProtoMajor:       context.ProtoMajor,
 			}
 
-			spent := runV4ScriptBudget(t, tt.script, context)
-			controlSpent := runV4ScriptBudget(t, tt.script, controlContext)
+			spent := runV4ScriptBudget(t, tt.builtin, tt.script, context)
+			controlSpent := runV4ScriptBudget(t, tt.builtin, tt.script, controlContext)
 			if got := spent.Sub(&controlSpent); got != tt.wantBudget {
 				t.Fatalf("builtin budget = %+v, want %+v", got, tt.wantBudget)
 			}
@@ -131,6 +167,7 @@ func TestV4ValueBuiltinScriptBudgetMatchesCostModel(t *testing.T) {
 
 func runV4ScriptBudget(
 	t *testing.T,
+	fn builtin.DefaultFunction,
 	script string,
 	context *EvalContext,
 ) ExBudget {
@@ -144,6 +181,12 @@ func runV4ScriptBudget(
 		t.Fatalf("convert V4 script to De Bruijn: %v", err)
 	}
 	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV4, 0, context)
+	// These builtins have published V4 costs but remain protocol-unavailable.
+	// Enable them here to exercise cost charging through the CEK evaluator.
+	switch fn {
+	case builtin.MultiIndexArray, builtin.Policies, builtin.AssetCount:
+		machine.available[fn] = true
+	}
 	initialBudget := machine.ExBudget
 	if _, err := machine.Run(dbProgram.Term); err != nil {
 		t.Fatalf("run V4 script: %v", err)
