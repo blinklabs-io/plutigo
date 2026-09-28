@@ -2045,20 +2045,6 @@ func canAccumulateUint64(chunk uint64, group int) bool {
 	return chunk <= (math.MaxUint64 >> shift)
 }
 
-// bigWord decodes a variable-length unsigned integer from the buffer.
-// It is byte-alignment agnostic. Reads 8 bits at a time, using the 7 least
-// significant bits for the integer, continuing if the MSB is 1, stopping if 0.
-func (d *decoder) bigWord() (*big.Int, error) {
-	small, word, err := d.bigWordSmall()
-	if err != nil {
-		return nil, err
-	}
-	if word == nil {
-		return new(big.Int).SetUint64(small), nil
-	}
-	return word, nil
-}
-
 func unzigzagUint64(n uint64) (int64, bool) {
 	shifted := n >> 1
 	if shifted > math.MaxInt64 {
