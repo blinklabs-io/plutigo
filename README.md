@@ -78,10 +78,15 @@ Go 1.26 delivers ~10% faster full-script execution vs Go 1.25 across all Plutus 
 
 ### Script Contexts
 
-plutigo evaluates UPLC and accepts script context data as `data.PlutusData`;
-it does not construct ledger-era `ScriptContext`, `TxInfo`, or script-purpose
-values. Those structures belong in ledger-facing integrations such as
-gouroboros, which know the transaction era and protocol rules.
+The `plutus/v4` package serializes Plutus V4 addresses, transaction outputs,
+purposes, `TxInfo`, nested `TopTxInfo`, and `ScriptContext` values. It follows
+the V4 constructor tags and field order, including the account-address and
+nested-transaction structures. V4 calls the Observe purpose from CIP-0112
+`Guarding`; both names are available in the package.
+
+The builder takes already-derived Plutus data values. Ledger integrations such
+as gouroboros remain responsible for deriving context values from a transaction
+and ledger state. V4 `TxInfo` has a validity range and no `isValid` field.
 
 ## Usage
 
