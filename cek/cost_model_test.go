@@ -11,6 +11,8 @@ import (
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
+// These V4 coefficients match the published Plutus model C at:
+// https://github.com/IntersectMBO/plutus/blob/ca8463f4c61d12e6dd64dcf994089bd6a1130b8c/plutus-core/cost-model/data/builtinCostModelC.json
 func TestV4ValueCostModelsMatchPlutusSpec(t *testing.T) {
 	valueData := DefaultBuiltinCosts[builtin.ValueData]
 	valueDataCPU := valueData.cpu.(*LinearCost)
@@ -36,6 +38,117 @@ func TestV4ValueCostModelsMatchPlutusSpec(t *testing.T) {
 	if unValueDataMem.intercept != 1 || unValueDataMem.slope != 11 {
 		t.Fatalf("unValueData memory model = (%d, %d), want (1, 11)", unValueDataMem.intercept, unValueDataMem.slope)
 	}
+
+	multiIndexArray := DefaultBuiltinCosts[builtin.MultiIndexArray]
+	multiIndexArrayCPU := multiIndexArray.cpu.(*QuadraticInYModel)
+	multiIndexArrayMem := multiIndexArray.mem.(*LinearInY)
+	if multiIndexArrayCPU.coeff0 != 326163 ||
+		multiIndexArrayCPU.coeff1 != 12304 || multiIndexArrayCPU.coeff2 != 2 {
+		t.Fatalf(
+			"multiIndexArray CPU model = (%d, %d, %d), want (326163, 12304, 2)",
+			multiIndexArrayCPU.coeff0,
+			multiIndexArrayCPU.coeff1,
+			multiIndexArrayCPU.coeff2,
+		)
+	}
+	if multiIndexArrayMem.intercept != 4 || multiIndexArrayMem.slope != 3 {
+		t.Fatalf("multiIndexArray memory model = (%d, %d), want (4, 3)", multiIndexArrayMem.intercept, multiIndexArrayMem.slope)
+	}
+
+	policies := DefaultBuiltinCosts[builtin.Policies]
+	policiesCPU := policies.cpu.(*LinearInX)
+	policiesMem := policies.mem.(*LinearInX)
+	if policiesCPU.intercept != 930912 || policiesCPU.slope != 13220 {
+		t.Fatalf("policies CPU model = (%d, %d), want (930912, 13220)", policiesCPU.intercept, policiesCPU.slope)
+	}
+	if policiesMem.intercept != 4 || policiesMem.slope != 3 {
+		t.Fatalf("policies memory model = (%d, %d), want (4, 3)", policiesMem.intercept, policiesMem.slope)
+	}
+
+	assetCount := DefaultBuiltinCosts[builtin.AssetCount]
+	if got := assetCount.cpu.(*ConstantCost).c; got != 129043 {
+		t.Fatalf("assetCount CPU cost = %d, want 129043", got)
+	}
+	if got := assetCount.mem.(*ConstantCost).c; got != 10 {
+		t.Fatalf("assetCount memory cost = %d, want 10", got)
+	}
+}
+
+func TestV4ValueBuiltinScriptBudgetMatchesCostModel(t *testing.T) {
+	tests := []struct {
+		name       string
+		builtin    builtin.DefaultFunction
+		script     string
+		wantBudget ExBudget
+		zeroCost   func(*CostingFunc[Arguments])
+	}{
+		{
+			name:    "valueData",
+			builtin: builtin.ValueData,
+			script: `(program 1.3.0
+				[(builtin valueData) (con value [(#aa, [(#bb, 1)])])])`,
+			wantBudget: ExBudget{Mem: 24, Cpu: 39159},
+			zeroCost: func(cost *CostingFunc[Arguments]) {
+				cost.mem = &LinearCost{}
+				cost.cpu = &LinearCost{}
+			},
+		},
+		{
+			name:    "unValueData",
+			builtin: builtin.UnValueData,
+			script: `(program 1.3.0
+				[(builtin unValueData) (con data (Map [(B #aa, Map [(B #bb, I 1)])]))])`,
+			wantBudget: ExBudget{Mem: 56, Cpu: 480690},
+			zeroCost: func(cost *CostingFunc[Arguments]) {
+				cost.mem = &LinearCost{}
+				cost.cpu = &QuadraticInXModel{}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			context := NewDefaultEvalContext(
+				lang.LanguageVersionV4,
+				ProtoVersion{Major: 12},
+			)
+			controlModel := context.CostModel.Clone()
+			tt.zeroCost(controlModel.builtinCosts[tt.builtin])
+			controlContext := &EvalContext{
+				CostModel:        controlModel,
+				SemanticsVariant: context.SemanticsVariant,
+				ProtoMajor:       context.ProtoMajor,
+			}
+
+			spent := runV4ScriptBudget(t, tt.script, context)
+			controlSpent := runV4ScriptBudget(t, tt.script, controlContext)
+			if got := spent.Sub(&controlSpent); got != tt.wantBudget {
+				t.Fatalf("builtin budget = %+v, want %+v", got, tt.wantBudget)
+			}
+		})
+	}
+}
+
+func runV4ScriptBudget(
+	t *testing.T,
+	script string,
+	context *EvalContext,
+) ExBudget {
+	t.Helper()
+	program, err := syn.Parse(script)
+	if err != nil {
+		t.Fatalf("parse V4 script: %v", err)
+	}
+	dbProgram, err := syn.NameToDeBruijn(program)
+	if err != nil {
+		t.Fatalf("convert V4 script to De Bruijn: %v", err)
+	}
+	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV4, 0, context)
+	initialBudget := machine.ExBudget
+	if _, err := machine.Run(dbProgram.Term); err != nil {
+		t.Fatalf("run V4 script: %v", err)
+	}
+	return initialBudget.Sub(&machine.ExBudget)
 }
 
 func TestDataNodeCountIncludesValueInner(t *testing.T) {

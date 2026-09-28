@@ -102,8 +102,8 @@ builtin[ 98] valueData                                mem=&LinearCost{slope:1000
 builtin[ 99] unValueData                              mem=&LinearCost{slope:1000327, intercept:1000326} cpu=&QuadraticInXModel{QuadraticFunction:QuadraticFunction{coeff0:1000323, coeff1:1000324, coeff2:1000325}}
 builtin[100] scaleValue                               mem=&LinearInY{LinearCost:LinearCost{slope:1000331, intercept:1000330}} cpu=&LinearInY{LinearCost:LinearCost{slope:1000329, intercept:1000328}}
 builtin[101] multiIndexArray                          mem=&LinearInY{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&QuadraticInYModel{QuadraticFunction:QuadraticFunction{coeff0:326163, coeff1:12304, coeff2:2}}
-builtin[102] policies                                 mem=&ConstantCost{c:100000000000} cpu=&ConstantCost{c:100000000000}
-builtin[103] assetCount                               mem=&ConstantCost{c:0} cpu=&ConstantCost{c:1}
+builtin[102] policies                                 mem=&LinearInX{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&LinearInX{LinearCost:LinearCost{slope:13220, intercept:930912}}
+builtin[103] assetCount                               mem=&ConstantCost{c:10} cpu=&ConstantCost{c:129043}
 === synthetic_v1_variantB ===
 machineCosts: MachineCosts{startup:ExBudget{Mem:1000030, Cpu:1000029}, variable:ExBudget{Mem:1000032, Cpu:1000031}, constant:ExBudget{Mem:1000022, Cpu:1000021}, lambda:ExBudget{Mem:1000028, Cpu:1000027}, delay:ExBudget{Mem:1000024, Cpu:1000023}, force:ExBudget{Mem:1000026, Cpu:1000025}, apply:ExBudget{Mem:1000018, Cpu:1000017}, constr:ExBudget{Mem:1000176, Cpu:1000175}, ccase:ExBudget{Mem:1000178, Cpu:1000177}, builtin:ExBudget{Mem:1000020, Cpu:1000019}}
 builtin[  0] addInteger                               mem=&MaxSizeModel{MaxSize:MaxSize{intercept:1000002, slope:1000003}} cpu=&MaxSizeModel{MaxSize:MaxSize{intercept:1000000, slope:1000001}}
@@ -208,8 +208,8 @@ builtin[ 98] valueData                                mem=&LinearCost{slope:1000
 builtin[ 99] unValueData                              mem=&LinearCost{slope:1000327, intercept:1000326} cpu=&QuadraticInXModel{QuadraticFunction:QuadraticFunction{coeff0:1000323, coeff1:1000324, coeff2:1000325}}
 builtin[100] scaleValue                               mem=&LinearInY{LinearCost:LinearCost{slope:1000331, intercept:1000330}} cpu=&LinearInY{LinearCost:LinearCost{slope:1000329, intercept:1000328}}
 builtin[101] multiIndexArray                          mem=&LinearInY{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&QuadraticInYModel{QuadraticFunction:QuadraticFunction{coeff0:326163, coeff1:12304, coeff2:2}}
-builtin[102] policies                                 mem=&ConstantCost{c:100000000000} cpu=&ConstantCost{c:100000000000}
-builtin[103] assetCount                               mem=&ConstantCost{c:0} cpu=&ConstantCost{c:1}
+builtin[102] policies                                 mem=&LinearInX{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&LinearInX{LinearCost:LinearCost{slope:13220, intercept:930912}}
+builtin[103] assetCount                               mem=&ConstantCost{c:10} cpu=&ConstantCost{c:129043}
 === synthetic_v1_variantD ===
 machineCosts: MachineCosts{startup:ExBudget{Mem:1000030, Cpu:1000029}, variable:ExBudget{Mem:1000032, Cpu:1000031}, constant:ExBudget{Mem:1000022, Cpu:1000021}, lambda:ExBudget{Mem:1000028, Cpu:1000027}, delay:ExBudget{Mem:1000024, Cpu:1000023}, force:ExBudget{Mem:1000026, Cpu:1000025}, apply:ExBudget{Mem:1000018, Cpu:1000017}, constr:ExBudget{Mem:1000176, Cpu:1000175}, ccase:ExBudget{Mem:1000178, Cpu:1000177}, builtin:ExBudget{Mem:1000020, Cpu:1000019}}
 builtin[  0] addInteger                               mem=&MaxSizeModel{MaxSize:MaxSize{intercept:1000002, slope:1000003}} cpu=&MaxSizeModel{MaxSize:MaxSize{intercept:1000000, slope:1000001}}
@@ -314,8 +314,8 @@ builtin[ 98] valueData                                mem=&LinearCost{slope:1000
 builtin[ 99] unValueData                              mem=&LinearCost{slope:1000327, intercept:1000326} cpu=&QuadraticInXModel{QuadraticFunction:QuadraticFunction{coeff0:1000323, coeff1:1000324, coeff2:1000325}}
 builtin[100] scaleValue                               mem=&LinearInY{LinearCost:LinearCost{slope:1000331, intercept:1000330}} cpu=&LinearInY{LinearCost:LinearCost{slope:1000329, intercept:1000328}}
 builtin[101] multiIndexArray                          mem=&LinearInY{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&QuadraticInYModel{QuadraticFunction:QuadraticFunction{coeff0:326163, coeff1:12304, coeff2:2}}
-builtin[102] policies                                 mem=&ConstantCost{c:100000000000} cpu=&ConstantCost{c:100000000000}
-builtin[103] assetCount                               mem=&ConstantCost{c:0} cpu=&ConstantCost{c:1}
+builtin[102] policies                                 mem=&LinearInX{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&LinearInX{LinearCost:LinearCost{slope:13220, intercept:930912}}
+builtin[103] assetCount                               mem=&ConstantCost{c:10} cpu=&ConstantCost{c:129043}
 === synthetic_v2_variantA ===
 machineCosts: MachineCosts{startup:ExBudget{Mem:1000030, Cpu:1000029}, variable:ExBudget{Mem:1000032, Cpu:1000031}, constant:ExBudget{Mem:1000022, Cpu:1000021}, lambda:ExBudget{Mem:1000028, Cpu:1000027}, delay:ExBudget{Mem:1000024, Cpu:1000023}, force:ExBudget{Mem:1000026, Cpu:1000025}, apply:ExBudget{Mem:1000018, Cpu:1000017}, constr:ExBudget{Mem:1000186, Cpu:1000185}, ccase:ExBudget{Mem:1000188, Cpu:1000187}, builtin:ExBudget{Mem:1000020, Cpu:1000019}}
 builtin[  0] addInteger                               mem=&MaxSizeModel{MaxSize:MaxSize{intercept:1000002, slope:1000003}} cpu=&MaxSizeModel{MaxSize:MaxSize{intercept:1000000, slope:1000001}}
@@ -420,8 +420,8 @@ builtin[ 98] valueData                                mem=&LinearCost{slope:1000
 builtin[ 99] unValueData                              mem=&LinearCost{slope:1000327, intercept:1000326} cpu=&QuadraticInXModel{QuadraticFunction:QuadraticFunction{coeff0:1000323, coeff1:1000324, coeff2:1000325}}
 builtin[100] scaleValue                               mem=&LinearInY{LinearCost:LinearCost{slope:1000331, intercept:1000330}} cpu=&LinearInY{LinearCost:LinearCost{slope:1000329, intercept:1000328}}
 builtin[101] multiIndexArray                          mem=&LinearInY{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&QuadraticInYModel{QuadraticFunction:QuadraticFunction{coeff0:326163, coeff1:12304, coeff2:2}}
-builtin[102] policies                                 mem=&ConstantCost{c:100000000000} cpu=&ConstantCost{c:100000000000}
-builtin[103] assetCount                               mem=&ConstantCost{c:0} cpu=&ConstantCost{c:1}
+builtin[102] policies                                 mem=&LinearInX{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&LinearInX{LinearCost:LinearCost{slope:13220, intercept:930912}}
+builtin[103] assetCount                               mem=&ConstantCost{c:10} cpu=&ConstantCost{c:129043}
 === synthetic_v2_variantB ===
 machineCosts: MachineCosts{startup:ExBudget{Mem:1000030, Cpu:1000029}, variable:ExBudget{Mem:1000032, Cpu:1000031}, constant:ExBudget{Mem:1000022, Cpu:1000021}, lambda:ExBudget{Mem:1000028, Cpu:1000027}, delay:ExBudget{Mem:1000024, Cpu:1000023}, force:ExBudget{Mem:1000026, Cpu:1000025}, apply:ExBudget{Mem:1000018, Cpu:1000017}, constr:ExBudget{Mem:1000186, Cpu:1000185}, ccase:ExBudget{Mem:1000188, Cpu:1000187}, builtin:ExBudget{Mem:1000020, Cpu:1000019}}
 builtin[  0] addInteger                               mem=&MaxSizeModel{MaxSize:MaxSize{intercept:1000002, slope:1000003}} cpu=&MaxSizeModel{MaxSize:MaxSize{intercept:1000000, slope:1000001}}
@@ -526,8 +526,8 @@ builtin[ 98] valueData                                mem=&LinearCost{slope:1000
 builtin[ 99] unValueData                              mem=&LinearCost{slope:1000327, intercept:1000326} cpu=&QuadraticInXModel{QuadraticFunction:QuadraticFunction{coeff0:1000323, coeff1:1000324, coeff2:1000325}}
 builtin[100] scaleValue                               mem=&LinearInY{LinearCost:LinearCost{slope:1000331, intercept:1000330}} cpu=&LinearInY{LinearCost:LinearCost{slope:1000329, intercept:1000328}}
 builtin[101] multiIndexArray                          mem=&LinearInY{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&QuadraticInYModel{QuadraticFunction:QuadraticFunction{coeff0:326163, coeff1:12304, coeff2:2}}
-builtin[102] policies                                 mem=&ConstantCost{c:100000000000} cpu=&ConstantCost{c:100000000000}
-builtin[103] assetCount                               mem=&ConstantCost{c:0} cpu=&ConstantCost{c:1}
+builtin[102] policies                                 mem=&LinearInX{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&LinearInX{LinearCost:LinearCost{slope:13220, intercept:930912}}
+builtin[103] assetCount                               mem=&ConstantCost{c:10} cpu=&ConstantCost{c:129043}
 === synthetic_v2_variantD ===
 machineCosts: MachineCosts{startup:ExBudget{Mem:1000030, Cpu:1000029}, variable:ExBudget{Mem:1000032, Cpu:1000031}, constant:ExBudget{Mem:1000022, Cpu:1000021}, lambda:ExBudget{Mem:1000028, Cpu:1000027}, delay:ExBudget{Mem:1000024, Cpu:1000023}, force:ExBudget{Mem:1000026, Cpu:1000025}, apply:ExBudget{Mem:1000018, Cpu:1000017}, constr:ExBudget{Mem:1000186, Cpu:1000185}, ccase:ExBudget{Mem:1000188, Cpu:1000187}, builtin:ExBudget{Mem:1000020, Cpu:1000019}}
 builtin[  0] addInteger                               mem=&MaxSizeModel{MaxSize:MaxSize{intercept:1000002, slope:1000003}} cpu=&MaxSizeModel{MaxSize:MaxSize{intercept:1000000, slope:1000001}}
@@ -632,8 +632,8 @@ builtin[ 98] valueData                                mem=&LinearCost{slope:1000
 builtin[ 99] unValueData                              mem=&LinearCost{slope:1000327, intercept:1000326} cpu=&QuadraticInXModel{QuadraticFunction:QuadraticFunction{coeff0:1000323, coeff1:1000324, coeff2:1000325}}
 builtin[100] scaleValue                               mem=&LinearInY{LinearCost:LinearCost{slope:1000331, intercept:1000330}} cpu=&LinearInY{LinearCost:LinearCost{slope:1000329, intercept:1000328}}
 builtin[101] multiIndexArray                          mem=&LinearInY{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&QuadraticInYModel{QuadraticFunction:QuadraticFunction{coeff0:326163, coeff1:12304, coeff2:2}}
-builtin[102] policies                                 mem=&ConstantCost{c:100000000000} cpu=&ConstantCost{c:100000000000}
-builtin[103] assetCount                               mem=&ConstantCost{c:0} cpu=&ConstantCost{c:1}
+builtin[102] policies                                 mem=&LinearInX{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&LinearInX{LinearCost:LinearCost{slope:13220, intercept:930912}}
+builtin[103] assetCount                               mem=&ConstantCost{c:10} cpu=&ConstantCost{c:129043}
 === synthetic_v3_variantC ===
 machineCosts: MachineCosts{startup:ExBudget{Mem:1000030, Cpu:1000029}, variable:ExBudget{Mem:1000032, Cpu:1000031}, constant:ExBudget{Mem:1000022, Cpu:1000021}, lambda:ExBudget{Mem:1000028, Cpu:1000027}, delay:ExBudget{Mem:1000024, Cpu:1000023}, force:ExBudget{Mem:1000026, Cpu:1000025}, apply:ExBudget{Mem:1000018, Cpu:1000017}, constr:ExBudget{Mem:1000194, Cpu:1000193}, ccase:ExBudget{Mem:1000196, Cpu:1000195}, builtin:ExBudget{Mem:1000020, Cpu:1000019}}
 builtin[  0] addInteger                               mem=&MaxSizeModel{MaxSize:MaxSize{intercept:1000002, slope:1000003}} cpu=&MaxSizeModel{MaxSize:MaxSize{intercept:1000000, slope:1000001}}
@@ -738,8 +738,8 @@ builtin[ 98] valueData                                mem=&LinearCost{slope:1000
 builtin[ 99] unValueData                              mem=&LinearCost{slope:1000345, intercept:1000344} cpu=&QuadraticInXModel{QuadraticFunction:QuadraticFunction{coeff0:1000341, coeff1:1000342, coeff2:1000343}}
 builtin[100] scaleValue                               mem=&LinearInY{LinearCost:LinearCost{slope:1000349, intercept:1000348}} cpu=&LinearInY{LinearCost:LinearCost{slope:1000347, intercept:1000346}}
 builtin[101] multiIndexArray                          mem=&LinearInY{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&QuadraticInYModel{QuadraticFunction:QuadraticFunction{coeff0:326163, coeff1:12304, coeff2:2}}
-builtin[102] policies                                 mem=&ConstantCost{c:100000000000} cpu=&ConstantCost{c:100000000000}
-builtin[103] assetCount                               mem=&ConstantCost{c:0} cpu=&ConstantCost{c:1}
+builtin[102] policies                                 mem=&LinearInX{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&LinearInX{LinearCost:LinearCost{slope:13220, intercept:930912}}
+builtin[103] assetCount                               mem=&ConstantCost{c:10} cpu=&ConstantCost{c:129043}
 === synthetic_v3_variantE ===
 machineCosts: MachineCosts{startup:ExBudget{Mem:1000030, Cpu:1000029}, variable:ExBudget{Mem:1000032, Cpu:1000031}, constant:ExBudget{Mem:1000022, Cpu:1000021}, lambda:ExBudget{Mem:1000028, Cpu:1000027}, delay:ExBudget{Mem:1000024, Cpu:1000023}, force:ExBudget{Mem:1000026, Cpu:1000025}, apply:ExBudget{Mem:1000018, Cpu:1000017}, constr:ExBudget{Mem:1000194, Cpu:1000193}, ccase:ExBudget{Mem:1000196, Cpu:1000195}, builtin:ExBudget{Mem:1000020, Cpu:1000019}}
 builtin[  0] addInteger                               mem=&MaxSizeModel{MaxSize:MaxSize{intercept:1000002, slope:1000003}} cpu=&MaxSizeModel{MaxSize:MaxSize{intercept:1000000, slope:1000001}}
@@ -844,8 +844,8 @@ builtin[ 98] valueData                                mem=&LinearCost{slope:1000
 builtin[ 99] unValueData                              mem=&LinearCost{slope:1000345, intercept:1000344} cpu=&QuadraticInXModel{QuadraticFunction:QuadraticFunction{coeff0:1000341, coeff1:1000342, coeff2:1000343}}
 builtin[100] scaleValue                               mem=&LinearInY{LinearCost:LinearCost{slope:1000349, intercept:1000348}} cpu=&LinearInY{LinearCost:LinearCost{slope:1000347, intercept:1000346}}
 builtin[101] multiIndexArray                          mem=&LinearInY{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&QuadraticInYModel{QuadraticFunction:QuadraticFunction{coeff0:326163, coeff1:12304, coeff2:2}}
-builtin[102] policies                                 mem=&ConstantCost{c:100000000000} cpu=&ConstantCost{c:100000000000}
-builtin[103] assetCount                               mem=&ConstantCost{c:0} cpu=&ConstantCost{c:1}
+builtin[102] policies                                 mem=&LinearInX{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&LinearInX{LinearCost:LinearCost{slope:13220, intercept:930912}}
+builtin[103] assetCount                               mem=&ConstantCost{c:10} cpu=&ConstantCost{c:129043}
 === synthetic_v4_variantC ===
 machineCosts: MachineCosts{startup:ExBudget{Mem:1000030, Cpu:1000029}, variable:ExBudget{Mem:1000032, Cpu:1000031}, constant:ExBudget{Mem:1000022, Cpu:1000021}, lambda:ExBudget{Mem:1000028, Cpu:1000027}, delay:ExBudget{Mem:1000024, Cpu:1000023}, force:ExBudget{Mem:1000026, Cpu:1000025}, apply:ExBudget{Mem:1000018, Cpu:1000017}, constr:ExBudget{Mem:1000194, Cpu:1000193}, ccase:ExBudget{Mem:1000196, Cpu:1000195}, builtin:ExBudget{Mem:1000020, Cpu:1000019}}
 builtin[  0] addInteger                               mem=&MaxSizeModel{MaxSize:MaxSize{intercept:1000002, slope:1000003}} cpu=&MaxSizeModel{MaxSize:MaxSize{intercept:1000000, slope:1000001}}
@@ -950,7 +950,7 @@ builtin[ 98] valueData                                mem=&LinearCost{slope:1000
 builtin[ 99] unValueData                              mem=&LinearCost{slope:1000345, intercept:1000344} cpu=&QuadraticInXModel{QuadraticFunction:QuadraticFunction{coeff0:1000341, coeff1:1000342, coeff2:1000343}}
 builtin[100] scaleValue                               mem=&LinearInY{LinearCost:LinearCost{slope:1000349, intercept:1000348}} cpu=&LinearInY{LinearCost:LinearCost{slope:1000347, intercept:1000346}}
 builtin[101] multiIndexArray                          mem=&LinearInY{LinearCost:LinearCost{slope:1000354, intercept:1000353}} cpu=&QuadraticInYModel{QuadraticFunction:QuadraticFunction{coeff0:1000350, coeff1:1000351, coeff2:1000352}}
-builtin[102] policies                                 mem=&ConstantCost{c:100000000000} cpu=&ConstantCost{c:100000000000}
+builtin[102] policies                                 mem=&LinearInX{LinearCost:LinearCost{slope:1000360, intercept:1000359}} cpu=&LinearInX{LinearCost:LinearCost{slope:1000358, intercept:1000357}}
 builtin[103] assetCount                               mem=&ConstantCost{c:1000356} cpu=&ConstantCost{c:1000355}
 === synthetic_v4_variantE ===
 machineCosts: MachineCosts{startup:ExBudget{Mem:1000030, Cpu:1000029}, variable:ExBudget{Mem:1000032, Cpu:1000031}, constant:ExBudget{Mem:1000022, Cpu:1000021}, lambda:ExBudget{Mem:1000028, Cpu:1000027}, delay:ExBudget{Mem:1000024, Cpu:1000023}, force:ExBudget{Mem:1000026, Cpu:1000025}, apply:ExBudget{Mem:1000018, Cpu:1000017}, constr:ExBudget{Mem:1000194, Cpu:1000193}, ccase:ExBudget{Mem:1000196, Cpu:1000195}, builtin:ExBudget{Mem:1000020, Cpu:1000019}}
@@ -1056,7 +1056,7 @@ builtin[ 98] valueData                                mem=&LinearCost{slope:1000
 builtin[ 99] unValueData                              mem=&LinearCost{slope:1000345, intercept:1000344} cpu=&QuadraticInXModel{QuadraticFunction:QuadraticFunction{coeff0:1000341, coeff1:1000342, coeff2:1000343}}
 builtin[100] scaleValue                               mem=&LinearInY{LinearCost:LinearCost{slope:1000349, intercept:1000348}} cpu=&LinearInY{LinearCost:LinearCost{slope:1000347, intercept:1000346}}
 builtin[101] multiIndexArray                          mem=&LinearInY{LinearCost:LinearCost{slope:1000354, intercept:1000353}} cpu=&QuadraticInYModel{QuadraticFunction:QuadraticFunction{coeff0:1000350, coeff1:1000351, coeff2:1000352}}
-builtin[102] policies                                 mem=&ConstantCost{c:100000000000} cpu=&ConstantCost{c:100000000000}
+builtin[102] policies                                 mem=&LinearInX{LinearCost:LinearCost{slope:1000360, intercept:1000359}} cpu=&LinearInX{LinearCost:LinearCost{slope:1000358, intercept:1000357}}
 builtin[103] assetCount                               mem=&ConstantCost{c:1000356} cpu=&ConstantCost{c:1000355}
 === real_v1_variantA ===
 machineCosts: MachineCosts{startup:ExBudget{Mem:100, Cpu:100}, variable:ExBudget{Mem:100, Cpu:29773}, constant:ExBudget{Mem:100, Cpu:29773}, lambda:ExBudget{Mem:100, Cpu:29773}, delay:ExBudget{Mem:100, Cpu:29773}, force:ExBudget{Mem:100, Cpu:29773}, apply:ExBudget{Mem:100, Cpu:29773}, constr:ExBudget{Mem:100, Cpu:16000}, ccase:ExBudget{Mem:100, Cpu:16000}, builtin:ExBudget{Mem:100, Cpu:29773}}
@@ -1162,8 +1162,8 @@ builtin[ 98] valueData                                mem=&LinearCost{slope:22, 
 builtin[ 99] unValueData                              mem=&LinearCost{slope:11, intercept:1} cpu=&QuadraticInXModel{QuadraticFunction:QuadraticFunction{coeff0:1000, coeff1:95933, coeff2:1}}
 builtin[100] scaleValue                               mem=&LinearInY{LinearCost:LinearCost{slope:21, intercept:12}} cpu=&LinearInY{LinearCost:LinearCost{slope:277577, intercept:1000}}
 builtin[101] multiIndexArray                          mem=&LinearInY{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&QuadraticInYModel{QuadraticFunction:QuadraticFunction{coeff0:326163, coeff1:12304, coeff2:2}}
-builtin[102] policies                                 mem=&ConstantCost{c:100000000000} cpu=&ConstantCost{c:100000000000}
-builtin[103] assetCount                               mem=&ConstantCost{c:0} cpu=&ConstantCost{c:1}
+builtin[102] policies                                 mem=&LinearInX{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&LinearInX{LinearCost:LinearCost{slope:13220, intercept:930912}}
+builtin[103] assetCount                               mem=&ConstantCost{c:10} cpu=&ConstantCost{c:129043}
 === real_v3_variantC ===
 machineCosts: MachineCosts{startup:ExBudget{Mem:100, Cpu:100}, variable:ExBudget{Mem:100, Cpu:16000}, constant:ExBudget{Mem:100, Cpu:16000}, lambda:ExBudget{Mem:100, Cpu:16000}, delay:ExBudget{Mem:100, Cpu:16000}, force:ExBudget{Mem:100, Cpu:16000}, apply:ExBudget{Mem:100, Cpu:16000}, constr:ExBudget{Mem:100, Cpu:16000}, ccase:ExBudget{Mem:100, Cpu:16000}, builtin:ExBudget{Mem:100, Cpu:16000}}
 builtin[  0] addInteger                               mem=&MaxSizeModel{MaxSize:MaxSize{intercept:1, slope:1}} cpu=&MaxSizeModel{MaxSize:MaxSize{intercept:100788, slope:420}}
@@ -1268,5 +1268,5 @@ builtin[ 98] valueData                                mem=&LinearCost{slope:9223
 builtin[ 99] unValueData                              mem=&LinearCost{slope:9223372036854775807, intercept:9223372036854775807} cpu=&QuadraticInXModel{QuadraticFunction:QuadraticFunction{coeff0:9223372036854775807, coeff1:9223372036854775807, coeff2:9223372036854775807}}
 builtin[100] scaleValue                               mem=&LinearInY{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}} cpu=&LinearInY{LinearCost:LinearCost{slope:9223372036854775807, intercept:9223372036854775807}}
 builtin[101] multiIndexArray                          mem=&LinearInY{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&QuadraticInYModel{QuadraticFunction:QuadraticFunction{coeff0:326163, coeff1:12304, coeff2:2}}
-builtin[102] policies                                 mem=&ConstantCost{c:100000000000} cpu=&ConstantCost{c:100000000000}
-builtin[103] assetCount                               mem=&ConstantCost{c:0} cpu=&ConstantCost{c:1}
+builtin[102] policies                                 mem=&LinearInX{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&LinearInX{LinearCost:LinearCost{slope:13220, intercept:930912}}
+builtin[103] assetCount                               mem=&ConstantCost{c:10} cpu=&ConstantCost{c:129043}
