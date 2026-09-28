@@ -76,6 +76,13 @@ Go 1.26 delivers ~10% faster full-script execution vs Go 1.25 across all Plutus 
 - Version Compatibility: Automatic cost model and builtin selection by Plutus version
 - Testing First: Property-based testing and fuzzing ensure correctness
 
+### Script Contexts
+
+plutigo evaluates UPLC and accepts script context data as `data.PlutusData`;
+it does not construct ledger-era `ScriptContext`, `TxInfo`, or script-purpose
+values. Those structures belong in ledger-facing integrations such as
+gouroboros, which know the transaction era and protocol rules.
+
 ## Usage
 
 ### Install
