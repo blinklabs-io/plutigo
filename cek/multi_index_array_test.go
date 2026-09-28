@@ -192,6 +192,10 @@ func TestV4CostModelParameters(t *testing.T) {
 		"multiIndexArray-memory-arguments-slope",
 		"assetCount-cpu-arguments",
 		"assetCount-memory-arguments",
+		"policies-cpu-arguments-intercept",
+		"policies-cpu-arguments-slope",
+		"policies-memory-arguments-intercept",
+		"policies-memory-arguments-slope",
 	}
 	for _, want := range wantNames {
 		found := false
@@ -212,21 +216,41 @@ func TestV4CostModelParameters(t *testing.T) {
 	params["multiIndexArray-cpu-arguments-c2"] = 2
 	params["multiIndexArray-memory-arguments-intercept"] = 4
 	params["multiIndexArray-memory-arguments-slope"] = 3
-	_, err := costModelFromMap(lang.LanguageVersionV4, SemanticsVariantE, params)
+	params["assetCount-cpu-arguments"] = 129043
+	params["assetCount-memory-arguments"] = 10
+	params["policies-cpu-arguments-intercept"] = 930912
+	params["policies-cpu-arguments-slope"] = 13220
+	params["policies-memory-arguments-intercept"] = 4
+	params["policies-memory-arguments-slope"] = 3
+	costModel, err := costModelFromMap(lang.LanguageVersionV4, SemanticsVariantE, params)
 	if err != nil {
-		t.Fatalf("V4 cost model parameters were rejected: %v", err)
+		t.Fatalf("V4 cost model parameters were not mapped: %v", err)
+	}
+	if got := costModel.builtinCosts[builtin.Policies].cpu.(*LinearInX); got.intercept != 930912 || got.slope != 13220 {
+		t.Fatalf("policies CPU model = %+v, want intercept=930912 slope=13220", got)
+	}
+	if got := costModel.builtinCosts[builtin.AssetCount].cpu.(*ConstantCost).c; got != 129043 {
+		t.Fatalf("assetCount CPU cost = %d, want 129043", got)
 	}
 }
 
 func TestV4CostModelLoadsCompleteParameterList(t *testing.T) {
 	params := make([]int64, len(lang.CostModelParamNamesV4))
+	wantParams := map[string]int64{
+		"multiIndexArray-cpu-arguments-c0":           326163,
+		"multiIndexArray-cpu-arguments-c1":           12304,
+		"multiIndexArray-cpu-arguments-c2":           2,
+		"multiIndexArray-memory-arguments-intercept": 4,
+		"multiIndexArray-memory-arguments-slope":     3,
+		"assetCount-cpu-arguments":                   129043,
+		"assetCount-memory-arguments":                10,
+		"policies-cpu-arguments-intercept":           930912,
+		"policies-cpu-arguments-slope":               13220,
+		"policies-memory-arguments-intercept":        4,
+		"policies-memory-arguments-slope":            3,
+	}
 	for i, name := range lang.CostModelParamNamesV4 {
-		switch name {
-		case "assetCount-cpu-arguments":
-			params[i] = 17
-		case "assetCount-memory-arguments":
-			params[i] = 23
-		}
+		params[i] = wantParams[name]
 	}
 	context, err := NewEvalContext(
 		lang.LanguageVersionV4,
@@ -236,12 +260,23 @@ func TestV4CostModelLoadsCompleteParameterList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("full V4 cost model was rejected: %v", err)
 	}
-	assetCountCosts := context.CostModel.builtinCosts[builtin.AssetCount]
-	if got := assetCountCosts.cpu.(*ConstantCost).c; got != 17 {
-		t.Fatalf("assetCount CPU cost = %d, want 17", got)
+	multiIndexArrayCosts := context.CostModel.builtinCosts[builtin.MultiIndexArray]
+	if got := multiIndexArrayCosts.cpu.(*QuadraticInYModel); got.coeff0 != 326163 || got.coeff1 != 12304 || got.coeff2 != 2 {
+		t.Fatalf("multiIndexArray CPU model = %+v, want coefficients (326163, 12304, 2)", got)
 	}
-	if got := assetCountCosts.mem.(*ConstantCost).c; got != 23 {
-		t.Fatalf("assetCount memory cost = %d, want 23", got)
+	assetCountCosts := context.CostModel.builtinCosts[builtin.AssetCount]
+	if got := assetCountCosts.cpu.(*ConstantCost).c; got != 129043 {
+		t.Fatalf("assetCount CPU cost = %d, want 129043", got)
+	}
+	if got := assetCountCosts.mem.(*ConstantCost).c; got != 10 {
+		t.Fatalf("assetCount memory cost = %d, want 10", got)
+	}
+	policiesCosts := context.CostModel.builtinCosts[builtin.Policies]
+	if got := policiesCosts.cpu.(*LinearInX); got.intercept != 930912 || got.slope != 13220 {
+		t.Fatalf("policies CPU model = %+v, want (930912, 13220)", got)
+	}
+	if got := policiesCosts.mem.(*LinearInX); got.intercept != 4 || got.slope != 3 {
+		t.Fatalf("policies memory model = %+v, want (4, 3)", got)
 	}
 }
 

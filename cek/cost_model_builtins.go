@@ -1166,15 +1166,19 @@ var DefaultBuiltinCosts = BuiltinCosts{
 			coeff2: 2,
 		}},
 	},
-	// Upstream uses unimplementedCostingFun for Policies: a prohibitive fixed
-	// cost until a measured model is published.
 	builtin.Policies: &CostingFunc[Arguments]{
-		mem: &ConstantCost{100000000000},
-		cpu: &ConstantCost{100000000000},
+		mem: &LinearInX{LinearCost{
+			intercept: 4,
+			slope:     3,
+		}},
+		cpu: &LinearInX{LinearCost{
+			intercept: 930912,
+			slope:     13220,
+		}},
 	},
 	builtin.AssetCount: &CostingFunc[Arguments]{
-		mem: &ConstantCost{0},
-		cpu: &ConstantCost{1},
+		mem: &ConstantCost{10},
+		cpu: &ConstantCost{129043},
 	},
 	// Value/coin builtins
 	builtin.InsertCoin: &CostingFunc[Arguments]{

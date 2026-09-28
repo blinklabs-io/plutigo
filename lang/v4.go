@@ -4,7 +4,7 @@ package lang
 //
 // This ordering follows the complete PlutusLedgerApi.V4.ParamName declaration,
 // including parameters for builtins not yet implemented by this module.
-// Source: https://github.com/IntersectMBO/plutus/blob/3109dc1e6501ecbbed0b7ae27361c255d7a16173/plutus-ledger-api/src/PlutusLedgerApi/V4/ParamName.hs
+// Source: https://github.com/IntersectMBO/plutus/blob/ca8463f4c61d12e6dd64dcf994089bd6a1130b8c/plutus-ledger-api/src/PlutusLedgerApi/V4/ParamName.hs
 var CostModelParamNamesV4 = []string{
 	"addInteger-cpu-arguments-intercept",
 	"addInteger-cpu-arguments-slope",
@@ -363,4 +363,8 @@ var CostModelParamNamesV4 = []string{
 	"multiIndexArray-memory-arguments-slope",
 	"assetCount-cpu-arguments",
 	"assetCount-memory-arguments",
+	"policies-cpu-arguments-intercept",
+	"policies-cpu-arguments-slope",
+	"policies-memory-arguments-intercept",
+	"policies-memory-arguments-slope",
 }
