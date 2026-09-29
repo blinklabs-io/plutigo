@@ -78,15 +78,15 @@ Go 1.26 delivers ~10% faster full-script execution vs Go 1.25 across all Plutus 
 
 ### Script Contexts
 
-The `plutus/v4` package serializes Plutus V4 addresses, transaction outputs,
-purposes, `TxInfo`, nested `TopTxInfo`, and `ScriptContext` values. It follows
-the V4 constructor tags and field order, including the account-address and
-nested-transaction structures. V4 calls the Observe purpose from CIP-0112
-`Guarding`; both names are available in the package.
+The `lang` package serializes Plutus V4 addresses, transaction outputs,
+purposes, `TxInfoV4`, nested `TopTxInfoV4`, and `ScriptContextV4` values. It
+follows the V4 constructor tags and field order, including the account-address
+and nested-transaction structures. V4 calls the Observe purpose from CIP-0112
+`Guarding`; both the `Guarding*V4` and `Observing*V4` names are available.
 
 The builder takes already-derived Plutus data values. Ledger integrations such
 as gouroboros remain responsible for deriving context values from a transaction
-and ledger state. V4 `TxInfo` has a validity range and no `isValid` field.
+and ledger state. `TxInfoV4` has a validity range and no `isValid` field.
 
 ## Usage
 

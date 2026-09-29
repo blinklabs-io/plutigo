@@ -24,6 +24,14 @@
 // all parameters in the order expected by protocol parameter updates.
 // These match the official Plutus cost model specification.
 //
+// # Script Contexts
+//
+// [ScriptContextV4], [TxInfoV4], [TopTxInfoV4], and the related V4 purpose,
+// script info, address, and output types serialize Plutus V4 script context
+// values to data.PlutusData. Callers supply already-derived values; ledger
+// integrations remain responsible for deriving them from transaction and
+// ledger state.
+//
 // # Version Detection
 //
 // Programs declare their version in the header: (program 1.0.0 ...)
