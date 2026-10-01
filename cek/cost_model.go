@@ -486,7 +486,6 @@ func equalsDataMinExMem(x data.PlutusData, y data.PlutusData) ExMem {
 		if xLen {
 			last := len(costStackX) - 1
 			d := costStackX[last]
-			costStackX[last] = nil
 			costStackX = costStackX[:last]
 			var size ExMem
 			size, costStackX = equalsDataNodeExMem(d, costStackX)
@@ -496,7 +495,6 @@ func equalsDataMinExMem(x data.PlutusData, y data.PlutusData) ExMem {
 		if yLen {
 			last := len(costStackY) - 1
 			d := costStackY[last]
-			costStackY[last] = nil
 			costStackY = costStackY[:last]
 			var size ExMem
 			size, costStackY = equalsDataNodeExMem(d, costStackY)
