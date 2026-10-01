@@ -2288,8 +2288,8 @@ func equalsData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	costX, costY := equalsDataExMem(arg1, arg2)
-	err = m.CostTwo(&b.Func, costX, costY)
+	size := equalsDataMinExMem(arg1, arg2)
+	err = m.CostTwoExMem(&b.Func, size, size)
 	if err != nil {
 		return nil, err
 	}

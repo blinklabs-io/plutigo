@@ -84,22 +84,25 @@ type Machine[T syn.Eval] struct {
 	stepCostMem        [9]int64
 	builtins           *Builtins[T]
 	builtinNoArgValues *[builtin.TotalBuiltinCount][3]*Builtin[T]
-	oneArgCosts        [builtin.TotalBuiltinCount]oneArgCost
-	twoArgCosts        [builtin.TotalBuiltinCount]twoArgCost
-	threeArgCosts      [builtin.TotalBuiltinCount]threeArgCost
-	available          *[builtin.TotalBuiltinCount]bool
-	slippage           uint32
-	version            lang.LanguageVersion
-	semantics          SemanticsVariant
-	protoMajor         uint
-	ExBudget           ExBudget
-	Logs               []string
+	costCaches         *builtinCostCaches
+	// available is shared by every machine with the same language and
+	// protocol major; it must never be written through.
+	available  *[builtin.TotalBuiltinCount]bool
+	slippage   uint32
+	version    lang.LanguageVersion
+	semantics  SemanticsVariant
+	protoMajor uint
+	ExBudget   ExBudget
+	Logs       []string
 
-	argHolder       argHolder[T]
-	frameStack      []stackFrame[T]
-	frameStackUsed  int
-	unbudgetedSteps [9]uint32
-	unbudgetedTotal uint32
+	argHolder argHolder[T]
+	// Scratch for evalBuiltinAppReady and evalBuiltinAppWithArg.
+	readyBuiltin     Builtin[T]
+	readyBuiltinArgs BuiltinArgs[T]
+	frameStack       []stackFrame[T]
+	frameStackUsed   int
+	unbudgetedSteps  [9]uint32
+	unbudgetedTotal  uint32
 
 	freeCompute            []*Compute[T]
 	freeReturn             []*Return[T]
@@ -703,9 +706,7 @@ func NewMachine[T syn.Eval](
 		stepCostMem:        stepCostMem,
 		builtins:           chooseBuiltins[T](version, evalContext.ProtoMajor),
 		builtinNoArgValues: getSharedBuiltinNoArgValues[T](version),
-		oneArgCosts:        newOneArgCostCache(evalContext.CostModel.builtinCosts),
-		twoArgCosts:        newTwoArgCostCache(evalContext.CostModel.builtinCosts),
-		threeArgCosts:      newThreeArgCostCache(evalContext.CostModel.builtinCosts),
+		costCaches:         evalContext.CostModel.builtinCostCaches(),
 		available:          chooseAvailableBuiltins(version, evalContext.ProtoMajor),
 		slippage:           slippage,
 		version:            version,
