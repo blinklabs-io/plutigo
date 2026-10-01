@@ -2,7 +2,6 @@ package replay
 
 import (
 	"strings"
-	"syscall"
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/cek"
@@ -64,17 +63,9 @@ func BenchmarkMainnetEvalOnly(b *testing.B) {
 					b.Fatalf("budget mismatch: %+v", used)
 				}
 			}
-			b.ReportMetric(float64(processCPUNanos()-startCPU)/float64(b.N), "cpu-ns/op")
+			if startCPU != 0 {
+				b.ReportMetric(float64(processCPUNanos()-startCPU)/float64(b.N), "cpu-ns/op")
+			}
 		})
 	}
-}
-
-// processCPUNanos is the process's user+system CPU time, which unlike wall
-// time is not inflated by other load on the host.
-func processCPUNanos() int64 {
-	var ru syscall.Rusage
-	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &ru); err != nil {
-		return 0
-	}
-	return ru.Utime.Nano() + ru.Stime.Nano()
 }
