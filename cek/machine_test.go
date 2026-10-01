@@ -37,13 +37,6 @@ func TestNewMachine(t *testing.T) {
 	if m.ExBudget != DefaultExBudget {
 		t.Fatalf("expected default budget, got %+v", m.ExBudget)
 	}
-	if cap(m.envIndexChunks) != cap(m.envChunks) {
-		t.Fatalf(
-			"env index chunk capacity = %d, want env chunk capacity %d",
-			cap(m.envIndexChunks),
-			cap(m.envChunks),
-		)
-	}
 }
 
 func TestNewMachineSharesImmutableBuiltinPrototypes(t *testing.T) {
@@ -154,13 +147,6 @@ func TestRunResetsEnvArena(t *testing.T) {
 		if m.envChunkPos != 0 {
 			t.Fatalf("envChunkPos after %s Run = %d, want 0", run, m.envChunkPos)
 		}
-		if m.envIndexChunkPos != 0 {
-			t.Fatalf(
-				"envIndexChunkPos after %s Run = %d, want 0",
-				run,
-				m.envIndexChunkPos,
-			)
-		}
 	}
 }
 
@@ -220,22 +206,8 @@ func TestRunClearsRetainedArenaReferencesAfterReturn(t *testing.T) {
 	for ci, chunk := range m.envChunks {
 		for si := range chunk {
 			slot := chunk[si]
-			if slot.data != nil || slot.next != nil || slot.index != nil {
+			if slot.data != nil || slot.next != nil || slot.jump != nil || slot.depth != 0 {
 				t.Fatalf("envChunks[%d][%d] retained stale data after Run: %+v", ci, si, slot)
-			}
-		}
-	}
-	for ci, chunk := range m.envIndexChunks {
-		for si := range chunk {
-			for level, ancestor := range chunk[si] {
-				if ancestor != nil {
-					t.Fatalf(
-						"envIndexChunks[%d][%d][%d] retained stale ancestor after Run",
-						ci,
-						si,
-						level,
-					)
-				}
 			}
 		}
 	}
@@ -385,9 +357,6 @@ func TestResetEnvArenaRetainsOnlyTrackedChunkHeaders(t *testing.T) {
 	if len(m.envChunks) < usedChunks {
 		t.Fatalf("expected multiple env chunks, got %d", len(m.envChunks))
 	}
-	if len(m.envIndexChunks) < usedChunks {
-		t.Fatalf("expected multiple env index chunks, got %d", len(m.envIndexChunks))
-	}
 
 	m.resetEnvArena()
 
@@ -397,25 +366,8 @@ func TestResetEnvArenaRetainsOnlyTrackedChunkHeaders(t *testing.T) {
 	if cap(m.envChunks) != envRetainChunkCap {
 		t.Fatalf("cap(envChunks) after reset = %d, want %d", cap(m.envChunks), envRetainChunkCap)
 	}
-	if len(m.envIndexChunks) != envRetainChunkCap {
-		t.Fatalf(
-			"len(envIndexChunks) after reset = %d, want %d",
-			len(m.envIndexChunks),
-			envRetainChunkCap,
-		)
-	}
-	if cap(m.envIndexChunks) != envRetainChunkCap {
-		t.Fatalf(
-			"cap(envIndexChunks) after reset = %d, want %d",
-			cap(m.envIndexChunks),
-			envRetainChunkCap,
-		)
-	}
 	if m.envChunkPos != 0 {
 		t.Fatalf("envChunkPos after reset = %d, want 0", m.envChunkPos)
-	}
-	if m.envIndexChunkPos != 0 {
-		t.Fatalf("envIndexChunkPos after reset = %d, want 0", m.envIndexChunkPos)
 	}
 }
 
@@ -543,7 +495,7 @@ func TestLookupEnvIndexedAtMaximumDepth(t *testing.T) {
 }
 
 func TestEnvLookupBeyondIndexRange(t *testing.T) {
-	const depth = 2 * (envMaxIndexedJump + 1)
+	const depth = 1 << 18
 
 	oldest := int64Constant(1)
 	newer := int64Constant(2)

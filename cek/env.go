@@ -1,34 +1,31 @@
 package cek
 
 import (
-	"math/bits"
-
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
-// envIndexLevels covers every environment depth accepted by the parser and
-// FLAT decoder (both cap nesting at 100,000). Entry n is the ancestor at
-// distance 2^(n+1)-1. Deeper chains built through the exported Env API compose
-// multiple maximum-distance jumps.
-const (
-	envIndexLevels    = 17
-	envMaxIndexedJump = (1 << envIndexLevels) - 1
-)
-
-type envIndex[T syn.Eval] [envIndexLevels]*Env[T]
-
+// Env is a persistent environment: a linked list of bindings, newest first.
+//
+// Ancestor lookup uses Myers' skew-binary jump pointers ("An applicative
+// random-access stack", 1983): every node carries one extra pointer to an
+// ancestor chosen so that any ancestor is reachable in O(log depth) steps.
+// One pointer and a depth per node replace a per-node table of
+// power-of-two ancestors, which made each binding several times larger than
+// the binding itself while most environments stay shallow.
+//
+// A node with a nil jump was built without Extend or Machine.extendEnv (a
+// literal in package-local code); lookups walk such nodes linearly until they
+// reach an indexed node.
 type Env[T syn.Eval] struct {
 	data  Value[T]
 	next  *Env[T]
-	index *envIndex[T]
+	jump  *Env[T]
+	depth int
 }
 
 func lookupEnv[T syn.Eval](env *Env[T], idx int) (Value[T], bool) {
 	var zero Value[T]
-	if idx <= 0 {
-		return zero, false
-	}
-	if env == nil {
+	if idx <= 0 || env == nil {
 		return zero, false
 	}
 	switch idx {
@@ -50,71 +47,7 @@ func lookupEnv[T syn.Eval](env *Env[T], idx int) (Value[T], bool) {
 			return zero, false
 		}
 		return env.data, true
-	case 4:
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		return env.data, true
-	case 5:
-		if env.index != nil {
-			ancestor := env.index[1]
-			if ancestor != nil {
-				ancestor = ancestor.next
-				if ancestor != nil {
-					return ancestor.data, true
-				}
-			}
-		}
-	case 6:
-		if env.index != nil {
-			ancestor := env.index[1]
-			if ancestor != nil {
-				ancestor = ancestor.next
-			}
-			if ancestor != nil {
-				ancestor = ancestor.next
-				if ancestor != nil {
-					return ancestor.data, true
-				}
-			}
-		}
-	case 7:
-		if env.index != nil {
-			ancestor := env.index[1]
-			for range 3 {
-				if ancestor != nil {
-					ancestor = ancestor.next
-				}
-			}
-			if ancestor != nil {
-				return ancestor.data, true
-			}
-		}
-	case 8:
-		if env.index != nil {
-			if ancestor := env.index[2]; ancestor != nil {
-				return ancestor.data, true
-			}
-		}
 	}
-	if idx&(idx-1) == 0 {
-		level := bits.TrailingZeros(uint(idx)) - 1
-		if level < envIndexLevels && env.index != nil {
-			if ancestor := env.index[level]; ancestor != nil {
-				return ancestor.data, true
-			}
-		}
-	}
-
 	env = envAncestor(env, idx-1)
 	if env == nil {
 		return zero, false
@@ -122,51 +55,59 @@ func lookupEnv[T syn.Eval](env *Env[T], idx int) (Value[T], bool) {
 	return env.data, true
 }
 
+// envAncestor returns the node distance links above env, or nil when the
+// chain is shorter than that.
 func envAncestor[T syn.Eval](env *Env[T], distance int) *Env[T] {
-	for distance != 0 {
-		level := bits.Len(uint(distance+1)) - 2
-		if level >= envIndexLevels {
-			level = envIndexLevels - 1
+	for env.jump == nil {
+		if distance == 0 {
+			return env
 		}
-		jump := min((1<<(level+1))-1, envMaxIndexedJump)
-		var ancestor *Env[T]
-		if env.index != nil {
-			ancestor = env.index[level]
+		env = env.next
+		if env == nil {
+			return nil
 		}
-		if ancestor == nil {
-			// Keep package-local manually constructed Env values working.
-			// Environments made through Extend or Machine.extendEnv always
-			// have a complete index and take the direct path above.
-			ancestor = env
-			for range jump {
-				ancestor = ancestor.next
-				if ancestor == nil {
-					return nil
-				}
-			}
+		distance--
+	}
+	target := env.depth - distance
+	if target < 1 {
+		return nil
+	}
+	// Every indexed node's jump is a strict ancestor except the root's, which
+	// points at itself; the root has depth 1 <= target, so the loop ends.
+	for env.depth != target {
+		if env.jump.depth >= target {
+			env = env.jump
+		} else {
+			env = env.next
 		}
-		env = ancestor
-		distance -= jump
 	}
 	return env
 }
 
-func initEnvIndex[T syn.Eval](env, parent *Env[T]) {
+// initEnvLink links env below parent and picks its jump pointer. When
+// parent's jump spans the same distance as parent.jump's own jump, the two
+// combine into one jump of twice that distance plus one; otherwise the jump
+// is a single step. The resulting jump lengths follow the skew-binary
+// decomposition of the depth.
+func initEnvLink[T syn.Eval](env, parent *Env[T]) {
 	env.next = parent
-	if env.index == nil {
-		env.index = &envIndex[T]{}
+	if parent == nil {
+		env.depth = 1
+		env.jump = env
+		return
 	}
-	env.index[0] = parent
-	for level := 1; level < envIndexLevels; level++ {
-		previous := env.index[level-1]
-		if previous == nil || previous.index == nil {
-			break
-		}
-		previous = previous.index[level-1]
-		if previous == nil {
-			break
-		}
-		env.index[level] = previous.next
+	if parent.jump == nil {
+		// Below a manually built node the depth is unknown, so stay linear.
+		env.depth = 0
+		env.jump = nil
+		return
+	}
+	env.depth = parent.depth + 1
+	j := parent.jump
+	if j != parent && parent.depth-j.depth == j.depth-j.jump.depth {
+		env.jump = j.jump
+	} else {
+		env.jump = parent
 	}
 }
 
@@ -174,7 +115,7 @@ func (e *Env[T]) Extend(data Value[T]) *Env[T] {
 	env := &Env[T]{
 		data: data,
 	}
-	initEnvIndex(env, e)
+	initEnvLink(env, e)
 	return env
 }
 
