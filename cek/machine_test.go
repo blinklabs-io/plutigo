@@ -167,8 +167,20 @@ func TestRunClearsRetainedArenaReferencesAfterReturn(t *testing.T) {
 		t.Fatalf("NameToDeBruijn returned error: %v", err)
 	}
 
-	if _, err := m.Run(dbProgram.Term); err != nil {
-		t.Fatalf("Run returned error: %v", err)
+	// A first Run drops its arenas outright, so only later runs retain chunks
+	// for the loops below to inspect. The second run settles the value-arena
+	// chunk size; the third keeps every arena.
+	for run := 1; run <= 3; run++ {
+		if _, err := m.Run(dbProgram.Term); err != nil {
+			t.Fatalf("Run %d returned error: %v", run, err)
+		}
+	}
+	if len(m.envChunks) == 0 || len(m.lambdaChunks) == 0 {
+		t.Fatalf(
+			"Run retained %d env and %d lambda chunks, want both > 0",
+			len(m.envChunks),
+			len(m.lambdaChunks),
+		)
 	}
 
 	for ci, chunk := range m.lambdaChunks {
