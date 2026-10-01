@@ -64,6 +64,9 @@ func TestDecodedProgramIsReusableAcrossEvaluations(t *testing.T) {
 				t.Fatalf("decode failed: %v", err)
 			}
 			want := evalSharedProgram(fresh)
+			if want.err != "" {
+				t.Fatalf("fresh evaluation failed: %s", want.err)
+			}
 
 			for i := range 2 {
 				if got := evalSharedProgram(shared); got != want {
