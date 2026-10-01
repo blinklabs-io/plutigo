@@ -131,7 +131,7 @@ type ProtoList struct {
 func (ProtoList) isConstant() {}
 
 func (pl ProtoList) Typ() Typ {
-	return &TList{Typ: pl.LTyp}
+	return listType(pl.LTyp)
 }
 
 type ProtoArray struct {
@@ -165,7 +165,7 @@ type ProtoPair struct {
 func (ProtoPair) isConstant() {}
 
 func (pp ProtoPair) Typ() Typ {
-	return &TPair{First: pp.FstType, Second: pp.SndType}
+	return pairType(pp.FstType, pp.SndType)
 }
 
 type Data struct {

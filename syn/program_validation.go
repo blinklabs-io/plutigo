@@ -39,7 +39,8 @@ const maxConstantTypeTagsPV11 = 32
 // stack tolerates.
 func constantTypeSize(typ Typ) int {
 	size := 0
-	pending := []Typ{typ}
+	var stack [8]Typ
+	pending := append(stack[:0], typ)
 	for len(pending) > 0 {
 		last := len(pending) - 1
 		current := pending[last]
@@ -83,7 +84,10 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 		return err
 	}
 
-	terms := []Term[T]{program.Term}
+	// The worklist starts on the stack; it holds pending siblings along one
+	// path, so ledger scripts rarely outgrow it.
+	var stack [128]Term[T]
+	terms := append(stack[:0], program.Term)
 	for len(terms) > 0 {
 		last := len(terms) - 1
 		term := terms[last]
