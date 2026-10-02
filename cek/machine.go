@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 	"math/big"
+	"sync"
 	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -148,10 +149,10 @@ type Machine[T syn.Eval] struct {
 	valueArenaChunkSize    int
 	envChunks              [][]Env[T]
 	envActiveChunk         []Env[T]
-	envActiveChunkLimit    int
+	envActiveChunkIdx      int
+	envActiveOff           int
 	envChunkPos            int
-	envIndexChunks         [][]envIndex[T]
-	envIndexChunkPos       int
+	envPooled              *pooledEnvChunks[T]
 	budgetTemplate         ExBudget
 	lastRunRemaining       ExBudget
 	hasRun                 bool
@@ -161,6 +162,8 @@ type Machine[T syn.Eval] struct {
 
 const (
 	envChunkSize          = 2048
+	envFirstChunkSize     = 128
+	envChunkGrowthSteps   = 4 // envFirstChunkSize << envChunkGrowthSteps == envChunkSize
 	envRetainChunkCap     = 64
 	valueColdChunkSize    = 512
 	valueMaxChunkSize     = 262144
@@ -757,8 +760,6 @@ func NewMachine[T syn.Eval](
 		valueArenaChunkSize:   valueColdChunkSize,
 		envChunks:             make([][]Env[T], 0, 8),
 		envChunkPos:           0,
-		envIndexChunks:        make([][]envIndex[T], 0, 8),
-		envIndexChunkPos:      0,
 		budgetTemplate:        DefaultExBudget,
 		lastRunRemaining:      DefaultExBudget,
 		hasRun:                false,
@@ -786,57 +787,60 @@ func chooseAvailableBuiltins(
 }
 
 func (m *Machine[T]) extendEnv(parent *Env[T], data Value[T]) *Env[T] {
-	pos := m.envChunkPos
+	off := m.envActiveOff
 	chunk := m.envActiveChunk
-	if chunk == nil || pos == m.envActiveChunkLimit {
-		chunkIdx := pos / envChunkSize
-		if chunkIdx == len(m.envChunks) {
-			m.envChunks = append(m.envChunks, make([]Env[T], envChunkSize))
-		}
-		chunk = m.envChunks[chunkIdx]
-		if chunk == nil {
-			chunk = make([]Env[T], envChunkSize)
-			m.envChunks[chunkIdx] = chunk
-		}
-		m.envActiveChunk = chunk
-		m.envActiveChunkLimit = (chunkIdx + 1) * envChunkSize
+	if off == len(chunk) {
+		chunk = m.nextEnvChunk()
+		off = 0
 	}
-	env := &chunk[pos&(envChunkSize-1)]
-	m.envChunkPos = pos + 1
-	index := allocArenaSlot(
-		&m.envIndexChunks,
-		&m.envIndexChunkPos,
-		envChunkSize,
-	)
-	*index = envIndex[T]{}
-	env.index = index
+	env := &chunk[off]
+	m.envActiveOff = off + 1
+	m.envChunkPos++
 	env.data = data
-	initEnvIndex(env, parent)
+	initEnvLink(env, parent)
 	return env
 }
 
-func (m *Machine[T]) resetEnvArena() {
-	retainedUsed := m.envChunkPos
-	maxRetained := envRetainChunkCap * envChunkSize
-	if retainedUsed > maxRetained {
-		retainedUsed = maxRetained
+// nextEnvChunk makes the next env chunk active, reusing one retained from an
+// earlier run when present. Chunk sizes double from envFirstChunkSize up to
+// envChunkSize so that a fresh Machine, which most callers build per script,
+// does not allocate a full-size chunk for an evaluation that binds a few
+// hundred variables.
+func (m *Machine[T]) nextEnvChunk() []Env[T] {
+	idx := m.envActiveChunkIdx
+	if idx == 0 && len(m.envChunks) == 0 {
+		m.takePooledEnvChunks()
 	}
-	clearArenaChunks(m.envChunks, retainedUsed)
-	clearArenaChunks(m.envIndexChunks, retainedUsed)
-	if len(m.envChunks) > envRetainChunkCap {
-		retained := make([][]Env[T], envRetainChunkCap)
-		copy(retained, m.envChunks[:envRetainChunkCap])
-		m.envChunks = retained
+	m.envActiveChunkIdx = idx + 1
+	if idx < len(m.envChunks) && m.envChunks[idx] != nil {
+		m.envActiveChunk = m.envChunks[idx]
+		m.envActiveOff = 0
+		return m.envActiveChunk
 	}
-	if len(m.envIndexChunks) > envRetainChunkCap {
-		retained := make([][]envIndex[T], envRetainChunkCap)
-		copy(retained, m.envIndexChunks[:envRetainChunkCap])
-		m.envIndexChunks = retained
+	size := envChunkSize
+	if idx < envChunkGrowthSteps {
+		size = envFirstChunkSize << idx
 	}
+	chunk := make([]Env[T], size)
+	if idx < len(m.envChunks) {
+		m.envChunks[idx] = chunk
+	} else {
+		m.envChunks = append(m.envChunks, chunk)
+	}
+	m.envActiveChunk = chunk
+	m.envActiveOff = 0
+	return chunk
+}
+
+func (m *Machine[T]) clearEnvActive() {
 	m.envActiveChunk = nil
-	m.envActiveChunkLimit = 0
-	m.envChunkPos = 0
-	m.envIndexChunkPos = 0
+	m.envActiveChunkIdx = 0
+	m.envActiveOff = 0
+}
+
+func (m *Machine[T]) resetEnvArena() {
+	resetArenaChunks(&m.envChunks, &m.envChunkPos, envRetainChunkCap)
+	m.clearEnvActive()
 }
 
 // lazyPrepareEnvArena trims chunks beyond envRetainChunkCap and clears the
@@ -844,22 +848,58 @@ func (m *Machine[T]) resetEnvArena() {
 // the previous run's Env/Value graph pinned inside the Machine.
 func (m *Machine[T]) lazyPrepareEnvArena() {
 	lazyPrepareArenaChunks(&m.envChunks, &m.envChunkPos, envRetainChunkCap)
-	lazyPrepareArenaChunks(
-		&m.envIndexChunks,
-		&m.envIndexChunkPos,
-		envRetainChunkCap,
-	)
-	m.envActiveChunk = nil
-	m.envActiveChunkLimit = 0
+	m.clearEnvActive()
+}
+
+// envChunkPool holds env chunks released by single-use Machines. Callers
+// typically build one Machine per script, so without it every evaluation
+// allocates and the GC scans and frees a fresh set of chunks. Only Run's
+// teardown releases chunks, after the result has been discharged: discharged
+// terms and errors never reference Env nodes, and the value arenas that do
+// (closures) are dropped in the same teardown, so no live pointer reaches a
+// pooled chunk.
+var envChunkPool sync.Pool
+
+// envPoolChunkCap bounds what one released arena returns to the pool so a
+// single deep evaluation does not pin a large arena there.
+const envPoolChunkCap = 8
+
+type pooledEnvChunks[T syn.Eval] struct {
+	chunks [][]Env[T]
+}
+
+func (m *Machine[T]) takePooledEnvChunks() {
+	pooled, ok := envChunkPool.Get().(*pooledEnvChunks[T])
+	if !ok || pooled == nil {
+		return
+	}
+	m.envChunks = append(m.envChunks[:0], pooled.chunks...)
+	clear(pooled.chunks)
+	m.envPooled = pooled
+}
+
+// releaseEnvArena clears the used prefix of the env chunks and hands the
+// first envPoolChunkCap of them to envChunkPool.
+func (m *Machine[T]) releaseEnvArena() {
+	n := min(len(m.envChunks), envPoolChunkCap)
+	if n == 0 {
+		return
+	}
+	clearArenaChunks(m.envChunks[:n], m.envChunkPos)
+	pooled := m.envPooled
+	if pooled == nil {
+		pooled = &pooledEnvChunks[T]{}
+	}
+	m.envPooled = nil
+	pooled.chunks = append(pooled.chunks[:0], m.envChunks[:n]...)
+	envChunkPool.Put(pooled)
 }
 
 func (m *Machine[T]) dropEnvArena() {
+	m.releaseEnvArena()
 	m.envChunks = nil
-	m.envIndexChunks = nil
-	m.envActiveChunk = nil
-	m.envActiveChunkLimit = 0
 	m.envChunkPos = 0
-	m.envIndexChunkPos = 0
+	m.clearEnvActive()
 }
 
 func (m *Machine[T]) resetValueArenas() {
