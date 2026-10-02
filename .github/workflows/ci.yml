@@ -13,24 +13,18 @@ on:
 
 jobs:
   go-test:
-    needs: [golangci-lint]
     uses: blinklabs-io/actions/.github/workflows/reuseable-go-test.yml@main
     with:
+      nilaway-exclude-file-docstrings: <nilaway skip stack-machine>
+      nilaway-include-pkgs: github.com/blinklabs-io/plutigo
       pre-test-command: make test
+      run-golangci-lint: true
+      run-nilaway: true
       submodules: true
       test-flags: -race -coverprofile=coverage.out -covermode=atomic
       upload-coverage: true
-  golangci-lint:
-    uses: blinklabs-io/actions/.github/workflows/reuseable-golangci-lint.yml@main
-  nilaway:
-    needs: [golangci-lint]
-    uses: blinklabs-io/actions/.github/workflows/reuseable-nilaway.yml@main
-    with:
-      exclude-file-docstrings: <nilaway skip stack-machine>
-      include-pkgs: github.com/blinklabs-io/plutigo
-      submodules: true
   publish:
-    needs: [go-test, nilaway]
+    needs: [go-test]
     if: github.event_name == 'push' && github.ref_type == 'tag'
     uses: blinklabs-io/actions/.github/workflows/reuseable-go-library-release.yml@main
     permissions:
