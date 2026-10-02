@@ -183,9 +183,13 @@ func runV4ScriptBudget(
 	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV4, 0, context)
 	// These builtins have published V4 costs but remain protocol-unavailable.
 	// Enable them here to exercise cost charging through the CEK evaluator.
+	// The availability table is shared by every machine with the same
+	// language and protocol, so enable them on a private copy.
 	switch fn {
 	case builtin.MultiIndexArray, builtin.Policies, builtin.AssetCount:
-		machine.available[fn] = true
+		available := *machine.available
+		available[fn] = true
+		machine.available = &available
 	}
 	initialBudget := machine.ExBudget
 	if _, err := machine.Run(dbProgram.Term); err != nil {

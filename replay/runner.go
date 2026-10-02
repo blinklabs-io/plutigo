@@ -121,10 +121,19 @@ func runDecodedCase(replayCase *Case, decoded decodedCase) CaseResult {
 	return result
 }
 
-func evaluate(replayCase *Case, decoded decodedCase) Actual {
+// evaluation is a replay case prepared for the machine: the program applied
+// to its arguments, the evaluation context and the initial budget.
+type evaluation struct {
+	languageVersion cek.LanguageVersion
+	term            syn.Term[syn.DeBruijn]
+	evalContext     *cek.EvalContext
+	budget          cek.ExBudget
+}
+
+func prepareEvaluation(replayCase *Case, decoded decodedCase) (evaluation, error) {
 	languageVersion, err := replayCase.Language.Version()
 	if err != nil {
-		return setupFailure(err)
+		return evaluation{}, err
 	}
 
 	term := decoded.program.Term
@@ -151,21 +160,35 @@ func evaluate(replayCase *Case, decoded decodedCase) Actual {
 			replayCase.CostModel.Parameters,
 		)
 		if err != nil {
-			return setupFailure(fmt.Errorf("build evaluation context: %w", err))
+			return evaluation{}, fmt.Errorf("build evaluation context: %w", err)
 		}
 	}
 
-	initialBudget := cek.ExBudget{
-		Cpu: replayCase.BudgetLimit.Steps,
-		Mem: replayCase.BudgetLimit.Memory,
+	return evaluation{
+		languageVersion: languageVersion,
+		term:            term,
+		evalContext:     evalContext,
+		budget: cek.ExBudget{
+			Cpu: replayCase.BudgetLimit.Steps,
+			Mem: replayCase.BudgetLimit.Memory,
+		},
+	}, nil
+}
+
+func evaluate(replayCase *Case, decoded decodedCase) Actual {
+	prepared, err := prepareEvaluation(replayCase, decoded)
+	if err != nil {
+		return setupFailure(err)
 	}
+
+	initialBudget := prepared.budget
 	machine := cek.NewMachine[syn.DeBruijn](
-		languageVersion,
+		prepared.languageVersion,
 		0,
-		evalContext,
+		prepared.evalContext,
 	)
 	machine.ExBudget = initialBudget
-	evalErr := runMachine(machine, term)
+	evalErr := runMachine(machine, prepared.term)
 	consumed := initialBudget.Sub(&machine.ExBudget)
 
 	actual := Actual{
