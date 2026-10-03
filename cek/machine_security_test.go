@@ -64,3 +64,37 @@ func TestAllocArenaSliceCapBounded(t *testing.T) {
 		t.Fatalf("second alloc: expected cap == len == %d, got cap %d", len(s2), cap(s2))
 	}
 }
+
+// A delayed term can capture a small shared value graph whose discharged tree
+// is exponentially larger. Bound total work as well as recursion depth.
+func TestDischargeValueBoundsCapturedExpansion(t *testing.T) {
+	var captured Value[syn.DeBruijn] = &Constant{
+		Constant: &syn.Integer{Inner: big.NewInt(0)},
+	}
+	for range 20 {
+		captured = &Constr[syn.DeBruijn]{
+			Tag:    0,
+			Fields: []Value[syn.DeBruijn]{captured, captured},
+		}
+	}
+
+	env := (*Env[syn.DeBruijn])(nil).Extend(captured)
+	delayed := &Delay[syn.DeBruijn]{
+		AST: &syn.Delay[syn.DeBruijn]{
+			Term: &syn.Var[syn.DeBruijn]{Name: syn.DeBruijn(1)},
+		},
+		Env: env,
+	}
+
+	_, err := dischargeValue[syn.DeBruijn](delayed)
+	if err == nil {
+		t.Fatal("expected BudgetError for exponentially expanded captured value")
+	}
+	var budgetErr *BudgetError
+	if !errors.As(err, &budgetErr) {
+		t.Fatalf("expected BudgetError, got %T: %v", err, err)
+	}
+	if budgetErr.Code != ErrCodeBudgetExhausted {
+		t.Fatalf("expected budget exhausted code, got %v", budgetErr.Code)
+	}
+}
