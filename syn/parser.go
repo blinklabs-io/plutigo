@@ -27,6 +27,21 @@ type Parser struct {
 	uniqueCounter Unique
 	version       lang.LanguageVersion
 	depth         int
+	inputLen      int
+	// nodes counts the terms and constant list items parsed so far.
+	nodes int
+	// maxConstrFields is the widest constr field list accepted.
+	maxConstrFields int
+}
+
+// node charges one term or constant list item against the program's node
+// budget.
+func (p *Parser) node() error {
+	p.nodes++
+	if p.nodes > maxProgramNodes {
+		return errors.New("program has too many nodes")
+	}
+	return nil
 }
 
 // enter records descent into a nested construct and fails if the nesting limit
@@ -49,6 +64,9 @@ func NewParser(input string) *Parser {
 		lexer:         lex.NewLexer(input),
 		interned:      make(map[string]Unique),
 		uniqueCounter: 0,
+		inputLen:      len(input),
+
+		maxConstrFields: maxCollectionWidth,
 	}
 
 	p.curToken = p.lexer.NextToken()
@@ -99,6 +117,10 @@ func Parse(input string) (*Program[Name], error) {
 }
 
 func (p *Parser) ParseProgram() (*Program[Name], error) {
+	if p.inputLen > maxInputBytes {
+		return nil, errors.New("input too large")
+	}
+
 	if err := p.expect(lex.TokenLParen); err != nil {
 		return nil, err
 	}
@@ -166,6 +188,9 @@ func (p *Parser) ParseTerm() (Term[Name], error) {
 		return nil, err
 	}
 	defer p.leave()
+	if err := p.node(); err != nil {
+		return nil, err
+	}
 
 	switch p.curToken.Type {
 	case lex.TokenIdentifier:
@@ -346,6 +371,9 @@ func (p *Parser) parseConstr() (Term[Name], error) {
 	fields := make([]Term[Name], 0, 8)
 
 	for p.curToken.Type != lex.TokenRParen {
+		if len(fields) >= p.maxConstrFields {
+			return nil, errTooMany("term list items", p.maxConstrFields)
+		}
 		term, err := p.ParseTerm()
 		if err != nil {
 			return nil, err
@@ -378,6 +406,9 @@ func (p *Parser) parseCase() (Term[Name], error) {
 	branches := make([]Term[Name], 0, 4)
 
 	for p.curToken.Type != lex.TokenRParen {
+		if len(branches) >= maxCollectionWidth {
+			return nil, errTooMany("term list items", maxCollectionWidth)
+		}
 		branch, err := p.ParseTerm()
 		if err != nil {
 			return nil, err
@@ -799,6 +830,12 @@ func (p *Parser) parseConstantCollection(
 
 	var items []IConstant
 	for p.curToken.Type != lex.TokenRBracket {
+		if len(items) >= maxCollectionWidth {
+			return nil, errTooMany("constant list items", maxCollectionWidth)
+		}
+		if err := p.node(); err != nil {
+			return nil, err
+		}
 		item, err := p.parseConstantValue(elementType)
 		if err != nil {
 			return nil, err

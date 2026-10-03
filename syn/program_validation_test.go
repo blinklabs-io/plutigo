@@ -339,6 +339,10 @@ func TestContextualValidationConstrFieldLimit(t *testing.T) {
 		protocol   uint
 		fieldCount int
 		wantErr    string
+		// wantDecodeErr is what the decoders report: they stop at the bound
+		// without having read the full field list, so they cannot name its
+		// size.
+		wantDecodeErr string
 	}{
 		{
 			name:       "pre-PV11 remains unbounded",
@@ -360,12 +364,16 @@ func TestContextualValidationConstrFieldLimit(t *testing.T) {
 			protocol:   11,
 			fieldCount: 1025,
 			wantErr:    "constr with 1025 fields is not available in protocol version 11",
+
+			wantDecodeErr: "too many term list items: limit is 1024",
 		},
 		{
 			name:       "post-PV11 above limit",
 			protocol:   12,
 			fieldCount: 1025,
 			wantErr:    "constr with 1025 fields is not available in protocol version 12",
+
+			wantDecodeErr: "too many term list items: limit is 1024",
 		},
 	}
 
@@ -392,8 +400,9 @@ func TestContextualValidationConstrFieldLimit(t *testing.T) {
 			}
 
 			entryPoints := []struct {
-				name string
-				run  func() (int, error)
+				name    string
+				decodes bool
+				run     func() (int, error)
 			}{
 				{
 					name: "ValidateProgram",
@@ -402,7 +411,8 @@ func TestContextualValidationConstrFieldLimit(t *testing.T) {
 					},
 				},
 				{
-					name: "DecodeWithContext generic",
+					name:    "DecodeWithContext generic",
+					decodes: true,
 					run: func() (int, error) {
 						decoded, err := DecodeWithContext[Name](encoded, context)
 						if err != nil {
@@ -416,7 +426,8 @@ func TestContextualValidationConstrFieldLimit(t *testing.T) {
 					},
 				},
 				{
-					name: "DecodeDeBruijnWithContext",
+					name:    "DecodeDeBruijnWithContext",
+					decodes: true,
 					run: func() (int, error) {
 						decoded, err := DecodeDeBruijnWithContext(encoded, context)
 						if err != nil {
@@ -435,8 +446,12 @@ func TestContextualValidationConstrFieldLimit(t *testing.T) {
 				t.Run(entryPoint.name, func(t *testing.T) {
 					gotFields, err := entryPoint.run()
 					if tt.wantErr != "" {
-						if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-							t.Fatalf("error = %v, want %q", err, tt.wantErr)
+						want := tt.wantErr
+						if entryPoint.decodes {
+							want = tt.wantDecodeErr
+						}
+						if err == nil || !strings.Contains(err.Error(), want) {
+							t.Fatalf("error = %v, want %q", err, want)
 						}
 						return
 					}
