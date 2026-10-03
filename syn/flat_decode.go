@@ -14,6 +14,34 @@ import (
 	"github.com/blinklabs-io/plutigo/lang"
 )
 
+// Default resource bounds for untrusted programs, applied to both the FLAT
+// decoder and the text parser before the protocol's own limits are known. They
+// sit far above any script a transaction can carry, so they only stop inputs
+// that would otherwise allocate in proportion to attacker-chosen counts.
+const (
+	// maxInputBytes bounds the encoded or textual size of a program.
+	maxInputBytes = 16 << 20
+	// maxProgramNodes bounds the terms plus constant list items of a program.
+	maxProgramNodes = 1 << 20
+	// maxCollectionWidth bounds the fields of a constr, the branches of a
+	// case and the items of a constant list.
+	maxCollectionWidth = 1 << 16
+)
+
+func errTooMany(what string, limit int) error {
+	return fmt.Errorf("too many %s: limit is %d", what, limit)
+}
+
+// constrFieldLimit returns the widest constr the protocol admits. The
+// protocol bound is enforced while decoding so an over-wide field list is
+// rejected before it is allocated.
+func constrFieldLimit(protocolMajor uint) int {
+	if protocolMajor >= builtin.VanRossemProtoVersion {
+		return maxConstrFieldsPV11
+	}
+	return maxCollectionWidth
+}
+
 const (
 	decodeTermChunkSize  = 384
 	decodeRetainVarCap   = 16
@@ -137,6 +165,9 @@ func decodeProgramVersion(
 	d *decoder,
 	context *ProgramContext,
 ) (lang.LanguageVersion, error) {
+	if len(d.buffer) > maxInputBytes {
+		return lang.LanguageVersion{}, errors.New("input too large")
+	}
 	major, err := d.word()
 	if err != nil {
 		return lang.LanguageVersion{}, err
@@ -158,6 +189,7 @@ func decodeProgramVersion(
 		if err := validateLedgerLanguageAvailability(*context); err != nil {
 			return lang.LanguageVersion{}, err
 		}
+		d.maxConstrFields = constrFieldLimit(context.ProtocolMajor)
 	}
 	return version, nil
 }
@@ -174,6 +206,9 @@ func decodeTermDeBruijnWithArena(
 	// runtime's panic/defer machinery, which measured ~39% of decode time.
 	if depth >= maxFlatDecodeDepth {
 		return nil, errors.New("term nesting too deep")
+	}
+	if err := d.node(); err != nil {
+		return nil, err
 	}
 
 	tag, err := d.bits4()
@@ -239,7 +274,9 @@ func decodeTermDeBruijnWithArena(
 		if err != nil {
 			return nil, err
 		}
-		fields, err := decodeTermListDeBruijnWithArena(d, arena, consts, depth+1)
+		fields, err := decodeTermListDeBruijnWithArena(
+			d, arena, consts, depth+1, d.maxConstrFields,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -249,7 +286,9 @@ func decodeTermDeBruijnWithArena(
 		if err != nil {
 			return nil, err
 		}
-		branches, err := decodeTermListDeBruijnWithArena(d, arena, consts, depth+1)
+		branches, err := decodeTermListDeBruijnWithArena(
+			d, arena, consts, depth+1, maxCollectionWidth,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -264,6 +303,9 @@ func decodeTermWithArena[T Binder](d *decoder, arena *termArena[T]) (Term[T], er
 		return nil, err
 	}
 	defer d.leave()
+	if err := d.node(); err != nil {
+		return nil, err
+	}
 
 	tag, e := d.bits4()
 	if e != nil {
@@ -345,7 +387,7 @@ func decodeTermWithArena[T Binder](d *decoder, arena *termArena[T]) (Term[T], er
 			return nil, err
 		}
 
-		fields, err := decodeTermListWithArena(d, arena)
+		fields, err := decodeTermListWithArena(d, arena, d.maxConstrFields)
 		if err != nil {
 			return nil, err
 		}
@@ -357,7 +399,7 @@ func decodeTermWithArena[T Binder](d *decoder, arena *termArena[T]) (Term[T], er
 			return nil, err
 		}
 
-		branches, err := decodeTermListWithArena(d, arena)
+		branches, err := decodeTermListWithArena(d, arena, maxCollectionWidth)
 		if err != nil {
 			return nil, err
 		}
@@ -370,7 +412,11 @@ func decodeTermWithArena[T Binder](d *decoder, arena *termArena[T]) (Term[T], er
 	return term, nil
 }
 
-func decodeTermListWithArena[T Binder](d *decoder, arena *termArena[T]) ([]Term[T], error) {
+func decodeTermListWithArena[T Binder](
+	d *decoder,
+	arena *termArena[T],
+	maxWidth int,
+) ([]Term[T], error) {
 	result := arena.allocTermList(4)[:0]
 
 	for {
@@ -380,6 +426,9 @@ func decodeTermListWithArena[T Binder](d *decoder, arena *termArena[T]) ([]Term[
 		}
 		if !bit {
 			break
+		}
+		if len(result) >= maxWidth {
+			return nil, errTooMany("term list items", maxWidth)
 		}
 		item, err := decodeTermWithArena(d, arena)
 		if err != nil {
@@ -396,6 +445,7 @@ func decodeTermListDeBruijnWithArena(
 	arena *termArena[DeBruijn],
 	consts *constantArena,
 	depth int,
+	maxWidth int,
 ) ([]Term[DeBruijn], error) {
 	var result []Term[DeBruijn]
 
@@ -409,6 +459,9 @@ func decodeTermListDeBruijnWithArena(
 				return emptyDeBruijnTermList, nil
 			}
 			return result, nil
+		}
+		if len(result) >= maxWidth {
+			return nil, errTooMany("term list items", maxWidth)
 		}
 		if result == nil {
 			result = arena.allocTermList(4)[:0]
@@ -1085,6 +1138,12 @@ func decodeConstantListWithArena(
 			}
 			return result, nil
 		}
+		if len(result) >= maxCollectionWidth {
+			return nil, errTooMany("constant list items", maxCollectionWidth)
+		}
+		if err := d.node(); err != nil {
+			return nil, err
+		}
 		if result == nil {
 			result = arena.allocList(4)[:0]
 		}
@@ -1453,6 +1512,12 @@ func DecodeList[T any](
 		if !bit {
 			break
 		}
+		if len(result) >= maxCollectionWidth {
+			return nil, errTooMany("constant list items", maxCollectionWidth)
+		}
+		if err := d.node(); err != nil {
+			return nil, err
+		}
 		item, err := decoderFunc(d)
 		if err != nil {
 			return nil, err
@@ -1479,22 +1544,30 @@ type decoder struct {
 	usedBits int64
 	pos      int
 	depth    int
+	// nodes counts the terms and constant list items decoded so far.
+	nodes int
+	// maxConstrFields is the widest constr field list accepted.
+	maxConstrFields int
 }
 
 func newDecoder(bytes []byte) *decoder {
-	return &decoder{
-		buffer:   bytes,
-		usedBits: 0,
-		pos:      0,
-		depth:    0,
-	}
+	d := &decoder{}
+	d.reset(bytes)
+	return d
 }
 
 func (d *decoder) reset(bytes []byte) {
-	d.buffer = bytes
-	d.usedBits = 0
-	d.pos = 0
-	d.depth = 0
+	*d = decoder{buffer: bytes, maxConstrFields: maxCollectionWidth}
+}
+
+// node charges one term or constant list item against the program's node
+// budget.
+func (d *decoder) node() error {
+	d.nodes++
+	if d.nodes > maxProgramNodes {
+		return errors.New("program has too many nodes")
+	}
+	return nil
 }
 
 // enter records descent into a nested term and fails if the nesting limit is

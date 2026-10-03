@@ -134,8 +134,7 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 			if !supportsConstructors(program.Version) {
 				return fmt.Errorf("constr is not available in UPLC version %s", formatVersion(program.Version))
 			}
-			if context.ProtocolMajor >= builtin.VanRossemProtoVersion &&
-				len(t.Fields) > maxConstrFieldsPV11 {
+			if len(t.Fields) > constrFieldLimit(context.ProtocolMajor) {
 				return fmt.Errorf(
 					"constr with %d fields is not available in protocol version %d",
 					len(t.Fields),
@@ -175,7 +174,9 @@ func DecodeWithContext[T Binder](bytes []byte, context ProgramContext) (*Program
 // ParseWithContext parses and validates a textual UPLC program against the
 // selected ledger language and protocol version.
 func ParseWithContext(input string, context ProgramContext) (*Program[Name], error) {
-	program, err := Parse(input)
+	p := NewParser(input)
+	p.maxConstrFields = constrFieldLimit(context.ProtocolMajor)
+	program, err := p.ParseProgram()
 	if err != nil {
 		return nil, err
 	}

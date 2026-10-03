@@ -33,16 +33,16 @@ func convertNameProgram[T any](
 	}, nil
 }
 
+// converter resolves names to De Bruijn indices in constant time: it records,
+// for each Unique bound by an enclosing lambda, the binding depth, so a lookup
+// is one map access regardless of nesting.
 type converter struct {
-	scopes []map[Unique]struct{}
+	depth  int
+	levels map[Unique]int
 }
 
 func newConverter() *converter {
-	return &converter{
-		scopes: []map[Unique]struct{}{
-			make(map[Unique]struct{}),
-		},
-	}
+	return &converter{levels: make(map[Unique]int)}
 }
 
 func nameToIndex[T any](
@@ -72,23 +72,23 @@ func nameToIndex[T any](
 			Term: inner,
 		}
 	case *Lambda[Name]:
-		c.declareUnique(t.ParameterName.Unique)
+		shadowed, wasBound := c.bind(t.ParameterName.Unique)
 
 		index, err := c.getIndex(&t.ParameterName)
 		if err != nil {
 			return nil, err
 		}
 
-		c.startScope()
+		c.depth++
 
 		body, err := nameToIndex(c, t.Body, convertName)
 		if err != nil {
 			return nil, err
 		}
 
-		c.endScope()
+		c.depth--
 
-		c.removeUnique(t.ParameterName.Unique)
+		c.unbind(t.ParameterName.Unique, shadowed, wasBound)
 
 		converted = &Lambda[T]{
 			ParameterName: convertName(t.ParameterName.Text, index),
@@ -169,27 +169,27 @@ func nameToIndex[T any](
 }
 
 func (c *converter) getIndex(name *Name) (DeBruijn, error) {
-	for i := len(c.scopes) - 1; i >= 0; i-- {
-		if _, ok := c.scopes[i][name.Unique]; ok {
-			return DeBruijn(len(c.scopes) - 1 - i), nil
-		}
+	level, ok := c.levels[name.Unique]
+	if !ok {
+		return 0, errors.New("FreeUnique")
 	}
 
-	return 0, errors.New("FreeUnique")
+	return DeBruijn(c.depth - level), nil
 }
 
-func (c *converter) declareUnique(unique Unique) {
-	c.scopes[len(c.scopes)-1][unique] = struct{}{}
+// bind makes unique visible at the current depth and returns the binding it
+// shadows, to be passed to unbind.
+func (c *converter) bind(unique Unique) (shadowed int, wasBound bool) {
+	shadowed, wasBound = c.levels[unique]
+	c.levels[unique] = c.depth
+
+	return shadowed, wasBound
 }
 
-func (c *converter) removeUnique(unique Unique) {
-	delete(c.scopes[len(c.scopes)-1], unique)
-}
-
-func (c *converter) startScope() {
-	c.scopes = append(c.scopes, make(map[Unique]struct{}))
-}
-
-func (c *converter) endScope() {
-	c.scopes = c.scopes[:len(c.scopes)-1]
+func (c *converter) unbind(unique Unique, shadowed int, wasBound bool) {
+	if wasBound {
+		c.levels[unique] = shadowed
+	} else {
+		delete(c.levels, unique)
+	}
 }
