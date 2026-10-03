@@ -9,9 +9,11 @@ import (
 	"github.com/blinklabs-io/plutigo/lang"
 )
 
-func valueDataProgram(t *testing.T, valueText string) string {
-	t.Helper()
-	return `(program 1.3.0 (con data (V ` + valueText + `)))`
+// valuePrograms wraps a Value literal in each text form that parses one: a
+// data Value and a builtin value constant.
+var valuePrograms = map[string]func(valueText string) string{
+	"data": func(v string) string { return `(program 1.3.0 (con data (V ` + v + `)))` },
+	"con":  func(v string) string { return `(program 1.3.0 (con value ` + v + `))` },
 }
 
 func TestParsePlutusValueCanonicalForm(t *testing.T) {
@@ -28,13 +30,15 @@ func TestParsePlutusValueCanonicalForm(t *testing.T) {
 		"min quantity": `[(#aa, [(#bb, ` + minQty + `)])]`,
 		"ascending":    `[(#aa, [(#01, 1), (#02, -1)]), (#bb, [(#01, 1)])]`,
 	}
-	for name, text := range valid {
-		t.Run("accepts "+name, func(t *testing.T) {
-			t.Parallel()
-			if _, err := Parse(valueDataProgram(t, text)); err != nil {
-				t.Fatalf("Parse: %v", err)
-			}
-		})
+	for form, program := range valuePrograms {
+		for name, text := range valid {
+			t.Run(form+"/accepts "+name, func(t *testing.T) {
+				t.Parallel()
+				if _, err := Parse(program(text)); err != nil {
+					t.Fatalf("Parse: %v", err)
+				}
+			})
+		}
 	}
 
 	invalid := map[string]string{
@@ -49,13 +53,15 @@ func TestParsePlutusValueCanonicalForm(t *testing.T) {
 		"quantity above range":  `[(#aa, [(#bb, ` + pastMax + `)])]`,
 		"quantity below range":  `[(#aa, [(#bb, ` + pastMin + `)])]`,
 	}
-	for name, text := range invalid {
-		t.Run("rejects "+name, func(t *testing.T) {
-			t.Parallel()
-			if _, err := Parse(valueDataProgram(t, text)); err == nil {
-				t.Fatal("Parse accepted a non-canonical Value")
-			}
-		})
+	for form, program := range valuePrograms {
+		for name, text := range invalid {
+			t.Run(form+"/rejects "+name, func(t *testing.T) {
+				t.Parallel()
+				if _, err := Parse(program(text)); err == nil {
+					t.Fatal("Parse accepted a non-canonical Value")
+				}
+			})
+		}
 	}
 }
 
