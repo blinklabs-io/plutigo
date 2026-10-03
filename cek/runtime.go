@@ -240,6 +240,12 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			),
 		}
 	}
+	if m.metrics != nil {
+		before := m.ExBudget
+		value, err := fn(m, b)
+		m.recordBuiltin(b.Func, before)
+		return value, normalizeBuiltinError(b.Func.String(), err)
+	}
 	value, err := fn(m, b)
 	return value, normalizeBuiltinError(b.Func.String(), err)
 }

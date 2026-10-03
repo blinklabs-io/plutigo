@@ -102,6 +102,7 @@ type Machine[T syn.Eval] struct {
 	readyBuiltinArgs BuiltinArgs[T]
 	frameStack       []stackFrame[T]
 	frameStackUsed   int
+	metrics          *Metrics
 	unbudgetedSteps  [9]uint32
 	unbudgetedTotal  uint32
 
@@ -664,6 +665,10 @@ func (m *Machine[T]) putFrameCases(f *FrameCases[T]) {
 // The second argument is slippage, which controls batched budget checking.
 // Protocol-version-dependent semantics and builtin availability come from
 // evalContext.ProtoMajor, not from slippage.
+//
+// NewMachine panics if evalContext is nil or carries machine costs that would
+// not deplete the budget. Build the context with [NewEvalContext], or with
+// [NewDefaultEvalContext] where the default cost model is intended.
 func NewMachine[T syn.Eval](
 	version lang.LanguageVersion,
 	slippage uint32,
@@ -679,11 +684,10 @@ func NewMachine[T syn.Eval](
 		)
 	}
 	if evalContext == nil {
-		// Use the default V3 cost models and semantics variant if no eval context is provided
-		evalContext = &EvalContext{
-			CostModel:        DefaultCostModel,
-			SemanticsVariant: SemanticsVariantC,
-		}
+		panic("cek.NewMachine requires a non-nil EvalContext")
+	}
+	if err := evalContext.CostModel.machineCosts.validate(); err != nil {
+		panic(fmt.Sprintf("cek.NewMachine: invalid cost model: %v", err))
 	}
 	stepCosts := [9]ExBudget{
 		evalContext.CostModel.machineCosts.get(ExConstant),
@@ -1053,9 +1057,15 @@ func (m *Machine[T]) runContext(
 	}
 	runValueArenaChunkSize := m.valueArenaChunkSize
 	m.Logs = m.Logs[:0]
+	if m.metrics != nil {
+		*m.metrics = Metrics{}
+	}
 	clear(m.unbudgetedSteps[:])
 	m.unbudgetedTotal = 0
 	defer func() {
+		if m.metrics != nil {
+			m.metrics.MaxStackDepth = m.frameStackUsed
+		}
 		nextChunkSize := nextValueArenaChunkSize(m.valueArenaHighWatermark())
 		m.lastRunEnvHighWatermark = m.envChunkPos
 		m.lastRunRemaining = m.ExBudget
@@ -1081,7 +1091,10 @@ func (m *Machine[T]) runContext(
 	if err := m.spendBudget(startupBudget); err != nil {
 		return nil, err
 	}
-	if m.slippage <= 1 {
+	// The DeBruijn fast path charges steps without counting them, so a metered
+	// machine runs the generic loop, which charges each step in order exactly
+	// as the unbatched path does.
+	if m.slippage <= 1 && m.metrics == nil {
 		dbMachine := (*Machine[syn.DeBruijn])(unsafe.Pointer(m))
 		dbTerm, ok := any(term).(syn.Term[syn.DeBruijn])
 		if !ok {
@@ -2228,6 +2241,9 @@ func withEnv[T syn.Eval](
 }
 
 func (m *Machine[T]) stepAndMaybeSpend(step StepKind) error {
+	if m.metrics != nil {
+		m.metrics.Steps[step]++
+	}
 	if m.slippage <= 1 {
 		memCost := m.stepCostMem[step]
 		cpuCost := m.stepCostCpu[step]

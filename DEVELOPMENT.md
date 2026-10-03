@@ -412,8 +412,10 @@ if err != nil {
     return err
 }
 
-// Create machine and run
-machine := cek.NewMachine[syn.DeBruijn](dbProgram.Version, 0, nil)
+// Create machine and run. The ledger language and protocol version come from
+// the caller, not from the program header.
+evalCtx := cek.NewDefaultEvalContext(language, cek.ProtoVersion{Major: 11})
+machine := cek.NewMachine[syn.DeBruijn](language, 0, evalCtx)
 machine.ExBudget = cek.ExBudget{Cpu: 10_000_000, Mem: 1_000_000}
 
 result, err := machine.Run(dbProgram.Term)

@@ -26,7 +26,7 @@ func envValueInt(t *testing.T, value Value[syn.DeBruijn]) int64 {
 func TestEnvLookupEveryIndexEveryDepth(t *testing.T) {
 	const maxDepth = 1100
 
-	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 	var arenaEnv, heapEnv *Env[syn.DeBruijn]
 	for depth := 1; depth <= maxDepth; depth++ {
 		value := int64Constant(int64(depth))
@@ -98,14 +98,14 @@ func TestEnvLookupMixedLiteralAndIndexedNodes(t *testing.T) {
 // evaluation that used them, or a later Machine would read stale bindings and
 // the pool would pin the old graph.
 func TestReleasedEnvChunksAreCleared(t *testing.T) {
-	released := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	released := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 	var env *Env[syn.DeBruijn]
 	for i := range envFirstChunkSize * 8 {
 		env = released.extendEnv(env, int64Constant(int64(i)))
 	}
 	released.dropEnvArena()
 
-	reused := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	reused := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 	reused.takePooledEnvChunks()
 	if len(reused.envChunks) == 0 {
 		t.Skip("envChunkPool was emptied by a GC cycle")

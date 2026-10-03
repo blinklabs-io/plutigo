@@ -106,12 +106,13 @@ import (
 	"fmt"
 
 	"github.com/blinklabs-io/plutigo/cek"
+	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
 func main() {
 	input := `
-	(program 1.2.0
+	(program 1.1.0
 	  [
 	    [
 	      (builtin addInteger)
@@ -122,31 +123,39 @@ func main() {
 	)
 	`
 
-	pprogram, _ := syn.Parse(input)
-
-	program, _ := syn.NameToDeBruijn(pprogram)
-
-	// Create a machine using the default cost model at protocol major 200.
+	// The ledger language and protocol version come from the caller, not from
+	// the program header. EvaluateText validates the program for them before it
+	// evaluates anything.
 	evalCtx := cek.NewDefaultEvalContext(
-		program.Version,
-		cek.ProtoVersion{Major: 200},
+		lang.LanguageVersionV3,
+		cek.ProtoVersion{Major: 11},
 	)
-	machine := cek.NewMachine[syn.DeBruijn](program.Version, 0, evalCtx)
+	term, consumed, err := cek.EvaluateText(
+		context.Background(),
+		input,
+		lang.LanguageVersionV3,
+		evalCtx,
+		cek.DefaultExBudget,
+	)
+	if err != nil {
+		panic(err)
+	}
 
-	runCtx := context.Background()
-	term, _ := machine.RunContext(runCtx, program.Term)
-
-	prettyTerm := syn.PrettyTerm[syn.DeBruijn](term)
-
-	fmt.Println(prettyTerm) // Output: (con integer 2)
+	fmt.Println(syn.PrettyTerm[syn.DeBruijn](term)) // Output: (con integer 2)
+	fmt.Println(consumed.Cpu, consumed.Mem)
 }
 ```
 
-Pass the caller's `context.Context` as `runCtx` when it has a cancellation
-scope. Cancellation is cooperative and synchronous: the call returns only
-after CEK evaluation and result discharge have stopped, and it does not start
-an evaluator goroutine. A builtin already executing must return before the
+Pass the caller's `context.Context` when it has a cancellation scope.
+Cancellation is cooperative and synchronous: the call returns only after CEK
+evaluation and result discharge have stopped, and it does not start an
+evaluator goroutine. A builtin already executing must return before the
 machine can observe cancellation.
+
+For FLAT-encoded scripts, decode with `syn.DecodeDeBruijnForExecution` and run
+the term on a `cek.NewMachine`, which requires an explicit `EvalContext`. See
+the [consumer guide](docs/consumer-guide.md) for protocol versions, budgets,
+errors, metrics and PlutusData JSON, with runnable examples.
 
 ## Plutus Version Support
 
@@ -158,7 +167,7 @@ plutigo supports all major Plutus protocol versions:
 - Plutus V4 (1.3.0+): Initial evaluator support with the published V4 cost model parameters
 
 The library selects cost models and builtin behavior from the Plutus ledger
-language supplied to `NewMachine` and the evaluation context. On-chain callers
+language supplied by the caller and the evaluation context. On-chain callers
 must use the ledger language rather than infer it from the UPLC program header.
 
 ## Development

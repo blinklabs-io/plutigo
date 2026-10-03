@@ -87,7 +87,7 @@ func TestEd25519VerifyCacheConcurrentAccess(t *testing.T) {
 				// Can't call t.Fatal from goroutine; just return.
 				return
 			}
-			m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+			m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 			for i := 0; i < 300; i++ {
 				msg := make([]byte, 8)
 				msg[0] = byte(g)
@@ -167,7 +167,7 @@ func TestSharedDynamicIntCacheConcurrentAccess(t *testing.T) {
 		g := g
 		go func() {
 			defer wg.Done()
-			m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+			m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 			for i := 0; i < 500; i++ {
 				v := base + int64(g*500+i)
 				_ = m.int64Constant(v)

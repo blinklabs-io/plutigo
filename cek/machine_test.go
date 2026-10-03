@@ -22,14 +22,14 @@ func (unsupportedDischargeValue) isValue() {}
 
 func TestSmokeBuild(t *testing.T) {
 	// Ensure the package builds and a CEK machine can be allocated.
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 	if m == nil {
 		t.Fatal("NewMachine returned nil")
 	}
 }
 
 func TestNewMachine(t *testing.T) {
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 	if m == nil {
 		t.Fatal("expected machine, got nil")
 	}
@@ -47,14 +47,14 @@ func TestNewMachineSharesImmutableBuiltinPrototypes(t *testing.T) {
 		lang.LanguageVersionV4,
 	}
 	for _, version := range versions {
-		first := NewMachine[syn.DeBruijn](version, 0, nil)
-		second := NewMachine[syn.DeBruijn](version, 0, nil)
+		first := NewMachine[syn.DeBruijn](version, 0, testEvalContext())
+		second := NewMachine[syn.DeBruijn](version, 0, testEvalContext())
 		if first.builtinNoArgValues != second.builtinNoArgValues {
 			t.Fatalf("version %v machines do not share builtin prototypes", version)
 		}
 	}
 
-	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 	prototype := machine.builtinNoArgValues[builtin.AddInteger][0]
 	want := *prototype
 	arg := &Constant{Constant: &syn.Integer{Inner: big.NewInt(1)}}
@@ -69,7 +69,7 @@ func TestNewMachineSharesImmutableBuiltinPrototypes(t *testing.T) {
 }
 
 func TestRunConstant(t *testing.T) {
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 
 	// construct a simple constant term (integer)
 	term := &syn.Constant{
@@ -86,7 +86,7 @@ func TestRunConstant(t *testing.T) {
 }
 
 func TestRunReturnsIndependentConstantTerms(t *testing.T) {
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 	term := &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(42)}}
 
 	first, err := m.Run(term)
@@ -129,7 +129,7 @@ func TestRunReturnsIndependentConstantTerms(t *testing.T) {
 }
 
 func TestRunResetsEnvArena(t *testing.T) {
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 
 	dbProgram, err := syn.NameToDeBruijn(buildLambdaChainProgram(envChunkSize + 1))
 	if err != nil {
@@ -157,7 +157,7 @@ func TestRunResetsEnvArena(t *testing.T) {
 // previous evaluation's graph until its next Run call, pinning arbitrarily
 // large script sub-trees the caller may have already dropped.
 func TestRunClearsRetainedArenaReferencesAfterReturn(t *testing.T) {
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 
 	// envChunkSize+1 forces env arena extension past a single chunk while
 	// also populating lambda, constant, and elem arenas through the apply
@@ -249,7 +249,7 @@ func TestRunKeepsSmallReusedValueArenaCold(t *testing.T) {
 		{
 			name: "single lambda reuse",
 			setup: func() *Machine[syn.DeBruijn] {
-				return NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+				return NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 			},
 			term:               term,
 			wantChunkSize:      valueColdChunkSize,
@@ -287,7 +287,7 @@ func TestRunKeepsSmallReusedValueArenaCold(t *testing.T) {
 }
 
 func TestRunStackLambdaImmediateFastPathSkipsLambdaArena(t *testing.T) {
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 2, nil)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 2, testEvalContext())
 	term := &syn.Apply[syn.DeBruijn]{
 		Function: &syn.Lambda[syn.DeBruijn]{
 			ParameterName: syn.DeBruijn(0),
@@ -360,7 +360,7 @@ func TestRunFlushesSuccessfulFinalSlippageBatch(t *testing.T) {
 }
 
 func TestResetEnvArenaRetainsOnlyTrackedChunkHeaders(t *testing.T) {
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 
 	usedChunks := envRetainChunkCap + 2
 	for i := 0; i < envChunkSize*usedChunks; i++ {
@@ -472,7 +472,7 @@ func TestLookupEnvUsesOneIndexedDepth(t *testing.T) {
 func TestLookupEnvIndexedAtMaximumDepth(t *testing.T) {
 	const depth = 100_000
 
-	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 	var env *Env[syn.DeBruijn]
 	for i := 1; i <= depth; i++ {
 		env = machine.extendEnv(env, int64Constant(int64(i)))
@@ -540,7 +540,7 @@ func TestNewMachinePanicsForNonDeBruijnEval(t *testing.T) {
 }
 
 func TestRunResetsTransientStateAcrossInvocations(t *testing.T) {
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 	initialBudget := ExBudget{Mem: 100_000, Cpu: 1_000_000}
 	m.ExBudget = initialBudget
 
@@ -571,7 +571,7 @@ func TestRunResetsTransientStateAcrossInvocations(t *testing.T) {
 }
 
 func TestRunUsesUpdatedBudgetOverrideOnReuse(t *testing.T) {
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 
 	term := &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(7)}}
 	firstBudget := ExBudget{Mem: 100_000, Cpu: 1_000_000}
@@ -592,7 +592,7 @@ func TestRunUsesUpdatedBudgetOverrideOnReuse(t *testing.T) {
 }
 
 func TestRunResetsFrameStackAcrossInvocations(t *testing.T) {
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 
 	identity := &syn.Lambda[syn.DeBruijn]{
 		ParameterName: syn.DeBruijn(0),

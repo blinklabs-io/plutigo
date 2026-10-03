@@ -72,6 +72,9 @@ func costModelFromList(
 			}
 		}
 	}
+	if err := cm.machineCosts.validate(); err != nil {
+		return CostModel{}, err
+	}
 	return cm.withCostCaches(), nil
 }
 
@@ -98,6 +101,9 @@ func costModelFromMap(
 				return cm, err
 			}
 		}
+	}
+	if err := cm.machineCosts.validate(); err != nil {
+		return CostModel{}, err
 	}
 	return cm.withCostCaches(), nil
 }

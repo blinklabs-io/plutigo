@@ -55,7 +55,8 @@ The CEK machine that executes UPLC programs.
 ```go
 program, _ := syn.Parse(input)
 dbProgram, _ := syn.NameToDeBruijn(program)
-machine := cek.NewMachine[syn.DeBruijn](dbProgram.Version, 0, nil)
+evalCtx := cek.NewDefaultEvalContext(language, cek.ProtoVersion{Major: 11})
+machine := cek.NewMachine[syn.DeBruijn](language, 0, evalCtx)
 result, _ := machine.Run(dbProgram.Term)
 ```
 
@@ -251,7 +252,7 @@ The machine has three components:
 Scripts can emit log messages using the Plutus `trace` builtin. These are captured in `machine.Logs`:
 
 ```go
-machine := cek.NewMachine[syn.DeBruijn](version, 0, nil)
+machine := cek.NewMachine[syn.DeBruijn](version, 0, evalCtx)
 result, _ := machine.Run(term)
 for _, log := range machine.Logs {
     fmt.Println(log)  // Logs emitted by trace builtin
@@ -303,7 +304,8 @@ func EvaluateScript(uplcHex string, budget cek.ExBudget) (cek.Value, error) {
     }
 
     // Create machine with budget
-    machine := cek.NewMachine[syn.DeBruijn](program.Version, 0, nil)
+    evalCtx := cek.NewDefaultEvalContext(language, cek.ProtoVersion{Major: 11})
+    machine := cek.NewMachine[syn.DeBruijn](language, 0, evalCtx)
     machine.ExBudget = budget
 
     // Evaluate

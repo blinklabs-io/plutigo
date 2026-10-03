@@ -3,6 +3,7 @@
 package replay
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -98,25 +99,30 @@ type Expected struct {
 }
 
 type decodedCase struct {
-	program   *syn.Program[syn.DeBruijn]
-	arguments []data.PlutusData
+	program     *syn.Program[syn.DeBruijn]
+	arguments   []data.PlutusData
+	evalContext *cek.EvalContext
 }
 
-func LoadFile(path string) (*Corpus, error) {
+// LoadFile loads and validates the corpus at path. Loading stops with the
+// context's error once ctx is canceled.
+func LoadFile(ctx context.Context, path string) (*Corpus, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open replay corpus: %w", err)
 	}
 	defer f.Close()
 
-	corpus, err := Load(f)
+	corpus, err := Load(ctx, f)
 	if err != nil {
 		return nil, fmt.Errorf("load replay corpus %q: %w", path, err)
 	}
 	return corpus, nil
 }
 
-func Load(r io.Reader) (*Corpus, error) {
+// Load decodes and validates a corpus. Validation checks ctx between cases and
+// stops with its error once it is canceled.
+func Load(ctx context.Context, r io.Reader) (*Corpus, error) {
 	decoder := json.NewDecoder(r)
 	decoder.DisallowUnknownFields()
 
@@ -133,18 +139,20 @@ func Load(r io.Reader) (*Corpus, error) {
 		return nil, fmt.Errorf("decode replay corpus trailing data: %w", err)
 	}
 
-	if err := corpus.Validate(); err != nil {
+	if err := corpus.Validate(ctx); err != nil {
 		return nil, err
 	}
 	return &corpus, nil
 }
 
-func (c *Corpus) Validate() error {
-	_, err := c.validateCases()
+// Validate checks the corpus, including that every case's cost model builds
+// into a usable evaluation context. It checks ctx between cases.
+func (c *Corpus) Validate(ctx context.Context) error {
+	_, err := c.validateCases(ctx)
 	return err
 }
 
-func (c *Corpus) validateCases() ([]decodedCase, error) {
+func (c *Corpus) validateCases(ctx context.Context) ([]decodedCase, error) {
 	if c == nil {
 		return nil, errors.New("replay corpus is required")
 	}
@@ -173,6 +181,9 @@ func (c *Corpus) validateCases() ([]decodedCase, error) {
 	ids := make(map[string]struct{}, len(c.Cases))
 	decodedCases := make([]decodedCase, len(c.Cases))
 	for i := range c.Cases {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("validate replay corpus: %w", err)
+		}
 		replayCase := &c.Cases[i]
 		decoded, err := replayCase.validate()
 		if err != nil {
@@ -271,9 +282,27 @@ func (c *Case) validate() (decodedCase, error) {
 			"expected execution units exceed the budget limit",
 		)
 	}
+	protoVersion := cek.ProtoVersion{
+		Major: c.ProtocolVersion.Major,
+		Minor: c.ProtocolVersion.Minor,
+	}
+	var evalContext *cek.EvalContext
+	if c.CostModel.UseDefault {
+		evalContext = cek.NewDefaultEvalContext(languageVersion, protoVersion)
+	} else {
+		evalContext, err = cek.NewEvalContext(
+			languageVersion,
+			protoVersion,
+			c.CostModel.Parameters,
+		)
+		if err != nil {
+			return decodedCase{}, fmt.Errorf("build evaluation context: %w", err)
+		}
+	}
 	return decodedCase{
-		program:   program,
-		arguments: arguments,
+		program:     program,
+		arguments:   arguments,
+		evalContext: evalContext,
 	}, nil
 }
 

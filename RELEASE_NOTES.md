@@ -9,6 +9,27 @@
   Haskell Plutus implementation. Consumers that enabled the removed option
   must stop doing so; retaining the option could accept scripts whose declared
   execution budget the reference ledger rejects.
+* `cek.NewMachine` panics on a nil `EvalContext` instead of selecting the
+  default cost model and semantics, and on an `EvalContext` whose machine costs
+  would not deplete the budget. Build the context with `cek.NewEvalContext`, or
+  `cek.NewDefaultEvalContext` where the default cost model is intended.
+* `cek.NewEvalContext` rejects a cost model whose recurring step costs are not
+  positive or whose startup cost is negative. Builtin and step costs now
+  saturate at the int64 bounds instead of wrapping.
+* In `replay`, `Load`, `LoadFile`, `Corpus.Validate` and `RunCase` take a
+  `context.Context`, and `Run` takes a `Limits` value (`DefaultLimits()`) that
+  caps each case's budget limit and the corpus total. Evaluation uses
+  `Machine.RunContext`, so canceling the context stops active evaluation.
+
+### New Features
+
+* Added `cek.EvaluateText`, which validates a textual program for the caller's
+  ledger language and protocol version, applies the execution-time term
+  version gate, and evaluates it.
+* Added opt-in execution metrics: `Machine.EnableMetrics` and
+  `Machine.Metrics` report step counts, maximum stack depth and per-builtin
+  calls and budget.
+* Added a consumer guide (`docs/consumer-guide.md`) with runnable examples.
 
 ## v0.2.0 - mainnet replay tooling, V4 builtin alignment, and runtime improvements
 

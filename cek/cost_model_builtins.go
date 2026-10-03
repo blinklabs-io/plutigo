@@ -1495,7 +1495,7 @@ func (LinearCost) HasConstants() []bool {
 }
 
 func (l LinearCost) Cost(x ExMem) int64 {
-	return l.slope*int64(x) + l.intercept
+	return satAdd(satMul(l.slope, int64(x)), l.intercept)
 }
 
 type DropListCost struct {
@@ -1621,7 +1621,7 @@ type LinearInXAndY struct {
 }
 
 func (l LinearInXAndY) CostTwo(x, y ExMem) int64 {
-	return l.slope1*int64(x) + l.slope2*int64(y) + l.intercept
+	return satAdd(satAdd(satMul(l.slope1, int64(x)), satMul(l.slope2, int64(y))), l.intercept)
 }
 
 func (LinearInXAndY) HasConstants() []bool {
@@ -1636,7 +1636,7 @@ type AddedSizesModel struct {
 }
 
 func (a AddedSizesModel) CostTwo(x, y ExMem) int64 {
-	return a.slope*(int64(x)+int64(y)) + a.intercept
+	return satAdd(satMul(a.slope, satAdd(int64(x), int64(y))), a.intercept)
 }
 
 func (AddedSizesModel) HasConstants() []bool {
@@ -1653,7 +1653,7 @@ type SubtractedSizesModel struct {
 func (s SubtractedSizesModel) CostTwo(x, y ExMem) int64 {
 	diff := max(int64(x)-int64(y), s.minimum)
 
-	return s.slope*diff + s.intercept
+	return satAdd(satMul(s.slope, diff), s.intercept)
 }
 
 func (SubtractedSizesModel) HasConstants() []bool {
@@ -1668,7 +1668,7 @@ type MultipliedSizesModel struct {
 }
 
 func (m MultipliedSizesModel) CostTwo(x, y ExMem) int64 {
-	return m.slope*(int64(x)*int64(y)) + m.intercept
+	return satAdd(satMul(m.slope, satMul(int64(x), int64(y))), m.intercept)
 }
 
 func (MultipliedSizesModel) HasConstants() []bool {
@@ -1688,7 +1688,7 @@ func (m MinSizeModel) CostTwo(x, y ExMem) int64 {
 		min = int64(y)
 	}
 
-	return m.slope*min + m.intercept
+	return satAdd(satMul(m.slope, min), m.intercept)
 }
 
 func (MinSizeModel) HasConstants() []bool {
@@ -1708,7 +1708,7 @@ func (m MaxSizeModel) CostTwo(x, y ExMem) int64 {
 		max = int64(y)
 	}
 
-	return m.slope*max + m.intercept
+	return satAdd(satMul(m.slope, max), m.intercept)
 }
 
 func (MaxSizeModel) HasConstants() []bool {
@@ -1724,7 +1724,7 @@ type LinearOnDiagonalModel struct {
 
 func (l LinearOnDiagonalModel) CostTwo(x, y ExMem) int64 {
 	if int64(x) == int64(y) {
-		return l.slope*int64(x) + l.intercept
+		return satAdd(satMul(l.slope, int64(x)), l.intercept)
 	}
 
 	return l.constant
@@ -1802,7 +1802,7 @@ type QuadraticInYModel struct {
 func (q QuadraticInYModel) CostTwo(x, y ExMem) int64 {
 	yVal := int64(y)
 
-	return q.coeff0 + (q.coeff1 * yVal) + (q.coeff2 * yVal * yVal)
+	return satQuadratic(q.coeff0, q.coeff1, q.coeff2, yVal)
 }
 
 // X is not used so constant
@@ -1819,7 +1819,7 @@ type QuadraticInXModel struct {
 
 func (q QuadraticInXModel) Cost(x ExMem) int64 {
 	xVal := int64(x)
-	return q.coeff0 + (q.coeff1 * xVal) + (q.coeff2 * xVal * xVal)
+	return satQuadratic(q.coeff0, q.coeff1, q.coeff2, xVal)
 }
 
 // X is used for computation
@@ -1840,7 +1840,10 @@ type WithInteractionInXAndY struct {
 
 func (w WithInteractionInXAndY) CostTwo(x, y ExMem) int64 {
 	xVal, yVal := int64(x), int64(y)
-	return w.c00 + w.c01*yVal + w.c10*xVal + w.c11*xVal*yVal
+	return satAdd(
+		satAdd(w.c00, satMul(w.c01, yVal)),
+		satAdd(satMul(w.c10, xVal), satMul(w.c11, satMul(xVal, yVal))),
+	)
 }
 
 func (WithInteractionInXAndY) HasConstants() []bool {
@@ -1861,12 +1864,11 @@ func (c ConstAboveDiagonalIntoQuadraticXAndYModel) CostTwo(x, y ExMem) int64 {
 	}
 
 	xVal, yVal := int64(x), int64(y)
-	result := c.coeff00 +
-		c.coeff10*xVal +
-		c.coeff01*yVal +
-		c.coeff20*xVal*xVal +
-		c.coeff11*xVal*yVal +
-		c.coeff02*yVal*yVal
+	result := satAdd(c.coeff00, satMul(c.coeff10, xVal))
+	result = satAdd(result, satMul(c.coeff01, yVal))
+	result = satAdd(result, satMul(c.coeff20, satMul(xVal, xVal)))
+	result = satAdd(result, satMul(c.coeff11, satMul(xVal, yVal)))
+	result = satAdd(result, satMul(c.coeff02, satMul(yVal, yVal)))
 
 	if result < c.minimum {
 		return c.minimum
@@ -1913,7 +1915,7 @@ type ThreeAddedSizesModel struct {
 }
 
 func (a ThreeAddedSizesModel) CostThree(x, y, z ExMem) int64 {
-	return a.slope*(int64(x)+int64(y)+int64(z)) + a.intercept
+	return satAdd(satMul(a.slope, satAdd(satAdd(int64(x), int64(y)), int64(z))), a.intercept)
 }
 
 func (ThreeAddedSizesModel) HasConstants() []bool {
@@ -1979,7 +1981,7 @@ type ThreeQuadraticInZ struct {
 func (q ThreeQuadraticInZ) CostThree(x, y, z ExMem) int64 {
 	zVal := int64(z)
 
-	return q.coeff0 + (q.coeff1 * zVal) + (q.coeff2 * zVal * zVal)
+	return satQuadratic(q.coeff0, q.coeff1, q.coeff2, zVal)
 }
 
 func (ThreeQuadraticInZ) HasConstants() []bool {
@@ -1995,7 +1997,7 @@ type ThreeLiteralInYorLinearInZ struct {
 
 func (l ThreeLiteralInYorLinearInZ) CostThree(x, y, z ExMem) int64 {
 	if int64(y) == 0 {
-		return l.slope*int64(z) + l.intercept
+		return satAdd(satMul(l.slope, int64(z)), l.intercept)
 	}
 
 	return int64(y)
@@ -2019,7 +2021,7 @@ func (l ThreeLinearInMaxYZ) CostThree(x, y, z ExMem) int64 {
 		max = int64(z)
 	}
 
-	return l.slope*max + l.intercept
+	return satAdd(satMul(l.slope, max), l.intercept)
 }
 
 // X is not used so constant
@@ -2035,7 +2037,7 @@ type ThreeLinearInYandZ struct {
 }
 
 func (l ThreeLinearInYandZ) CostThree(x, y, z ExMem) int64 {
-	return l.slope1*int64(y) + l.slope2*int64(z) + l.intercept
+	return satAdd(satAdd(satMul(l.slope1, int64(y)), satMul(l.slope2, int64(z))), l.intercept)
 }
 
 // X is not used so constant
@@ -2408,4 +2410,41 @@ func buildBuiltinCosts(
 		}
 	}
 	return costs, nil
+}
+
+// satAdd and satMul saturate at the int64 bounds instead of wrapping, so a
+// cost model whose parameters overflow charges the largest representable cost
+// rather than a small or negative one.
+func satAdd(x, y int64) int64 {
+	sum := x + y
+	if (sum > x) == (y > 0) {
+		return sum
+	}
+	if y < 0 {
+		return math.MinInt64
+	}
+	return math.MaxInt64
+}
+
+func satMul(x, y int64) int64 {
+	if x == 0 || y == 0 {
+		return 0
+	}
+	product := x * y
+	// MinInt64 * -1 wraps to MinInt64, and MinInt64 / -1 does too, so the
+	// division check alone does not see it.
+	if product/y == x && (x != math.MinInt64 || y != -1) {
+		return product
+	}
+	if (x < 0) != (y < 0) {
+		return math.MinInt64
+	}
+	return math.MaxInt64
+}
+
+func satQuadratic(c0, c1, c2, x int64) int64 {
+	return satAdd(
+		satAdd(c0, satMul(c1, x)),
+		satMul(c2, satMul(x, x)),
+	)
 }
