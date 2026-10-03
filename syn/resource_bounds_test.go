@@ -301,11 +301,12 @@ func TestNameToDeBruijnShadowingIndices(t *testing.T) {
 
 // TestNameToDeBruijnLinearInDepth references the outermost binder from the
 // bottom of a deep lambda chain many times. Resolving each reference by
-// walking the enclosing scopes takes well over a minute at this size; a direct
-// lookup takes milliseconds, so the generous bound only trips on the former.
+// walking the enclosing scopes is quadratic and takes over a minute at this
+// size; a direct lookup takes milliseconds, so the bound only trips on the
+// former.
 func TestNameToDeBruijnLinearInDepth(t *testing.T) {
 	t.Parallel()
-	const depth = 40_000
+	const depth = 80_000
 	refs := make([]Term[Name], depth)
 	for i := range refs {
 		refs[i] = &Var[Name]{Name: nameTerm(0)}
@@ -328,5 +329,51 @@ func TestNameToDeBruijnLinearInDepth(t *testing.T) {
 	}
 	if idx := inner.(*Constr[DeBruijn]).Fields[0].(*Var[DeBruijn]).Name; idx != depth {
 		t.Errorf("outermost reference index = %d, want %d", idx, depth)
+	}
+}
+
+// TestFlatDecodeAcceptsTransactionSizedUnitList decodes the widest unit list a
+// 16 KiB script can encode. A unit list item costs one bit, so a width bound
+// near the item count of a transaction-sized script rejects scripts the
+// reference implementation accepts.
+func TestFlatDecodeAcceptsTransactionSizedUnitList(t *testing.T) {
+	t.Parallel()
+	items := make([]IConstant, 16*1024*8)
+	for i := range items {
+		items[i] = &Unit{}
+	}
+	encoded := encodeV110(t, &Constant{Con: &ProtoList{
+		LTyp: &TUnit{}, List: items,
+	}})
+	for path, err := range decodeAll(encoded) {
+		if err != nil {
+			t.Errorf("%s: %v", path, err)
+		}
+	}
+	_, err := DecodeDeBruijnWithContext(encoded, ProgramContext{
+		LedgerLanguage: lang.LanguageVersionV3,
+		ProtocolMajor:  builtin.VanRossemProtoVersion,
+	})
+	if err != nil {
+		t.Errorf("DecodeDeBruijnWithContext: %v", err)
+	}
+}
+
+// TestValidateProgramPrePV11ConstrUnbounded checks that the decoders' default
+// width is not reported as a protocol rule before protocol version 11.
+func TestValidateProgramPrePV11ConstrUnbounded(t *testing.T) {
+	t.Parallel()
+	program := &Program[DeBruijn]{
+		Version: uplcVersion110,
+		Term: &Constr[DeBruijn]{
+			Fields: errorFields(maxCollectionWidth + 1),
+		},
+	}
+	err := ValidateProgram(program, ProgramContext{
+		LedgerLanguage: lang.LanguageVersionV3,
+		ProtocolMajor:  builtin.VanRossemProtoVersion - 1,
+	})
+	if err != nil {
+		t.Errorf("ValidateProgram: %v", err)
 	}
 }

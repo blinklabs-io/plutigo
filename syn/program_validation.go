@@ -134,7 +134,8 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 			if !supportsConstructors(program.Version) {
 				return fmt.Errorf("constr is not available in UPLC version %s", formatVersion(program.Version))
 			}
-			if len(t.Fields) > constrFieldLimit(context.ProtocolMajor) {
+			if context.ProtocolMajor >= builtin.VanRossemProtoVersion &&
+				len(t.Fields) > maxConstrFieldsPV11 {
 				return fmt.Errorf(
 					"constr with %d fields is not available in protocol version %d",
 					len(t.Fields),
