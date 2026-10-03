@@ -1,7 +1,6 @@
 package syn
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"math"
@@ -1217,12 +1216,10 @@ func decodeConstantValue(d *decoder, typ Typ) (IConstant, error) {
 	return constant, nil
 }
 
+// validateValueEntries checks the shape of Value entries and then applies the
+// canonical Value rules shared with the data package.
 func validateValueEntries(entries []IConstant) error {
-	quantityLimit := new(big.Int).Lsh(big.NewInt(1), 127)
-	maxQuantity := new(big.Int).Sub(new(big.Int).Set(quantityLimit), big.NewInt(1))
-	minQuantity := new(big.Int).Neg(new(big.Int).Set(quantityLimit))
-
-	var previousPolicy []byte
+	policies := make([][2]data.PlutusData, len(entries))
 	for policyIndex, entry := range entries {
 		policy, ok := entry.(*ProtoPair)
 		if !ok {
@@ -1232,22 +1229,11 @@ func validateValueEntries(entries []IConstant) error {
 		if !ok {
 			return fmt.Errorf("value policy entry %d has a non-bytestring key", policyIndex)
 		}
-		if len(policyID.Inner) > 32 {
-			return fmt.Errorf("value policy entry %d key exceeds 32 bytes", policyIndex)
-		}
-		if policyIndex > 0 && bytes.Compare(previousPolicy, policyID.Inner) >= 0 {
-			return errors.New("value policy keys must be strictly ascending")
-		}
-
 		tokens, ok := policy.Second.(*ProtoList)
 		if !ok {
 			return fmt.Errorf("value policy entry %d has a non-list payload", policyIndex)
 		}
-		if len(tokens.List) == 0 {
-			return fmt.Errorf("value policy entry %d has no tokens", policyIndex)
-		}
-
-		var previousToken []byte
+		tokenPairs := make([][2]data.PlutusData, len(tokens.List))
 		for tokenIndex, entry := range tokens.List {
 			token, ok := entry.(*ProtoPair)
 			if !ok {
@@ -1257,28 +1243,21 @@ func validateValueEntries(entries []IConstant) error {
 			if !ok {
 				return fmt.Errorf("value token entry %d:%d has a non-bytestring key", policyIndex, tokenIndex)
 			}
-			if len(tokenID.Inner) > 32 {
-				return fmt.Errorf("value token entry %d:%d key exceeds 32 bytes", policyIndex, tokenIndex)
-			}
-			if tokenIndex > 0 && bytes.Compare(previousToken, tokenID.Inner) >= 0 {
-				return errors.New("value token keys must be strictly ascending")
-			}
-
 			quantity, ok := token.Second.(*Integer)
 			if !ok || quantity.Inner == nil {
 				return fmt.Errorf("value token entry %d:%d has a non-integer quantity", policyIndex, tokenIndex)
 			}
-			if quantity.Inner.Sign() == 0 {
-				return fmt.Errorf("value token entry %d:%d has a zero quantity", policyIndex, tokenIndex)
+			tokenPairs[tokenIndex] = [2]data.PlutusData{
+				&data.ByteString{Inner: tokenID.Inner},
+				&data.Integer{Inner: quantity.Inner},
 			}
-			if quantity.Inner.Cmp(minQuantity) < 0 || quantity.Inner.Cmp(maxQuantity) > 0 {
-				return fmt.Errorf("value token entry %d:%d quantity is out of range", policyIndex, tokenIndex)
-			}
-			previousToken = tokenID.Inner
 		}
-		previousPolicy = policyID.Inner
+		policies[policyIndex] = [2]data.PlutusData{
+			&data.ByteString{Inner: policyID.Inner},
+			&data.Map{Pairs: tokenPairs},
+		}
 	}
-	return nil
+	return data.Value{Inner: &data.Map{Pairs: policies}}.Validate()
 }
 
 var (

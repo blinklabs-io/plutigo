@@ -1,7 +1,6 @@
 package syn
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"math/big"
@@ -641,11 +640,6 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				return nil, fmt.Errorf("invalid bytestring key %s at position %d", p.curToken.Literal, p.curToken.Position)
 			}
 
-			// policy key length must be <= 32 bytes
-			if len(kb) > 32 {
-				return nil, fmt.Errorf("policy key too long (%d bytes) at position %d", len(kb), p.curToken.Position)
-			}
-
 			p.nextToken()
 
 			if err := p.expect(lex.TokenComma); err != nil {
@@ -673,11 +667,6 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 					return nil, fmt.Errorf("invalid bytestring value %s at position %d", p.curToken.Literal, p.curToken.Position)
 				}
 
-				// token key length must be <= 32 bytes
-				if len(ib) > 32 {
-					return nil, fmt.Errorf("token key too long (%d bytes) at position %d", len(ib), p.curToken.Position)
-				}
-
 				p.nextToken()
 
 				if err := p.expect(lex.TokenComma); err != nil {
@@ -692,21 +681,6 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				if !ok {
 					return nil, fmt.Errorf("invalid integer value %s at position %d", p.curToken.Literal, p.curToken.Position)
 				}
-				// Token amounts must fit in the allowed range:
-				// minimum: -(2^127), maximum: (2^127 - 1)
-				limit := new(big.Int).Lsh(big.NewInt(1), 127)           // 2^127
-				limitMinusOne := new(big.Int).Sub(limit, big.NewInt(1)) // 2^127 - 1
-				negLimit := new(big.Int).Neg(limit)                     // -2^127
-				if n.Sign() >= 0 {
-					if n.Cmp(limitMinusOne) > 0 {
-						return nil, fmt.Errorf("integer in value token out of range %s at position %d", p.curToken.Literal, p.curToken.Position)
-					}
-				} else {
-					if n.Cmp(negLimit) < 0 {
-						return nil, fmt.Errorf("integer in value token out of range %s at position %d", p.curToken.Literal, p.curToken.Position)
-					}
-				}
-
 				p.nextToken()
 
 				if err := p.expect(lex.TokenRParen); err != nil {
@@ -756,31 +730,8 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 
 		// Value constants are serialized canonically. Reject non-canonical text
 		// instead of silently sorting, merging, or dropping entries.
-		var previousPolicy []byte
-		for policyIndex, item := range items {
-			policy := item.(*ProtoPair)
-			policyID := policy.First.(*ByteString).Inner
-			if policyIndex > 0 && bytes.Compare(previousPolicy, policyID) >= 0 {
-				return nil, errors.New("value policy IDs must be unique and lexicographically ordered")
-			}
-			previousPolicy = policyID
-
-			tokens := policy.Second.(*ProtoList).List
-			if len(tokens) == 0 {
-				return nil, errors.New("value policy must contain at least one token")
-			}
-			var previousToken []byte
-			for tokenIndex, tokenItem := range tokens {
-				token := tokenItem.(*ProtoPair)
-				tokenID := token.First.(*ByteString).Inner
-				if tokenIndex > 0 && bytes.Compare(previousToken, tokenID) >= 0 {
-					return nil, errors.New("value token IDs must be unique and lexicographically ordered")
-				}
-				if token.Second.(*Integer).Inner.Sign() == 0 {
-					return nil, errors.New("value token amount must be non-zero")
-				}
-				previousToken = tokenID
-			}
+		if err := validateValueEntries(items); err != nil {
+			return nil, err
 		}
 
 		return &Constant{Con: &Value{Entries: items}}, nil
