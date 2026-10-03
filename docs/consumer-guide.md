@@ -41,8 +41,8 @@ parameters) and reuse it: it is immutable and safe to share across goroutines.
 
 The protocol major version selects the semantics variant and which builtins
 exist: a builtin introduced at a later protocol version fails validation, and
-fails at run time on a raw machine, before that version. `builtin.IsAvailableInWithProto`
-reports availability for a language and protocol version.
+fails at run time on a raw machine, before that version. `DefaultFunction.IsAvailableInWithProto`
+in the `builtin` package reports availability for a language and protocol version.
 
 ## Budgets and errors
 

@@ -53,11 +53,10 @@ The CEK machine that executes UPLC programs.
 
 **Standard evaluation flow:**
 ```go
-program, _ := syn.Parse(input)
-dbProgram, _ := syn.NameToDeBruijn(program)
-evalCtx := cek.NewDefaultEvalContext(language, cek.ProtoVersion{Major: 11})
-machine := cek.NewMachine[syn.DeBruijn](language, 0, evalCtx)
-result, _ := machine.Run(dbProgram.Term)
+// language and the protocol version come from the ledger, never from the
+// program header. EvaluateText validates the program for them first.
+evalCtx, _ := cek.NewEvalContext(language, cek.ProtoVersion{Major: 11}, costModelParams)
+result, consumed, _ := cek.EvaluateText(ctx, input, language, evalCtx, budget)
 ```
 
 ### `syn/` - Syntax and Parsing
@@ -292,24 +291,43 @@ Current priorities:
 
 ```go
 import (
+    "context"
+    "fmt"
+
     "github.com/blinklabs-io/plutigo/cek"
+    "github.com/blinklabs-io/plutigo/lang"
     "github.com/blinklabs-io/plutigo/syn"
 )
 
-func EvaluateScript(uplcHex string, budget cek.ExBudget) (cek.Value, error) {
-    // Parse FLAT-encoded script
-    program, err := syn.ParseFlat[syn.DeBruijn](uplcHex)
+// language, protocolMajor and costModelParams come from the ledger.
+func EvaluateScript(
+    ctx context.Context,
+    flat []byte,
+    language lang.LanguageVersion,
+    protocolMajor uint,
+    costModelParams []int64,
+    budget cek.ExBudget,
+) (syn.Term[syn.DeBruijn], error) {
+    // Decode with phase-1 and execution-version validation
+    program, err := syn.DecodeDeBruijnForExecution(flat, syn.ProgramContext{
+        LedgerLanguage: language,
+        ProtocolMajor:  protocolMajor,
+    })
     if err != nil {
-        return nil, fmt.Errorf("parse: %w", err)
+        return nil, fmt.Errorf("decode: %w", err)
     }
 
-    // Create machine with budget
-    evalCtx := cek.NewDefaultEvalContext(language, cek.ProtoVersion{Major: 11})
+    evalCtx, err := cek.NewEvalContext(
+        language,
+        cek.ProtoVersion{Major: protocolMajor},
+        costModelParams,
+    )
+    if err != nil {
+        return nil, fmt.Errorf("cost model: %w", err)
+    }
     machine := cek.NewMachine[syn.DeBruijn](language, 0, evalCtx)
     machine.ExBudget = budget
-
-    // Evaluate
-    return machine.Run(program.Term)
+    return machine.RunContext(ctx, program.Term)
 }
 ```
 
