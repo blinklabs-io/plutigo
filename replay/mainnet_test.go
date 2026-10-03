@@ -8,12 +8,12 @@ import (
 const mainnetCorpusPath = "testdata/mainnet.json"
 
 func TestMainnetCorpusParity(t *testing.T) {
-	corpus, err := LoadFile(mainnetCorpusPath)
+	corpus, err := LoadFile(context.Background(), mainnetCorpusPath)
 	if err != nil {
 		t.Fatalf("LoadFile() failed: %v", err)
 	}
 
-	report, err := Run(context.Background(), corpus)
+	report, err := Run(context.Background(), corpus, DefaultLimits())
 	if err != nil {
 		t.Fatalf("Run() failed: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestMainnetCorpusParity(t *testing.T) {
 }
 
 func BenchmarkMainnetCorpus(b *testing.B) {
-	corpus, err := LoadFile(mainnetCorpusPath)
+	corpus, err := LoadFile(context.Background(), mainnetCorpusPath)
 	if err != nil {
 		b.Fatalf("LoadFile() failed: %v", err)
 	}
@@ -38,7 +38,7 @@ func BenchmarkMainnetCorpus(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		report, err := Run(context.Background(), corpus)
+		report, err := Run(context.Background(), corpus, DefaultLimits())
 		if err != nil {
 			b.Fatalf("Run() failed: %v", err)
 		}

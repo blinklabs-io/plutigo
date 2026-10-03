@@ -64,6 +64,56 @@ func (mc *MachineCosts) update(param string, val int64) error {
 	return nil
 }
 
+// validate rejects machine costs under which evaluation could fail to consume
+// budget: every step kind must charge a positive amount of both CPU and memory
+// so that a recurring step always depletes the budget, and the one-off startup
+// charge must not be negative so that it cannot increase it.
+func (mc MachineCosts) validate() error {
+	if err := mc.startup.validateCharge("cekStartupCost", 0); err != nil {
+		return err
+	}
+	steps := []struct {
+		name   string
+		budget ExBudget
+	}{
+		{"cekVarCost", mc.variable},
+		{"cekConstCost", mc.constant},
+		{"cekLamCost", mc.lambda},
+		{"cekDelayCost", mc.delay},
+		{"cekForceCost", mc.force},
+		{"cekApplyCost", mc.apply},
+		{"cekBuiltinCost", mc.builtin},
+		{"cekConstrCost", mc.constr},
+		{"cekCaseCost", mc.ccase},
+	}
+	for _, step := range steps {
+		if err := step.budget.validateCharge(step.name, 1); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ex ExBudget) validateCharge(name string, minimum int64) error {
+	if ex.Cpu < minimum {
+		return fmt.Errorf(
+			"%s-exBudgetCPU is %d, must be at least %d",
+			name,
+			ex.Cpu,
+			minimum,
+		)
+	}
+	if ex.Mem < minimum {
+		return fmt.Errorf(
+			"%s-exBudgetMemory is %d, must be at least %d",
+			name,
+			ex.Mem,
+			minimum,
+		)
+	}
+	return nil
+}
+
 func (mc MachineCosts) get(kind StepKind) ExBudget {
 	switch kind {
 	case ExConstant:

@@ -52,12 +52,12 @@ func runContext(
 		return 2
 	}
 
-	corpus, err := replay.LoadFile(corpusPath)
+	corpus, err := replay.LoadFile(ctx, corpusPath)
 	if err != nil {
 		fmt.Fprintf(stderr, "plutigo-replay: %v\n", err)
 		return 2
 	}
-	report, err := replay.Run(ctx, corpus)
+	report, err := replay.Run(ctx, corpus, replay.DefaultLimits())
 	if err != nil {
 		fmt.Fprintf(stderr, "plutigo-replay: %v\n", err)
 		return 2

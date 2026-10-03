@@ -94,7 +94,7 @@ func TestRunCanceledContext(t *testing.T) {
 
 func TestRunReportsMatchingCorpus(t *testing.T) {
 	replayCase := commandReplayCase(t)
-	first := replay.RunCase(&replayCase)
+	first := replay.RunCase(context.Background(), &replayCase)
 	if !first.Actual.Success {
 		t.Fatalf("replay setup failed: %s", first.Actual.Error)
 	}

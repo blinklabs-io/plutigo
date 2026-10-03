@@ -147,17 +147,21 @@ func TestBuiltinAvailabilityMatrixInMachine(t *testing.T) {
 	}
 }
 
-func TestPV11DefaultProtoVersion(t *testing.T) {
-	// When no EvalContext is provided, protoMajor should default to 0
-	// which means pre-PV11 behavior (backward compatible)
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV1, 0, nil)
+func TestPV11UnversionedEvalContextKeepsProtoMajorZero(t *testing.T) {
+	// An explicit context with no protocol major version selects the
+	// pre-PV11 behavior; NewMachine no longer supplies one for nil.
+	m := NewMachine[syn.DeBruijn](
+		lang.LanguageVersionV1,
+		0,
+		testEvalContext(),
+	)
 	if m.protoMajor != 0 {
-		t.Errorf("default protoMajor = %d, want 0", m.protoMajor)
+		t.Errorf("protoMajor = %d, want 0", m.protoMajor)
 	}
 }
 
 func TestUnavailableBuiltinReturnsBuiltinError(t *testing.T) {
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV1, 0, nil)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV1, 0, testEvalContext())
 	b := &Builtin[syn.DeBruijn]{
 		Func: builtin.Bls12_381_G1_Add,
 	}

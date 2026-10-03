@@ -397,31 +397,24 @@ The machine transitions between three states:
 ```go
 import (
     "github.com/blinklabs-io/plutigo/cek"
-    "github.com/blinklabs-io/plutigo/syn"
 )
 
-// Parse UPLC text
-program, err := syn.Parse(uplcText)
-if err != nil {
-    return err
-}
-
-// Convert to De Bruijn indices
-dbProgram, err := syn.NameToDeBruijn(program)
-if err != nil {
-    return err
-}
-
-// Create machine and run
-machine := cek.NewMachine[syn.DeBruijn](dbProgram.Version, 0, nil)
-machine.ExBudget = cek.ExBudget{Cpu: 10_000_000, Mem: 1_000_000}
-
-result, err := machine.Run(dbProgram.Term)
+// The ledger language and protocol version come from the caller, not from
+// the program header. EvaluateText runs phase-1 and execution-version
+// validation for them before evaluating.
+evalCtx := cek.NewDefaultEvalContext(language, cek.ProtoVersion{Major: 11})
+result, consumed, err := cek.EvaluateText(
+    ctx,
+    uplcText,
+    language,
+    evalCtx,
+    cek.ExBudget{Cpu: 10_000_000, Mem: 1_000_000},
+)
 if err != nil {
     return err // Budget exhausted, evaluation error, etc.
 }
 
-// result is a cek.Value (can be *cek.Con, *cek.VLamAbs, etc.)
+// result is the discharged syn.Term[syn.DeBruijn]; consumed is the budget used
 ```
 
 ### Object Pooling

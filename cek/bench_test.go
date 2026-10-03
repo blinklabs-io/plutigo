@@ -46,7 +46,7 @@ func BenchmarkMachineLambdaChain(b *testing.B) {
 		machine := NewMachine[syn.DeBruijn](
 			lang.LanguageVersionV3,
 			200,
-			nil,
+			testEvalContext(),
 		)
 
 		b.Run(fmt.Sprintf("depth=%d", depth), func(b *testing.B) {
@@ -71,10 +71,41 @@ func BenchmarkMachineBuiltinHeavy(b *testing.B) {
 		machine := NewMachine[syn.DeBruijn](
 			lang.LanguageVersionV3,
 			200,
-			nil,
+			testEvalContext(),
 		)
 
 		b.Run(fmt.Sprintf("ops=%d", count-1), func(b *testing.B) {
+			b.ReportAllocs()
+
+			for b.Loop() {
+				result, err := machine.Run(term)
+				if err != nil {
+					b.Fatalf("Run failed: %v", err)
+				}
+				benchmarkTermSink = result
+			}
+		})
+	}
+}
+
+// BenchmarkMachineMetrics measures what opting in to metrics costs on the
+// builtin-heavy workload: "off" is the default machine, "on" has metrics
+// enabled.
+func BenchmarkMachineMetrics(b *testing.B) {
+	term := mustBenchmarkTerm(b, buildBuiltinHeavyProgram(128))
+	for _, enabled := range []bool{false, true} {
+		machine := NewMachine[syn.DeBruijn](
+			lang.LanguageVersionV3,
+			0,
+			testEvalContext(),
+		)
+		name := "off"
+		if enabled {
+			machine.EnableMetrics()
+			name = "on"
+		}
+
+		b.Run(name, func(b *testing.B) {
 			b.ReportAllocs()
 
 			for b.Loop() {
@@ -143,7 +174,7 @@ func BenchmarkBuiltinIntegerOps(b *testing.B) {
 		b.Run(bench.name, func(b *testing.B) {
 			b.ReportAllocs()
 
-			machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+			machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 			builtinValue := &Builtin[syn.DeBruijn]{
 				Func: bench.fn,
 			}

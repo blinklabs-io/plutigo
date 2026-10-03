@@ -23,9 +23,9 @@ func TestLoadRejectsUnknownFields(t *testing.T) {
 		"cases": [],
 		"unknown": true
 	}`
-	_, err := Load(strings.NewReader(input))
+	_, err := Load(context.Background(), strings.NewReader(input))
 	if err == nil || !strings.Contains(err.Error(), "unknown field") {
-		t.Fatalf("Load() error = %v, want unknown-field error", err)
+		t.Fatalf("Load(context.Background(), ) error = %v, want unknown-field error", err)
 	}
 }
 
@@ -37,7 +37,7 @@ func TestCorpusValidateRejectsDuplicateIDs(t *testing.T) {
 		Reference:     testReference(),
 		Cases:         []Case{replayCase, replayCase},
 	}
-	err := corpus.Validate()
+	err := corpus.Validate(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "duplicate id") {
 		t.Fatalf("Validate() error = %v, want duplicate-id error", err)
 	}
@@ -45,7 +45,7 @@ func TestCorpusValidateRejectsDuplicateIDs(t *testing.T) {
 
 func TestRunCaseMatchesSuccessAndBudget(t *testing.T) {
 	replayCase := successfulCase(t)
-	first := RunCase(&replayCase)
+	first := RunCase(context.Background(), &replayCase)
 	if !first.Actual.Success {
 		t.Fatalf("first RunCase() failed: %s", first.Actual.Error)
 	}
@@ -54,7 +54,7 @@ func TestRunCaseMatchesSuccessAndBudget(t *testing.T) {
 	}
 
 	replayCase.Expected.ExUnits = first.Actual.ExUnits
-	result := RunCase(&replayCase)
+	result := RunCase(context.Background(), &replayCase)
 	if !result.Passed {
 		t.Fatalf("RunCase() mismatches = %v", result.Mismatches)
 	}
@@ -62,7 +62,7 @@ func TestRunCaseMatchesSuccessAndBudget(t *testing.T) {
 
 func BenchmarkRunCase(b *testing.B) {
 	replayCase := successfulCase(b)
-	first := RunCase(&replayCase)
+	first := RunCase(context.Background(), &replayCase)
 	if !first.Actual.Success {
 		b.Fatalf("RunCase() setup failed: %s", first.Actual.Error)
 	}
@@ -71,7 +71,7 @@ func BenchmarkRunCase(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		result := RunCase(&replayCase)
+		result := RunCase(context.Background(), &replayCase)
 		if !result.Passed {
 			b.Fatalf("RunCase() mismatches = %v", result.Mismatches)
 		}
@@ -88,7 +88,7 @@ func TestRunCaseMatchesEvaluationFailure(t *testing.T) {
 		ErrorCode: &errorCode,
 	}
 
-	first := RunCase(&replayCase)
+	first := RunCase(context.Background(), &replayCase)
 	if first.Actual.Success {
 		t.Fatal("first RunCase() unexpectedly succeeded")
 	}
@@ -97,7 +97,7 @@ func TestRunCaseMatchesEvaluationFailure(t *testing.T) {
 	}
 	replayCase.Expected.ExUnits = first.Actual.ExUnits
 
-	result := RunCase(&replayCase)
+	result := RunCase(context.Background(), &replayCase)
 	if !result.Passed {
 		t.Fatalf("RunCase() mismatches = %v", result.Mismatches)
 	}
@@ -111,7 +111,7 @@ func TestEvaluateRecoversMachinePanic(t *testing.T) {
 	}
 	decoded.program.Term = (*syn.Apply[syn.DeBruijn])(nil)
 
-	actual := evaluate(&replayCase, decoded)
+	actual := evaluate(context.Background(), &replayCase, decoded)
 	if actual.Success {
 		t.Fatal("evaluate() unexpectedly succeeded")
 	}
@@ -140,13 +140,13 @@ func TestRunCaseUsesLedgerLanguageInsteadOfUPLCVersion(t *testing.T) {
 	// same program is accepted as V2 and rejected as V1.
 	replayCase := baseCaseWithVersion(t, lang.LanguageVersionV1, term, nil)
 	replayCase.Language = PlutusV2
-	v2Result := RunCase(&replayCase)
+	v2Result := RunCase(context.Background(), &replayCase)
 	if !v2Result.Actual.Success {
 		t.Fatalf("Plutus V2 evaluation failed: %s", v2Result.Actual.Error)
 	}
 
 	replayCase.Language = PlutusV1
-	v1Result := RunCase(&replayCase)
+	v1Result := RunCase(context.Background(), &replayCase)
 	if v1Result.Actual.Success {
 		t.Fatal("Plutus V1 evaluation unexpectedly accepted a V2 builtin")
 	}
@@ -171,7 +171,7 @@ func TestRunCaseRejectsPreVanRossemTermVersionAtSetup(t *testing.T) {
 	replayCase.ProtocolVersion = ProtocolVersion{Major: 10}
 	replayCase.Expected = Expected{Success: false}
 
-	result := RunCase(&replayCase)
+	result := RunCase(context.Background(), &replayCase)
 	if result.Actual.Success {
 		t.Fatal("RunCase() unexpectedly succeeded executing a pre-van-Rossem UPLC 1.1.0 V2 script")
 	}
@@ -189,7 +189,7 @@ func TestRunCaseNeverTreatsSetupFailureAsExpectedScriptFailure(t *testing.T) {
 	replayCase.Expected.Success = false
 	replayCase.Expected.ExUnits = ExUnits{}
 
-	result := RunCase(&replayCase)
+	result := RunCase(context.Background(), &replayCase)
 	if result.Passed {
 		t.Fatal("RunCase() passed an invalid FLAT program as an expected failure")
 	}
@@ -200,7 +200,7 @@ func TestRunCaseNeverTreatsSetupFailureAsExpectedScriptFailure(t *testing.T) {
 
 func TestRunBuildsSummary(t *testing.T) {
 	first := successfulCase(t)
-	firstResult := RunCase(&first)
+	firstResult := RunCase(context.Background(), &first)
 	first.Expected.ExUnits = firstResult.Actual.ExUnits
 
 	second := first
@@ -213,7 +213,7 @@ func TestRunBuildsSummary(t *testing.T) {
 		Reference:     testReference(),
 		Cases:         []Case{first, second},
 	}
-	report, err := Run(context.Background(), corpus)
+	report, err := Run(context.Background(), corpus, DefaultLimits())
 	if err != nil {
 		t.Fatalf("Run() failed: %v", err)
 	}
@@ -239,7 +239,7 @@ func TestRunHonorsCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := Run(ctx, corpus)
+	_, err := Run(ctx, corpus, DefaultLimits())
 	if err == nil || !strings.Contains(err.Error(), "context canceled") {
 		t.Fatalf("Run() error = %v, want context cancellation", err)
 	}
@@ -258,12 +258,12 @@ func TestLoadRoundTrip(t *testing.T) {
 		t.Fatalf("json.Marshal() failed: %v", err)
 	}
 
-	loaded, err := Load(bytes.NewReader(encoded))
+	loaded, err := Load(context.Background(), bytes.NewReader(encoded))
 	if err != nil {
-		t.Fatalf("Load() failed: %v", err)
+		t.Fatalf("Load(context.Background(), ) failed: %v", err)
 	}
 	if loaded.Cases[0].ID != replayCase.ID {
-		t.Fatalf("Load() case id = %q, want %q", loaded.Cases[0].ID, replayCase.ID)
+		t.Fatalf("Load(context.Background(), ) case id = %q, want %q", loaded.Cases[0].ID, replayCase.ID)
 	}
 }
 

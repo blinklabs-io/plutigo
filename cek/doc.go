@@ -22,14 +22,20 @@
 //
 // # Basic Usage
 //
-//	// Parse and convert to De Bruijn indices first (see syn package)
-//	// slippage is the step-interval threshold for batch budget checking
-//	machine := cek.NewMachine[syn.DeBruijn](program.Version, slippage, nil)
-//	result, err := machine.Run(program.Term)
+//	// Validate for the ledger language and protocol version the caller
+//	// supplies, then evaluate (see syn.ParseWithContext for the checks).
+//	evalCtx := cek.NewDefaultEvalContext(language, cek.ProtoVersion{Major: 11})
+//	term, consumed, err := cek.EvaluateText(ctx, input, language, evalCtx, budget)
 //	if err != nil {
-//	    // Handle evaluation error or budget exhaustion
+//	    // Handle validation error, evaluation error or budget exhaustion
 //	}
-//	// result is a Value[syn.DeBruijn]
+//
+// To run a decoded program directly, build the machine with an explicit
+// [EvalContext]; [NewMachine] panics on nil. slippage is the step-interval
+// threshold for batch budget checking.
+//
+//	machine := cek.NewMachine[syn.DeBruijn](language, slippage, evalCtx)
+//	result, err := machine.Run(program.Term)
 //
 // [Machine.RunContext] adds cooperative, synchronous cancellation. It does not
 // start a goroutine; a builtin already executing must return before
@@ -44,6 +50,7 @@
 // # Cost Model
 //
 // Every operation charges costs before execution. Budget exhaustion returns
-// an error rather than allowing unbounded computation. Pass an [EvalContext]
-// to [NewMachine] to configure custom cost model parameters.
+// an error rather than allowing unbounded computation. Build an [EvalContext]
+// with [NewEvalContext] to use the ledger's cost model parameters, and pass it
+// to [NewMachine].
 package cek

@@ -46,9 +46,76 @@ type Summary struct {
 	TransactionsPerSecond float64 `json:"transactions_per_second"`
 }
 
-func Run(ctx context.Context, corpus *Corpus) (*Report, error) {
-	decodedCases, err := corpus.validateCases()
+// Limits bounds the work a replay may start. Case caps the budget limit of any
+// single case and Corpus caps the sum of the budget limits of all cases, so
+// that a corpus cannot ask for more evaluation than the caller allows.
+type Limits struct {
+	Case   ExUnits
+	Corpus ExUnits
+}
+
+const (
+	// Mainnet's maxBlockExUnits: no single script evaluation can exceed it.
+	defaultCaseSteps  = 20_000_000_000
+	defaultCaseMemory = 62_000_000
+	// defaultCorpusCases is the number of maximum-budget cases DefaultLimits
+	// admits in one corpus.
+	defaultCorpusCases = 1000
+)
+
+// DefaultLimits caps a case at mainnet's block execution budget and a corpus
+// at defaultCorpusCases such cases.
+func DefaultLimits() Limits {
+	return Limits{
+		Case: ExUnits{Steps: defaultCaseSteps, Memory: defaultCaseMemory},
+		Corpus: ExUnits{
+			Steps:  defaultCaseSteps * defaultCorpusCases,
+			Memory: defaultCaseMemory * defaultCorpusCases,
+		},
+	}
+}
+
+func (l Limits) check(corpus *Corpus) error {
+	if l.Case.Steps <= 0 || l.Case.Memory <= 0 ||
+		l.Corpus.Steps <= 0 || l.Corpus.Memory <= 0 {
+		return errors.New("replay limits must be positive")
+	}
+	var total ExUnits
+	for i := range corpus.Cases {
+		limit := corpus.Cases[i].BudgetLimit
+		if limit.Steps > l.Case.Steps || limit.Memory > l.Case.Memory {
+			return fmt.Errorf(
+				"replay case %d: budget limit steps=%d memory=%d exceeds the per-case limit steps=%d memory=%d",
+				i,
+				limit.Steps,
+				limit.Memory,
+				l.Case.Steps,
+				l.Case.Memory,
+			)
+		}
+		if limit.Steps > l.Corpus.Steps-total.Steps ||
+			limit.Memory > l.Corpus.Memory-total.Memory {
+			return fmt.Errorf(
+				"replay case %d: budget limits exceed the corpus limit steps=%d memory=%d",
+				i,
+				l.Corpus.Steps,
+				l.Corpus.Memory,
+			)
+		}
+		total.Steps += limit.Steps
+		total.Memory += limit.Memory
+	}
+	return nil
+}
+
+// Run replays every case in the corpus within limits. It stops with the
+// context's error once ctx is canceled, including while a case is evaluating.
+func Run(ctx context.Context, corpus *Corpus, limits Limits) (*Report, error) {
+	decodedCases, err := corpus.validateCases(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := limits.check(corpus); err != nil {
 		return nil, err
 	}
 
@@ -66,7 +133,10 @@ func Run(ctx context.Context, corpus *Corpus) (*Report, error) {
 		}
 
 		replayCase := &corpus.Cases[i]
-		result := runDecodedCase(replayCase, decodedCases[i])
+		result := runDecodedCase(ctx, replayCase, decodedCases[i])
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("run replay corpus: %w", err)
+		}
 		report.Cases = append(report.Cases, result)
 		durations = append(durations, result.DurationNS)
 		report.Summary.TotalDurationNS += result.DurationNS
@@ -87,7 +157,7 @@ func Run(ctx context.Context, corpus *Corpus) (*Report, error) {
 	return report, nil
 }
 
-func RunCase(replayCase *Case) CaseResult {
+func RunCase(ctx context.Context, replayCase *Case) CaseResult {
 	if replayCase == nil {
 		actual := setupFailure(errors.New("replay case is required"))
 		return CaseResult{
@@ -105,16 +175,20 @@ func RunCase(replayCase *Case) CaseResult {
 			Mismatches:  compare(replayCase.Expected, actual),
 		}
 	}
-	return runDecodedCase(replayCase, decoded)
+	return runDecodedCase(ctx, replayCase, decoded)
 }
 
-func runDecodedCase(replayCase *Case, decoded decodedCase) CaseResult {
+func runDecodedCase(
+	ctx context.Context,
+	replayCase *Case,
+	decoded decodedCase,
+) CaseResult {
 	result := CaseResult{
 		ID:          replayCase.ID,
 		Transaction: replayCase.Transaction,
 	}
 	start := time.Now()
-	result.Actual = evaluate(replayCase, decoded)
+	result.Actual = evaluate(ctx, replayCase, decoded)
 	result.DurationNS = time.Since(start).Nanoseconds()
 	result.Mismatches = compare(replayCase.Expected, result.Actual)
 	result.Passed = len(result.Mismatches) == 0
@@ -146,28 +220,10 @@ func prepareEvaluation(replayCase *Case, decoded decodedCase) (evaluation, error
 		}
 	}
 
-	protoVersion := cek.ProtoVersion{
-		Major: replayCase.ProtocolVersion.Major,
-		Minor: replayCase.ProtocolVersion.Minor,
-	}
-	var evalContext *cek.EvalContext
-	if replayCase.CostModel.UseDefault {
-		evalContext = cek.NewDefaultEvalContext(languageVersion, protoVersion)
-	} else {
-		evalContext, err = cek.NewEvalContext(
-			languageVersion,
-			protoVersion,
-			replayCase.CostModel.Parameters,
-		)
-		if err != nil {
-			return evaluation{}, fmt.Errorf("build evaluation context: %w", err)
-		}
-	}
-
 	return evaluation{
 		languageVersion: languageVersion,
 		term:            term,
-		evalContext:     evalContext,
+		evalContext:     decoded.evalContext,
 		budget: cek.ExBudget{
 			Cpu: replayCase.BudgetLimit.Steps,
 			Mem: replayCase.BudgetLimit.Memory,
@@ -175,7 +231,7 @@ func prepareEvaluation(replayCase *Case, decoded decodedCase) (evaluation, error
 	}, nil
 }
 
-func evaluate(replayCase *Case, decoded decodedCase) Actual {
+func evaluate(ctx context.Context, replayCase *Case, decoded decodedCase) Actual {
 	prepared, err := prepareEvaluation(replayCase, decoded)
 	if err != nil {
 		return setupFailure(err)
@@ -188,7 +244,7 @@ func evaluate(replayCase *Case, decoded decodedCase) Actual {
 		prepared.evalContext,
 	)
 	machine.ExBudget = initialBudget
-	evalErr := runMachine(machine, prepared.term)
+	evalErr := runMachine(ctx, machine, prepared.term)
 	consumed := initialBudget.Sub(&machine.ExBudget)
 
 	actual := Actual{
@@ -208,6 +264,7 @@ func evaluate(replayCase *Case, decoded decodedCase) Actual {
 }
 
 func runMachine(
+	ctx context.Context,
 	machine *cek.Machine[syn.DeBruijn],
 	term syn.Term[syn.DeBruijn],
 ) (err error) {
@@ -216,7 +273,7 @@ func runMachine(
 			err = fmt.Errorf("panic during script evaluation: %v", recovered)
 		}
 	}()
-	_, err = machine.Run(term)
+	_, err = machine.RunContext(ctx, term)
 	return err
 }
 

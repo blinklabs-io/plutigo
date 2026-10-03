@@ -1,6 +1,7 @@
 package replay
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -12,11 +13,11 @@ import (
 // iteration: a fresh machine and Run over a pre-decoded program and
 // arguments, with the evaluation context built once, as a node does.
 func BenchmarkMainnetEvalOnly(b *testing.B) {
-	corpus, err := LoadFile(mainnetCorpusPath)
+	corpus, err := LoadFile(context.Background(), mainnetCorpusPath)
 	if err != nil {
 		b.Fatalf("LoadFile() failed: %v", err)
 	}
-	decodedCases, err := corpus.validateCases()
+	decodedCases, err := corpus.validateCases(context.Background())
 	if err != nil {
 		b.Fatal(err)
 	}
