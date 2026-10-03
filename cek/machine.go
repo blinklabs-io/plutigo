@@ -1945,8 +1945,11 @@ func dischargeValueDepth[T syn.Eval](
 	if depth > maxDischargeDepth {
 		return nil, dischargeDepthLimitError()
 	}
-	if err := budget.consume(1); err != nil {
-		return nil, err
+	// Pair constants are charged by their recursive materializer below.
+	if _, isPair := value.(*pairValue[T]); !isPair {
+		if err := budget.consume(1); err != nil {
+			return nil, err
+		}
 	}
 
 	switch v := value.(type) {

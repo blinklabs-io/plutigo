@@ -1,6 +1,7 @@
 package cek
 
 import (
+	"context"
 	"errors"
 	"math/big"
 	"testing"
@@ -62,6 +63,20 @@ func TestAllocArenaSliceCapBounded(t *testing.T) {
 	s2 := allocArenaSlice(&chunks, &pos, 4, 16)
 	if cap(s2) != len(s2) {
 		t.Fatalf("second alloc: expected cap == len == %d, got cap %d", len(s2), cap(s2))
+	}
+}
+
+func TestDischargePairChargesEachValueOnce(t *testing.T) {
+	leaves := &Constant{Constant: &syn.Integer{Inner: big.NewInt(0)}}
+	pair := &pairValue[syn.DeBruijn]{first: leaves, second: leaves}
+	budget := dischargeWorkBudget{remaining: 3}
+
+	_, err := dischargeValueDepth[syn.DeBruijn](context.Background(), false, pair, &budget, 0)
+	if err != nil {
+		t.Fatalf("discharge pair with one work unit per value: %v", err)
+	}
+	if budget.remaining != 0 {
+		t.Fatalf("expected three values to consume three work units, %d remain", budget.remaining)
 	}
 }
 
