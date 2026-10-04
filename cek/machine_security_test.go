@@ -113,3 +113,24 @@ func TestDischargeValueBoundsCapturedExpansion(t *testing.T) {
 		t.Fatalf("expected budget exhausted code, got %v", budgetErr.Code)
 	}
 }
+
+func TestUnwrapConstantBoundsCapturedExpansion(t *testing.T) {
+	var captured Value[syn.DeBruijn] = &Constant{
+		Constant: &syn.Integer{Inner: big.NewInt(0)},
+	}
+	for range 19 {
+		captured = &pairValue[syn.DeBruijn]{first: captured, second: captured}
+	}
+
+	_, err := unwrapConstant[syn.DeBruijn](captured)
+	if err == nil {
+		t.Fatal("expected BudgetError for exponentially expanded captured constant")
+	}
+	var budgetErr *BudgetError
+	if !errors.As(err, &budgetErr) {
+		t.Fatalf("expected BudgetError, got %T: %v", err, err)
+	}
+	if budgetErr.Code != ErrCodeBudgetExhausted {
+		t.Fatalf("expected budget exhausted code, got %v", budgetErr.Code)
+	}
+}

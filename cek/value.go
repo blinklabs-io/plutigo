@@ -261,7 +261,10 @@ func materializeConstantValueDepth[T syn.Eval](
 	depth int,
 	maxDepth int,
 ) (syn.IConstant, bool, error) {
-	return materializeConstantValueDepthWithBudget[T](value, depth, maxDepth, nil)
+	// Builtins also materialize values while evaluating, so this path must be
+	// bounded just like final result discharge.
+	budget := dischargeWorkBudget{remaining: maxDischargeWork}
+	return materializeConstantValueDepthWithBudget[T](value, depth, maxDepth, &budget)
 }
 
 func materializeConstantValueDepthWithBudget[T syn.Eval](
