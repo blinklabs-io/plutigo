@@ -5,9 +5,9 @@ import "math/big"
 // Normalize returns a deep copy of pd with every Constr, Map, and List node's
 // definite/indefinite-length CBOR encoding reset to the package default,
 // discarding whatever encoding style the value originally carried from
-// Decode.
+// Decode. A Value's inner Map is normalized the same way.
 //
-// The default is per type, and Map is not like the other two: Constr and
+// The default is per type, and Map is not like Constr and List: Constr and
 // List encode indefinite when non-empty and definite when empty, while Map
 // always encodes definite, matching Haskell's canonical CBOR. See MarshalCBOR
 // on each type. So normalizing a map decoded from indefinite-length bytes
@@ -32,8 +32,8 @@ import "math/big"
 // through to the input. Integer and ByteString leaves are returned as-is:
 // they hold no encoding state, and this package treats their contents as
 // read-only. Container nodes held in their value form rather than as a
-// pointer are normalized too, and come back as pointers, the same
-// conversion Clone makes.
+// pointer are normalized too, and come back as pointers, the same conversion
+// Clone makes.
 func Normalize(pd PlutusData) PlutusData {
 	switch v := pd.(type) {
 	case *Constr:
@@ -77,8 +77,24 @@ func Normalize(pd PlutusData) PlutusData {
 		return Normalize(&v)
 	case List:
 		return Normalize(&v)
+	case *Value:
+		// A nil receiver or nil Inner stays empty, as Clone does; the
+		// typed-nil pointer is returned unchanged.
+		if v == nil {
+			return v
+		}
+		if v.Inner == nil {
+			return &Value{}
+		}
+		return &Value{Inner: Normalize(v.Inner).(*Map)}
+	case Value:
+		return Normalize(&v)
+	case *Integer, Integer, *ByteString, ByteString, nil:
+		// Leaves carry no encoding-style state.
+		return pd
 	default:
-		// Integer and ByteString carry no encoding-style state.
+		// PlutusData is sealed by an unexported method, so every
+		// implementation is listed above; a new one must choose a case.
 		return pd
 	}
 }
