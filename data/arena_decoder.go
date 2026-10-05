@@ -121,6 +121,9 @@ type arenaSlices[S any] struct {
 	pos    int
 }
 
+// alloc returns n elements whose capacity equals n, so an append by a caller
+// of a decoded value reallocates instead of writing into the neighbouring
+// live allocation.
 func (a *arenaSlices[S]) alloc(n int) []S {
 	if n == 0 {
 		return make([]S, 0)
@@ -133,7 +136,7 @@ func (a *arenaSlices[S]) alloc(n int) []S {
 			if remaining+n <= len(chunk) {
 				start := remaining
 				a.pos += n
-				return chunk[start : start+n]
+				return chunk[start : start+n : start+n]
 			}
 			a.pos += len(chunk) - remaining
 			remaining = 0
@@ -149,7 +152,7 @@ func (a *arenaSlices[S]) alloc(n int) []S {
 	chunk := make([]S, size)
 	a.chunks = append(a.chunks, chunk)
 	a.pos += n
-	return chunk[:n]
+	return chunk[:n:n]
 }
 
 func (a *arenaSlices[S]) reset(retainCap int) {
@@ -499,7 +502,7 @@ func (d *Decoder) decodeMapNextEntered(data []byte, state *decodeState) (*Map, [
 		pairs = d.pairs.alloc(pairLen)
 		copy(pairs, smallPairs[:pairLen])
 	} else {
-		pairs = pairs[:pairLen]
+		pairs = pairs[:pairLen:pairLen]
 	}
 
 	decoded := d.maps.alloc()
@@ -601,7 +604,7 @@ func (d *Decoder) decodeListItemsNextEntered(
 		tmpItems = d.items.alloc(tmpLen)
 		copy(tmpItems, smallItems[:tmpLen])
 	} else {
-		tmpItems = tmpItems[:tmpLen]
+		tmpItems = tmpItems[:tmpLen:tmpLen]
 	}
 	return tmpItems, useIndefPtr(true), rest, nil
 }
