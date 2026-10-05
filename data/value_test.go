@@ -106,3 +106,20 @@ func TestValueCanonicalFormAcrossPaths(t *testing.T) {
 		})
 	}
 }
+
+func TestNewValueRejectsTypedNil(t *testing.T) {
+	one := big.NewInt(1)
+	invalid := map[string]*Map{
+		"policy key": valueMap([2]PlutusData{(*ByteString)(nil), NewMap([][2]PlutusData{valueToken(nil, one)})}),
+		"token map":  valueMap([2]PlutusData{NewByteString(nil), (*Map)(nil)}),
+		"token key":  valueMap(valuePolicy(nil, [2]PlutusData{(*ByteString)(nil), NewInteger(one)})),
+		"quantity":   valueMap(valuePolicy(nil, [2]PlutusData{NewByteString(nil), (*Integer)(nil)})),
+	}
+	for name, inner := range invalid {
+		t.Run(name, func(t *testing.T) {
+			if _, err := NewValue(inner); err == nil {
+				t.Fatal("NewValue accepted a typed-nil entry")
+			}
+		})
+	}
+}

@@ -623,6 +623,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			return nil, err
 		}
 
+		var prevPolicy []byte
 		items := make([]IConstant, 0, 8)
 
 		for p.curToken.Type != lex.TokenRBracket {
@@ -640,6 +641,10 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				return nil, fmt.Errorf("invalid bytestring key %s at position %d", p.curToken.Literal, p.curToken.Position)
 			}
 
+			if err := data.CheckValueKey("policy", len(items), kb, prevPolicy); err != nil {
+				return nil, err
+			}
+			prevPolicy = kb
 			p.nextToken()
 
 			if err := p.expect(lex.TokenComma); err != nil {
@@ -651,6 +656,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				return nil, err
 			}
 
+			var prevToken []byte
 			innerItems := make([]IConstant, 0, 8)
 
 			for p.curToken.Type != lex.TokenRBracket {
@@ -667,6 +673,10 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 					return nil, fmt.Errorf("invalid bytestring value %s at position %d", p.curToken.Literal, p.curToken.Position)
 				}
 
+				if err := data.CheckValueKey("token", len(innerItems), ib, prevToken); err != nil {
+					return nil, err
+				}
+				prevToken = ib
 				p.nextToken()
 
 				if err := p.expect(lex.TokenComma); err != nil {
@@ -680,6 +690,9 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				n, ok := p.curToken.Value.(*big.Int)
 				if !ok {
 					return nil, fmt.Errorf("invalid integer value %s at position %d", p.curToken.Literal, p.curToken.Position)
+				}
+				if err := data.CheckValueQuantity(len(items), len(innerItems), n); err != nil {
+					return nil, err
 				}
 				p.nextToken()
 
@@ -696,6 +709,9 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				}
 			}
 
+			if err := data.CheckValueTokenCount(len(items), len(innerItems)); err != nil {
+				return nil, err
+			}
 			if err := p.expect(lex.TokenRBracket); err != nil {
 				return nil, err
 			}
@@ -1154,30 +1170,34 @@ func (p *Parser) parsePlutusValue() (data.PlutusData, error) {
 	if err := p.expect(lex.TokenLBracket); err != nil {
 		return nil, err
 	}
+	var prevPolicy []byte
 	pairs := make([][2]data.PlutusData, 0)
 	for p.curToken.Type != lex.TokenRBracket {
 		if err := p.expect(lex.TokenLParen); err != nil {
 			return nil, err
 		}
-		policy, err := p.parseValueBytes()
+		policy, err := p.parseValueBytes("policy", len(pairs), prevPolicy)
 		if err != nil {
 			return nil, err
 		}
+		prevPolicy = policy.Inner
 		if err := p.expect(lex.TokenComma); err != nil {
 			return nil, err
 		}
 		if err := p.expect(lex.TokenLBracket); err != nil {
 			return nil, err
 		}
+		var prevToken []byte
 		tokens := make([][2]data.PlutusData, 0)
 		for p.curToken.Type != lex.TokenRBracket {
 			if err := p.expect(lex.TokenLParen); err != nil {
 				return nil, err
 			}
-			token, err := p.parseValueBytes()
+			token, err := p.parseValueBytes("token", len(tokens), prevToken)
 			if err != nil {
 				return nil, err
 			}
+			prevToken = token.Inner
 			if err := p.expect(lex.TokenComma); err != nil {
 				return nil, err
 			}
@@ -1192,6 +1212,9 @@ func (p *Parser) parsePlutusValue() (data.PlutusData, error) {
 			if !ok {
 				return nil, fmt.Errorf("invalid Value quantity at position %d", p.curToken.Position)
 			}
+			if err := data.CheckValueQuantity(len(pairs), len(tokens), quantity); err != nil {
+				return nil, err
+			}
 			p.nextToken()
 			if err := p.expect(lex.TokenRParen); err != nil {
 				return nil, err
@@ -1202,6 +1225,9 @@ func (p *Parser) parsePlutusValue() (data.PlutusData, error) {
 					return nil, err
 				}
 			}
+		}
+		if err := data.CheckValueTokenCount(len(pairs), len(tokens)); err != nil {
+			return nil, err
 		}
 		if err := p.expect(lex.TokenRBracket); err != nil {
 			return nil, err
@@ -1226,7 +1252,7 @@ func (p *Parser) parsePlutusValue() (data.PlutusData, error) {
 	return value, nil
 }
 
-func (p *Parser) parseValueBytes() (data.PlutusData, error) {
+func (p *Parser) parseValueBytes(kind string, index int, prev []byte) (*data.ByteString, error) {
 	if p.curToken.Type != lex.TokenByteString {
 		return nil, fmt.Errorf(
 			"expected Value bytestring, got %v at position %d",
@@ -1238,8 +1264,11 @@ func (p *Parser) parseValueBytes() (data.PlutusData, error) {
 	if !ok {
 		return nil, fmt.Errorf("invalid Value bytestring at position %d", p.curToken.Position)
 	}
+	if err := data.CheckValueKey(kind, index, value, prev); err != nil {
+		return nil, err
+	}
 	p.nextToken()
-	return data.NewByteString(value), nil
+	return &data.ByteString{Inner: value}, nil
 }
 
 func (p *Parser) parseTypeSpec() (Typ, error) {

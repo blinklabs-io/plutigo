@@ -85,3 +85,47 @@ func TestEncodeRejectsNonCanonicalDataValue(t *testing.T) {
 		t.Fatal("Encode accepted a data Value with a zero quantity")
 	}
 }
+
+func TestParseValueRejectsInvalidPrefix(t *testing.T) {
+	long := strings.Repeat("01", 33)
+	limit := new(big.Int).Lsh(big.NewInt(1), 127).String()
+	invalid := map[string]struct{ text, errorText string }{
+		"policy key":       {`[(#` + long + `, [(#bb, 1)]), malformed]`, "key exceeds"},
+		"token key":        {`[(#aa, [(#` + long + `, 1), malformed])]`, "key exceeds"},
+		"quantity":         {`[(#aa, [(#bb, ` + limit + `), malformed])]`, "quantity out of signed 128-bit range"},
+		"zero quantity":    {`[(#aa, [(#bb, 0), malformed])]`, "zero quantity"},
+		"duplicate policy": {`[(#aa, [(#bb, 1)]), (#aa, malformed)]`, "policy keys must be strictly ascending"},
+		"duplicate token":  {`[(#aa, [(#bb, 1), (#bb, malformed)])]`, "token keys must be strictly ascending"},
+		"empty tokens":     {`[(#aa, []), malformed]`, "empty token map"},
+	}
+	for form, program := range valuePrograms {
+		for name, tc := range invalid {
+			t.Run(form+"/"+name, func(t *testing.T) {
+				_, err := Parse(program(tc.text))
+				if err == nil || !strings.Contains(err.Error(), tc.errorText) {
+					t.Fatalf("Parse error = %v, want prefix validation error %q before malformed suffix", err, tc.errorText)
+				}
+			})
+		}
+	}
+}
+
+func TestValueValidationAllocationBound(t *testing.T) {
+	entries := make([]IConstant, 1024)
+	for i := range entries {
+		entries[i] = &ProtoPair{
+			First: &ByteString{Inner: []byte{byte(i >> 8), byte(i)}},
+			Second: &ProtoList{List: []IConstant{&ProtoPair{
+				First: &ByteString{Inner: []byte{1}}, Second: newInteger(big.NewInt(1)),
+			}}},
+		}
+	}
+	allocs := testing.AllocsPerRun(10, func() {
+		if err := validateValueEntries(entries); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if allocs > 1 {
+		t.Fatalf("validating 1024 policies allocated %.0f objects, want at most 1", allocs)
+	}
+}

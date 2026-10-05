@@ -1219,45 +1219,51 @@ func decodeConstantValue(d *decoder, typ Typ) (IConstant, error) {
 // validateValueEntries checks the shape of Value entries and then applies the
 // canonical Value rules shared with the data package.
 func validateValueEntries(entries []IConstant) error {
-	policies := make([][2]data.PlutusData, len(entries))
+	var prevPolicy []byte
 	for policyIndex, entry := range entries {
 		policy, ok := entry.(*ProtoPair)
-		if !ok {
+		if !ok || policy == nil {
 			return fmt.Errorf("value policy entry %d is not a pair", policyIndex)
 		}
 		policyID, ok := policy.First.(*ByteString)
-		if !ok {
+		if !ok || policyID == nil {
 			return fmt.Errorf("value policy entry %d has a non-bytestring key", policyIndex)
 		}
+		if err := data.CheckValueKey("policy", policyIndex, policyID.Inner, prevPolicy); err != nil {
+			return err
+		}
+		prevPolicy = policyID.Inner
 		tokens, ok := policy.Second.(*ProtoList)
-		if !ok {
+		if !ok || tokens == nil {
 			return fmt.Errorf("value policy entry %d has a non-list payload", policyIndex)
 		}
-		tokenPairs := make([][2]data.PlutusData, len(tokens.List))
+		if err := data.CheckValueTokenCount(policyIndex, len(tokens.List)); err != nil {
+			return err
+		}
+		var prevToken []byte
 		for tokenIndex, entry := range tokens.List {
 			token, ok := entry.(*ProtoPair)
-			if !ok {
+			if !ok || token == nil {
 				return fmt.Errorf("value token entry %d:%d is not a pair", policyIndex, tokenIndex)
 			}
 			tokenID, ok := token.First.(*ByteString)
-			if !ok {
+			if !ok || tokenID == nil {
 				return fmt.Errorf("value token entry %d:%d has a non-bytestring key", policyIndex, tokenIndex)
 			}
+			if err := data.CheckValueKey("token", tokenIndex, tokenID.Inner, prevToken); err != nil {
+				return err
+			}
+			prevToken = tokenID.Inner
 			quantity, ok := token.Second.(*Integer)
-			if !ok || quantity.Inner == nil {
+			if !ok || quantity == nil || quantity.Inner == nil {
 				return fmt.Errorf("value token entry %d:%d has a non-integer quantity", policyIndex, tokenIndex)
 			}
-			tokenPairs[tokenIndex] = [2]data.PlutusData{
-				&data.ByteString{Inner: tokenID.Inner},
-				&data.Integer{Inner: quantity.Inner},
+			if err := data.CheckValueQuantity(policyIndex, tokenIndex, quantity.Inner); err != nil {
+				return err
 			}
 		}
-		policies[policyIndex] = [2]data.PlutusData{
-			&data.ByteString{Inner: policyID.Inner},
-			&data.Map{Pairs: tokenPairs},
-		}
 	}
-	return data.Value{Inner: &data.Map{Pairs: policies}}.Validate()
+	return nil
 }
 
 var (

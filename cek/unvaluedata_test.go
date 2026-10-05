@@ -35,6 +35,10 @@ func TestUnValueDataCanonicalForm(t *testing.T) {
 		input *data.Map
 		code  ErrorCode
 	}{
+		"nil policy key":      {unValueDataInput([2]data.PlutusData{(*data.ByteString)(nil), &data.Map{Pairs: [][2]data.PlutusData{unValueDataToken(nil, one)}}}), ErrCodeInvalidArgument},
+		"nil token map":       {unValueDataInput([2]data.PlutusData{data.NewByteString(nil), (*data.Map)(nil)}), ErrCodeInvalidArgument},
+		"nil token key":       {unValueDataInput(unValueDataPolicy(nil, [2]data.PlutusData{(*data.ByteString)(nil), data.NewInteger(one)})), ErrCodeInvalidArgument},
+		"nil quantity":        {unValueDataInput(unValueDataPolicy(nil, [2]data.PlutusData{data.NewByteString(nil), (*data.Integer)(nil)})), ErrCodeInvalidArgument},
 		"policy key too long": {unValueDataInput(unValueDataPolicy(long, unValueDataToken([]byte{1}, one))), ErrCodeInvalidArgument},
 		"token key too long":  {unValueDataInput(unValueDataPolicy([]byte{1}, unValueDataToken(long, one))), ErrCodeInvalidArgument},
 		"policies out of order": {unValueDataInput(

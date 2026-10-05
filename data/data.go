@@ -485,55 +485,73 @@ func (v Value) Validate() error {
 	var prevPolicy []byte
 	for i, policy := range v.Inner.Pairs {
 		policyKey, ok := policy[0].(*ByteString)
-		if !ok {
+		if !ok || policyKey == nil {
 			return fmt.Errorf("Value policy key must be a bytestring, got %T", policy[0])
 		}
-		if err := checkValueKey("policy", i, policyKey.Inner, prevPolicy); err != nil {
+		if err := CheckValueKey("policy", i, policyKey.Inner, prevPolicy); err != nil {
 			return err
 		}
 		prevPolicy = policyKey.Inner
 		tokens, ok := policy[1].(*Map)
-		if !ok {
+		if !ok || tokens == nil {
 			return fmt.Errorf("Value policy value must be a map, got %T", policy[1])
 		}
-		if len(tokens.Pairs) == 0 {
-			return fmt.Errorf("Value policy %d has an empty token map", i)
+		if err := CheckValueTokenCount(i, len(tokens.Pairs)); err != nil {
+			return err
 		}
 		var prevToken []byte
 		for j, token := range tokens.Pairs {
 			tokenKey, ok := token[0].(*ByteString)
-			if !ok {
+			if !ok || tokenKey == nil {
 				return fmt.Errorf("Value token key must be a bytestring, got %T", token[0])
 			}
-			if err := checkValueKey("token", j, tokenKey.Inner, prevToken); err != nil {
+			if err := CheckValueKey("token", j, tokenKey.Inner, prevToken); err != nil {
 				return err
 			}
 			prevToken = tokenKey.Inner
 			quantity, ok := token[1].(*Integer)
-			if !ok || quantity.Inner == nil {
+			if !ok || quantity == nil || quantity.Inner == nil {
 				return fmt.Errorf("Value token quantity must be an integer, got %T", token[1])
 			}
-			switch {
-			case quantity.Inner.Sign() == 0:
-				return fmt.Errorf("Value policy %d token %d has a zero quantity", i, j)
-			case quantity.Inner.Cmp(valueQuantityMin) < 0,
-				quantity.Inner.Cmp(valueQuantityMax) > 0:
-				return fmt.Errorf("Value policy %d token %d: %w", i, j, ErrValueQuantityRange)
+			if err := CheckValueQuantity(i, j, quantity.Inner); err != nil {
+				return err
 			}
 		}
 	}
 	return nil
 }
 
-// checkValueKey validates a policy or token key at index i against its
+// CheckValueKey validates a policy or token key at index i against its
 // predecessor. The first key at a level has no predecessor, which is tracked by
 // index because an empty key is a valid predecessor.
-func checkValueKey(kind string, i int, key, prev []byte) error {
+func CheckValueKey(kind string, i int, key, prev []byte) error {
 	if len(key) > MaxValueKeyLength {
 		return fmt.Errorf("Value %s %d key exceeds %d bytes", kind, i, MaxValueKeyLength)
 	}
 	if i > 0 && bytes.Compare(prev, key) >= 0 {
 		return fmt.Errorf("Value %s keys must be strictly ascending (index %d)", kind, i)
+	}
+	return nil
+}
+
+// CheckValueTokenCount rejects an empty token map for a Value policy.
+func CheckValueTokenCount(policy, count int) error {
+	if count == 0 {
+		return fmt.Errorf("Value policy %d has an empty token map", policy)
+	}
+	return nil
+}
+
+// CheckValueQuantity checks that a Value token quantity is a non-zero signed
+// 128-bit integer. Policy and token are its indices for error reporting.
+func CheckValueQuantity(policy, token int, quantity *big.Int) error {
+	switch {
+	case quantity == nil:
+		return errors.New("Value token quantity must be an integer")
+	case quantity.Sign() == 0:
+		return fmt.Errorf("Value policy %d token %d has a zero quantity", policy, token)
+	case quantity.Cmp(valueQuantityMin) < 0, quantity.Cmp(valueQuantityMax) > 0:
+		return fmt.Errorf("Value policy %d token %d: %w", policy, token, ErrValueQuantityRange)
 	}
 	return nil
 }
