@@ -411,6 +411,11 @@ func (Value) isPlutusData() {}
 const valueCBORTag uint64 = 1401
 
 func (v *Value) UnmarshalCBOR(encoded []byte) error {
+	state := newDecodeState()
+	if err := state.enterValue(); err != nil {
+		return err
+	}
+	defer state.leaveValue()
 	tag, content, err := decodeCBORTag(encoded)
 	if err != nil {
 		return err
@@ -418,19 +423,34 @@ func (v *Value) UnmarshalCBOR(encoded []byte) error {
 	if tag != valueCBORTag {
 		return fmt.Errorf("unexpected CBOR tag for PlutusData Value: %d", tag)
 	}
-	inner, rest, err := decodeMapNext(content)
+	value, rest, err := decodeValueNextEntered(content, state)
 	if err != nil {
 		return err
 	}
 	if len(rest) > 0 {
 		return fmt.Errorf("unexpected %d trailing bytes", len(rest))
 	}
-	value := Value{Inner: inner}
-	if err := value.Validate(); err != nil {
-		return err
-	}
-	v.Inner = inner
+	v.Inner = value.Inner
 	return nil
+}
+
+// decodeValueNextEntered decodes the content of a tag 1401 item. The tag has
+// already been counted by the caller; the inner map is counted here, so each
+// node of the tagged subtree is charged exactly once.
+func decodeValueNextEntered(data []byte, state *decodeState) (*Value, []byte, error) {
+	if err := state.enterValue(); err != nil {
+		return nil, nil, err
+	}
+	defer state.leaveValue()
+	inner, rest, err := decodeMapNextEntered(data, state)
+	if err != nil {
+		return nil, nil, err
+	}
+	value := &Value{Inner: inner}
+	if err := value.Validate(); err != nil {
+		return nil, nil, err
+	}
+	return value, rest, nil
 }
 
 func (v Value) MarshalCBOR() ([]byte, error) {

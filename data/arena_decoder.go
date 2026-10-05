@@ -277,24 +277,6 @@ func (d *Decoder) decodePrimitive(data []byte, state *decodeState) (PlutusData, 
 			return nil, fmt.Errorf("unexpected constructor tag in scalar decoder: %d", tagNumber)
 		case tagNumber == 2 || tagNumber == 3:
 			return d.decodeInteger(data)
-		case tagNumber == valueCBORTag:
-			_, content, err := decodeCBORTag(data)
-			if err != nil {
-				return nil, err
-			}
-			inner, rest, err := d.decodeMapNextEntered(content, state)
-			if err != nil {
-				return nil, err
-			}
-			if len(rest) > 0 {
-				return nil, fmt.Errorf("unexpected %d trailing bytes", len(rest))
-			}
-			if err := (&Value{Inner: inner}).Validate(); err != nil {
-				return nil, err
-			}
-			value := d.values.alloc()
-			value.Inner = inner
-			return value, nil
 		default:
 			return nil, fmt.Errorf("unknown CBOR tag for PlutusData: %d", tagNumber)
 		}
@@ -343,6 +325,12 @@ func (d *Decoder) decodeNextPlutusData(
 				return nil, nil, err
 			}
 			return tmpConstr, rest, nil
+		case tagNumber == valueCBORTag:
+			tmpValue, rest, err := d.decodeValueNextEntered(tagContent, state)
+			if err != nil {
+				return nil, nil, err
+			}
+			return tmpValue, rest, nil
 		}
 	}
 
@@ -355,6 +343,29 @@ func (d *Decoder) decodeNextPlutusData(
 		return nil, nil, err
 	}
 	return tmp, rest, nil
+}
+
+// decodeValueNextEntered decodes the content of a tag 1401 item. The tag has
+// already been counted by the caller; the inner map is counted here, so each
+// node of the tagged subtree is charged exactly once.
+func (d *Decoder) decodeValueNextEntered(
+	data []byte,
+	state *decodeState,
+) (*Value, []byte, error) {
+	if err := state.enterValue(); err != nil {
+		return nil, nil, err
+	}
+	defer state.leaveValue()
+	inner, rest, err := d.decodeMapNextEntered(data, state)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := (&Value{Inner: inner}).Validate(); err != nil {
+		return nil, nil, err
+	}
+	value := d.values.alloc()
+	value.Inner = inner
+	return value, rest, nil
 }
 
 func (d *Decoder) decodeConstrNextEntered(

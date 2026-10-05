@@ -264,13 +264,6 @@ func decodePrimitive(data []byte, maxDepth int) (PlutusData, error) {
 			}
 			return &tmpData, nil
 
-		case tagNumber == valueCBORTag:
-			var tmpValue Value
-			if err := tmpValue.UnmarshalCBOR(data); err != nil {
-				return nil, err
-			}
-			return &tmpValue, nil
-
 		default:
 			return nil, fmt.Errorf(
 				"unknown CBOR tag for PlutusData: %d",
@@ -451,6 +444,12 @@ func decodeNextPlutusDataWithState(
 				return nil, nil, err
 			}
 			return tmpConstr, rest, nil
+		case tagNumber == valueCBORTag:
+			tmpValue, rest, err := decodeValueNextEntered(tagContent, state)
+			if err != nil {
+				return nil, nil, err
+			}
+			return tmpValue, rest, nil
 		}
 	}
 
