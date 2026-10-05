@@ -773,10 +773,15 @@ type constantArena struct {
 	protoLists  arenaChunks[ProtoList]
 	protoArrays arenaChunks[ProtoArray]
 	protoPairs  arenaChunks[ProtoPair]
-	values      arenaChunks[Value]
-	datas       arenaChunks[Data]
-	lists       arenaSlices[IConstant]
-	bytes       arenaSlices[byte]
+	// Composite constant types come from the arena so that every decoded
+	// constant owns its own TList/TPair wrappers without a heap allocation
+	// apiece; TList and TPair have exported writable fields.
+	tLists arenaChunks[TList]
+	tPairs arenaChunks[TPair]
+	values arenaChunks[Value]
+	datas  arenaChunks[Data]
+	lists  arenaSlices[IConstant]
+	bytes  arenaSlices[byte]
 	// words backs the magnitude of every decoded integer, so integer
 	// decoding allocates from the arena rather than once per big.Int.
 	words       arenaSlices[big.Word]
@@ -794,12 +799,36 @@ func (a *constantArena) reset() {
 	a.protoLists.reset(decodeRetainVarCap)
 	a.protoArrays.reset(decodeRetainVarCap)
 	a.protoPairs.reset(decodeRetainVarCap)
+	a.tLists.reset(decodeRetainVarCap)
+	a.tPairs.reset(decodeRetainVarCap)
 	a.values.reset(decodeRetainVarCap)
 	a.datas.reset(decodeRetainVarCap)
 	a.lists.reset(decodeRetainVarCap)
 	resetByteSlices(&a.bytes, decodeRetainBytesCap)
 	resetWordSlices(&a.words, decodeRetainBytesCap)
 	a.dataDecoder.Reset()
+}
+
+// listType returns a new list type over elem, from the arena when there is
+// one.
+func (a *constantArena) listType(elem Typ) Typ {
+	if a == nil {
+		return &TList{Typ: elem}
+	}
+	t := a.tLists.alloc()
+	t.Typ = elem
+	return t
+}
+
+// pairType returns a new pair type, from the arena when there is one.
+func (a *constantArena) pairType(first, second Typ) Typ {
+	if a == nil {
+		return &TPair{First: first, Second: second}
+	}
+	t := a.tPairs.alloc()
+	t.First = first
+	t.Second = second
+	return t
 }
 
 func (a *constantArena) allocBigInt() *big.Int {
@@ -1010,7 +1039,7 @@ func DecodeConstant(d *decoder) (IConstant, error) {
 	if err != nil {
 		return nil, err
 	}
-	typ, err := decodeConstantType(&tags)
+	typ, err := decodeConstantType(&tags, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1023,7 +1052,7 @@ func decodeConstantWithArena(d *decoder, arena *constantArena) (IConstant, error
 	if err != nil {
 		return nil, err
 	}
-	typ, err := decodeConstantType(&tags)
+	typ, err := decodeConstantType(&tags, arena)
 	if err != nil {
 		return nil, err
 	}
@@ -1428,8 +1457,8 @@ func (s *constantTagSeq) len() int {
 	return s.n
 }
 
-func decodeConstantType(tags *constantTagSeq) (Typ, error) {
-	typ, next, err := decodeConstantTypeAt(tags, 0)
+func decodeConstantType(tags *constantTagSeq, arena *constantArena) (Typ, error) {
+	typ, next, err := decodeConstantTypeAt(tags, 0, arena)
 	if err != nil {
 		return nil, err
 	}
@@ -1439,7 +1468,11 @@ func decodeConstantType(tags *constantTagSeq) (Typ, error) {
 	return typ, nil
 }
 
-func decodeConstantTypeAt(tags *constantTagSeq, idx int) (Typ, int, error) {
+func decodeConstantTypeAt(
+	tags *constantTagSeq,
+	idx int,
+	arena *constantArena,
+) (Typ, int, error) {
 	if idx >= tags.len() {
 		return nil, idx, errors.New("unknown type tag")
 	}
@@ -1475,13 +1508,13 @@ func decodeConstantTypeAt(tags *constantTagSeq, idx int) (Typ, int, error) {
 		}
 		switch tags.at(idx) {
 		case ProtoListTwoTag:
-			subType, next, err := decodeConstantTypeAt(tags, idx+1)
+			subType, next, err := decodeConstantTypeAt(tags, idx+1, arena)
 			if err != nil {
 				return nil, next, err
 			}
-			return listType(subType), next, nil
+			return arena.listType(subType), next, nil
 		case ProtoArrayTag:
-			subType, next, err := decodeConstantTypeAt(tags, idx+1)
+			subType, next, err := decodeConstantTypeAt(tags, idx+1, arena)
 			if err != nil {
 				return nil, next, err
 			}
@@ -1491,15 +1524,15 @@ func decodeConstantTypeAt(tags *constantTagSeq, idx int) (Typ, int, error) {
 			if idx >= tags.len() || tags.at(idx) != ProtoPairThreeTag {
 				return nil, idx, errors.New("unknown type tag")
 			}
-			first, next, err := decodeConstantTypeAt(tags, idx+1)
+			first, next, err := decodeConstantTypeAt(tags, idx+1, arena)
 			if err != nil {
 				return nil, next, err
 			}
-			second, next, err := decodeConstantTypeAt(tags, next)
+			second, next, err := decodeConstantTypeAt(tags, next, arena)
 			if err != nil {
 				return nil, next, err
 			}
-			return pairType(first, second), next, nil
+			return arena.pairType(first, second), next, nil
 		default:
 			return nil, idx, errors.New("unknown type tag")
 		}

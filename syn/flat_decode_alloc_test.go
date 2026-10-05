@@ -125,24 +125,54 @@ func TestDecodeIntegerConstantAllocationsDoNotScaleWithCount(t *testing.T) {
 	}
 }
 
-var typSink Typ
-
-func TestCompositeConstantTypesDoNotAllocate(t *testing.T) {
-	pair := ProtoPair{FstType: &TData{}, SndType: &TData{}}
-	list := ProtoList{LTyp: &TData{}}
-	mapList := ProtoList{LTyp: &TPair{First: &TData{}, Second: &TData{}}}
+func TestValidateCompositeConstantsDoesNotAllocate(t *testing.T) {
+	encoded := encodeConstantsProgram(
+		t,
+		&ProtoList{LTyp: &TData{}, List: []IConstant{}},
+		&ProtoList{
+			LTyp: &TPair{First: &TData{}, Second: &TData{}},
+			List: []IConstant{},
+		},
+		&ProtoPair{
+			FstType: &TInteger{},
+			SndType: &TList{Typ: &TData{}},
+			First:   &Integer{Inner: big.NewInt(1)},
+			Second:  &ProtoList{LTyp: &TData{}, List: []IConstant{}},
+		},
+	)
+	program, err := Decode[DeBruijn](encoded)
+	if err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	context := ProgramContext{
+		LedgerLanguage: lang.LanguageVersionV3,
+		ProtocolMajor:  11,
+	}
 	allocs := testing.AllocsPerRun(100, func() {
-		typSink = pair.Typ()
-		typSink = list.Typ()
-		typSink = mapList.Typ()
+		if err := ValidateProgram(program, context); err != nil {
+			t.Fatal(err)
+		}
 	})
 	if allocs != 0 {
-		t.Fatalf("composite Typ() made %.0f allocations, want 0", allocs)
+		t.Fatalf("ValidateProgram made %.0f allocations, want 0", allocs)
 	}
-	if !EqualType(mapList.Typ(), &TList{Typ: &TPair{First: &TData{}, Second: &TData{}}}) {
-		t.Fatalf("interned map type %#v is not list (pair data data)", mapList.Typ())
+}
+
+func TestConstantSizeMatchesTypeSize(t *testing.T) {
+	cons := []IConstant{
+		&Integer{Inner: big.NewInt(1)},
+		&ProtoList{LTyp: &TList{Typ: &TInteger{}}},
+		&ProtoArray{ATyp: &TPair{First: &TData{}, Second: &TBool{}}},
+		&ProtoPair{
+			FstType: &TList{Typ: &TData{}},
+			SndType: &TPair{First: &TUnit{}, Second: &TString{}},
+		},
+		ProtoList{LTyp: &TData{}},
+		ProtoPair{FstType: &TData{}, SndType: &TData{}},
 	}
-	if !EqualType(ProtoList{LTyp: &TInteger{}}.Typ(), &TList{Typ: &TInteger{}}) {
-		t.Fatal("interned list integer type mismatch")
+	for _, c := range cons {
+		if got, want := constantSize(c), constantTypeSize(c.Typ()); got != want {
+			t.Errorf("constantSize(%T) = %d, want %d", c, got, want)
+		}
 	}
 }
