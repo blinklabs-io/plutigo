@@ -35,10 +35,14 @@ func TestProtoPairTypIsPrivateToCaller(t *testing.T) {
 	}
 }
 
-func encodeConstantsProgram(t *testing.T, cons ...IConstant) []byte {
+func encodeConstantsProgram(
+	t *testing.T,
+	first IConstant,
+	rest ...IConstant,
+) []byte {
 	t.Helper()
-	var term Term[DeBruijn] = &Constant{Con: cons[0]}
-	for _, c := range cons[1:] {
+	var term Term[DeBruijn] = &Constant{Con: first}
+	for _, c := range rest {
 		term = &Apply[DeBruijn]{Function: term, Argument: &Constant{Con: c}}
 	}
 	encoded, err := Encode(&Program[DeBruijn]{
