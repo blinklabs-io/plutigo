@@ -1,7 +1,9 @@
 package syn
 
 import (
+	"github.com/blinklabs-io/plutigo/data"
 	"math/big"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -376,4 +378,157 @@ func TestValidateProgramPrePV11ConstrUnbounded(t *testing.T) {
 	if err != nil {
 		t.Errorf("ValidateProgram: %v", err)
 	}
+}
+
+func checkAllocationBound(t *testing.T, run func()) {
+	t.Helper()
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	run()
+	runtime.ReadMemStats(&after)
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 1<<20 {
+		t.Errorf("allocated %d bytes with a small output/input allowance", allocated)
+	}
+}
+
+func TestParseOversizedInputBeforeLexer(t *testing.T) {
+	input := strings.Repeat(" ", maxInputBytes+1)
+	checkAllocationBound(t, func() {
+		p := NewParser(input)
+		_, err := p.ParseProgram()
+		requireErrContains(t, "ParseProgram", err, "input too large")
+		_, err = p.ParseTerm()
+		requireErrContains(t, "ParseTerm", err, "input too large")
+	})
+}
+
+func TestParseValueNodeAccounting(t *testing.T) {
+	for _, input := range []string{"(con value [(#, [(#, 1)])])", "(con data (V [(#, [(#, 1)])]))"} {
+		for _, remaining := range []int{1, 2} {
+			p := NewParser(input)
+			p.nodes = maxProgramNodes - remaining
+			_, err := p.ParseTerm()
+			requireErrContains(t, input, err, "too many nodes")
+		}
+		p := NewParser(input)
+		p.nodes = maxProgramNodes - 3
+		if _, err := p.ParseTerm(); err != nil {
+			t.Errorf("three remaining nodes should admit a term, policy and token: %v", err)
+		}
+	}
+}
+
+func TestParseValueWidthBeforeCompletion(t *testing.T) {
+	for _, prefix := range []string{"(con value ", "(con data (V "} {
+		for _, input := range []string{
+			prefix + "[" + strings.Repeat("(#, []),", maxCollectionWidth) + "(",
+			prefix + "[(#, [" + strings.Repeat("(#, 1),", maxCollectionWidth) + "(",
+		} {
+			_, err := NewParser(input).ParseTerm()
+			requireErrContains(t, prefix, err, "too many")
+		}
+	}
+}
+
+func TestPrettyRecursiveDepth(t *testing.T) {
+	var typ Typ = &TUnit{}
+	var pair IConstant = &Unit{}
+	var datum data.PlutusData = data.NewInteger(big.NewInt(1))
+	var term Term[DeBruijn] = &Error{}
+	for range 20 {
+		typ = &TList{Typ: typ}
+		pair = &ProtoPair{First: pair, Second: &Unit{}}
+		datum = &data.List{Items: []data.PlutusData{datum}}
+		term = &Case[DeBruijn]{Constr: term}
+	}
+	for name, node := range map[string]Term[DeBruijn]{
+		"pair values":     &Constant{Con: &ProtoList{LTyp: &TUnit{}, List: []IConstant{pair}}},
+		"types":           &Constant{Con: &ProtoList{LTyp: typ}},
+		"data":            &Constant{Con: &Data{Inner: datum}},
+		"case scrutinees": term,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := PrettyTermWithLimits[DeBruijn](node, PrettyLimits{MaxDepth: 10})
+			requireErrContains(t, name, err, "depth")
+			if _, err := PrettyTermWithLimits[DeBruijn](node, PrettyLimits{MaxDepth: 100}); err != nil {
+				t.Errorf("within the depth limit: %v", err)
+			}
+		})
+	}
+}
+
+func TestPrettyLeafAllocationBound(t *testing.T) {
+	for name, con := range map[string]IConstant{
+		"escaped string": &String{Inner: strings.Repeat("\n", 2<<20)},
+		"bytes":          &ByteString{Inner: make([]byte, 1<<20)},
+		"integer":        &Integer{Inner: new(big.Int).Lsh(big.NewInt(1), 8<<20)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			checkAllocationBound(t, func() {
+				_, err := PrettyTermWithLimits[DeBruijn](&Constant{Con: con}, PrettyLimits{MaxOutputBytes: 32})
+				requireErrContains(t, name, err, "output")
+			})
+		})
+	}
+}
+
+func TestPrettyStopsBeforeNextConstant(t *testing.T) {
+	// The nil integer would panic if a sibling were visited after the first
+	// item exhausts the output allowance.
+	out, err := PrettyTermWithLimits[DeBruijn](&Constant{Con: &ProtoList{
+		LTyp: &TByteString{}, List: []IConstant{&ByteString{Inner: make([]byte, 100)}, (*Integer)(nil)},
+	}}, PrettyLimits{MaxOutputBytes: 40})
+	requireErrContains(t, "PrettyTermWithLimits", err, "output")
+	if out != "" {
+		t.Errorf("output on failure: %q", out)
+	}
+}
+
+func TestPrettyStopsBeforeNextData(t *testing.T) {
+	out, err := PrettyTermWithLimits[DeBruijn](&Constant{Con: &Data{Inner: &data.List{
+		Items: []data.PlutusData{data.NewByteString(make([]byte, 100)), (*data.ByteString)(nil)},
+	}}}, PrettyLimits{MaxOutputBytes: 50})
+	requireErrContains(t, "PrettyTermWithLimits", err, "output")
+	if out != "" {
+		t.Errorf("output on failure: %q", out)
+	}
+}
+
+func TestPrettyExactOutputAllowance(t *testing.T) {
+	for _, term := range []Term[DeBruijn]{
+		&Constant{Con: &String{Inner: "\"\\\n\t\a\b\f\r\v\x00\x7fλ"}},
+		&Constant{Con: &ByteString{Inner: []byte{0, 15, 16, 255}}},
+		&Constant{Con: &Integer{Inner: big.NewInt(-1024)}},
+		&Constant{Con: &Data{Inner: &data.Value{Inner: &data.Map{Pairs: [][2]data.PlutusData{
+			{data.NewByteString(nil), &data.Map{}},
+			{data.NewByteString([]byte{1}), &data.Map{Pairs: [][2]data.PlutusData{
+				{data.NewByteString(nil), data.NewInteger(big.NewInt(0))},
+			}}},
+		}}}}},
+	} {
+		want := PrettyTerm[DeBruijn](term)
+		if want == "" {
+			t.Fatal("unbounded control failed")
+		}
+		got, err := PrettyTermWithLimits[DeBruijn](term, PrettyLimits{MaxOutputBytes: len(want)})
+		if err != nil || got != want {
+			t.Errorf("exact allowance: got %q, %v; want %q", got, err, want)
+		}
+		_, err = PrettyTermWithLimits[DeBruijn](term, PrettyLimits{MaxOutputBytes: len(want) - 1})
+		requireErrContains(t, "one byte below allowance", err, "output")
+	}
+}
+
+func TestPrettyValueOutputLimit(t *testing.T) {
+	tokens := &data.Map{Pairs: [][2]data.PlutusData{
+		{data.NewByteString(nil), data.NewInteger(big.NewInt(1))},
+		{data.NewByteString([]byte{1}), data.NewInteger(big.NewInt(2))},
+	}}
+	term := &Constant{Con: &Data{Inner: &data.Value{Inner: &data.Map{Pairs: [][2]data.PlutusData{
+		{data.NewByteString(nil), tokens},
+		{data.NewByteString([]byte{1}), tokens},
+	}}}}}
+	_, err := PrettyTermWithLimits[DeBruijn](term, PrettyLimits{MaxOutputBytes: 32})
+	requireErrContains(t, "PrettyTermWithLimits", err, "output")
 }

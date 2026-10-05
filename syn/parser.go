@@ -61,7 +61,6 @@ func (p *Parser) leave() {
 
 func NewParser(input string) *Parser {
 	p := &Parser{
-		lexer:         lex.NewLexer(input),
 		interned:      make(map[string]Unique),
 		uniqueCounter: 0,
 		inputLen:      len(input),
@@ -69,6 +68,10 @@ func NewParser(input string) *Parser {
 		maxConstrFields: maxCollectionWidth,
 	}
 
+	if p.inputLen > maxInputBytes {
+		return p
+	}
+	p.lexer = lex.NewLexer(input)
 	p.curToken = p.lexer.NextToken()
 	p.peekToken = p.lexer.NextToken()
 
@@ -184,6 +187,9 @@ func (p *Parser) ParseProgram() (*Program[Name], error) {
 }
 
 func (p *Parser) ParseTerm() (Term[Name], error) {
+	if p.inputLen > maxInputBytes {
+		return nil, errors.New("input too large")
+	}
 	if err := p.enter(); err != nil {
 		return nil, err
 	}
@@ -658,6 +664,12 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 		items := make([]IConstant, 0, 8)
 
 		for p.curToken.Type != lex.TokenRBracket {
+			if len(items) >= maxCollectionWidth {
+				return nil, errTooMany("value policy items", maxCollectionWidth)
+			}
+			if err := p.node(); err != nil {
+				return nil, err
+			}
 			if err := p.expect(lex.TokenLParen); err != nil {
 				return nil, err
 			}
@@ -691,6 +703,12 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			innerItems := make([]IConstant, 0, 8)
 
 			for p.curToken.Type != lex.TokenRBracket {
+				if len(innerItems) >= maxCollectionWidth {
+					return nil, errTooMany("value token items", maxCollectionWidth)
+				}
+				if err := p.node(); err != nil {
+					return nil, err
+				}
 				if err := p.expect(lex.TokenLParen); err != nil {
 					return nil, err
 				}
@@ -1242,6 +1260,12 @@ func (p *Parser) parsePlutusValue() (data.PlutusData, error) {
 	}
 	pairs := make([][2]data.PlutusData, 0)
 	for p.curToken.Type != lex.TokenRBracket {
+		if len(pairs) >= maxCollectionWidth {
+			return nil, errTooMany("value policy items", maxCollectionWidth)
+		}
+		if err := p.node(); err != nil {
+			return nil, err
+		}
 		if err := p.expect(lex.TokenLParen); err != nil {
 			return nil, err
 		}
@@ -1257,6 +1281,12 @@ func (p *Parser) parsePlutusValue() (data.PlutusData, error) {
 		}
 		tokens := make([][2]data.PlutusData, 0)
 		for p.curToken.Type != lex.TokenRBracket {
+			if len(tokens) >= maxCollectionWidth {
+				return nil, errTooMany("value token items", maxCollectionWidth)
+			}
+			if err := p.node(); err != nil {
+				return nil, err
+			}
 			if err := p.expect(lex.TokenLParen); err != nil {
 				return nil, err
 			}

@@ -2,6 +2,7 @@ package syn
 
 import (
 	"fmt"
+	"math/big"
 	"strings"
 
 	"github.com/blinklabs-io/plutigo/data"
@@ -20,7 +21,7 @@ const (
 // PrettyLimits bounds the work of [PrettyWithLimits] and
 // [PrettyTermWithLimits]. A non-positive field selects its default.
 type PrettyLimits struct {
-	// MaxDepth is the deepest term nesting that will be formatted.
+	// MaxDepth bounds recursive term, constant, type and data formatting.
 	MaxDepth int
 	// MaxOutputBytes is the most output that will be produced.
 	MaxOutputBytes int
@@ -72,6 +73,7 @@ func PrettyTermWithLimits[T Binder](
 type PrettyPrinter struct {
 	builder    strings.Builder
 	indent     int
+	depth      int
 	indentSize int
 	maxDepth   int
 	maxBytes   int
@@ -118,6 +120,7 @@ func (pp *PrettyPrinter) result() (string, error) {
 func (pp *PrettyPrinter) Reset() {
 	pp.builder.Reset()
 	pp.indent = 0
+	pp.depth = 0
 	pp.err = nil
 }
 
@@ -145,7 +148,9 @@ func (pp *PrettyPrinter) write(s string) {
 
 // writef writes a formatted string to the builder
 func (pp *PrettyPrinter) writef(format string, args ...any) {
-	pp.write(fmt.Sprintf(format, args...))
+	if pp.err == nil {
+		pp.write(fmt.Sprintf(format, args...))
+	}
 }
 
 // writeIndent writes the current indentation. The allowance is checked before
@@ -160,9 +165,6 @@ func (pp *PrettyPrinter) writeIndent() {
 
 // increaseIndent increases the indentation level
 func (pp *PrettyPrinter) increaseIndent() {
-	if pp.indent >= pp.maxDepth && pp.err == nil {
-		pp.err = fmt.Errorf("pretty depth exceeds %d", pp.maxDepth)
-	}
 	pp.indent++
 }
 
@@ -203,9 +205,14 @@ func printProgram[T Binder](pp *PrettyPrinter, prog *Program[T]) {
 
 // printTerm dispatches to the appropriate term printing method
 func printTerm[T Binder](pp *PrettyPrinter, term Term[T]) {
-	if pp.err != nil {
+	if c, ok := term.(*Constant); ok {
+		pp.printConstant(c, false)
 		return
 	}
+	if !pp.enter() {
+		return
+	}
+	defer pp.leave()
 	switch t := term.(type) {
 	case *Var[T]:
 		pp.write(t.Name.TextName())
@@ -286,6 +293,9 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T]) {
 			pp.increaseIndent()
 
 			for _, field := range t.Fields {
+				if pp.err != nil {
+					break
+				}
 				pp.writeIndent()
 
 				printTerm[T](pp, field)
@@ -311,6 +321,9 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T]) {
 			pp.increaseIndent()
 
 			for _, branch := range t.Branches {
+				if pp.err != nil {
+					break
+				}
 				pp.writeIndent()
 
 				printTerm[T](pp, branch)
@@ -328,8 +341,6 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T]) {
 		pp.write(")")
 	case *Error:
 		pp.write("(error )")
-	case *Constant:
-		pp.printConstant(t, false)
 	default:
 		panic(fmt.Sprintf("unknown term: %T: %v", t, t))
 	}
@@ -337,6 +348,10 @@ func printTerm[T Binder](pp *PrettyPrinter, term Term[T]) {
 
 // printConstant formats a Constant node
 func (pp *PrettyPrinter) printConstant(c *Constant, inCollection bool) {
+	if !pp.enter() {
+		return
+	}
+	defer pp.leave()
 	if !inCollection {
 		pp.write("(con ")
 	}
@@ -347,16 +362,14 @@ func (pp *PrettyPrinter) printConstant(c *Constant, inCollection bool) {
 			pp.write("integer ")
 		}
 
-		pp.write(con.Inner.String())
+		pp.writeInteger(con.Inner)
 	case *ByteString:
 		if !inCollection {
 			pp.write("bytestring ")
 		}
 		pp.write("#")
 
-		for _, b := range con.Inner {
-			pp.writef("%02x", b)
-		}
+		pp.writeHex(con.Inner)
 	case *String:
 		if !inCollection {
 			pp.write("string ")
@@ -364,7 +377,7 @@ func (pp *PrettyPrinter) printConstant(c *Constant, inCollection bool) {
 
 		pp.write("\"")
 
-		pp.write(escapeString(con.Inner))
+		pp.writeEscapedString(con.Inner)
 
 		pp.write("\"")
 	case *Unit:
@@ -433,22 +446,26 @@ func (pp *PrettyPrinter) printConstant(c *Constant, inCollection bool) {
 		}
 		pp.write("0x")
 
+		if !pp.reserve(bls.SizeOfG1AffineCompressed * 2) {
+			return
+		}
 		affine := new(bls.G1Affine).FromJacobian(con.Inner)
 
-		for _, b := range affine.Bytes() {
-			pp.writef("%02x", b)
-		}
+		encoded := affine.Bytes()
+		pp.writeHex(encoded[:])
 	case *Bls12_381G2Element:
 		if !inCollection {
 			pp.write("bls12_381_G2_element ")
 		}
 		pp.write("0x")
 
+		if !pp.reserve(bls.SizeOfG2AffineCompressed * 2) {
+			return
+		}
 		affine := new(bls.G2Affine).FromJacobian(con.Inner)
 
-		for _, b := range affine.Bytes() {
-			pp.writef("%02x", b)
-		}
+		encoded := affine.Bytes()
+		pp.writeHex(encoded[:])
 	default:
 		pp.write(fmt.Sprintf("unknown constant: %v", c))
 	}
@@ -459,6 +476,9 @@ func (pp *PrettyPrinter) printConstant(c *Constant, inCollection bool) {
 }
 
 func (pp *PrettyPrinter) printConstantCollection(items []IConstant) {
+	if pp.err != nil {
+		return
+	}
 	if len(items) == 0 {
 		pp.write("[]")
 		return
@@ -466,6 +486,9 @@ func (pp *PrettyPrinter) printConstantCollection(items []IConstant) {
 	pp.write("[\n")
 	pp.increaseIndent()
 	for i, item := range items {
+		if pp.err != nil {
+			break
+		}
 		pp.writeIndent()
 		pp.printConstant(&Constant{Con: item}, true)
 		if i < len(items)-1 {
@@ -480,6 +503,10 @@ func (pp *PrettyPrinter) printConstantCollection(items []IConstant) {
 
 // printType formats a Typ interface
 func (pp *PrettyPrinter) printType(typ Typ) {
+	if !pp.enter() {
+		return
+	}
+	defer pp.leave()
 	switch t := typ.(type) {
 	case *TInteger:
 		pp.write("integer")
@@ -522,15 +549,17 @@ func (pp *PrettyPrinter) printType(typ Typ) {
 
 // printPlutusData formats a PlutusData node
 func (pp *PrettyPrinter) printPlutusData(pd data.PlutusData) {
+	if !pp.enter() {
+		return
+	}
+	defer pp.leave()
 	switch d := pd.(type) {
 	case *data.Integer:
 		pp.write("I ")
-		pp.write(d.Inner.String())
+		pp.writeInteger(d.Inner)
 	case *data.ByteString:
 		pp.write("B #")
-		for _, b := range d.Inner {
-			pp.writef("%02x", b)
-		}
+		pp.writeHex(d.Inner)
 	case *data.List:
 		if len(d.Items) == 0 {
 			pp.write("List []")
@@ -538,6 +567,9 @@ func (pp *PrettyPrinter) printPlutusData(pd data.PlutusData) {
 			pp.write("List [\n")
 			pp.increaseIndent()
 			for i, item := range d.Items {
+				if pp.err != nil {
+					break
+				}
 				pp.writeIndent()
 				pp.printPlutusData(item)
 				if i < len(d.Items)-1 {
@@ -556,6 +588,9 @@ func (pp *PrettyPrinter) printPlutusData(pd data.PlutusData) {
 			pp.write("Map [\n")
 			pp.increaseIndent()
 			for i, pair := range d.Pairs {
+				if pp.err != nil {
+					break
+				}
 				pp.writeIndent()
 				pp.write("(")
 				pp.printPlutusData(pair[0])
@@ -581,6 +616,9 @@ func (pp *PrettyPrinter) printPlutusData(pd data.PlutusData) {
 			pp.write("[\n")
 			pp.increaseIndent()
 			for i, field := range d.Fields {
+				if pp.err != nil {
+					break
+				}
 				pp.writeIndent()
 				pp.printPlutusData(field)
 				if i < len(d.Fields)-1 {
@@ -598,6 +636,29 @@ func (pp *PrettyPrinter) printPlutusData(pd data.PlutusData) {
 }
 
 func (pp *PrettyPrinter) printPlutusValue(value *data.Value) {
+	if pp.err != nil {
+		return
+	}
+	if value.Inner != nil {
+		allowance := pp.maxBytes - pp.builder.Len()
+		remaining := allowance
+		if len(value.Inner.Pairs) > remaining/7 {
+			pp.reserve(allowance + 1)
+			return
+		}
+		// Even empty keys need seven bytes per policy and six per token.
+		// Check this lower bound before Validate walks every token.
+		remaining -= len(value.Inner.Pairs) * 7
+		for _, policy := range value.Inner.Pairs {
+			if tokens, ok := policy[1].(*data.Map); ok && tokens != nil {
+				if len(tokens.Pairs) > remaining/6 {
+					pp.reserve(allowance + 1)
+					return
+				}
+				remaining -= len(tokens.Pairs) * 6
+			}
+		}
+	}
 	if err := value.Validate(); err != nil {
 		pp.write(fmt.Sprintf("Value{invalid: %v}", err))
 		return
@@ -605,6 +666,9 @@ func (pp *PrettyPrinter) printPlutusValue(value *data.Value) {
 	pp.write("V [")
 	if value.Inner != nil {
 		for i, policy := range value.Inner.Pairs {
+			if pp.err != nil {
+				break
+			}
 			if i > 0 {
 				pp.write(", ")
 			}
@@ -613,6 +677,9 @@ func (pp *PrettyPrinter) printPlutusValue(value *data.Value) {
 			pp.write(", [")
 			tokens := policy[1].(*data.Map)
 			for j, token := range tokens.Pairs {
+				if pp.err != nil {
+					break
+				}
 				if j > 0 {
 					pp.write(", ")
 				}
@@ -629,51 +696,93 @@ func (pp *PrettyPrinter) printPlutusValue(value *data.Value) {
 }
 
 func (pp *PrettyPrinter) printValueAtom(pd data.PlutusData) {
+	if pp.err != nil {
+		return
+	}
 	switch value := pd.(type) {
 	case *data.ByteString:
 		pp.write("#")
-		for _, b := range value.Inner {
-			pp.writef("%02x", b)
-		}
+		pp.writeHex(value.Inner)
 	case *data.Integer:
-		pp.write(value.Inner.String())
+		pp.writeInteger(value.Inner)
 	default:
 		pp.printPlutusData(pd)
 	}
 }
 
-// escapeString escapes special characters in a string for printing
-func escapeString(s string) string {
-	var builder strings.Builder
-
+func (pp *PrettyPrinter) writeEscapedString(s string) {
 	for _, r := range s {
+		if pp.err != nil {
+			break
+		}
 		switch r {
 		case '"':
-			builder.WriteString("\\\"")
+			pp.write("\\\"")
 		case '\\':
-			builder.WriteString("\\\\")
+			pp.write("\\\\")
 		case '\n':
-			builder.WriteString("\\n")
+			pp.write("\\n")
 		case '\t':
-			builder.WriteString("\\t")
+			pp.write("\\t")
 		case '\a':
-			builder.WriteString("\\a")
+			pp.write("\\a")
 		case '\b':
-			builder.WriteString("\\b")
+			pp.write("\\b")
 		case '\f':
-			builder.WriteString("\\f")
+			pp.write("\\f")
 		case '\r':
-			builder.WriteString("\\r")
+			pp.write("\\r")
 		case '\v':
-			builder.WriteString("\\v")
+			pp.write("\\v")
 		default:
 			if r < 0x20 || r == 0x7f {
-				fmt.Fprintf(&builder, "\\o%03o", r)
+				pp.writef("\\o%03o", r)
 			} else {
-				builder.WriteRune(r)
+				pp.write(string(r))
 			}
 		}
 	}
+}
 
-	return builder.String()
+func (pp *PrettyPrinter) enter() bool {
+	if pp.err != nil {
+		return false
+	}
+	if pp.depth >= pp.maxDepth {
+		pp.err = fmt.Errorf("pretty depth exceeds %d", pp.maxDepth)
+		return false
+	}
+	pp.depth++
+	return true
+}
+
+func (pp *PrettyPrinter) leave() { pp.depth-- }
+
+func (pp *PrettyPrinter) writeHex(input []byte) {
+	remaining := pp.maxBytes - pp.builder.Len()
+	if len(input) > remaining/2 {
+		pp.reserve(remaining + 1)
+		return
+	}
+	if !pp.reserve(2 * len(input)) {
+		return
+	}
+	const hex = "0123456789abcdef"
+	for _, b := range input {
+		pp.builder.WriteByte(hex[b>>4])
+		pp.builder.WriteByte(hex[b&15])
+	}
+}
+
+func (pp *PrettyPrinter) writeInteger(n *big.Int) {
+	if pp.err != nil {
+		return
+	}
+	// 2^10 > 10^3: this lower bound rejects oversized magnitudes before
+	// big.Int.String allocates its decimal representation.
+	minimum := (n.BitLen() / 10) * 3
+	if !pp.reserve(minimum) {
+		return
+	}
+	pp.write(n.String())
 }
