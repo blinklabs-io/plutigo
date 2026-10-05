@@ -403,15 +403,22 @@ func dataNodeCountExMem(d data.PlutusData) func() ExMem {
 			count++
 			switch n := node.(type) {
 			case *data.Constr:
-				stack = append(stack, n.Fields...)
+				if n != nil {
+					stack = append(stack, n.Fields...)
+				}
 			case *data.List:
-				stack = append(stack, n.Items...)
+				if n != nil {
+					stack = append(stack, n.Items...)
+				}
 			case *data.Map:
+				if n == nil {
+					continue
+				}
 				for _, pair := range n.Pairs {
 					stack = append(stack, pair[0], pair[1])
 				}
 			case *data.Value:
-				if n.Inner != nil {
+				if n != nil && n.Inner != nil {
 					stack = append(stack, n.Inner)
 				}
 			}

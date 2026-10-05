@@ -27,18 +27,11 @@ func (i Integer) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements json.Unmarshaler for Integer.
 func (i *Integer) UnmarshalJSON(data []byte) error {
-	var raw map[string]*big.Int
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return fmt.Errorf("failed to unmarshal Integer JSON: %w", err)
+	decoded, err := decodeJSONAs[Integer](data, "Integer", "int")
+	if err != nil {
+		return err
 	}
-	v, ok := raw["int"]
-	if !ok {
-		return errors.New("missing \"int\" key in Integer JSON")
-	}
-	if v == nil {
-		return errors.New("null \"int\" value in Integer JSON")
-	}
-	i.Inner = v
+	i.Inner = decoded.Inner
 	return nil
 }
 
@@ -49,172 +42,116 @@ func (b ByteString) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements json.Unmarshaler for ByteString.
 func (b *ByteString) UnmarshalJSON(data []byte) error {
-	var raw map[string]string
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return fmt.Errorf("failed to unmarshal ByteString JSON: %w", err)
-	}
-	v, ok := raw["bytes"]
-	if !ok {
-		return errors.New("missing \"bytes\" key in ByteString JSON")
-	}
-	decoded, err := hex.DecodeString(v)
+	decoded, err := decodeJSONAs[ByteString](data, "ByteString", "bytes")
 	if err != nil {
-		return fmt.Errorf("invalid hex in ByteString JSON: %w", err)
+		return err
 	}
-	b.Inner = decoded
+	b.Inner = decoded.Inner
 	return nil
 }
 
 // MarshalJSON implements json.Marshaler for List.
 func (l List) MarshalJSON() ([]byte, error) {
-	items := make([]json.RawMessage, len(l.Items))
-	for i, item := range l.Items {
-		raw, err := marshalPlutusDataJSON(item)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal List item %d: %w", i, err)
-		}
-		items[i] = raw
+	return marshalWith(l.appendJSON)
+}
+
+func (l List) appendJSON(buf *bytes.Buffer) error {
+	buf.WriteString(`{"list":`)
+	if err := appendJSONArray(buf, l.Items, "List item"); err != nil {
+		return err
 	}
-	return json.Marshal(map[string][]json.RawMessage{"list": items})
+	buf.WriteByte('}')
+	return nil
 }
 
 // UnmarshalJSON implements json.Unmarshaler for List.
 func (l *List) UnmarshalJSON(data []byte) error {
-	var raw map[string][]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return fmt.Errorf("failed to unmarshal List JSON: %w", err)
+	decoded, err := decodeJSONAs[List](data, "List", "list")
+	if err != nil {
+		return err
 	}
-	items, ok := raw["list"]
-	if !ok {
-		return errors.New("missing \"list\" key in List JSON")
-	}
-	if items == nil {
-		return errors.New("null \"list\" value in List JSON")
-	}
-	l.Items = make([]PlutusData, len(items))
-	for i, item := range items {
-		pd, err := unmarshalPlutusDataJSON(item)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal List item %d: %w", i, err)
-		}
-		l.Items[i] = pd
-	}
+	l.Items = decoded.Items
 	return nil
-}
-
-// mapPairJSON is the JSON representation of a single key-value pair in a Map.
-type mapPairJSON struct {
-	K json.RawMessage `json:"k"`
-	V json.RawMessage `json:"v"`
 }
 
 // MarshalJSON implements json.Marshaler for Map.
 func (m Map) MarshalJSON() ([]byte, error) {
-	pairs := make([]mapPairJSON, len(m.Pairs))
+	return marshalWith(m.appendJSON)
+}
+
+func (m Map) appendJSON(buf *bytes.Buffer) error {
+	buf.WriteString(`{"map":[`)
 	for i, pair := range m.Pairs {
-		k, err := marshalPlutusDataJSON(pair[0])
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal Map key %d: %w", i, err)
+		if i > 0 {
+			buf.WriteByte(',')
 		}
-		v, err := marshalPlutusDataJSON(pair[1])
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal Map value %d: %w", i, err)
+		buf.WriteString(`{"k":`)
+		if err := appendPlutusDataJSON(buf, pair[0]); err != nil {
+			return fmt.Errorf("failed to marshal Map key %d: %w", i, err)
 		}
-		pairs[i] = mapPairJSON{K: k, V: v}
+		buf.WriteString(`,"v":`)
+		if err := appendPlutusDataJSON(buf, pair[1]); err != nil {
+			return fmt.Errorf("failed to marshal Map value %d: %w", i, err)
+		}
+		buf.WriteByte('}')
 	}
-	return json.Marshal(map[string][]mapPairJSON{"map": pairs})
+	buf.WriteString(`]}`)
+	return nil
 }
 
 // UnmarshalJSON implements json.Unmarshaler for Map.
 func (m *Map) UnmarshalJSON(data []byte) error {
-	var raw map[string][]mapPairJSON
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return fmt.Errorf("failed to unmarshal Map JSON: %w", err)
+	decoded, err := decodeJSONAs[Map](data, "Map", "map")
+	if err != nil {
+		return err
 	}
-	pairs, ok := raw["map"]
-	if !ok {
-		return errors.New("missing \"map\" key in Map JSON")
-	}
-	if pairs == nil {
-		return errors.New("null \"map\" value in Map JSON")
-	}
-	m.Pairs = make([][2]PlutusData, len(pairs))
-	for i, pair := range pairs {
-		k, err := unmarshalPlutusDataJSON(pair.K)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal Map key %d: %w", i, err)
-		}
-		v, err := unmarshalPlutusDataJSON(pair.V)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal Map value %d: %w", i, err)
-		}
-		m.Pairs[i] = [2]PlutusData{k, v}
-	}
+	m.Pairs = decoded.Pairs
 	return nil
-}
-
-// constrJSON is the JSON representation of a Constr.
-type constrJSON struct {
-	Constructor *big.Int          `json:"constructor"`
-	Fields      []json.RawMessage `json:"fields"`
 }
 
 // MarshalJSON implements json.Marshaler for Constr.
 func (c Constr) MarshalJSON() ([]byte, error) {
-	fields := make([]json.RawMessage, len(c.Fields))
-	for i, field := range c.Fields {
-		raw, err := marshalPlutusDataJSON(field)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"failed to marshal Constr field %d: %w",
-				i,
-				err,
-			)
-		}
-		fields[i] = raw
+	return marshalWith(c.appendJSON)
+}
+
+func (c Constr) appendJSON(buf *bytes.Buffer) error {
+	buf.WriteString(`{"constructor":`)
+	buf.WriteString(constrTagString(c.Tag))
+	buf.WriteString(`,"fields":`)
+	if err := appendJSONArray(buf, c.Fields, "Constr field"); err != nil {
+		return err
 	}
-	constructor := c.Tag
-	if constructor == nil {
-		constructor = new(big.Int)
-	}
-	return json.Marshal(constrJSON{Constructor: constructor, Fields: fields})
+	buf.WriteByte('}')
+	return nil
 }
 
 // UnmarshalJSON implements json.Unmarshaler for Constr.
 func (c *Constr) UnmarshalJSON(data []byte) error {
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return fmt.Errorf("failed to unmarshal Constr JSON: %w", err)
+	decoded, err := decodeJSONAs[Constr](data, "Constr", "constructor")
+	if err != nil {
+		return err
 	}
-	tagRaw, ok := raw["constructor"]
-	if !ok {
-		return errors.New("missing \"constructor\" key in Constr JSON")
-	}
-	var tag big.Int
-	if err := json.Unmarshal(tagRaw, &tag); err != nil {
-		return fmt.Errorf("failed to unmarshal Constr constructor tag: %w", err)
-	}
-	c.Tag = &tag
-	fieldsRaw, ok := raw["fields"]
-	if !ok {
-		return errors.New("missing \"fields\" key in Constr JSON")
-	}
-	if string(fieldsRaw) == "null" {
-		return errors.New("null \"fields\" value in Constr JSON")
-	}
-	var fields []json.RawMessage
-	if err := json.Unmarshal(fieldsRaw, &fields); err != nil {
-		return fmt.Errorf("failed to unmarshal Constr fields: %w", err)
-	}
-	c.Fields = make([]PlutusData, len(fields))
-	for i, field := range fields {
-		pd, err := unmarshalPlutusDataJSON(field)
-		if err != nil {
-			return fmt.Errorf("failed to unmarshal Constr field %d: %w", i, err)
-		}
-		c.Fields[i] = pd
-	}
+	c.Tag = decoded.Tag
+	c.Fields = decoded.Fields
 	return nil
+}
+
+// decodeJSONAs decodes data with the bounded whole-document decoder, so the
+// exported per-type decoders share its depth and node limits, and requires the
+// document to be a T. key is T's discriminator key.
+func decodeJSONAs[T any, P interface {
+	*T
+	PlutusData
+}](data []byte, name, key string) (P, error) {
+	pd, err := unmarshalPlutusDataJSON(data)
+	if err != nil {
+		return nil, err
+	}
+	decoded, ok := pd.(P)
+	if !ok {
+		return nil, fmt.Errorf("missing %q key in %s JSON", key, name)
+	}
+	return decoded, nil
 }
 
 // MarshalJSON implements json.Marshaler for PlutusDataWrapper.
@@ -244,30 +181,61 @@ func DecodeJSON(data []byte) (PlutusData, error) {
 
 // marshalPlutusDataJSON marshals any PlutusData value to JSON.
 func marshalPlutusDataJSON(pd PlutusData) (json.RawMessage, error) {
-	switch v := pd.(type) {
-	case *Integer:
-		return json.Marshal(v)
-	case Integer:
-		return json.Marshal(v)
-	case *ByteString:
-		return json.Marshal(v)
-	case ByteString:
-		return json.Marshal(v)
-	case *List:
-		return json.Marshal(v)
-	case List:
-		return json.Marshal(v)
-	case *Map:
-		return json.Marshal(v)
-	case Map:
-		return json.Marshal(v)
-	case *Constr:
-		return json.Marshal(v)
-	case Constr:
-		return json.Marshal(v)
-	default:
-		return nil, fmt.Errorf("unknown PlutusData type: %T", pd)
+	var buf bytes.Buffer
+	if err := appendPlutusDataJSON(&buf, pd); err != nil {
+		return nil, err
 	}
+	return buf.Bytes(), nil
+}
+
+// appendPlutusDataJSON writes pd to buf. Containers write their children
+// into the same buffer, so the work is linear in the size of the output;
+// returning each child as a json.RawMessage would make json.Marshal rescan
+// the whole encoded subtree at every nesting level.
+func appendPlutusDataJSON(buf *bytes.Buffer, pd PlutusData) error {
+	switch v := pd.(type) {
+	case *List:
+		if v != nil {
+			return v.appendJSON(buf)
+		}
+	case List:
+		return v.appendJSON(buf)
+	case *Map:
+		if v != nil {
+			return v.appendJSON(buf)
+		}
+	case Map:
+		return v.appendJSON(buf)
+	case *Constr:
+		if v != nil {
+			return v.appendJSON(buf)
+		}
+	case Constr:
+		return v.appendJSON(buf)
+	case *Integer, Integer, *ByteString, ByteString:
+	default:
+		return fmt.Errorf("unknown PlutusData type: %T", pd)
+	}
+	raw, err := json.Marshal(pd)
+	if err != nil {
+		return err
+	}
+	buf.Write(raw)
+	return nil
+}
+
+func appendJSONArray(buf *bytes.Buffer, items []PlutusData, label string) error {
+	buf.WriteByte('[')
+	for i, item := range items {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		if err := appendPlutusDataJSON(buf, item); err != nil {
+			return fmt.Errorf("failed to marshal %s %d: %w", label, i, err)
+		}
+	}
+	buf.WriteByte(']')
+	return nil
 }
 
 // discriminatorKeys are the top-level JSON keys that identify each PlutusData variant.
