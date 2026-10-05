@@ -419,6 +419,25 @@ func TestParseValueNodeAccounting(t *testing.T) {
 	}
 }
 
+func TestParsePlutusDataNodeAccounting(t *testing.T) {
+	for _, input := range []string{
+		"(con data (List [I 1]))",
+		"(con data (Map [(I 1, I 2)]))",
+		"(con data (Constr 0 [I 1]))",
+	} {
+		p := NewParser(input)
+		p.nodes = maxProgramNodes - 1
+		_, err := p.ParseTerm()
+		requireErrContains(t, input, err, "too many nodes")
+
+		p = NewParser(input)
+		p.nodes = maxProgramNodes - 2
+		if _, err := p.ParseTerm(); err != nil {
+			t.Errorf("two remaining nodes should admit a term and data item: %v", err)
+		}
+	}
+}
+
 func TestParseValueWidthBeforeCompletion(t *testing.T) {
 	for _, prefix := range []string{"(con value ", "(con data (V "} {
 		for _, input := range []string{
@@ -427,6 +446,28 @@ func TestParseValueWidthBeforeCompletion(t *testing.T) {
 		} {
 			_, err := NewParser(input).ParseTerm()
 			requireErrContains(t, prefix, err, "too many")
+		}
+	}
+}
+
+func TestParsePlutusDataWidthBeforeCompletion(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		prefix string
+		item   string
+		extra  string
+	}{
+		{name: "list", prefix: "(con data (List [", item: "I 0,", extra: "I"},
+		{name: "map", prefix: "(con data (Map [", item: "(I 0, I 0),", extra: "("},
+		{name: "constr", prefix: "(con data (Constr 0 [", item: "I 0,", extra: "I"},
+	} {
+		items := strings.Repeat(test.item, maxCollectionWidth)
+		_, err := NewParser(test.prefix + items + test.extra).ParseTerm()
+		requireErrContains(t, test.name, err, "too many")
+
+		input := test.prefix + strings.TrimSuffix(items, ",") + "]))"
+		if _, err := NewParser(input).ParseTerm(); err != nil {
+			t.Errorf("%s: width at the limit should parse, got: %v", test.name, err)
 		}
 	}
 }
@@ -473,6 +514,15 @@ func TestPrettyLeafAllocationBound(t *testing.T) {
 	}
 }
 
+func TestPrettyDataConstrTagAllocationBound(t *testing.T) {
+	tag := new(big.Int).Lsh(big.NewInt(1), 8<<20)
+	term := &Constant{Con: &Data{Inner: &data.Constr{Tag: tag}}}
+	checkAllocationBound(t, func() {
+		_, err := PrettyTermWithLimits[DeBruijn](term, PrettyLimits{MaxOutputBytes: 32})
+		requireErrContains(t, "constr tag", err, "output")
+	})
+}
+
 func TestPrettyStopsBeforeNextConstant(t *testing.T) {
 	// The nil integer would panic if a sibling were visited after the first
 	// item exhausts the output allowance.
@@ -500,6 +550,7 @@ func TestPrettyExactOutputAllowance(t *testing.T) {
 		&Constant{Con: &String{Inner: "\"\\\n\t\a\b\f\r\v\x00\x7fλ"}},
 		&Constant{Con: &ByteString{Inner: []byte{0, 15, 16, 255}}},
 		&Constant{Con: &Integer{Inner: big.NewInt(-1024)}},
+		&Constant{Con: &Data{Inner: data.NewConstr(7, data.NewInteger(big.NewInt(1)))}},
 		&Constant{Con: &Data{Inner: &data.Value{Inner: &data.Map{Pairs: [][2]data.PlutusData{
 			{data.NewByteString(nil), &data.Map{}},
 			{data.NewByteString([]byte{1}), &data.Map{Pairs: [][2]data.PlutusData{

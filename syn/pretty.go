@@ -609,7 +609,9 @@ func (pp *PrettyPrinter) printPlutusData(pd data.PlutusData) {
 	case *data.Value:
 		pp.printPlutusValue(d)
 	case *data.Constr:
-		pp.write(fmt.Sprintf("Constr %d ", d.Tag))
+		pp.write("Constr ")
+		pp.writeInteger(d.Tag)
+		pp.write(" ")
 		if len(d.Fields) == 0 {
 			pp.write("[]")
 		} else {

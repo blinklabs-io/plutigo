@@ -28,14 +28,14 @@ type Parser struct {
 	version       lang.LanguageVersion
 	depth         int
 	inputLen      int
-	// nodes counts the terms and constant list items parsed so far.
+	// nodes counts terms and constant or PlutusData collection items parsed so
+	// far.
 	nodes int
 	// maxConstrFields is the widest constr field list accepted.
 	maxConstrFields int
 }
 
-// node charges one term or constant list item against the program's node
-// budget.
+// node charges one term or collection item against the program's node budget.
 func (p *Parser) node() error {
 	p.nodes++
 	if p.nodes > maxProgramNodes {
@@ -1129,6 +1129,12 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 		var items []data.PlutusData
 
 		for p.curToken.Type != lex.TokenRBracket {
+			if len(items) >= maxCollectionWidth {
+				return nil, errTooMany("PlutusData list items", maxCollectionWidth)
+			}
+			if err := p.node(); err != nil {
+				return nil, err
+			}
 			item, err := p.parsePlutusData()
 			if err != nil {
 				return nil, err
@@ -1158,6 +1164,12 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 		var pairs [][2]data.PlutusData
 
 		for p.curToken.Type != lex.TokenRBracket {
+			if len(pairs) >= maxCollectionWidth {
+				return nil, errTooMany("PlutusData map items", maxCollectionWidth)
+			}
+			if err := p.node(); err != nil {
+				return nil, err
+			}
 			if err := p.expect(lex.TokenLParen); err != nil {
 				return nil, err
 			}
@@ -1225,6 +1237,12 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 		var fields []data.PlutusData
 
 		for p.curToken.Type != lex.TokenRBracket {
+			if len(fields) >= maxCollectionWidth {
+				return nil, errTooMany("PlutusData constr fields", maxCollectionWidth)
+			}
+			if err := p.node(); err != nil {
+				return nil, err
+			}
 			field, err := p.parsePlutusData()
 			if err != nil {
 				return nil, err

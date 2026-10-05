@@ -21,12 +21,12 @@ import (
 const (
 	// maxInputBytes bounds the encoded or textual size of a program.
 	maxInputBytes = 16 << 20
-	// maxProgramNodes bounds the terms plus constant list items of a program.
+	// maxProgramNodes bounds the terms plus constant and PlutusData collection
+	// items of a program.
 	maxProgramNodes = 1 << 20
-	// maxCollectionWidth bounds the fields of a constr, the branches of a
-	// case and the items of a constant list. A unit list item encodes in one
-	// bit, so a list this wide needs 64 KiB, four times the largest script a
-	// transaction carries today.
+	// maxCollectionWidth bounds term lists and constant or PlutusData
+	// collections. A unit list item encodes in one bit, so a list this wide
+	// needs 64 KiB, four times the largest script a transaction carries today.
 	maxCollectionWidth = 1 << 19
 )
 
