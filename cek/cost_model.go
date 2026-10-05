@@ -16,8 +16,13 @@ import (
 type CostModel struct {
 	machineCosts MachineCosts
 	builtinCosts BuiltinCosts
+	caches       *builtinCostCaches
 }
 
+// Clone deliberately leaves the shared cost caches unbuilt: a clone exists to
+// be modified, and its costing functions can be rewritten in place through
+// the cloned pointers, which would leave a prebuilt cache stale. A machine
+// built from a cache-less model resolves the costs for itself.
 func (cm CostModel) Clone() CostModel {
 	return CostModel{
 		machineCosts: cm.machineCosts,
@@ -28,7 +33,7 @@ func (cm CostModel) Clone() CostModel {
 var DefaultCostModel = CostModel{
 	machineCosts: DefaultMachineCosts,
 	builtinCosts: DefaultBuiltinCosts,
-}
+}.withCostCaches()
 
 func costModelFromList(
 	version lang.LanguageVersion,
@@ -67,7 +72,7 @@ func costModelFromList(
 			}
 		}
 	}
-	return cm, nil
+	return cm.withCostCaches(), nil
 }
 
 func costModelFromMap(
@@ -94,7 +99,7 @@ func costModelFromMap(
 			}
 		}
 	}
-	return cm, nil
+	return cm.withCostCaches(), nil
 }
 
 const (
@@ -398,15 +403,22 @@ func dataNodeCountExMem(d data.PlutusData) func() ExMem {
 			count++
 			switch n := node.(type) {
 			case *data.Constr:
-				stack = append(stack, n.Fields...)
+				if n != nil {
+					stack = append(stack, n.Fields...)
+				}
 			case *data.List:
-				stack = append(stack, n.Items...)
+				if n != nil {
+					stack = append(stack, n.Items...)
+				}
 			case *data.Map:
+				if n == nil {
+					continue
+				}
 				for _, pair := range n.Pairs {
 					stack = append(stack, pair[0], pair[1])
 				}
 			case *data.Value:
-				if n.Inner != nil {
+				if n != nil && n.Inner != nil {
 					stack = append(stack, n.Inner)
 				}
 			}
@@ -453,89 +465,80 @@ func dataExMem(x data.PlutusData) func() ExMem {
 	}
 }
 
+// equalsDataMinExMem returns min(size(x), size(y)) in the dataExMem measure.
+//
 // Equals Data is an exceptional case where the cost for the full traversal
-// of 2 plutus data objects may far exceed what ends up being costed by the builtin cpu wise (Uses Min Size)
-// this is possible via having one super large object equals data with a tiny object
-// like script context vs a Data of bytearray of 0 bytes. In this case the cpu ExBudget would far underestimate
-// the cost for calculating the ExMem for the entire script context thus causing a lot of free work to be done
-// by the node
-func equalsDataExMem(
-	x data.PlutusData,
-	y data.PlutusData,
-) (func() ExMem, func() ExMem) {
+// of 2 plutus data objects may far exceed what ends up being costed by the
+// builtin cpu wise (it uses the minimum size). This is possible via having one
+// super large object equals data with a tiny object, like a script context
+// against a zero-length bytestring; fully sizing both would let a script buy
+// unbounded free traversal work. Both traversals therefore advance one node
+// per iteration and stop as soon as the side that has been fully counted is
+// known to be the smaller, which bounds the work by about twice the smaller
+// size.
+//
+// The result does not depend on traversal order: the loop only stops once one
+// side has been counted completely and is no larger than the other's partial
+// count, so the minimum is always an exact full size. That lets the pending
+// nodes live on LIFO stacks whose backing arrays start on the goroutine stack.
+func equalsDataMinExMem(x data.PlutusData, y data.PlutusData) ExMem {
 	var xAcc ExMem
 	var yAcc ExMem
-	var minAcc ExMem
-	costStackX := []data.PlutusData{
-		x,
-	}
-
-	costStackY := []data.PlutusData{
-		y,
-	}
+	var bufX, bufY [32]data.PlutusData
+	costStackX := append(bufX[:0], x)
+	costStackY := append(bufY[:0], y)
 
 	for xLen, yLen := true, true; (xLen || xAcc > yAcc) && (yLen || yAcc > xAcc); xLen,
 		yLen = len(costStackX) != 0, len(costStackY) != 0 {
 		if xLen {
-			// Cost 4 per item switch
-			xAcc += DataCost
-			d := costStackX[0]
-			costStackX = costStackX[1:]
-			switch dat := d.(type) {
-			case *data.Constr:
-				costStackX = append(costStackX, dat.Fields...)
-			case *data.List:
-				costStackX = append(costStackX, dat.Items...)
-			case *data.Map:
-				for _, pair := range dat.Pairs {
-					costStackX = append(costStackX, pair[0], pair[1])
-				}
-			case *data.Value:
-				if dat.Inner != nil {
-					costStackX = append(costStackX, dat.Inner)
-				}
-			case *data.Integer:
-				xAcc += bigIntExMem(dat.Inner)()
-			case *data.ByteString:
-				xAcc += byteArrayExMem(dat.Inner)()
-			default:
-				panic("Unreachable")
-			}
+			last := len(costStackX) - 1
+			d := costStackX[last]
+			costStackX = costStackX[:last]
+			var size ExMem
+			size, costStackX = equalsDataNodeExMem(d, costStackX)
+			xAcc += size
 		}
 
 		if yLen {
-			// Cost 4 per item switch
-			yAcc += DataCost
-			d := costStackY[0]
-			costStackY = costStackY[1:]
-			switch dat := d.(type) {
-			case *data.Constr:
-				costStackY = append(costStackY, dat.Fields...)
-			case *data.List:
-				costStackY = append(costStackY, dat.Items...)
-			case *data.Map:
-				for _, pair := range dat.Pairs {
-					costStackY = append(costStackY, pair[0], pair[1])
-				}
-			case *data.Value:
-				if dat.Inner != nil {
-					costStackY = append(costStackY, dat.Inner)
-				}
-			case *data.Integer:
-				yAcc += bigIntExMem(dat.Inner)()
-			case *data.ByteString:
-				yAcc += byteArrayExMem(dat.Inner)()
-			default:
-				panic("Unreachable")
-			}
+			last := len(costStackY) - 1
+			d := costStackY[last]
+			costStackY = costStackY[:last]
+			var size ExMem
+			size, costStackY = equalsDataNodeExMem(d, costStackY)
+			yAcc += size
 		}
 	}
 
-	minAcc = min(xAcc, yAcc)
+	return min(xAcc, yAcc)
+}
 
-	final_func := func() ExMem {
-		return minAcc
+// equalsDataNodeExMem costs one node in the dataExMem measure and pushes its
+// children onto stack.
+func equalsDataNodeExMem(
+	d data.PlutusData,
+	stack []data.PlutusData,
+) (ExMem, []data.PlutusData) {
+	// Cost 4 per item switch
+	size := ExMem(DataCost)
+	switch dat := d.(type) {
+	case *data.Constr:
+		stack = append(stack, dat.Fields...)
+	case *data.List:
+		stack = append(stack, dat.Items...)
+	case *data.Map:
+		for _, pair := range dat.Pairs {
+			stack = append(stack, pair[0], pair[1])
+		}
+	case *data.Value:
+		if dat.Inner != nil {
+			stack = append(stack, dat.Inner)
+		}
+	case *data.Integer:
+		size += bigIntExMemValue(dat.Inner)
+	case *data.ByteString:
+		size += byteArrayExMemValue(dat.Inner)
+	default:
+		panic("Unreachable")
 	}
-
-	return final_func, final_func
+	return size, stack
 }

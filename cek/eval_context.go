@@ -43,6 +43,7 @@ func NewDefaultEvalContext(
 	if builtinCosts, err := buildBuiltinCosts(version, semantics); err == nil {
 		costModel = DefaultCostModel.Clone()
 		costModel.builtinCosts = builtinCosts
+		costModel = costModel.withCostCaches()
 	}
 	return &EvalContext{
 		CostModel:        costModel,

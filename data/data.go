@@ -2,8 +2,10 @@ package data
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 
 	"github.com/fxamacker/cbor/v2"
@@ -74,12 +76,16 @@ func (c *Constr) UnmarshalCBOR(data []byte) error {
 }
 
 func (c Constr) MarshalCBOR() ([]byte, error) {
+	return marshalWith(c.appendCBOR)
+}
+
+func (c Constr) appendCBOR(buf *bytes.Buffer) error {
 	constrTag := c.Tag
 	if constrTag == nil {
 		constrTag = new(big.Int)
 	}
 	if !constrTag.IsUint64() {
-		return nil, fmt.Errorf(
+		return fmt.Errorf(
 			"constructor tag %s is outside the Word64 CBOR range",
 			constrTag,
 		)
@@ -93,31 +99,24 @@ func (c Constr) MarshalCBOR() ([]byte, error) {
 		useIndef = *c.useIndef
 	}
 
-	fields, err := encodeCBORArray(c.Fields, useIndef, "Constr field")
-	if err != nil {
-		return nil, err
-	}
-
-	// Determine CBOR tag based on Constr tag value.
-	var cborTag uint64
 	switch {
 	case constrTag.Uint64() <= 6:
 		// Tags 0-6 map to CBOR tags 121-127
-		cborTag = 121 + constrTag.Uint64()
+		appendCBORHead(buf, CborTypeTag, 121+constrTag.Uint64())
 	case constrTag.Uint64() <= 127:
 		// Tags 7-127 map to CBOR tags 1280-1400
-		cborTag = 1280 + constrTag.Uint64() - 7
+		appendCBORHead(buf, CborTypeTag, 1280+constrTag.Uint64()-7)
 	default:
 		// Tag 102 uses a definite-length 2-element outer list
-		cborTag = 102
-		fields = []any{constrTag, fields}
+		appendCBORHead(buf, CborTypeTag, 102)
+		appendCBORHead(buf, CborTypeArray, 2)
+		encodedTag, err := cborMarshal(constrTag)
+		if err != nil {
+			return err
+		}
+		buf.Write(encodedTag)
 	}
-
-	tmpTag := cbor.Tag{
-		Number:  cborTag,
-		Content: fields,
-	}
-	return cborMarshal(tmpTag)
+	return appendCBORArray(buf, c.Fields, useIndef, "Constr field")
 }
 
 func (c Constr) Clone() PlutusData {
@@ -213,50 +212,94 @@ func constrTagString(tag *big.Int) string {
 	return tag.String()
 }
 
-// encodeCBORArray encodes a slice of PlutusData items as a CBOR array.
-// When useIndef is true and the slice is non-empty, indefinite-length encoding
-// is used. Empty slices always use definite-length encoding regardless of
-// useIndef, matching Haskell's cborg behavior.
-func encodeCBORArray(
+// appendCBORArray writes items as a CBOR array. When useIndef is true and the
+// slice is non-empty, indefinite-length encoding is used. Empty slices always
+// use definite-length encoding regardless of useIndef, matching Haskell's
+// cborg behavior.
+func appendCBORArray(
+	buf *bytes.Buffer,
 	items []PlutusData,
 	useIndef bool,
 	desc string,
-) (any, error) {
-	if len(items) == 0 {
-		return [0]any{}, nil
+) error {
+	useIndef = useIndef && len(items) > 0
+	if useIndef {
+		buf.WriteByte(CborTypeArray | CborIndefFlag)
+	} else {
+		appendCBORHead(buf, CborTypeArray, uint64(len(items)))
+	}
+	for i, item := range items {
+		if err := appendPlutusDataCBOR(buf, item); err != nil {
+			return fmt.Errorf("failed to encode %s %d: %w", desc, i, err)
+		}
 	}
 	if useIndef {
-		var buf bytes.Buffer
-		buf.WriteByte(0x9F) // Start indefinite-length array
-		for i, item := range items {
-			encoded, err := cborMarshal(item)
-			if err != nil {
-				return nil, fmt.Errorf(
-					"failed to encode %s %d: %w",
-					desc,
-					i,
-					err,
-				)
-			}
-			buf.Write(encoded)
-		}
 		buf.WriteByte(0xff) // End indefinite-length array
-		return cbor.RawMessage(buf.Bytes()), nil
 	}
-	encoded := make([]cbor.RawMessage, len(items))
-	for i, item := range items {
-		raw, err := cborMarshal(item)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"failed to encode %s %d: %w",
-				desc,
-				i,
-				err,
-			)
+	return nil
+}
+
+// appendPlutusDataCBOR writes pd to buf. Containers write their children
+// into the same buffer, so the work is linear in the size of the encoding;
+// marshaling each child separately would copy the whole encoded subtree again
+// at every nesting level.
+func appendPlutusDataCBOR(buf *bytes.Buffer, pd PlutusData) error {
+	switch v := pd.(type) {
+	case *List:
+		if v != nil {
+			return v.appendCBOR(buf)
 		}
-		encoded[i] = raw
+	case List:
+		return v.appendCBOR(buf)
+	case *Map:
+		if v != nil {
+			return v.appendCBOR(buf)
+		}
+	case Map:
+		return v.appendCBOR(buf)
+	case *Constr:
+		if v != nil {
+			return v.appendCBOR(buf)
+		}
+	case Constr:
+		return v.appendCBOR(buf)
 	}
-	return encoded, nil
+	encoded, err := cborMarshal(pd)
+	if err != nil {
+		return err
+	}
+	buf.Write(encoded)
+	return nil
+}
+
+// appendCBORHead writes a CBOR initial byte and argument for the given major
+// type using the shortest form.
+func appendCBORHead(buf *bytes.Buffer, majorType uint8, n uint64) {
+	switch {
+	case n < 24:
+		buf.WriteByte(majorType | uint8(n)) //nolint:gosec // n < 24
+	case n <= math.MaxUint8:
+		buf.WriteByte(majorType | 24)
+		buf.WriteByte(uint8(n)) //nolint:gosec // n <= MaxUint8
+	case n <= math.MaxUint16:
+		buf.WriteByte(majorType | 25)
+		buf.Write(binary.BigEndian.AppendUint16(nil, uint16(n))) //nolint:gosec // n <= MaxUint16
+	case n <= math.MaxUint32:
+		buf.WriteByte(majorType | 26)
+		buf.Write(binary.BigEndian.AppendUint32(nil, uint32(n))) //nolint:gosec // n <= MaxUint32
+	default:
+		buf.WriteByte(majorType | 27)
+		buf.Write(binary.BigEndian.AppendUint64(nil, n))
+	}
+}
+
+// marshalWith runs appendTo against a fresh buffer and returns its contents.
+func marshalWith(appendTo func(*bytes.Buffer) error) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := appendTo(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // Map
@@ -282,53 +325,30 @@ func (m *Map) UnmarshalCBOR(data []byte) error {
 }
 
 func (m Map) MarshalCBOR() ([]byte, error) {
-	// The below is a hack to work around our CBOR library not supporting encoding a map
-	// with a specific key order. We pre-encode each key/value pair, build a dummy list to
-	// steal and modify its header, and build our own output from pieces. This avoids
-	// needing to support 6 different possible encodings of a map's header byte depending
-	// on length
+	return marshalWith(m.appendCBOR)
+}
+
+func (m Map) appendCBOR(buf *bytes.Buffer) error {
 	// Default to definite-length encoding to match Haskell's canonical CBOR.
 	// If useIndef is explicitly set, honor it.
-	useIndef := false
-	if m.useIndef != nil {
-		useIndef = *m.useIndef
-	}
-	// Build encoded pairs into buffer directly to avoid allocations
-	var pairsBuf bytes.Buffer
-	for _, pair := range m.Pairs {
-		keyRaw, err := cborMarshal(pair[0])
-		if err != nil {
-			return nil, fmt.Errorf("encode map key: %w", err)
-		}
-		valueRaw, err := cborMarshal(pair[1])
-		if err != nil {
-			return nil, fmt.Errorf("encode map value: %w", err)
-		}
-		pairsBuf.Write(keyRaw)
-		pairsBuf.Write(valueRaw)
-	}
-	// Build return value
-	var ret bytes.Buffer
+	useIndef := m.useIndef != nil && *m.useIndef
 	if useIndef {
-		ret.WriteByte(CborTypeMap | CborIndefFlag)
+		buf.WriteByte(CborTypeMap | CborIndefFlag)
 	} else {
-		// Create dummy list with simple (one-byte) values so we can easily extract the header
-		tmpList := make([]bool, len(m.Pairs))
-		tmpListRaw, err := cborMarshal(tmpList)
-		if err != nil {
-			return nil, err
+		appendCBORHead(buf, CborTypeMap, uint64(len(m.Pairs)))
+	}
+	for _, pair := range m.Pairs {
+		if err := appendPlutusDataCBOR(buf, pair[0]); err != nil {
+			return fmt.Errorf("encode map key: %w", err)
 		}
-		tmpListHeader := tmpListRaw[0 : len(tmpListRaw)-len(m.Pairs)]
-		// Modify header byte to switch type from array to map
-		tmpListHeader[0] |= 0x20
-		ret.Write(tmpListHeader)
+		if err := appendPlutusDataCBOR(buf, pair[1]); err != nil {
+			return fmt.Errorf("encode map value: %w", err)
+		}
 	}
-	ret.Write(pairsBuf.Bytes())
 	if useIndef {
-		// Indef-length "break" byte
-		ret.WriteByte(0xff)
+		buf.WriteByte(0xff) // Indef-length "break" byte
 	}
-	return ret.Bytes(), nil
+	return nil
 }
 
 func (m Map) Clone() PlutusData {
@@ -442,27 +462,96 @@ func (v Value) String() string {
 	return fmt.Sprintf("Value{%v}", v.Inner)
 }
 
-// Validate checks that a Value uses the canonical policy/token map shape.
+// MaxValueKeyLength is the longest policy or token key a Value may carry.
+const MaxValueKeyLength = 32
+
+// ErrValueQuantityRange is wrapped by the error Validate returns for a token
+// quantity outside the signed 128-bit range.
+var ErrValueQuantityRange = errors.New("quantity out of signed 128-bit range")
+
+var (
+	valueQuantityMax = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 127), big.NewInt(1))
+	valueQuantityMin = new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), 127))
+)
+
+// Validate checks that a Value is canonical: policy and token keys are
+// bytestrings of at most MaxValueKeyLength bytes, both levels are strictly
+// ascending, every token map is non-empty, and every quantity is a non-zero
+// integer within the signed 128-bit range.
 func (v Value) Validate() error {
 	if v.Inner == nil {
 		return errors.New("Value must contain a map")
 	}
-	for _, policy := range v.Inner.Pairs {
-		if _, ok := policy[0].(*ByteString); !ok {
+	var prevPolicy []byte
+	for i, policy := range v.Inner.Pairs {
+		policyKey, ok := policy[0].(*ByteString)
+		if !ok || policyKey == nil {
 			return fmt.Errorf("Value policy key must be a bytestring, got %T", policy[0])
 		}
+		if err := CheckValueKey("policy", i, policyKey.Inner, prevPolicy); err != nil {
+			return err
+		}
+		prevPolicy = policyKey.Inner
 		tokens, ok := policy[1].(*Map)
-		if !ok {
+		if !ok || tokens == nil {
 			return fmt.Errorf("Value policy value must be a map, got %T", policy[1])
 		}
-		for _, token := range tokens.Pairs {
-			if _, ok := token[0].(*ByteString); !ok {
+		if err := CheckValueTokenCount(i, len(tokens.Pairs)); err != nil {
+			return err
+		}
+		var prevToken []byte
+		for j, token := range tokens.Pairs {
+			tokenKey, ok := token[0].(*ByteString)
+			if !ok || tokenKey == nil {
 				return fmt.Errorf("Value token key must be a bytestring, got %T", token[0])
 			}
-			if _, ok := token[1].(*Integer); !ok {
+			if err := CheckValueKey("token", j, tokenKey.Inner, prevToken); err != nil {
+				return err
+			}
+			prevToken = tokenKey.Inner
+			quantity, ok := token[1].(*Integer)
+			if !ok || quantity == nil || quantity.Inner == nil {
 				return fmt.Errorf("Value token quantity must be an integer, got %T", token[1])
 			}
+			if err := CheckValueQuantity(i, j, quantity.Inner); err != nil {
+				return err
+			}
 		}
+	}
+	return nil
+}
+
+// CheckValueKey validates a policy or token key at index i against its
+// predecessor. The first key at a level has no predecessor, which is tracked by
+// index because an empty key is a valid predecessor.
+func CheckValueKey(kind string, i int, key, prev []byte) error {
+	if len(key) > MaxValueKeyLength {
+		return fmt.Errorf("Value %s %d key exceeds %d bytes", kind, i, MaxValueKeyLength)
+	}
+	if i > 0 && bytes.Compare(prev, key) >= 0 {
+		return fmt.Errorf("Value %s keys must be strictly ascending (index %d)", kind, i)
+	}
+	return nil
+}
+
+// CheckValueTokenCount rejects an empty token map for a Value policy.
+func CheckValueTokenCount(policy, count int) error {
+	if count == 0 {
+		return fmt.Errorf("Value policy %d has an empty token map", policy)
+	}
+	return nil
+}
+
+// CheckValueQuantity checks that a Value token quantity is a non-zero signed
+// 128-bit integer. Policy and token are its indices for error reporting.
+func CheckValueQuantity(policy, token int, quantity *big.Int) error {
+	switch {
+	case quantity == nil:
+		return errors.New("Value token quantity must be an integer")
+	case quantity.Sign() == 0:
+		return fmt.Errorf("Value policy %d token %d has a zero quantity", policy, token)
+	case quantity.Cmp(valueQuantityMin) < 0, quantity.Cmp(valueQuantityMax) > 0:
+		return fmt.Errorf("Value policy %d token %d: %w", policy, token, ErrValueQuantityRange)
 	}
 	return nil
 }
@@ -913,6 +1002,10 @@ func decodeListItemsDefiniteEntered(
 }
 
 func (l List) MarshalCBOR() ([]byte, error) {
+	return marshalWith(l.appendCBOR)
+}
+
+func (l List) appendCBOR(buf *bytes.Buffer) error {
 	// Determine whether to use indefinite-length encoding.
 	// If useIndef is explicitly set, honor it; otherwise default to
 	// Haskell's cborg behavior: indefinite for non-empty, definite for empty.
@@ -920,12 +1013,7 @@ func (l List) MarshalCBOR() ([]byte, error) {
 	if l.useIndef != nil {
 		useIndef = *l.useIndef
 	}
-
-	result, err := encodeCBORArray(l.Items, useIndef, "list item")
-	if err != nil {
-		return nil, err
-	}
-	return cborMarshal(result)
+	return appendCBORArray(buf, l.Items, useIndef, "list item")
 }
 
 func (l List) Clone() PlutusData {

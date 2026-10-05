@@ -3,7 +3,6 @@ package cek
 
 import (
 	"context"
-	"math/bits"
 	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/syn"
@@ -48,10 +47,7 @@ func lookupEnvDeBruijn(
 	idx int,
 ) (Value[syn.DeBruijn], bool) {
 	var zero Value[syn.DeBruijn]
-	if idx <= 0 {
-		return zero, false
-	}
-	if env == nil {
+	if idx <= 0 || env == nil {
 		return zero, false
 	}
 	switch idx {
@@ -73,71 +69,7 @@ func lookupEnvDeBruijn(
 			return zero, false
 		}
 		return env.data, true
-	case 4:
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		return env.data, true
-	case 5:
-		if env.index != nil {
-			ancestor := env.index[1]
-			if ancestor != nil {
-				ancestor = ancestor.next
-				if ancestor != nil {
-					return ancestor.data, true
-				}
-			}
-		}
-	case 6:
-		if env.index != nil {
-			ancestor := env.index[1]
-			if ancestor != nil {
-				ancestor = ancestor.next
-			}
-			if ancestor != nil {
-				ancestor = ancestor.next
-				if ancestor != nil {
-					return ancestor.data, true
-				}
-			}
-		}
-	case 7:
-		if env.index != nil {
-			ancestor := env.index[1]
-			for range 3 {
-				if ancestor != nil {
-					ancestor = ancestor.next
-				}
-			}
-			if ancestor != nil {
-				return ancestor.data, true
-			}
-		}
-	case 8:
-		if env.index != nil {
-			if ancestor := env.index[2]; ancestor != nil {
-				return ancestor.data, true
-			}
-		}
 	}
-	if idx&(idx-1) == 0 {
-		level := bits.TrailingZeros(uint(idx)) - 1
-		if level < envIndexLevels && env.index != nil {
-			if ancestor := env.index[level]; ancestor != nil {
-				return ancestor.data, true
-			}
-		}
-	}
-
 	env = envAncestor(env, idx-1)
 	if env == nil {
 		return zero, false

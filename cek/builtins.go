@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha3"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -2288,8 +2289,8 @@ func equalsData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	costX, costY := equalsDataExMem(arg1, arg2)
-	err = m.CostTwo(&b.Func, costX, costY)
+	size := equalsDataMinExMem(arg1, arg2)
+	err = m.CostTwoExMem(&b.Func, size, size)
 	if err != nil {
 		return nil, err
 	}
@@ -5186,151 +5187,27 @@ func unValueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 
-	// Bounds for quantity: [-2^127, 2^127-1]
-	limit := new(big.Int).Lsh(big.NewInt(1), 127)           // 2^127
-	limitMinusOne := new(big.Int).Sub(limit, big.NewInt(1)) // 2^127 - 1
-	negLimit := new(big.Int).Neg(limit)                     // -2^127
+	if err := (data.Value{Inner: dmap}).Validate(); err != nil {
+		code := ErrCodeInvalidArgument
+		if errors.Is(err, data.ErrValueQuantityRange) {
+			code = ErrCodeOverflow
+		}
+		return nil, &BuiltinError{
+			Code:    code,
+			Builtin: "unValueData",
+			Message: err.Error(),
+		}
+	}
 
-	// Build result list while validating
+	// Validate guarantees every key is a bytestring and every quantity an integer.
 	result := make([]syn.IConstant, 0, len(dmap.Pairs))
-	var prevPolicy []byte
-
 	for _, pair := range dmap.Pairs {
-		// Key must be ByteString (policy)
-		policyData, ok := pair[0].(*data.ByteString)
-		if !ok {
-			return nil, &BuiltinError{
-				Code:    ErrCodeInvalidArgument,
-				Builtin: "unValueData",
-				Message: "expected bytestring for currency key",
-			}
-		}
-
-		// Enforce max key length for policy (32 bytes)
-		if len(policyData.Inner) > 32 {
-			return nil, &BuiltinError{
-				Code:    ErrCodeInvalidArgument,
-				Builtin: "unValueData",
-				Message: "currency key too long",
-			}
-		}
-
-		// Check ordering: currencies must be in ascending order
-		if prevPolicy != nil {
-			cmp := bytes.Compare(prevPolicy, policyData.Inner)
-			if cmp == 0 {
-				return nil, &BuiltinError{
-					Code:    ErrCodeInvalidArgument,
-					Builtin: "unValueData",
-					Message: "duplicate currency key",
-				}
-			}
-			if cmp > 0 {
-				return nil, &BuiltinError{
-					Code:    ErrCodeInvalidArgument,
-					Builtin: "unValueData",
-					Message: "currency keys not in ascending order",
-				}
-			}
-		}
-		prevPolicy = policyData.Inner
-
-		// Value must be a Map of tokens
-		tokensData, ok := pair[1].(*data.Map) //nolint:gosec // pair is [2]PlutusData, always has 2 elements
-		if !ok {
-			return nil, &BuiltinError{
-				Code:    ErrCodeInvalidArgument,
-				Builtin: "unValueData",
-				Message: "expected map for tokens",
-			}
-		}
-
-		// Check for empty tokens (not allowed)
-		if len(tokensData.Pairs) == 0 {
-			return nil, &BuiltinError{
-				Code:    ErrCodeInvalidArgument,
-				Builtin: "unValueData",
-				Message: "empty token map",
-			}
-		}
-
+		policyData, _ := pair[0].(*data.ByteString)
+		tokensData, _ := pair[1].(*data.Map)
 		tokenPairs := make([]syn.IConstant, 0, len(tokensData.Pairs))
-		var prevToken []byte
-
 		for _, tkPair := range tokensData.Pairs {
-			// Token key must be ByteString
-			tokenData, ok := tkPair[0].(*data.ByteString)
-			if !ok {
-				return nil, &BuiltinError{
-					Code:    ErrCodeInvalidArgument,
-					Builtin: "unValueData",
-					Message: "expected bytestring for token key",
-				}
-			}
-
-			// Enforce max key length for token (32 bytes)
-			if len(tokenData.Inner) > 32 {
-				return nil, &BuiltinError{
-					Code:    ErrCodeInvalidArgument,
-					Builtin: "unValueData",
-					Message: "token key too long",
-				}
-			}
-
-			// Check ordering: tokens must be in ascending order
-			if prevToken != nil {
-				cmp := bytes.Compare(prevToken, tokenData.Inner)
-				if cmp == 0 {
-					return nil, &BuiltinError{
-						Code:    ErrCodeInvalidArgument,
-						Builtin: "unValueData",
-						Message: "duplicate token key",
-					}
-				}
-				if cmp > 0 {
-					return nil, &BuiltinError{
-						Code:    ErrCodeInvalidArgument,
-						Builtin: "unValueData",
-						Message: "token keys not in ascending order",
-					}
-				}
-			}
-			prevToken = tokenData.Inner
-
-			// Amount must be Integer
-			amtData, ok := tkPair[1].(*data.Integer) //nolint:gosec // tkPair is [2]PlutusData, always has 2 elements
-			if !ok {
-				return nil, &BuiltinError{
-					Code:    ErrCodeInvalidArgument,
-					Builtin: "unValueData",
-					Message: "expected integer for amount",
-				}
-			}
-
-			// Check for zero amounts (not allowed)
-			if amtData.Inner.Sign() == 0 {
-				return nil, &BuiltinError{
-					Code:    ErrCodeInvalidArgument,
-					Builtin: "unValueData",
-					Message: "zero quantity not allowed",
-				}
-			}
-
-			// Check quantity bounds: [-2^127, 2^127-1]
-			if amtData.Inner.Sign() >= 0 {
-				if amtData.Inner.Cmp(limitMinusOne) > 0 {
-					return nil, &BuiltinError{
-						Code:    ErrCodeOverflow,
-						Builtin: "unValueData",
-						Message: "quantity out of range",
-					}
-				}
-			} else {
-				if amtData.Inner.Cmp(negLimit) < 0 {
-					return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "unValueData", Message: "quantity out of range"}
-				}
-			}
-
+			tokenData, _ := tkPair[0].(*data.ByteString)
+			amtData, _ := tkPair[1].(*data.Integer)
 			tokenPairs = append(tokenPairs, &syn.ProtoPair{
 				FstType: &syn.TByteString{},
 				SndType: &syn.TInteger{},

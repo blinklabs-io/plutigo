@@ -1,7 +1,6 @@
 package syn
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"math"
@@ -1346,66 +1345,52 @@ func decodeConstantValue(d *decoder, typ Typ) (IConstant, error) {
 	return constant, nil
 }
 
+// validateValueEntries checks the shape of Value entries and then applies the
+// canonical Value rules shared with the data package.
 func validateValueEntries(entries []IConstant) error {
-	quantityLimit := new(big.Int).Lsh(big.NewInt(1), 127)
-	maxQuantity := new(big.Int).Sub(new(big.Int).Set(quantityLimit), big.NewInt(1))
-	minQuantity := new(big.Int).Neg(new(big.Int).Set(quantityLimit))
-
-	var previousPolicy []byte
+	var prevPolicy []byte
 	for policyIndex, entry := range entries {
 		policy, ok := entry.(*ProtoPair)
-		if !ok {
+		if !ok || policy == nil {
 			return fmt.Errorf("value policy entry %d is not a pair", policyIndex)
 		}
 		policyID, ok := policy.First.(*ByteString)
-		if !ok {
+		if !ok || policyID == nil {
 			return fmt.Errorf("value policy entry %d has a non-bytestring key", policyIndex)
 		}
-		if len(policyID.Inner) > 32 {
-			return fmt.Errorf("value policy entry %d key exceeds 32 bytes", policyIndex)
+		if err := data.CheckValueKey("policy", policyIndex, policyID.Inner, prevPolicy); err != nil {
+			return err
 		}
-		if policyIndex > 0 && bytes.Compare(previousPolicy, policyID.Inner) >= 0 {
-			return errors.New("value policy keys must be strictly ascending")
-		}
-
+		prevPolicy = policyID.Inner
 		tokens, ok := policy.Second.(*ProtoList)
-		if !ok {
+		if !ok || tokens == nil {
 			return fmt.Errorf("value policy entry %d has a non-list payload", policyIndex)
 		}
-		if len(tokens.List) == 0 {
-			return fmt.Errorf("value policy entry %d has no tokens", policyIndex)
+		if err := data.CheckValueTokenCount(policyIndex, len(tokens.List)); err != nil {
+			return err
 		}
-
-		var previousToken []byte
+		var prevToken []byte
 		for tokenIndex, entry := range tokens.List {
 			token, ok := entry.(*ProtoPair)
-			if !ok {
+			if !ok || token == nil {
 				return fmt.Errorf("value token entry %d:%d is not a pair", policyIndex, tokenIndex)
 			}
 			tokenID, ok := token.First.(*ByteString)
-			if !ok {
+			if !ok || tokenID == nil {
 				return fmt.Errorf("value token entry %d:%d has a non-bytestring key", policyIndex, tokenIndex)
 			}
-			if len(tokenID.Inner) > 32 {
-				return fmt.Errorf("value token entry %d:%d key exceeds 32 bytes", policyIndex, tokenIndex)
+			if err := data.CheckValueKey("token", tokenIndex, tokenID.Inner, prevToken); err != nil {
+				return err
 			}
-			if tokenIndex > 0 && bytes.Compare(previousToken, tokenID.Inner) >= 0 {
-				return errors.New("value token keys must be strictly ascending")
-			}
-
+			prevToken = tokenID.Inner
 			quantity, ok := token.Second.(*Integer)
-			if !ok || quantity.Inner == nil {
+			if !ok || quantity == nil || quantity.Inner == nil {
 				return fmt.Errorf("value token entry %d:%d has a non-integer quantity", policyIndex, tokenIndex)
 			}
-			if quantity.Inner.Sign() == 0 {
-				return fmt.Errorf("value token entry %d:%d has a zero quantity", policyIndex, tokenIndex)
+			if err := data.CheckValueQuantity(policyIndex, tokenIndex, quantity.Inner); err != nil {
+				return err
 			}
-			if quantity.Inner.Cmp(minQuantity) < 0 || quantity.Inner.Cmp(maxQuantity) > 0 {
-				return fmt.Errorf("value token entry %d:%d quantity is out of range", policyIndex, tokenIndex)
-			}
-			previousToken = tokenID.Inner
 		}
-		previousPolicy = policyID.Inner
 	}
 	return nil
 }
