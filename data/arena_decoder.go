@@ -119,6 +119,12 @@ func resetBigIntChunks(a *arenaChunks[big.Int], retainCap int) {
 type arenaSlices[S any] struct {
 	chunks [][]S
 	pos    int
+	// cur is the chunk holding pos and curBase the total length of the chunks
+	// before it. Nothing behind pos is reused before reset, so alloc resumes
+	// at cur: walking from the first chunk makes a decode quadratic in its
+	// allocation count.
+	cur     int
+	curBase int
 }
 
 // alloc returns n elements whose capacity equals n, so an append by a caller
@@ -129,20 +135,16 @@ func (a *arenaSlices[S]) alloc(n int) []S {
 		return make([]S, 0)
 	}
 
-	remaining := a.pos
-	for i := range a.chunks {
-		chunk := a.chunks[i]
-		if remaining < len(chunk) {
-			if remaining+n <= len(chunk) {
-				start := remaining
-				a.pos += n
-				return chunk[start : start+n : start+n]
-			}
-			a.pos += len(chunk) - remaining
-			remaining = 0
-			continue
+	for a.cur < len(a.chunks) {
+		chunk := a.chunks[a.cur]
+		start := a.pos - a.curBase
+		if start+n <= len(chunk) {
+			a.pos += n
+			return chunk[start : start+n : start+n]
 		}
-		remaining -= len(chunk)
+		a.curBase += len(chunk)
+		a.pos = a.curBase
+		a.cur++
 	}
 
 	size := dataDecodeChunkSize
@@ -189,6 +191,8 @@ func (a *arenaSlices[S]) reset(retainCap int) {
 		a.chunks = a.chunks[:retainCap]
 	}
 	a.pos = 0
+	a.cur = 0
+	a.curBase = 0
 }
 
 // Decoder reuses arena-backed storage for decoded PlutusData values.

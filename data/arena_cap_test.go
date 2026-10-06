@@ -102,3 +102,30 @@ func TestArenaAppendDoesNotCorruptNeighbours(t *testing.T) {
 		t.Errorf("second list overwritten: %s", got)
 	}
 }
+
+// TestArenaSlicesReuseAfterReset fills several chunks, including one skipped
+// tail, and checks that after reset the same chunks are handed out again from
+// the first one rather than appended past the retained ones.
+func TestArenaSlicesReuseAfterReset(t *testing.T) {
+	t.Parallel()
+	var a arenaSlices[byte]
+	first := a.alloc(dataDecodeChunkSize - 1)
+	a.alloc(2)
+	a.alloc(dataDecodeChunkSize)
+	if len(a.chunks) != 3 {
+		t.Fatalf("chunks before reset = %d, want 3", len(a.chunks))
+	}
+	a.reset(dataSliceRetainCap)
+	again := a.alloc(dataDecodeChunkSize - 1)
+	if &again[0] != &first[0] {
+		t.Error("first allocation after reset did not reuse the first chunk")
+	}
+	a.alloc(2)
+	a.alloc(dataDecodeChunkSize)
+	if len(a.chunks) != 3 {
+		t.Errorf("chunks after reuse = %d, want 3", len(a.chunks))
+	}
+	if a.pos != 3*dataDecodeChunkSize {
+		t.Errorf("pos = %d, want %d", a.pos, 3*dataDecodeChunkSize)
+	}
+}
