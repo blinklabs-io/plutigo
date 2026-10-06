@@ -3,6 +3,8 @@ package cek
 import (
 	"fmt"
 	"log"
+
+	"github.com/blinklabs-io/plutigo/lang"
 )
 
 // EvalContext contains the cost model and semantics variant for a script evaluation.
@@ -28,6 +30,7 @@ import (
 type EvalContext struct {
 	CostModel        CostModel
 	SemanticsVariant SemanticsVariant
+	Language         lang.LanguageVersion
 	ProtoMajor       uint
 }
 
@@ -48,6 +51,7 @@ func NewDefaultEvalContext(
 	return &EvalContext{
 		CostModel:        costModel,
 		SemanticsVariant: semantics,
+		Language:         version,
 		ProtoMajor:       protoVersion.Major,
 	}
 }
@@ -94,6 +98,7 @@ func NewEvalContext(
 
 	ret := &EvalContext{
 		SemanticsVariant: semantics,
+		Language:         version,
 	}
 	ret.ProtoMajor = protoVersion.Major
 	costModel, err := costModelFromList(

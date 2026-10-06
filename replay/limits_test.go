@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ type cancelAfterErrCalls struct {
 	calls atomic.Int64
 	limit int64
 	done  chan struct{}
+	once  sync.Once
 }
 
 func (*cancelAfterErrCalls) Deadline() (time.Time, bool) { return time.Time{}, false }
@@ -27,6 +29,7 @@ func (c *cancelAfterErrCalls) Done() <-chan struct{}     { return c.done }
 func (*cancelAfterErrCalls) Value(any) any               { return nil }
 func (c *cancelAfterErrCalls) Err() error {
 	if c.calls.Add(1) >= c.limit {
+		c.once.Do(func() { close(c.done) })
 		return context.Canceled
 	}
 	return nil

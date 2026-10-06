@@ -52,6 +52,7 @@ type Summary struct {
 type Limits struct {
 	Case   ExUnits
 	Corpus ExUnits
+	Cases  int
 }
 
 const (
@@ -72,16 +73,23 @@ func DefaultLimits() Limits {
 			Steps:  defaultCaseSteps * defaultCorpusCases,
 			Memory: defaultCaseMemory * defaultCorpusCases,
 		},
+		Cases: defaultCorpusCases,
 	}
 }
 
-func (l Limits) check(corpus *Corpus) error {
+func (l Limits) check(ctx context.Context, corpus *Corpus) error {
 	if l.Case.Steps <= 0 || l.Case.Memory <= 0 ||
 		l.Corpus.Steps <= 0 || l.Corpus.Memory <= 0 {
 		return errors.New("replay limits must be positive")
 	}
+	if l.Cases > 0 && len(corpus.Cases) > l.Cases {
+		return fmt.Errorf("replay corpus has %d cases, exceeds the case-count limit %d", len(corpus.Cases), l.Cases)
+	}
 	var total ExUnits
 	for i := range corpus.Cases {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("check replay limits: %w", err)
+		}
 		limit := corpus.Cases[i].BudgetLimit
 		if limit.Steps > l.Case.Steps || limit.Memory > l.Case.Memory {
 			return fmt.Errorf(
@@ -115,7 +123,7 @@ func Run(ctx context.Context, corpus *Corpus, limits Limits) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := limits.check(corpus); err != nil {
+	if err := limits.check(ctx, corpus); err != nil {
 		return nil, err
 	}
 

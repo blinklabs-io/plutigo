@@ -24,7 +24,7 @@
 //
 //	// Validate for the ledger language and protocol version the caller
 //	// supplies, then evaluate (see syn.ParseWithContext for the checks).
-//	evalCtx := cek.NewDefaultEvalContext(language, cek.ProtoVersion{Major: 11})
+//	evalCtx := cek.NewDefaultEvalContext(language, protoVersion)
 //	term, consumed, err := cek.EvaluateText(ctx, input, language, evalCtx, budget)
 //	if err != nil {
 //	    // Handle validation error, evaluation error or budget exhaustion

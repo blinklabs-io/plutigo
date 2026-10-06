@@ -130,11 +130,13 @@ func TestEvaluateTextRejectsMismatchedContext(t *testing.T) {
 	t.Parallel()
 
 	v1Ctx := NewDefaultEvalContext(lang.LanguageVersionV1, ProtoVersion{Major: 11})
+	v2Ctx := NewDefaultEvalContext(lang.LanguageVersionV2, ProtoVersion{Major: 11})
 	for name, evalCtx := range map[string]*EvalContext{
-		"nil":                nil,
-		"other language":     v1Ctx,
-		"no protocol":        testEvalContext(),
-		"zero machine costs": {SemanticsVariant: SemanticsVariantE, ProtoMajor: 11},
+		"nil":                            nil,
+		"other language":                 v1Ctx,
+		"same semantics, other language": v2Ctx,
+		"no protocol":                    testEvalContext(),
+		"zero machine costs":             {SemanticsVariant: SemanticsVariantE, ProtoMajor: 11},
 	} {
 		_, _, err := EvaluateText(
 			context.Background(),

@@ -35,6 +35,11 @@ func EvaluateText(
 	if err := evalCtx.CostModel.machineCosts.validate(); err != nil {
 		return nil, ExBudget{}, fmt.Errorf("invalid cost model: %w", err)
 	}
+	if evalCtx.Language != language {
+		return nil, ExBudget{}, errors.New(
+			"evaluation context was not built for this ledger language and protocol version",
+		)
+	}
 	if evalCtx.SemanticsVariant != GetSemantics(
 		language,
 		ProtoVersion{Major: evalCtx.ProtoMajor},
@@ -47,6 +52,11 @@ func EvaluateText(
 	programContext := syn.ProgramContext{
 		LedgerLanguage: language,
 		ProtocolMajor:  evalCtx.ProtoMajor,
+	}
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return nil, ExBudget{}, err
+		}
 	}
 	program, err := syn.ParseWithContext(input, programContext)
 	if err != nil {

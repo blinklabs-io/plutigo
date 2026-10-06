@@ -52,9 +52,10 @@ rather than wraps, so an overflowing cost model exhausts the budget instead of
 undercharging. After a run, `initial.Sub(&machine.ExBudget)` is the budget
 consumed.
 
-Failures are typed. `cek.IsBudgetError`, `IsScriptError`, `IsTypeError`,
+Evaluation errors are typed. `cek.IsBudgetError`, `IsScriptError`, `IsTypeError`,
 `IsBuiltinError` and `IsInternalError` classify an error, and `cek.GetErrorCode`
-returns its numeric code. A budget error is recoverable by raising the budget;
+returns its numeric code. Parsing, validation and cancellation errors may not
+match these categories. A budget error is recoverable by raising the budget;
 the others are failures of the script. See `Example_budgetAndErrors`.
 
 `machine.RunContext(ctx, term)` stops cooperatively when `ctx` is canceled; it

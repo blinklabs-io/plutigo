@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/lang"
@@ -1863,18 +1864,30 @@ func (c ConstAboveDiagonalIntoQuadraticXAndYModel) CostTwo(x, y ExMem) int64 {
 		return c.constant
 	}
 
-	xVal, yVal := int64(x), int64(y)
-	result := satAdd(c.coeff00, satMul(c.coeff10, xVal))
-	result = satAdd(result, satMul(c.coeff01, yVal))
-	result = satAdd(result, satMul(c.coeff20, satMul(xVal, xVal)))
-	result = satAdd(result, satMul(c.coeff11, satMul(xVal, yVal)))
-	result = satAdd(result, satMul(c.coeff02, satMul(yVal, yVal)))
-
-	if result < c.minimum {
+	xVal, yVal := big.NewInt(int64(x)), big.NewInt(int64(y))
+	result := big.NewInt(c.coeff00)
+	result.Add(result, new(big.Int).Mul(big.NewInt(c.coeff10), xVal))
+	result.Add(result, new(big.Int).Mul(big.NewInt(c.coeff01), yVal))
+	result.Add(result, new(big.Int).Mul(
+		big.NewInt(c.coeff20), new(big.Int).Mul(xVal, xVal),
+	))
+	result.Add(result, new(big.Int).Mul(
+		big.NewInt(c.coeff11), new(big.Int).Mul(xVal, yVal),
+	))
+	result.Add(result, new(big.Int).Mul(
+		big.NewInt(c.coeff02), new(big.Int).Mul(yVal, yVal),
+	))
+	if result.Cmp(big.NewInt(math.MaxInt64)) > 0 {
+		return math.MaxInt64
+	}
+	if result.Cmp(big.NewInt(math.MinInt64)) < 0 {
+		return math.MinInt64
+	}
+	value := result.Int64()
+	if value < c.minimum {
 		return c.minimum
 	}
-
-	return result
+	return value
 }
 
 func (ConstAboveDiagonalIntoQuadraticXAndYModel) HasConstants() []bool {

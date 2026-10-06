@@ -55,7 +55,7 @@ The CEK machine that executes UPLC programs.
 ```go
 // language and the protocol version come from the ledger, never from the
 // program header. EvaluateText validates the program for them first.
-evalCtx, _ := cek.NewEvalContext(language, cek.ProtoVersion{Major: 11}, costModelParams)
+evalCtx, _ := cek.NewEvalContext(language, protoVersion, costModelParams)
 result, consumed, _ := cek.EvaluateText(ctx, input, language, evalCtx, budget)
 ```
 
