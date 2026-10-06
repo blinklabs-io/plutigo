@@ -120,10 +120,11 @@ func LoadFile(ctx context.Context, path string) (*Corpus, error) {
 	return corpus, nil
 }
 
-// Load decodes and validates a corpus. Validation checks ctx between cases and
-// stops with its error once it is canceled.
+// Load decodes and validates a corpus, stopping with the context's error once
+// ctx is canceled. Cancellation is observed between reads of r and between
+// cases; a caller whose reader can block closes it to interrupt a read.
 func Load(ctx context.Context, r io.Reader) (*Corpus, error) {
-	decoder := json.NewDecoder(r)
+	decoder := json.NewDecoder(contextReader{ctx: ctx, r: r})
 	decoder.DisallowUnknownFields()
 
 	var corpus Corpus
@@ -317,4 +318,17 @@ func decodeHex(name, value string) ([]byte, error) {
 		return nil, fmt.Errorf("decode %s hex: %w", name, err)
 	}
 	return decoded, nil
+}
+
+// contextReader stops reading once its context is canceled.
+type contextReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (c contextReader) Read(p []byte) (int, error) {
+	if err := c.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return c.r.Read(p)
 }

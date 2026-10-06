@@ -118,12 +118,16 @@ func (l Limits) check(ctx context.Context, corpus *Corpus) error {
 
 // Run replays every case in the corpus within limits. It stops with the
 // context's error once ctx is canceled, including while a case is evaluating.
+// Limits are checked before any case is decoded.
 func Run(ctx context.Context, corpus *Corpus, limits Limits) (*Report, error) {
-	decodedCases, err := corpus.validateCases(ctx)
-	if err != nil {
-		return nil, err
+	if corpus == nil {
+		return nil, errors.New("replay corpus is required")
 	}
 	if err := limits.check(ctx, corpus); err != nil {
+		return nil, err
+	}
+	decodedCases, err := corpus.validateCases(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -199,6 +203,14 @@ func runDecodedCase(
 	result.Actual = evaluate(ctx, replayCase, decoded)
 	result.DurationNS = time.Since(start).Nanoseconds()
 	result.Mismatches = compare(replayCase.Expected, result.Actual)
+	// A canceled evaluation consumes no budget and carries no error code, so
+	// comparison alone would match it against an expected zero-cost failure.
+	if err := ctx.Err(); err != nil {
+		result.Mismatches = append(
+			result.Mismatches,
+			"evaluation interrupted: "+err.Error(),
+		)
+	}
 	result.Passed = len(result.Mismatches) == 0
 	return result
 }

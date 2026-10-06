@@ -24,7 +24,11 @@ func ExampleEncodeJSON() {
 		fmt.Println("error:", err)
 		return
 	}
-	cbor, _ := data.Encode(decoded)
+	cbor, err := data.Encode(decoded)
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
 	fmt.Printf("%x\n", cbor)
 	// Output:
 	// {"constructor":0,"fields":[{"int":42}]}
