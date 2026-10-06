@@ -261,8 +261,23 @@ func materializeConstantValueDepth[T syn.Eval](
 	depth int,
 	maxDepth int,
 ) (syn.IConstant, bool, error) {
+	// Builtins also materialize values while evaluating, so this path must be
+	// bounded just like final result discharge.
+	budget := dischargeWorkBudget{remaining: maxDischargeWork}
+	return materializeConstantValueDepthWithBudget[T](value, depth, maxDepth, &budget)
+}
+
+func materializeConstantValueDepthWithBudget[T syn.Eval](
+	value Value[T],
+	depth int,
+	maxDepth int,
+	budget *dischargeWorkBudget,
+) (syn.IConstant, bool, error) {
 	if depth > maxDepth {
 		return nil, false, dischargeDepthLimitError()
+	}
+	if err := budget.consume(1); err != nil {
+		return nil, false, err
 	}
 
 	switch v := value.(type) {
@@ -271,14 +286,21 @@ func materializeConstantValueDepth[T syn.Eval](
 	case *dataValue[T]:
 		return &syn.Data{Inner: v.item}, true, nil
 	case *dataListValue[T]:
+		if err := budget.consume(len(v.items)); err != nil {
+			return nil, false, err
+		}
 		return materializeDataListConstant(v.items), true, nil
 	case *dataMapValue[T]:
+		if err := budget.consume(len(v.items)); err != nil {
+			return nil, false, err
+		}
 		return materializeDataMapConstant(v.items), true, nil
 	case *pairValue[T]:
-		first, ok, err := materializeConstantValueDepth[T](
+		first, ok, err := materializeConstantValueDepthWithBudget[T](
 			v.first,
 			depth+1,
 			maxDepth,
+			budget,
 		)
 		if err != nil {
 			return nil, false, err
@@ -286,10 +308,11 @@ func materializeConstantValueDepth[T syn.Eval](
 		if !ok || first == nil {
 			return nil, false, nil
 		}
-		second, ok, err := materializeConstantValueDepth[T](
+		second, ok, err := materializeConstantValueDepthWithBudget[T](
 			v.second,
 			depth+1,
 			maxDepth,
+			budget,
 		)
 		if err != nil {
 			return nil, false, err

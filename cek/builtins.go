@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha3"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -4741,12 +4742,13 @@ func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 	// Spend budget for insertCoin (4 args: policy, token, amount, value)
-	// The cost model uses linear_in_u where u is the value size
+	// The cost model is linear_in_u where u is the Value's max depth, since
+	// inserting walks the outer map then the token map of one policy.
 	if err := m.CostFour(&b.Func,
 		byteArrayExMem(policyBs),
 		byteArrayExMem(tokenBs),
 		bigIntExMem(amt),
-		valueListSizeExMem(entries),
+		valueMaxDepthExMem(entries),
 	); err != nil {
 		return nil, err
 	}
@@ -4828,11 +4830,12 @@ func lookupCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 	// Spend budget for lookupCoin (3 args: policy, token, value)
-	// Cost model uses linear_in_z (the value size)
+	// Cost model is linear_in_z where z is the Value's max depth, for the
+	// same two-level map lookup insertCoin is costed on.
 	if err := m.CostThree(&b.Func,
 		byteArrayExMem(policyBs),
 		byteArrayExMem(tokenBs),
-		valueListSizeExMem(entries),
+		valueMaxDepthExMem(entries),
 	); err != nil {
 		return nil, err
 	}
@@ -4870,10 +4873,11 @@ func scaleValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 	// Spend budget for scaleValue (2 args: factor, value)
-	// Cost model uses linear_in_y (the value size with minus-one formula)
+	// Cost model uses linear_in_y where y is the Value's total size, since
+	// scaling touches every (policy, token) pair.
 	if err := m.CostTwo(&b.Func,
 		bigIntExMem(factor),
-		valueListSizeMinusOneExMem(entries),
+		valueTotalSizeExMem(entries),
 	); err != nil {
 		return nil, err
 	}
@@ -4946,10 +4950,11 @@ func unionValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 	// Spend budget for unionValue (2 args: value a, value b)
-	// Cost model uses with_interaction_in_x_and_y (outer count only - number of policies)
+	// Cost model uses with_interaction_in_x_and_y, where x and y are each
+	// argument's total size, with c11 charging the x*y interaction term.
 	if err := m.CostTwo(&b.Func,
-		valueOuterCountExMem(aEntries),
-		valueOuterCountExMem(bEntries),
+		valueTotalSizeExMem(aEntries),
+		valueTotalSizeExMem(bEntries),
 	); err != nil {
 		return nil, err
 	}
@@ -5186,151 +5191,27 @@ func unValueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 
-	// Bounds for quantity: [-2^127, 2^127-1]
-	limit := new(big.Int).Lsh(big.NewInt(1), 127)           // 2^127
-	limitMinusOne := new(big.Int).Sub(limit, big.NewInt(1)) // 2^127 - 1
-	negLimit := new(big.Int).Neg(limit)                     // -2^127
+	if err := (data.Value{Inner: dmap}).Validate(); err != nil {
+		code := ErrCodeInvalidArgument
+		if errors.Is(err, data.ErrValueQuantityRange) {
+			code = ErrCodeOverflow
+		}
+		return nil, &BuiltinError{
+			Code:    code,
+			Builtin: "unValueData",
+			Message: err.Error(),
+		}
+	}
 
-	// Build result list while validating
+	// Validate guarantees every key is a bytestring and every quantity an integer.
 	result := make([]syn.IConstant, 0, len(dmap.Pairs))
-	var prevPolicy []byte
-
 	for _, pair := range dmap.Pairs {
-		// Key must be ByteString (policy)
-		policyData, ok := pair[0].(*data.ByteString)
-		if !ok {
-			return nil, &BuiltinError{
-				Code:    ErrCodeInvalidArgument,
-				Builtin: "unValueData",
-				Message: "expected bytestring for currency key",
-			}
-		}
-
-		// Enforce max key length for policy (32 bytes)
-		if len(policyData.Inner) > 32 {
-			return nil, &BuiltinError{
-				Code:    ErrCodeInvalidArgument,
-				Builtin: "unValueData",
-				Message: "currency key too long",
-			}
-		}
-
-		// Check ordering: currencies must be in ascending order
-		if prevPolicy != nil {
-			cmp := bytes.Compare(prevPolicy, policyData.Inner)
-			if cmp == 0 {
-				return nil, &BuiltinError{
-					Code:    ErrCodeInvalidArgument,
-					Builtin: "unValueData",
-					Message: "duplicate currency key",
-				}
-			}
-			if cmp > 0 {
-				return nil, &BuiltinError{
-					Code:    ErrCodeInvalidArgument,
-					Builtin: "unValueData",
-					Message: "currency keys not in ascending order",
-				}
-			}
-		}
-		prevPolicy = policyData.Inner
-
-		// Value must be a Map of tokens
-		tokensData, ok := pair[1].(*data.Map) //nolint:gosec // pair is [2]PlutusData, always has 2 elements
-		if !ok {
-			return nil, &BuiltinError{
-				Code:    ErrCodeInvalidArgument,
-				Builtin: "unValueData",
-				Message: "expected map for tokens",
-			}
-		}
-
-		// Check for empty tokens (not allowed)
-		if len(tokensData.Pairs) == 0 {
-			return nil, &BuiltinError{
-				Code:    ErrCodeInvalidArgument,
-				Builtin: "unValueData",
-				Message: "empty token map",
-			}
-		}
-
+		policyData, _ := pair[0].(*data.ByteString)
+		tokensData, _ := pair[1].(*data.Map)
 		tokenPairs := make([]syn.IConstant, 0, len(tokensData.Pairs))
-		var prevToken []byte
-
 		for _, tkPair := range tokensData.Pairs {
-			// Token key must be ByteString
-			tokenData, ok := tkPair[0].(*data.ByteString)
-			if !ok {
-				return nil, &BuiltinError{
-					Code:    ErrCodeInvalidArgument,
-					Builtin: "unValueData",
-					Message: "expected bytestring for token key",
-				}
-			}
-
-			// Enforce max key length for token (32 bytes)
-			if len(tokenData.Inner) > 32 {
-				return nil, &BuiltinError{
-					Code:    ErrCodeInvalidArgument,
-					Builtin: "unValueData",
-					Message: "token key too long",
-				}
-			}
-
-			// Check ordering: tokens must be in ascending order
-			if prevToken != nil {
-				cmp := bytes.Compare(prevToken, tokenData.Inner)
-				if cmp == 0 {
-					return nil, &BuiltinError{
-						Code:    ErrCodeInvalidArgument,
-						Builtin: "unValueData",
-						Message: "duplicate token key",
-					}
-				}
-				if cmp > 0 {
-					return nil, &BuiltinError{
-						Code:    ErrCodeInvalidArgument,
-						Builtin: "unValueData",
-						Message: "token keys not in ascending order",
-					}
-				}
-			}
-			prevToken = tokenData.Inner
-
-			// Amount must be Integer
-			amtData, ok := tkPair[1].(*data.Integer) //nolint:gosec // tkPair is [2]PlutusData, always has 2 elements
-			if !ok {
-				return nil, &BuiltinError{
-					Code:    ErrCodeInvalidArgument,
-					Builtin: "unValueData",
-					Message: "expected integer for amount",
-				}
-			}
-
-			// Check for zero amounts (not allowed)
-			if amtData.Inner.Sign() == 0 {
-				return nil, &BuiltinError{
-					Code:    ErrCodeInvalidArgument,
-					Builtin: "unValueData",
-					Message: "zero quantity not allowed",
-				}
-			}
-
-			// Check quantity bounds: [-2^127, 2^127-1]
-			if amtData.Inner.Sign() >= 0 {
-				if amtData.Inner.Cmp(limitMinusOne) > 0 {
-					return nil, &BuiltinError{
-						Code:    ErrCodeOverflow,
-						Builtin: "unValueData",
-						Message: "quantity out of range",
-					}
-				}
-			} else {
-				if amtData.Inner.Cmp(negLimit) < 0 {
-					return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "unValueData", Message: "quantity out of range"}
-				}
-			}
-
+			tokenData, _ := tkPair[0].(*data.ByteString)
+			amtData, _ := tkPair[1].(*data.Integer)
 			tokenPairs = append(tokenPairs, &syn.ProtoPair{
 				FstType: &syn.TByteString{},
 				SndType: &syn.TInteger{},

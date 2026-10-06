@@ -1,7 +1,6 @@
 package syn
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"math/big"
@@ -624,6 +623,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			return nil, err
 		}
 
+		var prevPolicy []byte
 		items := make([]IConstant, 0, 8)
 
 		for p.curToken.Type != lex.TokenRBracket {
@@ -641,11 +641,10 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				return nil, fmt.Errorf("invalid bytestring key %s at position %d", p.curToken.Literal, p.curToken.Position)
 			}
 
-			// policy key length must be <= 32 bytes
-			if len(kb) > 32 {
-				return nil, fmt.Errorf("policy key too long (%d bytes) at position %d", len(kb), p.curToken.Position)
+			if err := data.CheckValueKey("policy", len(items), kb, prevPolicy); err != nil {
+				return nil, err
 			}
-
+			prevPolicy = kb
 			p.nextToken()
 
 			if err := p.expect(lex.TokenComma); err != nil {
@@ -657,6 +656,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				return nil, err
 			}
 
+			var prevToken []byte
 			innerItems := make([]IConstant, 0, 8)
 
 			for p.curToken.Type != lex.TokenRBracket {
@@ -673,11 +673,10 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 					return nil, fmt.Errorf("invalid bytestring value %s at position %d", p.curToken.Literal, p.curToken.Position)
 				}
 
-				// token key length must be <= 32 bytes
-				if len(ib) > 32 {
-					return nil, fmt.Errorf("token key too long (%d bytes) at position %d", len(ib), p.curToken.Position)
+				if err := data.CheckValueKey("token", len(innerItems), ib, prevToken); err != nil {
+					return nil, err
 				}
-
+				prevToken = ib
 				p.nextToken()
 
 				if err := p.expect(lex.TokenComma); err != nil {
@@ -692,21 +691,9 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				if !ok {
 					return nil, fmt.Errorf("invalid integer value %s at position %d", p.curToken.Literal, p.curToken.Position)
 				}
-				// Token amounts must fit in the allowed range:
-				// minimum: -(2^127), maximum: (2^127 - 1)
-				limit := new(big.Int).Lsh(big.NewInt(1), 127)           // 2^127
-				limitMinusOne := new(big.Int).Sub(limit, big.NewInt(1)) // 2^127 - 1
-				negLimit := new(big.Int).Neg(limit)                     // -2^127
-				if n.Sign() >= 0 {
-					if n.Cmp(limitMinusOne) > 0 {
-						return nil, fmt.Errorf("integer in value token out of range %s at position %d", p.curToken.Literal, p.curToken.Position)
-					}
-				} else {
-					if n.Cmp(negLimit) < 0 {
-						return nil, fmt.Errorf("integer in value token out of range %s at position %d", p.curToken.Literal, p.curToken.Position)
-					}
+				if err := data.CheckValueQuantity(len(items), len(innerItems), n); err != nil {
+					return nil, err
 				}
-
 				p.nextToken()
 
 				if err := p.expect(lex.TokenRParen); err != nil {
@@ -722,6 +709,9 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				}
 			}
 
+			if err := data.CheckValueTokenCount(len(items), len(innerItems)); err != nil {
+				return nil, err
+			}
 			if err := p.expect(lex.TokenRBracket); err != nil {
 				return nil, err
 			}
@@ -756,31 +746,8 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 
 		// Value constants are serialized canonically. Reject non-canonical text
 		// instead of silently sorting, merging, or dropping entries.
-		var previousPolicy []byte
-		for policyIndex, item := range items {
-			policy := item.(*ProtoPair)
-			policyID := policy.First.(*ByteString).Inner
-			if policyIndex > 0 && bytes.Compare(previousPolicy, policyID) >= 0 {
-				return nil, errors.New("value policy IDs must be unique and lexicographically ordered")
-			}
-			previousPolicy = policyID
-
-			tokens := policy.Second.(*ProtoList).List
-			if len(tokens) == 0 {
-				return nil, errors.New("value policy must contain at least one token")
-			}
-			var previousToken []byte
-			for tokenIndex, tokenItem := range tokens {
-				token := tokenItem.(*ProtoPair)
-				tokenID := token.First.(*ByteString).Inner
-				if tokenIndex > 0 && bytes.Compare(previousToken, tokenID) >= 0 {
-					return nil, errors.New("value token IDs must be unique and lexicographically ordered")
-				}
-				if token.Second.(*Integer).Inner.Sign() == 0 {
-					return nil, errors.New("value token amount must be non-zero")
-				}
-				previousToken = tokenID
-			}
+		if err := validateValueEntries(items); err != nil {
+			return nil, err
 		}
 
 		return &Constant{Con: &Value{Entries: items}}, nil
@@ -1203,30 +1170,34 @@ func (p *Parser) parsePlutusValue() (data.PlutusData, error) {
 	if err := p.expect(lex.TokenLBracket); err != nil {
 		return nil, err
 	}
+	var prevPolicy []byte
 	pairs := make([][2]data.PlutusData, 0)
 	for p.curToken.Type != lex.TokenRBracket {
 		if err := p.expect(lex.TokenLParen); err != nil {
 			return nil, err
 		}
-		policy, err := p.parseValueBytes()
+		policy, err := p.parseValueBytes("policy", len(pairs), prevPolicy)
 		if err != nil {
 			return nil, err
 		}
+		prevPolicy = policy.Inner
 		if err := p.expect(lex.TokenComma); err != nil {
 			return nil, err
 		}
 		if err := p.expect(lex.TokenLBracket); err != nil {
 			return nil, err
 		}
+		var prevToken []byte
 		tokens := make([][2]data.PlutusData, 0)
 		for p.curToken.Type != lex.TokenRBracket {
 			if err := p.expect(lex.TokenLParen); err != nil {
 				return nil, err
 			}
-			token, err := p.parseValueBytes()
+			token, err := p.parseValueBytes("token", len(tokens), prevToken)
 			if err != nil {
 				return nil, err
 			}
+			prevToken = token.Inner
 			if err := p.expect(lex.TokenComma); err != nil {
 				return nil, err
 			}
@@ -1241,6 +1212,9 @@ func (p *Parser) parsePlutusValue() (data.PlutusData, error) {
 			if !ok {
 				return nil, fmt.Errorf("invalid Value quantity at position %d", p.curToken.Position)
 			}
+			if err := data.CheckValueQuantity(len(pairs), len(tokens), quantity); err != nil {
+				return nil, err
+			}
 			p.nextToken()
 			if err := p.expect(lex.TokenRParen); err != nil {
 				return nil, err
@@ -1251,6 +1225,9 @@ func (p *Parser) parsePlutusValue() (data.PlutusData, error) {
 					return nil, err
 				}
 			}
+		}
+		if err := data.CheckValueTokenCount(len(pairs), len(tokens)); err != nil {
+			return nil, err
 		}
 		if err := p.expect(lex.TokenRBracket); err != nil {
 			return nil, err
@@ -1275,7 +1252,7 @@ func (p *Parser) parsePlutusValue() (data.PlutusData, error) {
 	return value, nil
 }
 
-func (p *Parser) parseValueBytes() (data.PlutusData, error) {
+func (p *Parser) parseValueBytes(kind string, index int, prev []byte) (*data.ByteString, error) {
 	if p.curToken.Type != lex.TokenByteString {
 		return nil, fmt.Errorf(
 			"expected Value bytestring, got %v at position %d",
@@ -1287,8 +1264,11 @@ func (p *Parser) parseValueBytes() (data.PlutusData, error) {
 	if !ok {
 		return nil, fmt.Errorf("invalid Value bytestring at position %d", p.curToken.Position)
 	}
+	if err := data.CheckValueKey(kind, index, value, prev); err != nil {
+		return nil, err
+	}
 	p.nextToken()
-	return data.NewByteString(value), nil
+	return &data.ByteString{Inner: value}, nil
 }
 
 func (p *Parser) parseTypeSpec() (Typ, error) {

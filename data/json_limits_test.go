@@ -228,3 +228,113 @@ func FuzzDecodeJSON(f *testing.F) {
 		_, _ = DecodeJSON(input)
 	})
 }
+
+// concreteJSONShapes wraps two child documents in each container the exported
+// List, Map and Constr JSON decoders accept.
+var concreteJSONShapes = []struct {
+	name   string
+	wrap   func(a, b string) string
+	wide   func(items int) string
+	decode func(doc []byte) error
+}{
+	{
+		"List",
+		func(a, b string) string { return `{"list":[` + a + `,` + b + `]}` },
+		wideFlatJSON,
+		func(doc []byte) error { return new(List).UnmarshalJSON(doc) },
+	},
+	{
+		"Constr",
+		func(a, b string) string { return `{"constructor":0,"fields":[` + a + `,` + b + `]}` },
+		func(items int) string {
+			return `{"constructor":0,"fields":` + strings.TrimPrefix(wideFlatJSON(items), `{"list":`)
+		},
+		func(doc []byte) error { return new(Constr).UnmarshalJSON(doc) },
+	},
+	{
+		"Map",
+		func(a, b string) string { return `{"map":[{"k":` + a + `,"v":` + b + `}]}` },
+		func(items int) string {
+			pair := `{"k":{"int":1},"v":{"int":1}}`
+			return `{"map":[` + strings.Repeat(pair+",", items/2-1) + pair + `]}`
+		},
+		func(doc []byte) error { return new(Map).UnmarshalJSON(doc) },
+	},
+}
+
+// TestConcreteJSONDecodersShareDocumentNodeBudget verifies that the exported
+// decoders count nodes across the whole document: each child below is within
+// the node limit on its own, but together they exceed it.
+func TestConcreteJSONDecodersShareDocumentNodeBudget(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("builds a ~1M-node document; skipped in -short mode")
+	}
+
+	child := wideFlatJSON(MaxDecodeNodes/2 + 1000)
+	for _, shape := range concreteJSONShapes {
+		doc := []byte(shape.wrap(child, child))
+		if _, err := DecodeJSON(doc); err == nil ||
+			!strings.Contains(err.Error(), "max node count") {
+			t.Fatalf("%s: DecodeJSON error = %v, want max node count", shape.name, err)
+		}
+		err := shape.decode(doc)
+		if err == nil || !strings.Contains(err.Error(), "max node count") {
+			t.Errorf("%s decoder error = %v, want max node count", shape.name, err)
+		}
+	}
+}
+
+// TestConcreteJSONDecodersBoundParsedTree verifies that the exported decoders
+// reject a document over the parser's node cap instead of materializing it.
+func TestConcreteJSONDecodersBoundParsedTree(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("builds a >2.5M-node document; skipped in -short mode")
+	}
+
+	for _, shape := range concreteJSONShapes {
+		err := shape.decode([]byte(shape.wide(maxJSONParseNodes / 2)))
+		if err == nil || !strings.Contains(err.Error(), "tree exceeds max node count") {
+			t.Errorf("%s decoder error = %v, want parser node cap error", shape.name, err)
+		}
+	}
+}
+
+// TestConcreteJSONDecodersMatchGenericDepthLimit verifies the exported
+// decoders apply the same nesting limit as DecodeJSON.
+func TestConcreteJSONDecodersMatchGenericDepthLimit(t *testing.T) {
+	t.Parallel()
+	deep := nestedListJSON(MaxDecodeNestingDepth() * 2)
+	for _, shape := range concreteJSONShapes {
+		err := shape.decode([]byte(shape.wrap(deep, `{"int":0}`)))
+		if err == nil || !strings.Contains(err.Error(), "max depth") {
+			t.Errorf("%s decoder error = %v, want max depth error", shape.name, err)
+		}
+	}
+}
+
+func TestConcreteJSONDecodersRejectOtherVariants(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		doc  string
+		dst  interface{ UnmarshalJSON([]byte) error }
+		want string
+	}{
+		{"Integer", `{"bytes":"ab"}`, new(Integer), `missing "int" key`},
+		{"ByteString", `{"int":1}`, new(ByteString), `missing "bytes" key`},
+		{"List", `{"int":1}`, new(List), `missing "list" key`},
+		{"Map", `{"int":1}`, new(Map), `missing "map" key`},
+		{"Constr", `{"int":1}`, new(Constr), `missing "constructor" key`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := tt.dst.UnmarshalJSON([]byte(tt.doc))
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}

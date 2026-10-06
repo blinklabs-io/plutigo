@@ -1,7 +1,6 @@
 package syn
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"math"
@@ -15,11 +14,17 @@ import (
 )
 
 const (
-	decodeTermChunkSize  = 384
-	decodeRetainVarCap   = 16
-	decodeRetainApplyCap = 16
-	decodeRetainListCap  = 32
-	decodeRetainBytesCap = 8
+	// Arena chunks grow geometrically from decodeTermMinChunkSize to
+	// decodeTermChunkSize. A script populates a handful of node types densely
+	// and most others with a few nodes or none, so a fixed full-size first
+	// chunk per type wasted most of a fresh decode's allocation on small
+	// populations.
+	decodeTermMinChunkSize = 64
+	decodeTermChunkSize    = 384
+	decodeRetainVarCap     = 16
+	decodeRetainApplyCap   = 16
+	decodeRetainListCap    = 32
+	decodeRetainBytesCap   = 8
 )
 
 var (
@@ -83,6 +88,7 @@ func decodeProgram[T Binder](bytes []byte, context *ProgramContext) (*Program[T]
 	if err != nil {
 		return nil, err
 	}
+	arena.sizeForInput(len(bytes))
 	terms, err := decodeTermWithArena[T](d, arena)
 	if err != nil {
 		return nil, err
@@ -108,6 +114,7 @@ func decodeDeBruijnProgram(
 		return nil, err
 	}
 
+	arena.sizeForInput(len(d.buffer))
 	terms, err := decodeTermDeBruijnWithArena(d, arena, consts, 0)
 	if err != nil {
 		return nil, err
@@ -426,13 +433,33 @@ type arenaChunks[S any] struct {
 	chunkIdx    int
 	offset      int
 	activeChunk []S // cached pointer to chunks[chunkIdx]; nil when chunkIdx >= len(chunks)
+	// firstSize, when larger than decodeTermMinChunkSize, sizes the first
+	// chunk of an empty arena. Later chunks still grow geometrically.
+	firstSize int
 }
 
 func (a *arenaChunks[S]) used() int {
 	if len(a.chunks) == 0 {
 		return 0
 	}
-	return a.chunkIdx*decodeTermChunkSize + a.offset
+	used := a.offset
+	for i := 0; i < a.chunkIdx && i < len(a.chunks); i++ {
+		used += len(a.chunks[i])
+	}
+	return used
+}
+
+// nextArenaChunkSize doubles the previous chunk's length, bounded by
+// [decodeTermMinChunkSize, decodeTermChunkSize].
+func nextArenaChunkSize(prev int) int {
+	size := prev * 2
+	if size < decodeTermMinChunkSize {
+		return decodeTermMinChunkSize
+	}
+	if size > decodeTermChunkSize {
+		return decodeTermChunkSize
+	}
+	return size
 }
 
 // alloc returns the next free slot. The fast path uses the cached
@@ -458,7 +485,13 @@ func (a *arenaChunks[S]) allocSlow() *S {
 		}
 	}
 
-	chunk := make([]S, decodeTermChunkSize)
+	var size int
+	if n := len(a.chunks); n > 0 {
+		size = nextArenaChunkSize(len(a.chunks[n-1]))
+	} else {
+		size = max(a.firstSize, decodeTermMinChunkSize)
+	}
+	chunk := make([]S, size)
 	a.chunks = append(a.chunks, chunk)
 	a.chunkIdx = len(a.chunks) - 1
 	a.activeChunk = chunk
@@ -482,10 +515,6 @@ func (a *arenaChunks[S]) reset(retainCap int) {
 	}
 	if used > 0 && retained > 0 {
 		remaining := used
-		maxRetained := retained * decodeTermChunkSize
-		if remaining > maxRetained {
-			remaining = maxRetained
-		}
 		for i := 0; i < retained && remaining > 0; i++ {
 			chunk := a.chunks[i]
 			if chunk == nil {
@@ -553,7 +582,11 @@ func (a *arenaSlices[S]) alloc(n int) []S {
 		a.offset = 0
 	}
 
-	size := decodeTermChunkSize
+	prev := 0
+	if k := len(a.chunks); k > 0 {
+		prev = len(a.chunks[k-1])
+	}
+	size := nextArenaChunkSize(prev)
 	if n > size {
 		size = n
 	}
@@ -593,6 +626,17 @@ func (a *arenaSlices[S]) reset(retainCap int) {
 	a.offset = 0
 }
 
+func resetWordSlices(a *arenaSlices[big.Word], retainCap int) {
+	if len(a.chunks) > retainCap {
+		for i := retainCap; i < len(a.chunks); i++ {
+			a.chunks[i] = nil
+		}
+		a.chunks = a.chunks[:retainCap]
+	}
+	a.chunkIdx = 0
+	a.offset = 0
+}
+
 func resetByteSlices(a *arenaSlices[byte], retainCap int) {
 	if len(a.chunks) > retainCap {
 		for i := retainCap; i < len(a.chunks); i++ {
@@ -620,6 +664,22 @@ type termArena[T Binder] struct {
 
 func newTermArena[T Binder]() *termArena[T] {
 	return &termArena[T]{}
+}
+
+// sizeForInput sizes the first chunk of the densest node arenas from the
+// FLAT input length. Each divisor is below the smallest nodes-per-byte ratio
+// measured on mainnet and benchmark validators (applications 0.28-0.43,
+// variables 0.17-0.32, lambdas 0.06-0.22, builtins 0.04-0.13), so the first
+// chunk rarely exceeds what the script needs; any shortfall is covered by
+// geometric growth. Hints are a fixed fraction of the input length, so a
+// script cannot make the decoder reserve more than a constant multiple of
+// its own size. Arenas that already hold chunks from a previous decode are
+// unaffected.
+func (a *termArena[T]) sizeForInput(inputLen int) {
+	a.applies.firstSize = inputLen / 4
+	a.vars.firstSize = inputLen / 8
+	a.lambdas.firstSize = inputLen / 16
+	a.builtins.firstSize = inputLen / 32
 }
 
 func (a *termArena[T]) reset() {
@@ -712,10 +772,19 @@ type constantArena struct {
 	protoLists  arenaChunks[ProtoList]
 	protoArrays arenaChunks[ProtoArray]
 	protoPairs  arenaChunks[ProtoPair]
-	values      arenaChunks[Value]
-	datas       arenaChunks[Data]
-	lists       arenaSlices[IConstant]
-	bytes       arenaSlices[byte]
+	// Composite constant types come from the arena so that every decoded
+	// constant owns its own TList/TPair wrappers without a heap allocation
+	// apiece; TList and TPair have exported writable fields.
+	tLists arenaChunks[TList]
+	tPairs arenaChunks[TPair]
+	values arenaChunks[Value]
+	datas  arenaChunks[Data]
+	lists  arenaSlices[IConstant]
+	bytes  arenaSlices[byte]
+	// words backs the magnitude of every decoded integer, so integer
+	// decoding allocates from the arena rather than once per big.Int.
+	words       arenaSlices[big.Word]
+	wordScratch [16]big.Word
 	dataDecoder data.Decoder
 }
 
@@ -729,11 +798,36 @@ func (a *constantArena) reset() {
 	a.protoLists.reset(decodeRetainVarCap)
 	a.protoArrays.reset(decodeRetainVarCap)
 	a.protoPairs.reset(decodeRetainVarCap)
+	a.tLists.reset(decodeRetainVarCap)
+	a.tPairs.reset(decodeRetainVarCap)
 	a.values.reset(decodeRetainVarCap)
 	a.datas.reset(decodeRetainVarCap)
 	a.lists.reset(decodeRetainVarCap)
 	resetByteSlices(&a.bytes, decodeRetainBytesCap)
+	resetWordSlices(&a.words, decodeRetainBytesCap)
 	a.dataDecoder.Reset()
+}
+
+// listType returns a new list type over elem, from the arena when there is
+// one.
+func (a *constantArena) listType(elem Typ) Typ {
+	if a == nil {
+		return &TList{Typ: elem}
+	}
+	t := a.tLists.alloc()
+	t.Typ = elem
+	return t
+}
+
+// pairType returns a new pair type, from the arena when there is one.
+func (a *constantArena) pairType(first, second Typ) Typ {
+	if a == nil {
+		return &TPair{First: first, Second: second}
+	}
+	t := a.tPairs.alloc()
+	t.First = first
+	t.Second = second
+	return t
 }
 
 func (a *constantArena) allocBigInt() *big.Int {
@@ -944,7 +1038,7 @@ func DecodeConstant(d *decoder) (IConstant, error) {
 	if err != nil {
 		return nil, err
 	}
-	typ, err := decodeConstantType(&tags)
+	typ, err := decodeConstantType(&tags, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -957,7 +1051,7 @@ func decodeConstantWithArena(d *decoder, arena *constantArena) (IConstant, error
 	if err != nil {
 		return nil, err
 	}
-	typ, err := decodeConstantType(&tags)
+	typ, err := decodeConstantType(&tags, arena)
 	if err != nil {
 		return nil, err
 	}
@@ -1048,23 +1142,57 @@ func decodeIntegerWithArena(
 	d *decoder,
 	arena *constantArena,
 ) (*Integer, error) {
-	small, word, err := d.bigWordSmall()
+	small, words, err := d.bigWordSmallInto(arena.wordScratch[:0])
 	if err != nil {
 		return nil, err
 	}
 
 	inner := arena.allocBigInt()
-	if word == nil {
+	if words == nil {
 		if smallInt, ok := unzigzagUint64(small); ok {
-			inner.SetInt64(smallInt)
+			arena.setInt64(inner, smallInt)
 			return arena.allocInteger(inner), nil
 		}
-		inner.SetUint64(small)
-	} else {
-		inner.Set(word)
+		words = append(arena.wordScratch[:0], big.Word(small))
+		if bits.UintSize == 32 {
+			words = append(words, big.Word(small>>32))
+		}
 	}
+	// One spare word lets unzigzagInPlace's increment carry without
+	// reallocating. The three-index slice keeps every integer's magnitude
+	// disjoint from its neighbours in the shared arena chunk.
+	n := len(words)
+	magnitude := arena.words.alloc(n + 1)
+	copy(magnitude, words)
+	inner.SetBits(magnitude[: n : n+1])
 	unzigzagInPlace(inner)
 	return arena.allocInteger(inner), nil
+}
+
+// setInt64 sets inner to v with its magnitude backed by the arena's word
+// slab instead of a per-integer allocation.
+func (a *constantArena) setInt64(inner *big.Int, v int64) {
+	if v == 0 {
+		inner.SetBits(nil)
+		return
+	}
+	abs := uint64(v)
+	if v < 0 {
+		abs = uint64(-v) // wraps correctly for math.MinInt64
+	}
+	var magnitude []big.Word
+	if bits.UintSize == 32 && abs>>32 != 0 {
+		magnitude = a.words.alloc(2)
+		magnitude[0] = big.Word(abs)
+		magnitude[1] = big.Word(abs >> 32)
+	} else {
+		magnitude = a.words.alloc(1)
+		magnitude[0] = big.Word(abs)
+	}
+	inner.SetBits(magnitude)
+	if v < 0 {
+		inner.Neg(inner)
+	}
 }
 
 func decodeConstantListWithArena(
@@ -1217,66 +1345,52 @@ func decodeConstantValue(d *decoder, typ Typ) (IConstant, error) {
 	return constant, nil
 }
 
+// validateValueEntries checks the shape of Value entries and then applies the
+// canonical Value rules shared with the data package.
 func validateValueEntries(entries []IConstant) error {
-	quantityLimit := new(big.Int).Lsh(big.NewInt(1), 127)
-	maxQuantity := new(big.Int).Sub(new(big.Int).Set(quantityLimit), big.NewInt(1))
-	minQuantity := new(big.Int).Neg(new(big.Int).Set(quantityLimit))
-
-	var previousPolicy []byte
+	var prevPolicy []byte
 	for policyIndex, entry := range entries {
 		policy, ok := entry.(*ProtoPair)
-		if !ok {
+		if !ok || policy == nil {
 			return fmt.Errorf("value policy entry %d is not a pair", policyIndex)
 		}
 		policyID, ok := policy.First.(*ByteString)
-		if !ok {
+		if !ok || policyID == nil {
 			return fmt.Errorf("value policy entry %d has a non-bytestring key", policyIndex)
 		}
-		if len(policyID.Inner) > 32 {
-			return fmt.Errorf("value policy entry %d key exceeds 32 bytes", policyIndex)
+		if err := data.CheckValueKey("policy", policyIndex, policyID.Inner, prevPolicy); err != nil {
+			return err
 		}
-		if policyIndex > 0 && bytes.Compare(previousPolicy, policyID.Inner) >= 0 {
-			return errors.New("value policy keys must be strictly ascending")
-		}
-
+		prevPolicy = policyID.Inner
 		tokens, ok := policy.Second.(*ProtoList)
-		if !ok {
+		if !ok || tokens == nil {
 			return fmt.Errorf("value policy entry %d has a non-list payload", policyIndex)
 		}
-		if len(tokens.List) == 0 {
-			return fmt.Errorf("value policy entry %d has no tokens", policyIndex)
+		if err := data.CheckValueTokenCount(policyIndex, len(tokens.List)); err != nil {
+			return err
 		}
-
-		var previousToken []byte
+		var prevToken []byte
 		for tokenIndex, entry := range tokens.List {
 			token, ok := entry.(*ProtoPair)
-			if !ok {
+			if !ok || token == nil {
 				return fmt.Errorf("value token entry %d:%d is not a pair", policyIndex, tokenIndex)
 			}
 			tokenID, ok := token.First.(*ByteString)
-			if !ok {
+			if !ok || tokenID == nil {
 				return fmt.Errorf("value token entry %d:%d has a non-bytestring key", policyIndex, tokenIndex)
 			}
-			if len(tokenID.Inner) > 32 {
-				return fmt.Errorf("value token entry %d:%d key exceeds 32 bytes", policyIndex, tokenIndex)
+			if err := data.CheckValueKey("token", tokenIndex, tokenID.Inner, prevToken); err != nil {
+				return err
 			}
-			if tokenIndex > 0 && bytes.Compare(previousToken, tokenID.Inner) >= 0 {
-				return errors.New("value token keys must be strictly ascending")
-			}
-
+			prevToken = tokenID.Inner
 			quantity, ok := token.Second.(*Integer)
-			if !ok || quantity.Inner == nil {
+			if !ok || quantity == nil || quantity.Inner == nil {
 				return fmt.Errorf("value token entry %d:%d has a non-integer quantity", policyIndex, tokenIndex)
 			}
-			if quantity.Inner.Sign() == 0 {
-				return fmt.Errorf("value token entry %d:%d has a zero quantity", policyIndex, tokenIndex)
+			if err := data.CheckValueQuantity(policyIndex, tokenIndex, quantity.Inner); err != nil {
+				return err
 			}
-			if quantity.Inner.Cmp(minQuantity) < 0 || quantity.Inner.Cmp(maxQuantity) > 0 {
-				return fmt.Errorf("value token entry %d:%d quantity is out of range", policyIndex, tokenIndex)
-			}
-			previousToken = tokenID.Inner
 		}
-		previousPolicy = policyID.Inner
 	}
 	return nil
 }
@@ -1328,8 +1442,8 @@ func (s *constantTagSeq) len() int {
 	return s.n
 }
 
-func decodeConstantType(tags *constantTagSeq) (Typ, error) {
-	typ, next, err := decodeConstantTypeAt(tags, 0)
+func decodeConstantType(tags *constantTagSeq, arena *constantArena) (Typ, error) {
+	typ, next, err := decodeConstantTypeAt(tags, 0, arena)
 	if err != nil {
 		return nil, err
 	}
@@ -1339,7 +1453,11 @@ func decodeConstantType(tags *constantTagSeq) (Typ, error) {
 	return typ, nil
 }
 
-func decodeConstantTypeAt(tags *constantTagSeq, idx int) (Typ, int, error) {
+func decodeConstantTypeAt(
+	tags *constantTagSeq,
+	idx int,
+	arena *constantArena,
+) (Typ, int, error) {
 	if idx >= tags.len() {
 		return nil, idx, errors.New("unknown type tag")
 	}
@@ -1375,13 +1493,13 @@ func decodeConstantTypeAt(tags *constantTagSeq, idx int) (Typ, int, error) {
 		}
 		switch tags.at(idx) {
 		case ProtoListTwoTag:
-			subType, next, err := decodeConstantTypeAt(tags, idx+1)
+			subType, next, err := decodeConstantTypeAt(tags, idx+1, arena)
 			if err != nil {
 				return nil, next, err
 			}
-			return &TList{Typ: subType}, next, nil
+			return arena.listType(subType), next, nil
 		case ProtoArrayTag:
-			subType, next, err := decodeConstantTypeAt(tags, idx+1)
+			subType, next, err := decodeConstantTypeAt(tags, idx+1, arena)
 			if err != nil {
 				return nil, next, err
 			}
@@ -1391,15 +1509,15 @@ func decodeConstantTypeAt(tags *constantTagSeq, idx int) (Typ, int, error) {
 			if idx >= tags.len() || tags.at(idx) != ProtoPairThreeTag {
 				return nil, idx, errors.New("unknown type tag")
 			}
-			first, next, err := decodeConstantTypeAt(tags, idx+1)
+			first, next, err := decodeConstantTypeAt(tags, idx+1, arena)
 			if err != nil {
 				return nil, next, err
 			}
-			second, next, err := decodeConstantTypeAt(tags, next)
+			second, next, err := decodeConstantTypeAt(tags, next, arena)
 			if err != nil {
 				return nil, next, err
 			}
-			return &TPair{First: first, Second: second}, next, nil
+			return arena.pairType(first, second), next, nil
 		default:
 			return nil, idx, errors.New("unknown type tag")
 		}
@@ -1938,7 +2056,19 @@ func (d *decoder) integer() (*big.Int, error) {
 }
 
 func (d *decoder) bigWordSmall() (uint64, *big.Int, error) {
-	var accumulator bigWordAccumulator
+	small, words, err := d.bigWordSmallInto(nil)
+	if err != nil || words == nil {
+		return small, nil, err
+	}
+	return small, new(big.Int).SetBits(words), nil
+}
+
+// bigWordSmallInto decodes a base-128 natural. A value that fits the uint64
+// fast path is returned as small with nil words; a larger one is returned as
+// little-endian words accumulated into scratch, which the caller must copy
+// before reusing scratch.
+func (d *decoder) bigWordSmallInto(scratch []big.Word) (uint64, []big.Word, error) {
+	accumulator := bigWordAccumulator{scratch: scratch}
 
 	if d.usedBits == 0 {
 		for {
@@ -1974,9 +2104,10 @@ func (d *decoder) bigWordSmall() (uint64, *big.Int, error) {
 // native-word representation consumed by big.Int.SetBits. Each input group is
 // written once, avoiding repeated operations over the growing integer.
 type bigWordAccumulator struct {
-	small uint64
-	words []big.Word
-	group int
+	small   uint64
+	words   []big.Word
+	scratch []big.Word
+	group   int
 }
 
 func (a *bigWordAccumulator) add(chunk uint64) {
@@ -1989,10 +2120,9 @@ func (a *bigWordAccumulator) add(chunk uint64) {
 	}
 
 	if a.words == nil {
-		a.words = make([]big.Word, 64/bits.UintSize)
-		a.words[0] = big.Word(a.small)
+		a.words = append(a.scratch[:0], big.Word(a.small))
 		if bits.UintSize == 32 {
-			a.words[1] = big.Word(a.small >> 32)
+			a.words = append(a.words, big.Word(a.small>>32))
 		}
 	}
 	if chunk != 0 {
@@ -2001,11 +2131,8 @@ func (a *bigWordAccumulator) add(chunk uint64) {
 	a.group++
 }
 
-func (a *bigWordAccumulator) value() (uint64, *big.Int) {
-	if a.words == nil {
-		return a.small, nil
-	}
-	return a.small, new(big.Int).SetBits(a.words)
+func (a *bigWordAccumulator) value() (uint64, []big.Word) {
+	return a.small, a.words
 }
 
 func accumulateBigWordChunk(
