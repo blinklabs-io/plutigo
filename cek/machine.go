@@ -1884,6 +1884,32 @@ func (m *Machine[T]) transferArgStack(
 // term anywhere near this deep.
 const maxDischargeDepth = 100_000
 
+// maxDischargeWork caps the result nodes and child slots processed during
+// discharge, independently of evaluation budget.
+const maxDischargeWork = 1_000_000
+
+type dischargeWorkBudget struct {
+	remaining int
+}
+
+func (b *dischargeWorkBudget) consume(work int) error {
+	if b == nil {
+		return nil
+	}
+	if work < 0 || work > b.remaining {
+		return dischargeWorkLimitError()
+	}
+	b.remaining -= work
+	return nil
+}
+
+func dischargeWorkLimitError() *BudgetError {
+	return &BudgetError{
+		Code:    ErrCodeBudgetExhausted,
+		Message: "result term too large to discharge",
+	}
+}
+
 func dischargeDepthLimitError() *BudgetError {
 	return &BudgetError{
 		Code:    ErrCodeBudgetExhausted,
@@ -1900,13 +1926,15 @@ func dischargeValueContext[T syn.Eval](
 	checkCancellation bool,
 	value Value[T],
 ) (syn.Term[T], error) {
-	return dischargeValueDepth[T](ctx, checkCancellation, value, 0)
+	budget := dischargeWorkBudget{remaining: maxDischargeWork}
+	return dischargeValueDepth[T](ctx, checkCancellation, value, &budget, 0)
 }
 
 func dischargeValueDepth[T syn.Eval](
 	ctx context.Context,
 	checkCancellation bool,
 	value Value[T],
+	budget *dischargeWorkBudget,
 	depth int,
 ) (syn.Term[T], error) {
 	if checkCancellation {
@@ -1917,6 +1945,12 @@ func dischargeValueDepth[T syn.Eval](
 	if depth > maxDischargeDepth {
 		return nil, dischargeDepthLimitError()
 	}
+	// Pair constants are charged by their recursive materializer below.
+	if _, isPair := value.(*pairValue[T]); !isPair {
+		if err := budget.consume(1); err != nil {
+			return nil, err
+		}
+	}
 
 	switch v := value.(type) {
 	case *Constant:
@@ -1924,14 +1958,21 @@ func dischargeValueDepth[T syn.Eval](
 	case *dataValue[T]:
 		return constantTerm[T](&syn.Data{Inner: v.item}), nil
 	case *dataListValue[T]:
+		if err := budget.consume(len(v.items)); err != nil {
+			return nil, err
+		}
 		return constantTerm[T](materializeDataListConstant(v.items)), nil
 	case *dataMapValue[T]:
+		if err := budget.consume(len(v.items)); err != nil {
+			return nil, err
+		}
 		return constantTerm[T](materializeDataMapConstant(v.items)), nil
 	case *pairValue[T]:
-		constant, ok, err := materializeConstantValueDepth[T](
+		constant, ok, err := materializeConstantValueDepthWithBudget[T](
 			v,
 			depth,
 			maxDischargeDepth,
+			budget,
 		)
 		if err != nil {
 			return nil, err
@@ -1953,6 +1994,9 @@ func dischargeValueDepth[T syn.Eval](
 
 		// Add forces for polymorphic instantiation
 		for range uint(v.Forces) {
+			if err := budget.consume(1); err != nil {
+				return nil, err
+			}
 			forcedTerm = &syn.Force[T]{
 				Term: forcedTerm,
 			}
@@ -1960,10 +2004,14 @@ func dischargeValueDepth[T syn.Eval](
 
 		// Add applications for each argument
 		for arg := range v.Args.Iter() {
+			if err := budget.consume(1); err != nil {
+				return nil, err
+			}
 			discharged, err := dischargeValueDepth[T](
 				ctx,
 				checkCancellation,
 				arg,
+				budget,
 				depth+1,
 			)
 			if err != nil {
@@ -1981,6 +2029,7 @@ func dischargeValueDepth[T syn.Eval](
 		body, err := withEnv(
 			ctx,
 			checkCancellation,
+			budget,
 			0,
 			v.Env,
 			v.AST.Term,
@@ -1996,6 +2045,7 @@ func dischargeValueDepth[T syn.Eval](
 		body, err := withEnv(
 			ctx,
 			checkCancellation,
+			budget,
 			1,
 			v.Env,
 			v.AST.Body,
@@ -2011,6 +2061,9 @@ func dischargeValueDepth[T syn.Eval](
 
 	case *Constr[T]:
 		// Recursively discharge all constructor fields
+		if err := budget.consume(len(v.Fields)); err != nil {
+			return nil, err
+		}
 		fields := make([]syn.Term[T], len(v.Fields))
 
 		for i, f := range v.Fields {
@@ -2018,6 +2071,7 @@ func dischargeValueDepth[T syn.Eval](
 				ctx,
 				checkCancellation,
 				f,
+				budget,
 				depth+1,
 			)
 			if err != nil {
@@ -2055,6 +2109,7 @@ func dischargeValueDepth[T syn.Eval](
 func withEnv[T syn.Eval](
 	ctx context.Context,
 	checkCancellation bool,
+	budget *dischargeWorkBudget,
 	lamCnt int,
 	env *Env[T],
 	term syn.Term[T],
@@ -2067,6 +2122,9 @@ func withEnv[T syn.Eval](
 	}
 	if depth > maxDischargeDepth {
 		return nil, dischargeDepthLimitError()
+	}
+	if err := budget.consume(1); err != nil {
+		return nil, err
 	}
 
 	switch t := term.(type) {
@@ -2083,6 +2141,7 @@ func withEnv[T syn.Eval](
 				ctx,
 				checkCancellation,
 				value,
+				budget,
 				depth+1,
 			)
 		}
@@ -2094,6 +2153,7 @@ func withEnv[T syn.Eval](
 		body, err := withEnv(
 			ctx,
 			checkCancellation,
+			budget,
 			lamCnt+1,
 			env,
 			t.Body,
@@ -2112,6 +2172,7 @@ func withEnv[T syn.Eval](
 		fn, err := withEnv(
 			ctx,
 			checkCancellation,
+			budget,
 			lamCnt,
 			env,
 			t.Function,
@@ -2123,6 +2184,7 @@ func withEnv[T syn.Eval](
 		arg, err := withEnv(
 			ctx,
 			checkCancellation,
+			budget,
 			lamCnt,
 			env,
 			t.Argument,
@@ -2141,6 +2203,7 @@ func withEnv[T syn.Eval](
 		inner, err := withEnv(
 			ctx,
 			checkCancellation,
+			budget,
 			lamCnt,
 			env,
 			t.Term,
@@ -2156,6 +2219,7 @@ func withEnv[T syn.Eval](
 		inner, err := withEnv(
 			ctx,
 			checkCancellation,
+			budget,
 			lamCnt,
 			env,
 			t.Term,
@@ -2168,11 +2232,15 @@ func withEnv[T syn.Eval](
 
 	case *syn.Constr[T]:
 		// Constructor: recursively process all fields
+		if err := budget.consume(len(t.Fields)); err != nil {
+			return nil, err
+		}
 		fields := make([]syn.Term[T], len(t.Fields))
 		for i, f := range t.Fields {
 			d, err := withEnv(
 				ctx,
 				checkCancellation,
+				budget,
 				lamCnt,
 				env,
 				f,
@@ -2190,11 +2258,15 @@ func withEnv[T syn.Eval](
 
 	case *syn.Case[T]:
 		// Case expression: process scrutinee and all branches
+		if err := budget.consume(len(t.Branches)); err != nil {
+			return nil, err
+		}
 		branches := make([]syn.Term[T], len(t.Branches))
 		for i, b := range t.Branches {
 			d, err := withEnv(
 				ctx,
 				checkCancellation,
+				budget,
 				lamCnt,
 				env,
 				b,
@@ -2208,6 +2280,7 @@ func withEnv[T syn.Eval](
 		constr, err := withEnv(
 			ctx,
 			checkCancellation,
+			budget,
 			lamCnt,
 			env,
 			t.Constr,
