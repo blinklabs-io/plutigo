@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"math/bits"
 	"strings"
 	"unicode/utf8"
 
@@ -240,66 +241,27 @@ func listLengthExMem(l []syn.IConstant) func() ExMem {
 	}
 }
 
-// valueListSizeExMem calculates the "size" of a Value for V4 builtin costing.
-// The size is: outer_count + inner_count when sum <= 2, else sum - 1.
-// Used by insertCoin which needs the full count for small values.
-func valueListSizeExMem(l []syn.IConstant) func() ExMem {
+// valueTotalSizeExMem is the ValueTotalSize metric: the number of distinct
+// (policy, token) pairs, i.e. the sum of every policy's token count. A Value
+// is a nested Map PolicyId (Map TokenName Quantity) and totalSize is that map's
+// total entry count. Used by unionValue, valueContains, valueData and
+// scaleValue, whose reference denotations take ValueTotalSize.
+func valueTotalSizeExMem(l []syn.IConstant) func() ExMem {
 	return func() ExMem {
-		if len(l) == 0 {
-			return ExMem(0)
-		}
-		// Count outer entries (currency symbols)
-		outerCount := len(l)
-		// Count total inner entries (tokens)
-		innerCount := 0
-		for _, item := range l {
-			pair, ok := item.(*syn.ProtoPair)
-			if !ok {
-				continue
-			}
-			innerList, ok := pair.Second.(*syn.ProtoList)
-			if !ok {
-				continue
-			}
-			innerCount += len(innerList.List)
-		}
-		sum := outerCount + innerCount
-		// For insertCoin: sum when sum <= 2, else sum - 1
-		if sum > 2 {
-			return ExMem(sum - 1)
-		}
-		return ExMem(sum)
+		return ExMem(valueTokenCount(l))
 	}
 }
 
-// valueListSizeMinusOneExMem calculates the "size" as max(0, sum - 1).
-// Used by scaleValue, valueContains, valueData which use this simpler formula.
-func valueListSizeMinusOneExMem(l []syn.IConstant) func() ExMem {
+// valueMaxDepthExMem is the ValueMaxDepth metric: the sum of the base-2
+// logarithms of the outer (policy) count and the largest inner (token) count,
+// each floored to zero when that count is zero. It models a two-level map
+// lookup as O(log m + log k), which is why insertCoin and lookupCoin -- the
+// two builtins that search a Value by policy and then by token -- are costed
+// on depth rather than on size.
+func valueMaxDepthExMem(l []syn.IConstant) func() ExMem {
 	return func() ExMem {
-		if len(l) == 0 {
-			return ExMem(0)
-		}
-		// Count outer entries (currency symbols)
-		outerCount := len(l)
-		// Count total inner entries (tokens)
-		innerCount := 0
-		for _, item := range l {
-			pair, ok := item.(*syn.ProtoPair)
-			if !ok {
-				continue
-			}
-			innerList, ok := pair.Second.(*syn.ProtoList)
-			if !ok {
-				continue
-			}
-			innerCount += len(innerList.List)
-		}
-		sum := outerCount + innerCount
-		// For scaleValue, unionValue, valueContains: max(0, sum - 1)
-		if sum > 1 {
-			return ExMem(sum - 1)
-		}
-		return ExMem(0)
+		maxInner := valueMaxInnerCount(l)
+		return ExMem(bits.Len(uint(len(l))) + bits.Len(uint(maxInner)))
 	}
 }
 
@@ -339,31 +301,60 @@ func blsMlResultExMem() func() ExMem {
 	}
 }
 
-// valueOuterCountExMem returns just the outer list length (number of policies).
-// Used by unionValue which costs based on policy count only.
+// valueOuterCountExMem is the ValueOuterSize metric: the number of policies,
+// i.e. the outer map's entry count. Used by policies.
 func valueOuterCountExMem(l []syn.IConstant) func() ExMem {
 	return func() ExMem {
 		return ExMem(len(l))
 	}
 }
 
+// valueTokenCount returns the total number of token entries across every
+// policy, which is what ValueTotalSize and the unValueData budget check both
+// need. It is the same count valueInnerCountExMem exposes; valueMaxInnerCount
+// needs the per-policy counts too.
+func valueTokenCount(l []syn.IConstant) int {
+	innerCount := 0
+	for _, item := range l {
+		pair, ok := item.(*syn.ProtoPair)
+		if !ok {
+			continue
+		}
+		innerList, ok := pair.Second.(*syn.ProtoList)
+		if !ok {
+			continue
+		}
+		innerCount += len(innerList.List)
+	}
+	return innerCount
+}
+
+// valueMaxInnerCount returns the token count of the largest single policy,
+// matching Value.maxInnerSize. A Value with no policies has an empty size
+// cache, so the reference's lookupMax yields 0.
+func valueMaxInnerCount(l []syn.IConstant) int {
+	maxInner := 0
+	for _, item := range l {
+		pair, ok := item.(*syn.ProtoPair)
+		if !ok {
+			continue
+		}
+		innerList, ok := pair.Second.(*syn.ProtoList)
+		if !ok {
+			continue
+		}
+		if len(innerList.List) > maxInner {
+			maxInner = len(innerList.List)
+		}
+	}
+	return maxInner
+}
+
 // valueInnerCountExMem returns the total number of tokens across all policies.
-// Used by valueContains which costs based on token count.
+// Used by assetCount and the valueData entry-limit check.
 func valueInnerCountExMem(l []syn.IConstant) func() ExMem {
 	return func() ExMem {
-		innerCount := 0
-		for _, item := range l {
-			pair, ok := item.(*syn.ProtoPair)
-			if !ok {
-				continue
-			}
-			innerList, ok := pair.Second.(*syn.ProtoList)
-			if !ok {
-				continue
-			}
-			innerCount += len(innerList.List)
-		}
-		return ExMem(innerCount)
+		return ExMem(valueTokenCount(l))
 	}
 }
 

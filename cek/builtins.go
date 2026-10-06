@@ -4742,12 +4742,13 @@ func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 	// Spend budget for insertCoin (4 args: policy, token, amount, value)
-	// The cost model uses linear_in_u where u is the value size
+	// The cost model is linear_in_u where u is the Value's max depth, since
+	// inserting walks the outer map then the token map of one policy.
 	if err := m.CostFour(&b.Func,
 		byteArrayExMem(policyBs),
 		byteArrayExMem(tokenBs),
 		bigIntExMem(amt),
-		valueListSizeExMem(entries),
+		valueMaxDepthExMem(entries),
 	); err != nil {
 		return nil, err
 	}
@@ -4829,11 +4830,12 @@ func lookupCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 	// Spend budget for lookupCoin (3 args: policy, token, value)
-	// Cost model uses linear_in_z (the value size)
+	// Cost model is linear_in_z where z is the Value's max depth, for the
+	// same two-level map lookup insertCoin is costed on.
 	if err := m.CostThree(&b.Func,
 		byteArrayExMem(policyBs),
 		byteArrayExMem(tokenBs),
-		valueListSizeExMem(entries),
+		valueMaxDepthExMem(entries),
 	); err != nil {
 		return nil, err
 	}
@@ -4871,10 +4873,11 @@ func scaleValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 	// Spend budget for scaleValue (2 args: factor, value)
-	// Cost model uses linear_in_y (the value size with minus-one formula)
+	// Cost model uses linear_in_y where y is the Value's total size, since
+	// scaling touches every (policy, token) pair.
 	if err := m.CostTwo(&b.Func,
 		bigIntExMem(factor),
-		valueListSizeMinusOneExMem(entries),
+		valueTotalSizeExMem(entries),
 	); err != nil {
 		return nil, err
 	}
@@ -4947,10 +4950,11 @@ func unionValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 	// Spend budget for unionValue (2 args: value a, value b)
-	// Cost model uses with_interaction_in_x_and_y (outer count only - number of policies)
+	// Cost model uses with_interaction_in_x_and_y, where x and y are each
+	// argument's total size and c11 charges for the pairs that overlap.
 	if err := m.CostTwo(&b.Func,
-		valueOuterCountExMem(aEntries),
-		valueOuterCountExMem(bEntries),
+		valueTotalSizeExMem(aEntries),
+		valueTotalSizeExMem(bEntries),
 	); err != nil {
 		return nil, err
 	}
