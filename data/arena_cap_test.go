@@ -23,6 +23,7 @@ var arenaCapFixtures = map[string]string{
 	"bytes chunked":    "5f4201024203" + "04ff",
 	"value":            "d90579bf4101bf410201ffff",
 	"nested":           "9f" + "9f0102ff" + "a1" + "0102" + "4401020304" + "ff",
+	"empty containers": "9f" + "80" + "9fff" + "a0" + "bfff" + "d87980" + "d8799fff" + "40" + "5fff" + "ff",
 }
 
 func arenaWalk(t *testing.T, pd PlutusData, visit func(kind string, length, capacity int)) {
