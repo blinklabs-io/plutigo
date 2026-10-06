@@ -244,17 +244,17 @@ func listLengthExMem(l []syn.IConstant) func() ExMem {
 // valueTotalSizeExMem is the ValueTotalSize metric: the number of distinct
 // (policy, token) pairs, i.e. the sum of every policy's token count. A Value
 // is a nested Map PolicyId (Map TokenName Quantity) and totalSize is that map's
-// total entry count. Used by unionValue, valueContains, valueData and
-// scaleValue, whose reference denotations take ValueTotalSize.
+// total entry count. Used by scaleValue and unionValue; valueContains costs
+// the same count through valueInnerCountExMem.
 func valueTotalSizeExMem(l []syn.IConstant) func() ExMem {
 	return func() ExMem {
 		return ExMem(valueTokenCount(l))
 	}
 }
 
-// valueMaxDepthExMem is the ValueMaxDepth metric: the sum of the base-2
-// logarithms of the outer (policy) count and the largest inner (token) count,
-// each floored to zero when that count is zero. It models a two-level map
+// valueMaxDepthExMem is the ValueMaxDepth metric: the sum of the bit lengths
+// (floor(log2 n) + 1, or 0 when n is 0) of the outer (policy) count and the
+// largest inner (token) count. It models a two-level map
 // lookup as O(log m + log k), which is why insertCoin and lookupCoin -- the
 // two builtins that search a Value by policy and then by token -- are costed
 // on depth rather than on size.
@@ -310,8 +310,8 @@ func valueOuterCountExMem(l []syn.IConstant) func() ExMem {
 }
 
 // valueTokenCount returns the total number of token entries across every
-// policy, which is what ValueTotalSize and the unValueData budget check both
-// need. It is the same count valueInnerCountExMem exposes; valueMaxInnerCount
+// policy, which is what ValueTotalSize and the valueData entry-limit check
+// both need. It is the same count valueInnerCountExMem exposes; valueMaxInnerCount
 // needs the per-policy counts too.
 func valueTokenCount(l []syn.IConstant) int {
 	innerCount := 0

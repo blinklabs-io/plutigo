@@ -4951,7 +4951,7 @@ func unionValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 	// Spend budget for unionValue (2 args: value a, value b)
 	// Cost model uses with_interaction_in_x_and_y, where x and y are each
-	// argument's total size and c11 charges for the pairs that overlap.
+	// argument's total size, with c11 charging the x*y interaction term.
 	if err := m.CostTwo(&b.Func,
 		valueTotalSizeExMem(aEntries),
 		valueTotalSizeExMem(bEntries),
