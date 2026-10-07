@@ -1,7 +1,7 @@
 package syn
 
 import (
-	"github.com/blinklabs-io/plutigo/data"
+	"fmt"
 	"math/big"
 	"runtime"
 	"strings"
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/blinklabs-io/plutigo/builtin"
+	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/lang"
 )
 
@@ -439,10 +440,19 @@ func TestParsePlutusDataNodeAccounting(t *testing.T) {
 }
 
 func TestParseValueWidthBeforeCompletion(t *testing.T) {
+	var policies strings.Builder
+	var tokens strings.Builder
+	for i := range maxCollectionWidth {
+		fmt.Fprintf(&policies, "(#%08x, [(#, 1)]),", i)
+		fmt.Fprintf(&tokens, "(#%08x, 1),", i)
+	}
+	policyItems := policies.String()
+	tokenItems := tokens.String()
+
 	for _, prefix := range []string{"(con value ", "(con data (V "} {
 		for _, input := range []string{
-			prefix + "[" + strings.Repeat("(#, []),", maxCollectionWidth) + "(",
-			prefix + "[(#, [" + strings.Repeat("(#, 1),", maxCollectionWidth) + "(",
+			prefix + "[" + policyItems + "(",
+			prefix + "[(#00000000, [" + tokenItems + "(",
 		} {
 			_, err := NewParser(input).ParseTerm()
 			requireErrContains(t, prefix, err, "too many")
