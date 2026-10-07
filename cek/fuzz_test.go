@@ -26,7 +26,7 @@ func FuzzMachineRun(f *testing.F) {
 			return
 		}
 
-		machine := NewMachine[syn.DeBruijn](dbProgram.Version, 0, nil)
+		machine := NewMachine[syn.DeBruijn](dbProgram.Version, 0, testEvalContext())
 		machine.ExBudget = ExBudget{Mem: 500_000, Cpu: 5_000_000}
 		_, _ = machine.Run(dbProgram.Term)
 	})

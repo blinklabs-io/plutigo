@@ -183,9 +183,13 @@ func runV4ScriptBudget(
 	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV4, 0, context)
 	// These builtins have published V4 costs but remain protocol-unavailable.
 	// Enable them here to exercise cost charging through the CEK evaluator.
+	// The availability table is shared by every machine with the same
+	// language and protocol, so enable them on a private copy.
 	switch fn {
 	case builtin.MultiIndexArray, builtin.Policies, builtin.AssetCount:
-		machine.available[fn] = true
+		available := *machine.available
+		available[fn] = true
+		machine.available = &available
 	}
 	initialBudget := machine.ExBudget
 	if _, err := machine.Run(dbProgram.Term); err != nil {
@@ -212,7 +216,7 @@ func TestDataNodeCountIncludesValueInner(t *testing.T) {
 
 func TestMachineVersion(t *testing.T) {
 	version := lang.LanguageVersionV2
-	machine := NewMachine[syn.DeBruijn](version, 100, nil)
+	machine := NewMachine[syn.DeBruijn](version, 100, testEvalContext())
 
 	if machine.version != version {
 		t.Errorf("Expected version %v, got %v", version, machine.version)
@@ -244,7 +248,7 @@ func TestVersionLessThan(t *testing.T) {
 
 func TestMachineVersionV4(t *testing.T) {
 	version := LanguageVersionV4
-	machine := NewMachine[syn.DeBruijn](version, 100, nil)
+	machine := NewMachine[syn.DeBruijn](version, 100, testEvalContext())
 
 	if machine.version != version {
 		t.Errorf("Expected version %v, got %v", version, machine.version)
@@ -501,7 +505,7 @@ func TestUpdateV3CostModel(t *testing.T) {
 }
 
 func TestUpdateV3CostModelWithExpModCoefficientNames(t *testing.T) {
-	params := make([]int64, len(lang.CostModelParamNamesV3))
+	params := synthCostModelParams(lang.CostModelParamNamesV3)
 	var expModIdx int
 	foundExpMod := false
 	for i, name := range lang.CostModelParamNamesV3 {
@@ -643,7 +647,7 @@ func TestVariantBIntegerCosts(t *testing.T) {
 }
 
 func TestExpModIntegerCostOverflowReturnsBudgetError(t *testing.T) {
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 	originalBudget := m.ExBudget
 
 	fn := builtin.ExpModInteger
@@ -677,7 +681,7 @@ func TestExpModCostThreeSaturatesOnOverflow(t *testing.T) {
 }
 
 func TestSpendBudgetRejectsNegativeCost(t *testing.T) {
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 	originalBudget := m.ExBudget
 
 	err := m.spendBudget(ExBudget{Cpu: -1})

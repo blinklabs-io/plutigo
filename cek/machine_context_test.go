@@ -57,7 +57,7 @@ func TestRunContextStopsOnCancellation(t *testing.T) {
 	machine := NewMachine[syn.DeBruijn](
 		lang.LanguageVersionV1,
 		200,
-		nil,
+		testEvalContext(),
 	)
 	machine.ExBudget = ExBudget{Cpu: 1_000_000, Mem: 1_000_000}
 	ctx := &cancelAfterChecksContext{limit: 64, done: make(chan struct{})}
@@ -83,7 +83,7 @@ func TestRunBudgetBoundsDivergentEnvironmentGrowth(t *testing.T) {
 	machine := NewMachine[syn.DeBruijn](
 		lang.LanguageVersionV1,
 		200,
-		nil,
+		testEvalContext(),
 	)
 	initial := ExBudget{Cpu: 100_000_000, Mem: 100_000}
 	machine.ExBudget = initial

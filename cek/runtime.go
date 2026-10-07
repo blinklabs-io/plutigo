@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"sync"
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
@@ -65,6 +66,18 @@ func buildFilteredBuiltins(
 	return &ret
 }
 
+type availableBuiltinsKey struct {
+	version    lang.LanguageVersion
+	protoMajor uint
+}
+
+// availableBuiltinsByProto memoizes buildAvailableBuiltins for non-zero
+// protocol versions. A ledger passes the real protocol major, which misses the
+// precomputed protoMajor == 0 tables, and rebuilding the table walks every
+// builtin's availability list on each NewMachine. The tables are only read
+// after construction, so one per key is shared by all machines.
+var availableBuiltinsByProto sync.Map
+
 func newAvailableBuiltins(
 	version lang.LanguageVersion,
 	protoMajor uint,
@@ -81,7 +94,15 @@ func newAvailableBuiltins(
 			return availableBuiltinsV40
 		}
 	}
-	return buildAvailableBuiltins(version, protoMajor)
+	key := availableBuiltinsKey{version: version, protoMajor: protoMajor}
+	if cached, ok := availableBuiltinsByProto.Load(key); ok {
+		return cached.(*[builtin.TotalBuiltinCount]bool)
+	}
+	cached, _ := availableBuiltinsByProto.LoadOrStore(
+		key,
+		buildAvailableBuiltins(version, protoMajor),
+	)
+	return cached.(*[builtin.TotalBuiltinCount]bool)
 }
 
 func newBuiltins[T syn.Eval]() Builtins[T] {
@@ -219,6 +240,12 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 			),
 		}
 	}
+	if m.metrics != nil {
+		before := m.ExBudget
+		value, err := fn(m, b)
+		m.recordBuiltin(b.Func, before)
+		return value, normalizeBuiltinError(b.Func.String(), err)
+	}
 	value, err := fn(m, b)
 	return value, normalizeBuiltinError(b.Func.String(), err)
 }
@@ -229,14 +256,21 @@ func (m *Machine[T]) evalBuiltinAppReady(
 	argCount uint,
 	args *BuiltinArgs[T],
 ) (Value[T], error) {
-	ready := Builtin[T]{
+	// The builtin receives a pointer through an indirect call, so a local
+	// would escape to the heap on every saturated application. Builtins never
+	// re-enter the machine and never retain b or b.Args, so one scratch value
+	// per machine is enough; it is cleared afterwards so it pins no arena.
+	ready := &m.readyBuiltin
+	*ready = Builtin[T]{
 		Func:     fn,
 		Forces:   forces,
 		ArgCount: argCount,
 		Args:     args,
 		arity:    m.builtinArity(fn),
 	}
-	return m.evalBuiltinApp(&ready)
+	value, err := m.evalBuiltinApp(ready)
+	*ready = Builtin[T]{}
+	return value, err
 }
 
 func (m *Machine[T]) evalBuiltinAppWithArg(
@@ -246,11 +280,50 @@ func (m *Machine[T]) evalBuiltinAppWithArg(
 	args *BuiltinArgs[T],
 	arg Value[T],
 ) (Value[T], error) {
-	finalArgs := BuiltinArgs[T]{
+	// See evalBuiltinAppReady for why a machine scratch value is safe here.
+	finalArgs := &m.readyBuiltinArgs
+	*finalArgs = BuiltinArgs[T]{
 		data: arg,
 		next: args,
 	}
-	return m.evalBuiltinAppReady(fn, forces, argCount, &finalArgs)
+	value, err := m.evalBuiltinAppReady(fn, forces, argCount, finalArgs)
+	*finalArgs = BuiltinArgs[T]{}
+	return value, err
+}
+
+// builtinCostCaches holds every builtin's costing functions already resolved
+// to their arity, so the per-call cost paths avoid an interface type
+// assertion. It is built once per CostModel and shared read-only by every
+// machine using that model; src records the costs it was built from so a
+// CostModel whose builtinCosts were replaced is never served a stale cache.
+type builtinCostCaches struct {
+	src   BuiltinCosts
+	one   [builtin.TotalBuiltinCount]oneArgCost
+	two   [builtin.TotalBuiltinCount]twoArgCost
+	three [builtin.TotalBuiltinCount]threeArgCost
+}
+
+func newBuiltinCostCaches(costs BuiltinCosts) *builtinCostCaches {
+	return &builtinCostCaches{
+		src:   costs,
+		one:   newOneArgCostCache(costs),
+		two:   newTwoArgCostCache(costs),
+		three: newThreeArgCostCache(costs),
+	}
+}
+
+func (cm *CostModel) builtinCostCaches() *builtinCostCaches {
+	if cm.caches != nil && cm.caches.src == cm.builtinCosts {
+		return cm.caches
+	}
+	return newBuiltinCostCaches(cm.builtinCosts)
+}
+
+// withCostCaches returns cm with its shared cost caches built. Call it only
+// once every builtin cost of cm is final.
+func (cm CostModel) withCostCaches() CostModel {
+	cm.caches = newBuiltinCostCaches(cm.builtinCosts)
+	return cm
 }
 
 type oneArgCost struct {
@@ -382,16 +455,18 @@ func plutusVersionName(v builtin.PlutusVersion) string {
 }
 
 func (m *Machine[T]) CostOne(b *builtin.DefaultFunction, x func() ExMem) error {
-	model := &m.oneArgCosts[*b]
+	model := &m.costCaches.one[*b]
 	mem := model.mem
 	cpu := model.cpu
 	if mem == nil || cpu == nil {
 		fallbackModel := m.costs.builtinCosts[*b]
 		mem = fallbackModel.mem.(OneArgument)
 		cpu = fallbackModel.cpu.(OneArgument)
-		model.mem = mem
-		model.cpu = cpu
-		model.constant = mem.HasConstants()[0] && cpu.HasConstants()[0]
+		model = &oneArgCost{
+			mem:      mem,
+			cpu:      cpu,
+			constant: mem.HasConstants()[0] && cpu.HasConstants()[0],
+		}
 	}
 
 	xMem := ExMem(0)
@@ -426,21 +501,23 @@ func (m *Machine[T]) CostTwoExMem(
 	b *builtin.DefaultFunction,
 	x, y ExMem,
 ) error {
-	model := &m.twoArgCosts[*b]
+	model := &m.costCaches.two[*b]
 	mem := model.mem
 	cpu := model.cpu
 	if mem == nil || cpu == nil {
 		fallbackModel := m.costs.builtinCosts[*b]
 		mem = fallbackModel.mem.(TwoArgument)
 		cpu = fallbackModel.cpu.(TwoArgument)
-		model.mem = mem
-		model.cpu = cpu
 		memConstants := mem.HasConstants()
 		cpuConstants := cpu.HasConstants()
-		model.memConstX = memConstants[0]
-		model.memConstY = memConstants[1]
-		model.cpuConstX = cpuConstants[0]
-		model.cpuConstY = cpuConstants[1]
+		model = &twoArgCost{
+			mem:       mem,
+			cpu:       cpu,
+			memConstX: memConstants[0],
+			memConstY: memConstants[1],
+			cpuConstX: cpuConstants[0],
+			cpuConstY: cpuConstants[1],
+		}
 	}
 
 	xMem := x
@@ -461,23 +538,25 @@ func (m *Machine[T]) CostThree(
 	b *builtin.DefaultFunction,
 	x, y, z func() ExMem,
 ) error {
-	model := &m.threeArgCosts[*b]
+	model := &m.costCaches.three[*b]
 	mem := model.mem
 	cpu := model.cpu
 	if mem == nil || cpu == nil {
 		fallbackModel := m.costs.builtinCosts[*b]
 		mem = fallbackModel.mem.(ThreeArgument)
 		cpu = fallbackModel.cpu.(ThreeArgument)
-		model.mem = mem
-		model.cpu = cpu
 		memConstants := mem.HasConstants()
 		cpuConstants := cpu.HasConstants()
-		model.memConstX = memConstants[0]
-		model.memConstY = memConstants[1]
-		model.memConstZ = memConstants[2]
-		model.cpuConstX = cpuConstants[0]
-		model.cpuConstY = cpuConstants[1]
-		model.cpuConstZ = cpuConstants[2]
+		model = &threeArgCost{
+			mem:       mem,
+			cpu:       cpu,
+			memConstX: memConstants[0],
+			memConstY: memConstants[1],
+			memConstZ: memConstants[2],
+			cpuConstX: cpuConstants[0],
+			cpuConstY: cpuConstants[1],
+			cpuConstZ: cpuConstants[2],
+		}
 	}
 
 	xMem := ExMem(0)

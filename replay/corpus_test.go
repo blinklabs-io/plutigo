@@ -2,6 +2,7 @@ package replay
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -15,7 +16,7 @@ func TestCorpusValidateRejectsSuccessfulResultWithErrorCode(t *testing.T) {
 	replayCase.Expected.ErrorCode = &errorCode
 
 	corpus := validCorpus(replayCase)
-	err := corpus.Validate()
+	err := corpus.Validate(context.Background())
 	if err == nil || !strings.Contains(
 		err.Error(),
 		"successful expected result cannot include an error code",
@@ -56,9 +57,9 @@ func TestCorpusValidateRejectsMalformedEncodedPayloads(t *testing.T) {
 			if err != nil {
 				t.Fatalf("json.Marshal() failed: %v", err)
 			}
-			_, err = Load(bytes.NewReader(encoded))
+			_, err = Load(context.Background(), bytes.NewReader(encoded))
 			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
-				t.Fatalf("Load() error = %v, want %q", err, tt.wantError)
+				t.Fatalf("Load(context.Background(), ) error = %v, want %q", err, tt.wantError)
 			}
 		})
 	}
@@ -81,10 +82,10 @@ func FuzzLoadEncodedPayloads(f *testing.F) {
 
 		defer func() {
 			if recovered := recover(); recovered != nil {
-				t.Fatalf("Load() panicked: %v", recovered)
+				t.Fatalf("Load(context.Background(), ) panicked: %v", recovered)
 			}
 		}()
-		_, _ = Load(bytes.NewReader(encoded))
+		_, _ = Load(context.Background(), bytes.NewReader(encoded))
 	})
 }
 

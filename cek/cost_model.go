@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"math/bits"
 	"strings"
 	"unicode/utf8"
 
@@ -16,8 +17,13 @@ import (
 type CostModel struct {
 	machineCosts MachineCosts
 	builtinCosts BuiltinCosts
+	caches       *builtinCostCaches
 }
 
+// Clone deliberately leaves the shared cost caches unbuilt: a clone exists to
+// be modified, and its costing functions can be rewritten in place through
+// the cloned pointers, which would leave a prebuilt cache stale. A machine
+// built from a cache-less model resolves the costs for itself.
 func (cm CostModel) Clone() CostModel {
 	return CostModel{
 		machineCosts: cm.machineCosts,
@@ -28,7 +34,7 @@ func (cm CostModel) Clone() CostModel {
 var DefaultCostModel = CostModel{
 	machineCosts: DefaultMachineCosts,
 	builtinCosts: DefaultBuiltinCosts,
-}
+}.withCostCaches()
 
 func costModelFromList(
 	version lang.LanguageVersion,
@@ -67,7 +73,10 @@ func costModelFromList(
 			}
 		}
 	}
-	return cm, nil
+	if err := cm.machineCosts.validate(); err != nil {
+		return CostModel{}, err
+	}
+	return cm.withCostCaches(), nil
 }
 
 func costModelFromMap(
@@ -94,7 +103,10 @@ func costModelFromMap(
 			}
 		}
 	}
-	return cm, nil
+	if err := cm.machineCosts.validate(); err != nil {
+		return CostModel{}, err
+	}
+	return cm.withCostCaches(), nil
 }
 
 const (
@@ -235,66 +247,27 @@ func listLengthExMem(l []syn.IConstant) func() ExMem {
 	}
 }
 
-// valueListSizeExMem calculates the "size" of a Value for V4 builtin costing.
-// The size is: outer_count + inner_count when sum <= 2, else sum - 1.
-// Used by insertCoin which needs the full count for small values.
-func valueListSizeExMem(l []syn.IConstant) func() ExMem {
+// valueTotalSizeExMem is the ValueTotalSize metric: the number of distinct
+// (policy, token) pairs, i.e. the sum of every policy's token count. A Value
+// is a nested Map PolicyId (Map TokenName Quantity) and totalSize is that map's
+// total entry count. Used by scaleValue and unionValue; valueContains costs
+// the same count through valueInnerCountExMem.
+func valueTotalSizeExMem(l []syn.IConstant) func() ExMem {
 	return func() ExMem {
-		if len(l) == 0 {
-			return ExMem(0)
-		}
-		// Count outer entries (currency symbols)
-		outerCount := len(l)
-		// Count total inner entries (tokens)
-		innerCount := 0
-		for _, item := range l {
-			pair, ok := item.(*syn.ProtoPair)
-			if !ok {
-				continue
-			}
-			innerList, ok := pair.Second.(*syn.ProtoList)
-			if !ok {
-				continue
-			}
-			innerCount += len(innerList.List)
-		}
-		sum := outerCount + innerCount
-		// For insertCoin: sum when sum <= 2, else sum - 1
-		if sum > 2 {
-			return ExMem(sum - 1)
-		}
-		return ExMem(sum)
+		return ExMem(valueTokenCount(l))
 	}
 }
 
-// valueListSizeMinusOneExMem calculates the "size" as max(0, sum - 1).
-// Used by scaleValue, valueContains, valueData which use this simpler formula.
-func valueListSizeMinusOneExMem(l []syn.IConstant) func() ExMem {
+// valueMaxDepthExMem is the ValueMaxDepth metric: the sum of the bit lengths
+// (floor(log2 n) + 1, or 0 when n is 0) of the outer (policy) count and the
+// largest inner (token) count. It models a two-level map
+// lookup as O(log m + log k), which is why insertCoin and lookupCoin -- the
+// two builtins that search a Value by policy and then by token -- are costed
+// on depth rather than on size.
+func valueMaxDepthExMem(l []syn.IConstant) func() ExMem {
 	return func() ExMem {
-		if len(l) == 0 {
-			return ExMem(0)
-		}
-		// Count outer entries (currency symbols)
-		outerCount := len(l)
-		// Count total inner entries (tokens)
-		innerCount := 0
-		for _, item := range l {
-			pair, ok := item.(*syn.ProtoPair)
-			if !ok {
-				continue
-			}
-			innerList, ok := pair.Second.(*syn.ProtoList)
-			if !ok {
-				continue
-			}
-			innerCount += len(innerList.List)
-		}
-		sum := outerCount + innerCount
-		// For scaleValue, unionValue, valueContains: max(0, sum - 1)
-		if sum > 1 {
-			return ExMem(sum - 1)
-		}
-		return ExMem(0)
+		maxInner := valueMaxInnerCount(l)
+		return ExMem(bits.Len(uint(len(l))) + bits.Len(uint(maxInner)))
 	}
 }
 
@@ -334,31 +307,60 @@ func blsMlResultExMem() func() ExMem {
 	}
 }
 
-// valueOuterCountExMem returns just the outer list length (number of policies).
-// Used by unionValue which costs based on policy count only.
+// valueOuterCountExMem is the ValueOuterSize metric: the number of policies,
+// i.e. the outer map's entry count. Used by policies.
 func valueOuterCountExMem(l []syn.IConstant) func() ExMem {
 	return func() ExMem {
 		return ExMem(len(l))
 	}
 }
 
+// valueTokenCount returns the total number of token entries across every
+// policy, which is what ValueTotalSize and the valueData entry-limit check
+// both need. It is the same count valueInnerCountExMem exposes; valueMaxInnerCount
+// needs the per-policy counts too.
+func valueTokenCount(l []syn.IConstant) int {
+	innerCount := 0
+	for _, item := range l {
+		pair, ok := item.(*syn.ProtoPair)
+		if !ok {
+			continue
+		}
+		innerList, ok := pair.Second.(*syn.ProtoList)
+		if !ok {
+			continue
+		}
+		innerCount += len(innerList.List)
+	}
+	return innerCount
+}
+
+// valueMaxInnerCount returns the token count of the largest single policy,
+// matching Value.maxInnerSize. A Value with no policies has an empty size
+// cache, so the reference's lookupMax yields 0.
+func valueMaxInnerCount(l []syn.IConstant) int {
+	maxInner := 0
+	for _, item := range l {
+		pair, ok := item.(*syn.ProtoPair)
+		if !ok {
+			continue
+		}
+		innerList, ok := pair.Second.(*syn.ProtoList)
+		if !ok {
+			continue
+		}
+		if len(innerList.List) > maxInner {
+			maxInner = len(innerList.List)
+		}
+	}
+	return maxInner
+}
+
 // valueInnerCountExMem returns the total number of tokens across all policies.
-// Used by valueContains which costs based on token count.
+// Used by assetCount and the valueData entry-limit check.
 func valueInnerCountExMem(l []syn.IConstant) func() ExMem {
 	return func() ExMem {
-		innerCount := 0
-		for _, item := range l {
-			pair, ok := item.(*syn.ProtoPair)
-			if !ok {
-				continue
-			}
-			innerList, ok := pair.Second.(*syn.ProtoList)
-			if !ok {
-				continue
-			}
-			innerCount += len(innerList.List)
-		}
-		return ExMem(innerCount)
+		return ExMem(valueTokenCount(l))
 	}
 }
 
@@ -398,15 +400,22 @@ func dataNodeCountExMem(d data.PlutusData) func() ExMem {
 			count++
 			switch n := node.(type) {
 			case *data.Constr:
-				stack = append(stack, n.Fields...)
+				if n != nil {
+					stack = append(stack, n.Fields...)
+				}
 			case *data.List:
-				stack = append(stack, n.Items...)
+				if n != nil {
+					stack = append(stack, n.Items...)
+				}
 			case *data.Map:
+				if n == nil {
+					continue
+				}
 				for _, pair := range n.Pairs {
 					stack = append(stack, pair[0], pair[1])
 				}
 			case *data.Value:
-				if n.Inner != nil {
+				if n != nil && n.Inner != nil {
 					stack = append(stack, n.Inner)
 				}
 			}
@@ -453,89 +462,80 @@ func dataExMem(x data.PlutusData) func() ExMem {
 	}
 }
 
+// equalsDataMinExMem returns min(size(x), size(y)) in the dataExMem measure.
+//
 // Equals Data is an exceptional case where the cost for the full traversal
-// of 2 plutus data objects may far exceed what ends up being costed by the builtin cpu wise (Uses Min Size)
-// this is possible via having one super large object equals data with a tiny object
-// like script context vs a Data of bytearray of 0 bytes. In this case the cpu ExBudget would far underestimate
-// the cost for calculating the ExMem for the entire script context thus causing a lot of free work to be done
-// by the node
-func equalsDataExMem(
-	x data.PlutusData,
-	y data.PlutusData,
-) (func() ExMem, func() ExMem) {
+// of 2 plutus data objects may far exceed what ends up being costed by the
+// builtin cpu wise (it uses the minimum size). This is possible via having one
+// super large object equals data with a tiny object, like a script context
+// against a zero-length bytestring; fully sizing both would let a script buy
+// unbounded free traversal work. Both traversals therefore advance one node
+// per iteration and stop as soon as the side that has been fully counted is
+// known to be the smaller, which bounds the work by about twice the smaller
+// size.
+//
+// The result does not depend on traversal order: the loop only stops once one
+// side has been counted completely and is no larger than the other's partial
+// count, so the minimum is always an exact full size. That lets the pending
+// nodes live on LIFO stacks whose backing arrays start on the goroutine stack.
+func equalsDataMinExMem(x data.PlutusData, y data.PlutusData) ExMem {
 	var xAcc ExMem
 	var yAcc ExMem
-	var minAcc ExMem
-	costStackX := []data.PlutusData{
-		x,
-	}
-
-	costStackY := []data.PlutusData{
-		y,
-	}
+	var bufX, bufY [32]data.PlutusData
+	costStackX := append(bufX[:0], x)
+	costStackY := append(bufY[:0], y)
 
 	for xLen, yLen := true, true; (xLen || xAcc > yAcc) && (yLen || yAcc > xAcc); xLen,
 		yLen = len(costStackX) != 0, len(costStackY) != 0 {
 		if xLen {
-			// Cost 4 per item switch
-			xAcc += DataCost
-			d := costStackX[0]
-			costStackX = costStackX[1:]
-			switch dat := d.(type) {
-			case *data.Constr:
-				costStackX = append(costStackX, dat.Fields...)
-			case *data.List:
-				costStackX = append(costStackX, dat.Items...)
-			case *data.Map:
-				for _, pair := range dat.Pairs {
-					costStackX = append(costStackX, pair[0], pair[1])
-				}
-			case *data.Value:
-				if dat.Inner != nil {
-					costStackX = append(costStackX, dat.Inner)
-				}
-			case *data.Integer:
-				xAcc += bigIntExMem(dat.Inner)()
-			case *data.ByteString:
-				xAcc += byteArrayExMem(dat.Inner)()
-			default:
-				panic("Unreachable")
-			}
+			last := len(costStackX) - 1
+			d := costStackX[last]
+			costStackX = costStackX[:last]
+			var size ExMem
+			size, costStackX = equalsDataNodeExMem(d, costStackX)
+			xAcc += size
 		}
 
 		if yLen {
-			// Cost 4 per item switch
-			yAcc += DataCost
-			d := costStackY[0]
-			costStackY = costStackY[1:]
-			switch dat := d.(type) {
-			case *data.Constr:
-				costStackY = append(costStackY, dat.Fields...)
-			case *data.List:
-				costStackY = append(costStackY, dat.Items...)
-			case *data.Map:
-				for _, pair := range dat.Pairs {
-					costStackY = append(costStackY, pair[0], pair[1])
-				}
-			case *data.Value:
-				if dat.Inner != nil {
-					costStackY = append(costStackY, dat.Inner)
-				}
-			case *data.Integer:
-				yAcc += bigIntExMem(dat.Inner)()
-			case *data.ByteString:
-				yAcc += byteArrayExMem(dat.Inner)()
-			default:
-				panic("Unreachable")
-			}
+			last := len(costStackY) - 1
+			d := costStackY[last]
+			costStackY = costStackY[:last]
+			var size ExMem
+			size, costStackY = equalsDataNodeExMem(d, costStackY)
+			yAcc += size
 		}
 	}
 
-	minAcc = min(xAcc, yAcc)
+	return min(xAcc, yAcc)
+}
 
-	final_func := func() ExMem {
-		return minAcc
+// equalsDataNodeExMem costs one node in the dataExMem measure and pushes its
+// children onto stack.
+func equalsDataNodeExMem(
+	d data.PlutusData,
+	stack []data.PlutusData,
+) (ExMem, []data.PlutusData) {
+	// Cost 4 per item switch
+	size := ExMem(DataCost)
+	switch dat := d.(type) {
+	case *data.Constr:
+		stack = append(stack, dat.Fields...)
+	case *data.List:
+		stack = append(stack, dat.Items...)
+	case *data.Map:
+		for _, pair := range dat.Pairs {
+			stack = append(stack, pair[0], pair[1])
+		}
+	case *data.Value:
+		if dat.Inner != nil {
+			stack = append(stack, dat.Inner)
+		}
+	case *data.Integer:
+		size += bigIntExMemValue(dat.Inner)
+	case *data.ByteString:
+		size += byteArrayExMemValue(dat.Inner)
+	default:
+		panic("Unreachable")
 	}
-
-	return final_func, final_func
+	return size, stack
 }

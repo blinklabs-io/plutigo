@@ -17,7 +17,7 @@ import (
 func keccak256Builtin(t *testing.T, input []byte) []byte {
 	t.Helper()
 
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 	b := &Builtin[syn.DeBruijn]{
 		Func:     builtin.Keccak_256,
 		ArgCount: 0,

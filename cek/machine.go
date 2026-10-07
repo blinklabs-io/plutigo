@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 	"math/big"
+	"sync"
 	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -84,22 +85,26 @@ type Machine[T syn.Eval] struct {
 	stepCostMem        [9]int64
 	builtins           *Builtins[T]
 	builtinNoArgValues *[builtin.TotalBuiltinCount][3]*Builtin[T]
-	oneArgCosts        [builtin.TotalBuiltinCount]oneArgCost
-	twoArgCosts        [builtin.TotalBuiltinCount]twoArgCost
-	threeArgCosts      [builtin.TotalBuiltinCount]threeArgCost
-	available          *[builtin.TotalBuiltinCount]bool
-	slippage           uint32
-	version            lang.LanguageVersion
-	semantics          SemanticsVariant
-	protoMajor         uint
-	ExBudget           ExBudget
-	Logs               []string
+	costCaches         *builtinCostCaches
+	// available is shared by every machine with the same language and
+	// protocol major; it must never be written through.
+	available  *[builtin.TotalBuiltinCount]bool
+	slippage   uint32
+	version    lang.LanguageVersion
+	semantics  SemanticsVariant
+	protoMajor uint
+	ExBudget   ExBudget
+	Logs       []string
 
-	argHolder       argHolder[T]
-	frameStack      []stackFrame[T]
-	frameStackUsed  int
-	unbudgetedSteps [9]uint32
-	unbudgetedTotal uint32
+	argHolder argHolder[T]
+	// Scratch for evalBuiltinAppReady and evalBuiltinAppWithArg.
+	readyBuiltin     Builtin[T]
+	readyBuiltinArgs BuiltinArgs[T]
+	frameStack       []stackFrame[T]
+	frameStackUsed   int
+	metrics          *Metrics
+	unbudgetedSteps  [9]uint32
+	unbudgetedTotal  uint32
 
 	freeCompute            []*Compute[T]
 	freeReturn             []*Return[T]
@@ -148,10 +153,10 @@ type Machine[T syn.Eval] struct {
 	valueArenaChunkSize    int
 	envChunks              [][]Env[T]
 	envActiveChunk         []Env[T]
-	envActiveChunkLimit    int
+	envActiveChunkIdx      int
+	envActiveOff           int
 	envChunkPos            int
-	envIndexChunks         [][]envIndex[T]
-	envIndexChunkPos       int
+	envPooled              *pooledEnvChunks[T]
 	budgetTemplate         ExBudget
 	lastRunRemaining       ExBudget
 	hasRun                 bool
@@ -161,6 +166,8 @@ type Machine[T syn.Eval] struct {
 
 const (
 	envChunkSize          = 2048
+	envFirstChunkSize     = 128
+	envChunkGrowthSteps   = 4 // envFirstChunkSize << envChunkGrowthSteps == envChunkSize
 	envRetainChunkCap     = 64
 	valueColdChunkSize    = 512
 	valueMaxChunkSize     = 262144
@@ -658,6 +665,10 @@ func (m *Machine[T]) putFrameCases(f *FrameCases[T]) {
 // The second argument is slippage, which controls batched budget checking.
 // Protocol-version-dependent semantics and builtin availability come from
 // evalContext.ProtoMajor, not from slippage.
+//
+// NewMachine panics if evalContext is nil or carries machine costs that would
+// not deplete the budget. Build the context with [NewEvalContext], or with
+// [NewDefaultEvalContext] where the default cost model is intended.
 func NewMachine[T syn.Eval](
 	version lang.LanguageVersion,
 	slippage uint32,
@@ -673,11 +684,10 @@ func NewMachine[T syn.Eval](
 		)
 	}
 	if evalContext == nil {
-		// Use the default V3 cost models and semantics variant if no eval context is provided
-		evalContext = &EvalContext{
-			CostModel:        DefaultCostModel,
-			SemanticsVariant: SemanticsVariantC,
-		}
+		panic("cek.NewMachine requires a non-nil EvalContext")
+	}
+	if err := evalContext.CostModel.machineCosts.validate(); err != nil {
+		panic(fmt.Sprintf("cek.NewMachine: invalid cost model: %v", err))
 	}
 	stepCosts := [9]ExBudget{
 		evalContext.CostModel.machineCosts.get(ExConstant),
@@ -703,9 +713,7 @@ func NewMachine[T syn.Eval](
 		stepCostMem:        stepCostMem,
 		builtins:           chooseBuiltins[T](version, evalContext.ProtoMajor),
 		builtinNoArgValues: getSharedBuiltinNoArgValues[T](version),
-		oneArgCosts:        newOneArgCostCache(evalContext.CostModel.builtinCosts),
-		twoArgCosts:        newTwoArgCostCache(evalContext.CostModel.builtinCosts),
-		threeArgCosts:      newThreeArgCostCache(evalContext.CostModel.builtinCosts),
+		costCaches:         evalContext.CostModel.builtinCostCaches(),
 		available:          chooseAvailableBuiltins(version, evalContext.ProtoMajor),
 		slippage:           slippage,
 		version:            version,
@@ -757,8 +765,6 @@ func NewMachine[T syn.Eval](
 		valueArenaChunkSize:   valueColdChunkSize,
 		envChunks:             make([][]Env[T], 0, 8),
 		envChunkPos:           0,
-		envIndexChunks:        make([][]envIndex[T], 0, 8),
-		envIndexChunkPos:      0,
 		budgetTemplate:        DefaultExBudget,
 		lastRunRemaining:      DefaultExBudget,
 		hasRun:                false,
@@ -786,57 +792,60 @@ func chooseAvailableBuiltins(
 }
 
 func (m *Machine[T]) extendEnv(parent *Env[T], data Value[T]) *Env[T] {
-	pos := m.envChunkPos
+	off := m.envActiveOff
 	chunk := m.envActiveChunk
-	if chunk == nil || pos == m.envActiveChunkLimit {
-		chunkIdx := pos / envChunkSize
-		if chunkIdx == len(m.envChunks) {
-			m.envChunks = append(m.envChunks, make([]Env[T], envChunkSize))
-		}
-		chunk = m.envChunks[chunkIdx]
-		if chunk == nil {
-			chunk = make([]Env[T], envChunkSize)
-			m.envChunks[chunkIdx] = chunk
-		}
-		m.envActiveChunk = chunk
-		m.envActiveChunkLimit = (chunkIdx + 1) * envChunkSize
+	if off == len(chunk) {
+		chunk = m.nextEnvChunk()
+		off = 0
 	}
-	env := &chunk[pos&(envChunkSize-1)]
-	m.envChunkPos = pos + 1
-	index := allocArenaSlot(
-		&m.envIndexChunks,
-		&m.envIndexChunkPos,
-		envChunkSize,
-	)
-	*index = envIndex[T]{}
-	env.index = index
+	env := &chunk[off]
+	m.envActiveOff = off + 1
+	m.envChunkPos++
 	env.data = data
-	initEnvIndex(env, parent)
+	initEnvLink(env, parent)
 	return env
 }
 
-func (m *Machine[T]) resetEnvArena() {
-	retainedUsed := m.envChunkPos
-	maxRetained := envRetainChunkCap * envChunkSize
-	if retainedUsed > maxRetained {
-		retainedUsed = maxRetained
+// nextEnvChunk makes the next env chunk active, reusing one retained from an
+// earlier run when present. Chunk sizes double from envFirstChunkSize up to
+// envChunkSize so that a fresh Machine, which most callers build per script,
+// does not allocate a full-size chunk for an evaluation that binds a few
+// hundred variables.
+func (m *Machine[T]) nextEnvChunk() []Env[T] {
+	idx := m.envActiveChunkIdx
+	if idx == 0 && len(m.envChunks) == 0 {
+		m.takePooledEnvChunks()
 	}
-	clearArenaChunks(m.envChunks, retainedUsed)
-	clearArenaChunks(m.envIndexChunks, retainedUsed)
-	if len(m.envChunks) > envRetainChunkCap {
-		retained := make([][]Env[T], envRetainChunkCap)
-		copy(retained, m.envChunks[:envRetainChunkCap])
-		m.envChunks = retained
+	m.envActiveChunkIdx = idx + 1
+	if idx < len(m.envChunks) && m.envChunks[idx] != nil {
+		m.envActiveChunk = m.envChunks[idx]
+		m.envActiveOff = 0
+		return m.envActiveChunk
 	}
-	if len(m.envIndexChunks) > envRetainChunkCap {
-		retained := make([][]envIndex[T], envRetainChunkCap)
-		copy(retained, m.envIndexChunks[:envRetainChunkCap])
-		m.envIndexChunks = retained
+	size := envChunkSize
+	if idx < envChunkGrowthSteps {
+		size = envFirstChunkSize << idx
 	}
+	chunk := make([]Env[T], size)
+	if idx < len(m.envChunks) {
+		m.envChunks[idx] = chunk
+	} else {
+		m.envChunks = append(m.envChunks, chunk)
+	}
+	m.envActiveChunk = chunk
+	m.envActiveOff = 0
+	return chunk
+}
+
+func (m *Machine[T]) clearEnvActive() {
 	m.envActiveChunk = nil
-	m.envActiveChunkLimit = 0
-	m.envChunkPos = 0
-	m.envIndexChunkPos = 0
+	m.envActiveChunkIdx = 0
+	m.envActiveOff = 0
+}
+
+func (m *Machine[T]) resetEnvArena() {
+	resetArenaChunks(&m.envChunks, &m.envChunkPos, envRetainChunkCap)
+	m.clearEnvActive()
 }
 
 // lazyPrepareEnvArena trims chunks beyond envRetainChunkCap and clears the
@@ -844,22 +853,58 @@ func (m *Machine[T]) resetEnvArena() {
 // the previous run's Env/Value graph pinned inside the Machine.
 func (m *Machine[T]) lazyPrepareEnvArena() {
 	lazyPrepareArenaChunks(&m.envChunks, &m.envChunkPos, envRetainChunkCap)
-	lazyPrepareArenaChunks(
-		&m.envIndexChunks,
-		&m.envIndexChunkPos,
-		envRetainChunkCap,
-	)
-	m.envActiveChunk = nil
-	m.envActiveChunkLimit = 0
+	m.clearEnvActive()
+}
+
+// envChunkPool holds env chunks released by single-use Machines. Callers
+// typically build one Machine per script, so without it every evaluation
+// allocates and the GC scans and frees a fresh set of chunks. Only Run's
+// teardown releases chunks, after the result has been discharged: discharged
+// terms and errors never reference Env nodes, and the value arenas that do
+// (closures) are dropped in the same teardown, so no live pointer reaches a
+// pooled chunk.
+var envChunkPool sync.Pool
+
+// envPoolChunkCap bounds what one released arena returns to the pool so a
+// single deep evaluation does not pin a large arena there.
+const envPoolChunkCap = 8
+
+type pooledEnvChunks[T syn.Eval] struct {
+	chunks [][]Env[T]
+}
+
+func (m *Machine[T]) takePooledEnvChunks() {
+	pooled, ok := envChunkPool.Get().(*pooledEnvChunks[T])
+	if !ok || pooled == nil {
+		return
+	}
+	m.envChunks = append(m.envChunks[:0], pooled.chunks...)
+	clear(pooled.chunks)
+	m.envPooled = pooled
+}
+
+// releaseEnvArena clears the used prefix of the env chunks and hands the
+// first envPoolChunkCap of them to envChunkPool.
+func (m *Machine[T]) releaseEnvArena() {
+	n := min(len(m.envChunks), envPoolChunkCap)
+	if n == 0 {
+		return
+	}
+	clearArenaChunks(m.envChunks[:n], m.envChunkPos)
+	pooled := m.envPooled
+	if pooled == nil {
+		pooled = &pooledEnvChunks[T]{}
+	}
+	m.envPooled = nil
+	pooled.chunks = append(pooled.chunks[:0], m.envChunks[:n]...)
+	envChunkPool.Put(pooled)
 }
 
 func (m *Machine[T]) dropEnvArena() {
+	m.releaseEnvArena()
 	m.envChunks = nil
-	m.envIndexChunks = nil
-	m.envActiveChunk = nil
-	m.envActiveChunkLimit = 0
 	m.envChunkPos = 0
-	m.envIndexChunkPos = 0
+	m.clearEnvActive()
 }
 
 func (m *Machine[T]) resetValueArenas() {
@@ -1012,9 +1057,15 @@ func (m *Machine[T]) runContext(
 	}
 	runValueArenaChunkSize := m.valueArenaChunkSize
 	m.Logs = m.Logs[:0]
+	if m.metrics != nil {
+		*m.metrics = Metrics{}
+	}
 	clear(m.unbudgetedSteps[:])
 	m.unbudgetedTotal = 0
 	defer func() {
+		if m.metrics != nil {
+			m.metrics.MaxStackDepth = m.frameStackUsed
+		}
 		nextChunkSize := nextValueArenaChunkSize(m.valueArenaHighWatermark())
 		m.lastRunEnvHighWatermark = m.envChunkPos
 		m.lastRunRemaining = m.ExBudget
@@ -1040,7 +1091,10 @@ func (m *Machine[T]) runContext(
 	if err := m.spendBudget(startupBudget); err != nil {
 		return nil, err
 	}
-	if m.slippage <= 1 {
+	// The DeBruijn fast path charges steps without counting them, so a metered
+	// machine runs the generic loop, which charges each step in order exactly
+	// as the unbatched path does.
+	if m.slippage <= 1 && m.metrics == nil {
 		dbMachine := (*Machine[syn.DeBruijn])(unsafe.Pointer(m))
 		dbTerm, ok := any(term).(syn.Term[syn.DeBruijn])
 		if !ok {
@@ -1843,6 +1897,32 @@ func (m *Machine[T]) transferArgStack(
 // term anywhere near this deep.
 const maxDischargeDepth = 100_000
 
+// maxDischargeWork caps the result nodes and child slots processed during
+// discharge, independently of evaluation budget.
+const maxDischargeWork = 1_000_000
+
+type dischargeWorkBudget struct {
+	remaining int
+}
+
+func (b *dischargeWorkBudget) consume(work int) error {
+	if b == nil {
+		return nil
+	}
+	if work < 0 || work > b.remaining {
+		return dischargeWorkLimitError()
+	}
+	b.remaining -= work
+	return nil
+}
+
+func dischargeWorkLimitError() *BudgetError {
+	return &BudgetError{
+		Code:    ErrCodeBudgetExhausted,
+		Message: "result term too large to discharge",
+	}
+}
+
 func dischargeDepthLimitError() *BudgetError {
 	return &BudgetError{
 		Code:    ErrCodeBudgetExhausted,
@@ -1859,13 +1939,15 @@ func dischargeValueContext[T syn.Eval](
 	checkCancellation bool,
 	value Value[T],
 ) (syn.Term[T], error) {
-	return dischargeValueDepth[T](ctx, checkCancellation, value, 0)
+	budget := dischargeWorkBudget{remaining: maxDischargeWork}
+	return dischargeValueDepth[T](ctx, checkCancellation, value, &budget, 0)
 }
 
 func dischargeValueDepth[T syn.Eval](
 	ctx context.Context,
 	checkCancellation bool,
 	value Value[T],
+	budget *dischargeWorkBudget,
 	depth int,
 ) (syn.Term[T], error) {
 	if checkCancellation {
@@ -1876,6 +1958,12 @@ func dischargeValueDepth[T syn.Eval](
 	if depth > maxDischargeDepth {
 		return nil, dischargeDepthLimitError()
 	}
+	// Pair constants are charged by their recursive materializer below.
+	if _, isPair := value.(*pairValue[T]); !isPair {
+		if err := budget.consume(1); err != nil {
+			return nil, err
+		}
+	}
 
 	switch v := value.(type) {
 	case *Constant:
@@ -1883,14 +1971,21 @@ func dischargeValueDepth[T syn.Eval](
 	case *dataValue[T]:
 		return constantTerm[T](&syn.Data{Inner: v.item}), nil
 	case *dataListValue[T]:
+		if err := budget.consume(len(v.items)); err != nil {
+			return nil, err
+		}
 		return constantTerm[T](materializeDataListConstant(v.items)), nil
 	case *dataMapValue[T]:
+		if err := budget.consume(len(v.items)); err != nil {
+			return nil, err
+		}
 		return constantTerm[T](materializeDataMapConstant(v.items)), nil
 	case *pairValue[T]:
-		constant, ok, err := materializeConstantValueDepth[T](
+		constant, ok, err := materializeConstantValueDepthWithBudget[T](
 			v,
 			depth,
 			maxDischargeDepth,
+			budget,
 		)
 		if err != nil {
 			return nil, err
@@ -1912,6 +2007,9 @@ func dischargeValueDepth[T syn.Eval](
 
 		// Add forces for polymorphic instantiation
 		for range uint(v.Forces) {
+			if err := budget.consume(1); err != nil {
+				return nil, err
+			}
 			forcedTerm = &syn.Force[T]{
 				Term: forcedTerm,
 			}
@@ -1919,10 +2017,14 @@ func dischargeValueDepth[T syn.Eval](
 
 		// Add applications for each argument
 		for arg := range v.Args.Iter() {
+			if err := budget.consume(1); err != nil {
+				return nil, err
+			}
 			discharged, err := dischargeValueDepth[T](
 				ctx,
 				checkCancellation,
 				arg,
+				budget,
 				depth+1,
 			)
 			if err != nil {
@@ -1940,6 +2042,7 @@ func dischargeValueDepth[T syn.Eval](
 		body, err := withEnv(
 			ctx,
 			checkCancellation,
+			budget,
 			0,
 			v.Env,
 			v.AST.Term,
@@ -1955,6 +2058,7 @@ func dischargeValueDepth[T syn.Eval](
 		body, err := withEnv(
 			ctx,
 			checkCancellation,
+			budget,
 			1,
 			v.Env,
 			v.AST.Body,
@@ -1970,6 +2074,9 @@ func dischargeValueDepth[T syn.Eval](
 
 	case *Constr[T]:
 		// Recursively discharge all constructor fields
+		if err := budget.consume(len(v.Fields)); err != nil {
+			return nil, err
+		}
 		fields := make([]syn.Term[T], len(v.Fields))
 
 		for i, f := range v.Fields {
@@ -1977,6 +2084,7 @@ func dischargeValueDepth[T syn.Eval](
 				ctx,
 				checkCancellation,
 				f,
+				budget,
 				depth+1,
 			)
 			if err != nil {
@@ -2014,6 +2122,7 @@ func dischargeValueDepth[T syn.Eval](
 func withEnv[T syn.Eval](
 	ctx context.Context,
 	checkCancellation bool,
+	budget *dischargeWorkBudget,
 	lamCnt int,
 	env *Env[T],
 	term syn.Term[T],
@@ -2026,6 +2135,9 @@ func withEnv[T syn.Eval](
 	}
 	if depth > maxDischargeDepth {
 		return nil, dischargeDepthLimitError()
+	}
+	if err := budget.consume(1); err != nil {
+		return nil, err
 	}
 
 	switch t := term.(type) {
@@ -2042,6 +2154,7 @@ func withEnv[T syn.Eval](
 				ctx,
 				checkCancellation,
 				value,
+				budget,
 				depth+1,
 			)
 		}
@@ -2053,6 +2166,7 @@ func withEnv[T syn.Eval](
 		body, err := withEnv(
 			ctx,
 			checkCancellation,
+			budget,
 			lamCnt+1,
 			env,
 			t.Body,
@@ -2071,6 +2185,7 @@ func withEnv[T syn.Eval](
 		fn, err := withEnv(
 			ctx,
 			checkCancellation,
+			budget,
 			lamCnt,
 			env,
 			t.Function,
@@ -2082,6 +2197,7 @@ func withEnv[T syn.Eval](
 		arg, err := withEnv(
 			ctx,
 			checkCancellation,
+			budget,
 			lamCnt,
 			env,
 			t.Argument,
@@ -2100,6 +2216,7 @@ func withEnv[T syn.Eval](
 		inner, err := withEnv(
 			ctx,
 			checkCancellation,
+			budget,
 			lamCnt,
 			env,
 			t.Term,
@@ -2115,6 +2232,7 @@ func withEnv[T syn.Eval](
 		inner, err := withEnv(
 			ctx,
 			checkCancellation,
+			budget,
 			lamCnt,
 			env,
 			t.Term,
@@ -2127,11 +2245,15 @@ func withEnv[T syn.Eval](
 
 	case *syn.Constr[T]:
 		// Constructor: recursively process all fields
+		if err := budget.consume(len(t.Fields)); err != nil {
+			return nil, err
+		}
 		fields := make([]syn.Term[T], len(t.Fields))
 		for i, f := range t.Fields {
 			d, err := withEnv(
 				ctx,
 				checkCancellation,
+				budget,
 				lamCnt,
 				env,
 				f,
@@ -2149,11 +2271,15 @@ func withEnv[T syn.Eval](
 
 	case *syn.Case[T]:
 		// Case expression: process scrutinee and all branches
+		if err := budget.consume(len(t.Branches)); err != nil {
+			return nil, err
+		}
 		branches := make([]syn.Term[T], len(t.Branches))
 		for i, b := range t.Branches {
 			d, err := withEnv(
 				ctx,
 				checkCancellation,
+				budget,
 				lamCnt,
 				env,
 				b,
@@ -2167,6 +2293,7 @@ func withEnv[T syn.Eval](
 		constr, err := withEnv(
 			ctx,
 			checkCancellation,
+			budget,
 			lamCnt,
 			env,
 			t.Constr,
@@ -2187,6 +2314,9 @@ func withEnv[T syn.Eval](
 }
 
 func (m *Machine[T]) stepAndMaybeSpend(step StepKind) error {
+	if m.metrics != nil {
+		m.metrics.Steps[step]++
+	}
 	if m.slippage <= 1 {
 		memCost := m.stepCostMem[step]
 		cpuCost := m.stepCostCpu[step]

@@ -39,7 +39,8 @@ const maxConstantTypeTagsPV11 = 32
 // stack tolerates.
 func constantTypeSize(typ Typ) int {
 	size := 0
-	pending := []Typ{typ}
+	var stack [8]Typ
+	pending := append(stack[:0], typ)
 	for len(pending) > 0 {
 		last := len(pending) - 1
 		current := pending[last]
@@ -59,6 +60,22 @@ func constantTypeSize(typ Typ) int {
 		}
 	}
 	return size
+}
+
+// constantSize is constantTypeSize(con.Typ()) without building the outer
+// composite type, which Typ() allocates afresh for every list, array and pair
+// constant.
+func constantSize(con IConstant) int {
+	switch c := con.(type) {
+	case *ProtoList:
+		return 2 + constantTypeSize(c.LTyp)
+	case *ProtoArray:
+		return 2 + constantTypeSize(c.ATyp)
+	case *ProtoPair:
+		return 3 + constantTypeSize(c.FstType) + constantTypeSize(c.SndType)
+	default:
+		return constantTypeSize(con.Typ())
+	}
 }
 
 // ValidateProgram is a phase-1, decode-time well-formedness check: language
@@ -83,7 +100,10 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 		return err
 	}
 
-	terms := []Term[T]{program.Term}
+	// The worklist starts on the stack; it holds pending siblings along one
+	// path, so ledger scripts rarely outgrow it.
+	var stack [128]Term[T]
+	terms := append(stack[:0], program.Term)
 	for len(terms) > 0 {
 		last := len(terms) - 1
 		term := terms[last]
@@ -98,7 +118,7 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 		case *Constant:
 			if t.Con != nil &&
 				context.ProtocolMajor >= builtin.VanRossemProtoVersion {
-				size := constantTypeSize(t.Con.Typ())
+				size := constantSize(t.Con)
 				if size > maxConstantTypeTagsPV11 {
 					return fmt.Errorf(
 						"constant type of size %d is not available in protocol version %d",

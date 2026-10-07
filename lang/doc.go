@@ -34,6 +34,8 @@
 //
 // # Version Detection
 //
-// Programs declare their version in the header: (program 1.0.0 ...)
-// The cek package uses this to select appropriate builtins and costs.
+// Programs declare a UPLC term version in the header: (program 1.0.0 ...)
+// It is not the Plutus ledger language. Callers supply the ledger language
+// and protocol version, which the cek package uses to select builtins and
+// costs; the header is only checked for being a legal term version.
 package lang

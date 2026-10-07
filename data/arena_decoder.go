@@ -119,27 +119,32 @@ func resetBigIntChunks(a *arenaChunks[big.Int], retainCap int) {
 type arenaSlices[S any] struct {
 	chunks [][]S
 	pos    int
+	// cur is the chunk holding pos and curBase the total length of the chunks
+	// before it. Nothing behind pos is reused before reset, so alloc resumes
+	// at cur: walking from the first chunk makes a decode quadratic in its
+	// allocation count.
+	cur     int
+	curBase int
 }
 
+// alloc returns n elements whose capacity equals n, so an append by a caller
+// of a decoded value reallocates instead of writing into the neighbouring
+// live allocation.
 func (a *arenaSlices[S]) alloc(n int) []S {
 	if n == 0 {
 		return make([]S, 0)
 	}
 
-	remaining := a.pos
-	for i := range a.chunks {
-		chunk := a.chunks[i]
-		if remaining < len(chunk) {
-			if remaining+n <= len(chunk) {
-				start := remaining
-				a.pos += n
-				return chunk[start : start+n]
-			}
-			a.pos += len(chunk) - remaining
-			remaining = 0
-			continue
+	for a.cur < len(a.chunks) {
+		chunk := a.chunks[a.cur]
+		start := a.pos - a.curBase
+		if start+n <= len(chunk) {
+			a.pos += n
+			return chunk[start : start+n : start+n]
 		}
-		remaining -= len(chunk)
+		a.curBase += len(chunk)
+		a.pos = a.curBase
+		a.cur++
 	}
 
 	size := dataDecodeChunkSize
@@ -149,7 +154,7 @@ func (a *arenaSlices[S]) alloc(n int) []S {
 	chunk := make([]S, size)
 	a.chunks = append(a.chunks, chunk)
 	a.pos += n
-	return chunk[:n]
+	return chunk[:n:n]
 }
 
 func (a *arenaSlices[S]) reset(retainCap int) {
@@ -186,6 +191,8 @@ func (a *arenaSlices[S]) reset(retainCap int) {
 		a.chunks = a.chunks[:retainCap]
 	}
 	a.pos = 0
+	a.cur = 0
+	a.curBase = 0
 }
 
 // Decoder reuses arena-backed storage for decoded PlutusData values.
@@ -274,24 +281,6 @@ func (d *Decoder) decodePrimitive(data []byte, state *decodeState) (PlutusData, 
 			return nil, fmt.Errorf("unexpected constructor tag in scalar decoder: %d", tagNumber)
 		case tagNumber == 2 || tagNumber == 3:
 			return d.decodeInteger(data)
-		case tagNumber == valueCBORTag:
-			_, content, err := decodeCBORTag(data)
-			if err != nil {
-				return nil, err
-			}
-			inner, rest, err := d.decodeMapNextEntered(content, state)
-			if err != nil {
-				return nil, err
-			}
-			if len(rest) > 0 {
-				return nil, fmt.Errorf("unexpected %d trailing bytes", len(rest))
-			}
-			if err := (&Value{Inner: inner}).Validate(); err != nil {
-				return nil, err
-			}
-			value := d.values.alloc()
-			value.Inner = inner
-			return value, nil
 		default:
 			return nil, fmt.Errorf("unknown CBOR tag for PlutusData: %d", tagNumber)
 		}
@@ -340,6 +329,12 @@ func (d *Decoder) decodeNextPlutusData(
 				return nil, nil, err
 			}
 			return tmpConstr, rest, nil
+		case tagNumber == valueCBORTag:
+			tmpValue, rest, err := d.decodeValueNextEntered(tagContent, state)
+			if err != nil {
+				return nil, nil, err
+			}
+			return tmpValue, rest, nil
 		}
 	}
 
@@ -352,6 +347,29 @@ func (d *Decoder) decodeNextPlutusData(
 		return nil, nil, err
 	}
 	return tmp, rest, nil
+}
+
+// decodeValueNextEntered decodes the content of a tag 1401 item. The tag has
+// already been counted by the caller; the inner map is counted here, so each
+// node of the tagged subtree is charged exactly once.
+func (d *Decoder) decodeValueNextEntered(
+	data []byte,
+	state *decodeState,
+) (*Value, []byte, error) {
+	if err := state.enterValue(); err != nil {
+		return nil, nil, err
+	}
+	defer state.leaveValue()
+	inner, rest, err := d.decodeMapNextEntered(data, state)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := (&Value{Inner: inner}).Validate(); err != nil {
+		return nil, nil, err
+	}
+	value := d.values.alloc()
+	value.Inner = inner
+	return value, rest, nil
 }
 
 func (d *Decoder) decodeConstrNextEntered(
@@ -499,7 +517,7 @@ func (d *Decoder) decodeMapNextEntered(data []byte, state *decodeState) (*Map, [
 		pairs = d.pairs.alloc(pairLen)
 		copy(pairs, smallPairs[:pairLen])
 	} else {
-		pairs = pairs[:pairLen]
+		pairs = pairs[:pairLen:pairLen]
 	}
 
 	decoded := d.maps.alloc()
@@ -601,7 +619,7 @@ func (d *Decoder) decodeListItemsNextEntered(
 		tmpItems = d.items.alloc(tmpLen)
 		copy(tmpItems, smallItems[:tmpLen])
 	} else {
-		tmpItems = tmpItems[:tmpLen]
+		tmpItems = tmpItems[:tmpLen:tmpLen]
 	}
 	return tmpItems, useIndefPtr(true), rest, nil
 }

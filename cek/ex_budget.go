@@ -12,8 +12,8 @@ var DefaultExBudget = ExBudget{
 }
 
 func (ex *ExBudget) occurrences(n uint32) {
-	ex.Mem *= int64(n)
-	ex.Cpu *= int64(n)
+	ex.Mem = satMul(ex.Mem, int64(n))
+	ex.Cpu = satMul(ex.Cpu, int64(n))
 }
 
 func (ex *ExBudget) Sub(other *ExBudget) ExBudget {
