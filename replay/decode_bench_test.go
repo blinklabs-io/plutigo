@@ -2,6 +2,7 @@ package replay
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -13,7 +14,7 @@ import (
 // (DecodeDeBruijnWithContext) on each mainnet validator in isolation, since
 // a node decodes a script afresh for every redeemer that executes it.
 func BenchmarkMainnetCorpusDecode(b *testing.B) {
-	corpus, err := LoadFile(mainnetCorpusPath)
+	corpus, err := LoadFile(context.Background(), mainnetCorpusPath)
 	if err != nil {
 		b.Fatalf("LoadFile() failed: %v", err)
 	}
@@ -48,11 +49,12 @@ func BenchmarkMainnetCorpusDecode(b *testing.B) {
 // on top of the shared term, and requires the recorded cardano-node result
 // from every run.
 func TestMainnetDecodedProgramsAreReusable(t *testing.T) {
-	corpus, err := LoadFile(mainnetCorpusPath)
+	ctx := context.Background()
+	corpus, err := LoadFile(ctx, mainnetCorpusPath)
 	if err != nil {
 		t.Fatalf("LoadFile() failed: %v", err)
 	}
-	decoded, err := corpus.validateCases()
+	decoded, err := corpus.validateCases(ctx)
 	if err != nil {
 		t.Fatalf("validateCases() failed: %v", err)
 	}
@@ -67,7 +69,7 @@ func TestMainnetDecodedProgramsAreReusable(t *testing.T) {
 			results := make([]CaseResult, runs)
 			var wg sync.WaitGroup
 			for r := range runs {
-				wg.Go(func() { results[r] = runDecodedCase(replayCase, decoded[i]) })
+				wg.Go(func() { results[r] = runDecodedCase(ctx, replayCase, decoded[i]) })
 			}
 			wg.Wait()
 			for r, result := range results {

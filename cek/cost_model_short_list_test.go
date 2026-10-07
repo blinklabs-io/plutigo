@@ -74,15 +74,14 @@ func TestShortCostModelListCostsMissingParamsAtMaxBound(t *testing.T) {
 		    (con bytestring #ff) ]
 		  (con bytestring #ff) ])`
 
-	// Every supplied parameter is zero, so nothing but the uncosted tail can
-	// exhaust the budget.
-	full := make([]int64, len(names))
+	// Every supplied parameter is small enough for the default budget, so
+	// nothing but the uncosted tail can exhaust it.
+	full := synthCostModelParams(names)
 	if err := runWithCostModelParams(t, src, 10, full); err != nil {
 		t.Fatalf("complete parameter list: Run returned error: %v", err)
 	}
 
-	short := make([]int64, cut)
-	err := runWithCostModelParams(t, src, 10, short)
+	err := runWithCostModelParams(t, src, 10, full[:cut])
 	if err == nil {
 		t.Fatalf(
 			"short parameter list (%d of %d values): Run succeeded; "+

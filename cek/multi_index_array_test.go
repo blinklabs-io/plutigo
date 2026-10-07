@@ -235,7 +235,7 @@ func TestV4CostModelParameters(t *testing.T) {
 }
 
 func TestV4CostModelLoadsCompleteParameterList(t *testing.T) {
-	params := make([]int64, len(lang.CostModelParamNamesV4))
+	params := synthCostModelParams(lang.CostModelParamNamesV4)
 	wantParams := map[string]int64{
 		"multiIndexArray-cpu-arguments-c0":           326163,
 		"multiIndexArray-cpu-arguments-c1":           12304,
@@ -250,7 +250,9 @@ func TestV4CostModelLoadsCompleteParameterList(t *testing.T) {
 		"policies-memory-arguments-slope":            3,
 	}
 	for i, name := range lang.CostModelParamNamesV4 {
-		params[i] = wantParams[name]
+		if value, ok := wantParams[name]; ok {
+			params[i] = value
+		}
 	}
 	context, err := NewEvalContext(
 		lang.LanguageVersionV4,
@@ -281,7 +283,7 @@ func TestV4CostModelLoadsCompleteParameterList(t *testing.T) {
 }
 
 func TestMultiIndexArrayIsUnavailableWithoutProtocolVersion(t *testing.T) {
-	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV4, 0, nil)
+	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV4, 0, testEvalContext())
 	if machine.builtins[builtin.MultiIndexArray] != nil {
 		t.Fatal("multiIndexArray is available without an activating protocol version")
 	}

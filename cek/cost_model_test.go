@@ -216,7 +216,7 @@ func TestDataNodeCountIncludesValueInner(t *testing.T) {
 
 func TestMachineVersion(t *testing.T) {
 	version := lang.LanguageVersionV2
-	machine := NewMachine[syn.DeBruijn](version, 100, nil)
+	machine := NewMachine[syn.DeBruijn](version, 100, testEvalContext())
 
 	if machine.version != version {
 		t.Errorf("Expected version %v, got %v", version, machine.version)
@@ -248,7 +248,7 @@ func TestVersionLessThan(t *testing.T) {
 
 func TestMachineVersionV4(t *testing.T) {
 	version := LanguageVersionV4
-	machine := NewMachine[syn.DeBruijn](version, 100, nil)
+	machine := NewMachine[syn.DeBruijn](version, 100, testEvalContext())
 
 	if machine.version != version {
 		t.Errorf("Expected version %v, got %v", version, machine.version)
@@ -505,7 +505,7 @@ func TestUpdateV3CostModel(t *testing.T) {
 }
 
 func TestUpdateV3CostModelWithExpModCoefficientNames(t *testing.T) {
-	params := make([]int64, len(lang.CostModelParamNamesV3))
+	params := synthCostModelParams(lang.CostModelParamNamesV3)
 	var expModIdx int
 	foundExpMod := false
 	for i, name := range lang.CostModelParamNamesV3 {
@@ -647,7 +647,7 @@ func TestVariantBIntegerCosts(t *testing.T) {
 }
 
 func TestExpModIntegerCostOverflowReturnsBudgetError(t *testing.T) {
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 	originalBudget := m.ExBudget
 
 	fn := builtin.ExpModInteger
@@ -681,7 +681,7 @@ func TestExpModCostThreeSaturatesOnOverflow(t *testing.T) {
 }
 
 func TestSpendBudgetRejectsNegativeCost(t *testing.T) {
-	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, nil)
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 	originalBudget := m.ExBudget
 
 	err := m.spendBudget(ExBudget{Cpu: -1})

@@ -909,7 +909,13 @@ func (m *Machine[T]) applyEvaluateStack(
 		if forceCount <= f.Forces && arity > f.ArgCount {
 			nextArgCount := f.ArgCount + 1
 			if forceCount == f.Forces {
-				switch nextArgCount {
+				// The fast paths bypass evalBuiltinApp, where per-builtin
+				// metrics are recorded, so a metered machine skips them.
+				fastArgCount := nextArgCount
+				if m.metrics != nil {
+					fastArgCount = 0
+				}
+				switch fastArgCount {
 				case 1:
 					if resolved, handled, err := m.evalUnaryBuiltinFast(f.Func, arg); handled {
 						if err != nil {
