@@ -1793,6 +1793,14 @@ func (d *decoder) word64() (uint64, error) {
 	shl := 0
 
 	if d.usedBits == 0 {
+		if d.pos >= len(d.buffer) {
+			return 0, errors.New("end of buffer")
+		}
+		word8 := d.buffer[d.pos]
+		if word8&128 == 0 {
+			d.pos++
+			return uint64(word8), nil
+		}
 		for {
 			if d.pos >= len(d.buffer) {
 				return 0, errors.New("end of buffer")
@@ -1811,6 +1819,17 @@ func (d *decoder) word64() (uint64, error) {
 			}
 		}
 	}
+
+	word8, err := d.bits8(8)
+	if err != nil {
+		return 0, err
+	}
+	word7 := uint64(word8 & 127)
+	if word8&128 == 0 {
+		return word7, nil
+	}
+	finalWord = word7
+	shl = 7
 
 	for {
 		word8, err := d.bits8(8)
