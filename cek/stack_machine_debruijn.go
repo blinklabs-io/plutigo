@@ -85,8 +85,10 @@ func computeKnownImmediateValueNoSlippageDeBruijn(
 	env *Env[syn.DeBruijn],
 	term syn.Term[syn.DeBruijn],
 ) (Value[syn.DeBruijn], error) {
-	switch t := term.(type) {
-	case *syn.Var[syn.DeBruijn]:
+	termIface := (*termInterfaceDeBruijn)(unsafe.Pointer(&term))
+	switch termIface.tab {
+	case varTermTabDeBruijn:
+		t := (*syn.Var[syn.DeBruijn])(termIface.data)
 		if !m.spendStepNoSlippage(ExVar) {
 			return nil, m.budgetErrorForStep(ExVar)
 		}
@@ -95,29 +97,34 @@ func computeKnownImmediateValueNoSlippageDeBruijn(
 			return nil, &TypeError{Code: ErrCodeOpenTerm, Message: "open term evaluated"}
 		}
 		return value, nil
-	case *syn.Delay[syn.DeBruijn]:
+	case delayTermTabDeBruijn:
+		t := (*syn.Delay[syn.DeBruijn])(termIface.data)
 		if !m.spendStepNoSlippage(ExDelay) {
 			return nil, m.budgetErrorForStep(ExDelay)
 		}
 		return m.allocDelay(t, env), nil
-	case *syn.Lambda[syn.DeBruijn]:
+	case lambdaTermTabDeBruijn:
+		t := (*syn.Lambda[syn.DeBruijn])(termIface.data)
 		if !m.spendStepNoSlippage(ExLambda) {
 			return nil, m.budgetErrorForStep(ExLambda)
 		}
 		return m.allocLambda(t, env), nil
-	case *syn.Constant:
+	case constantTermTab:
+		t := (*syn.Constant)(termIface.data)
 		if !m.spendStepNoSlippage(ExConstant) {
 			return nil, m.budgetErrorForStep(ExConstant)
 		}
 		return machineConstantValue(m, t.Con), nil
-	case *syn.Error:
+	case errorTermTab:
 		return nil, &ScriptError{Code: ErrCodeExplicitError, Message: "error explicitly called"}
-	case *syn.Builtin:
+	case builtinTermTabDeBruijn:
+		t := (*syn.Builtin)(termIface.data)
 		if !m.spendStepNoSlippage(ExBuiltin) {
 			return nil, m.budgetErrorForStep(ExBuiltin)
 		}
 		return m.builtinNoArgValues[t.DefaultFunction][0], nil
-	case *syn.Constr[syn.DeBruijn]:
+	case constrTermTabDeBruijn:
+		t := (*syn.Constr[syn.DeBruijn])(termIface.data)
 		if !m.spendStepNoSlippage(ExConstr) {
 			return nil, m.budgetErrorForStep(ExConstr)
 		}
