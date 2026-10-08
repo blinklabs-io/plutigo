@@ -1801,6 +1801,13 @@ func (d *decoder) word64() (uint64, error) {
 			d.pos++
 			return uint64(word8), nil
 		}
+		if d.pos+1 < len(d.buffer) {
+			nextWord8 := d.buffer[d.pos+1]
+			if nextWord8&128 == 0 {
+				d.pos += 2
+				return uint64(word8&127) | uint64(nextWord8)<<7, nil
+			}
+		}
 		for {
 			if d.pos >= len(d.buffer) {
 				return 0, errors.New("end of buffer")
