@@ -9,17 +9,20 @@ import (
 )
 
 // termInterfaceDeBruijn mirrors Go's runtime layout for an interface value
-// holding a syn.Term[syn.DeBruijn]. We use it to dispatch on the concrete
-// type via the iface tab pointer, which is faster than a type switch for
-// the very hot is-immediate / fast-path checks.
+// holding a syn.Term[syn.DeBruijn]. Its itab pointer supports fast dispatch in
+// the evaluator loop and in immediate-term checks.
 type termInterfaceDeBruijn struct {
 	tab  unsafe.Pointer
 	data unsafe.Pointer
 }
 
 var (
+	varTermTabDeBruijn     = termTabDeBruijn(&syn.Var[syn.DeBruijn]{})
+	delayTermTabDeBruijn   = termTabDeBruijn(&syn.Delay[syn.DeBruijn]{})
 	applyTermTabDeBruijn   = termTabDeBruijn(&syn.Apply[syn.DeBruijn]{})
 	forceTermTabDeBruijn   = termTabDeBruijn(&syn.Force[syn.DeBruijn]{})
+	constantTermTab        = termTabDeBruijn(&syn.Constant{})
+	errorTermTab           = termTabDeBruijn(&syn.Error{})
 	caseTermTabDeBruijn    = termTabDeBruijn(&syn.Case[syn.DeBruijn]{})
 	constrTermTabDeBruijn  = termTabDeBruijn(&syn.Constr[syn.DeBruijn]{})
 	lambdaTermTabDeBruijn  = termTabDeBruijn(&syn.Lambda[syn.DeBruijn]{})
@@ -148,8 +151,10 @@ func runStackNoSlippageDeBruijn(
 			if currentTerm == nil {
 				return nil, internalError("DeBruijn stack machine current term is nil")
 			}
-			switch t := currentTerm.(type) {
-			case *syn.Var[syn.DeBruijn]:
+			termIface := (*termInterfaceDeBruijn)(unsafe.Pointer(&currentTerm))
+			switch termIface.tab {
+			case varTermTabDeBruijn:
+				t := (*syn.Var[syn.DeBruijn])(termIface.data)
 				if !m.spendStepNoSlippage(ExVar) {
 					return nil, m.budgetErrorForStep(ExVar)
 				}
@@ -164,21 +169,24 @@ func runStackNoSlippageDeBruijn(
 
 				currentValue = value
 				returning = true
-			case *syn.Delay[syn.DeBruijn]:
+			case delayTermTabDeBruijn:
+				t := (*syn.Delay[syn.DeBruijn])(termIface.data)
 				if !m.spendStepNoSlippage(ExDelay) {
 					return nil, m.budgetErrorForStep(ExDelay)
 				}
 
 				currentValue = m.allocDelay(t, currentEnv)
 				returning = true
-			case *syn.Lambda[syn.DeBruijn]:
+			case lambdaTermTabDeBruijn:
+				t := (*syn.Lambda[syn.DeBruijn])(termIface.data)
 				if !m.spendStepNoSlippage(ExLambda) {
 					return nil, m.budgetErrorForStep(ExLambda)
 				}
 
 				currentValue = m.allocLambda(t, currentEnv)
 				returning = true
-			case *syn.Apply[syn.DeBruijn]:
+			case applyTermTabDeBruijn:
+				t := (*syn.Apply[syn.DeBruijn])(termIface.data)
 				if !m.spendStepNoSlippage(ExApply) {
 					return nil, m.budgetErrorForStep(ExApply)
 				}
@@ -262,14 +270,16 @@ func runStackNoSlippageDeBruijn(
 				frame.env = currentEnv
 				frame.term = t.Argument
 				currentTerm = t.Function
-			case *syn.Constant:
+			case constantTermTab:
+				t := (*syn.Constant)(termIface.data)
 				if !m.spendStepNoSlippage(ExConstant) {
 					return nil, m.budgetErrorForStep(ExConstant)
 				}
 
 				currentValue = machineConstantValue(m, t.Con)
 				returning = true
-			case *syn.Force[syn.DeBruijn]:
+			case forceTermTabDeBruijn:
+				t := (*syn.Force[syn.DeBruijn])(termIface.data)
 				if !m.spendStepNoSlippage(ExForce) {
 					return nil, m.budgetErrorForStep(ExForce)
 				}
@@ -311,16 +321,18 @@ func runStackNoSlippageDeBruijn(
 				frame := m.pushFrameSlot()
 				frame.kind = frameForce
 				currentTerm = t.Term
-			case *syn.Error:
+			case errorTermTab:
 				return nil, &ScriptError{Code: ErrCodeExplicitError, Message: "error explicitly called"}
-			case *syn.Builtin:
+			case builtinTermTabDeBruijn:
+				t := (*syn.Builtin)(termIface.data)
 				if !m.spendStepNoSlippage(ExBuiltin) {
 					return nil, m.budgetErrorForStep(ExBuiltin)
 				}
 
 				currentValue = m.builtinNoArgValues[t.DefaultFunction][0]
 				returning = true
-			case *syn.Constr[syn.DeBruijn]:
+			case constrTermTabDeBruijn:
+				t := (*syn.Constr[syn.DeBruijn])(termIface.data)
 				if !m.spendStepNoSlippage(ExConstr) {
 					return nil, m.budgetErrorForStep(ExConstr)
 				}
@@ -338,7 +350,8 @@ func runStackNoSlippageDeBruijn(
 				frame.fields = t.Fields[1:]
 				frame.resolvedFields = m.allocValueElems(len(t.Fields))[:0]
 				currentTerm = t.Fields[0]
-			case *syn.Case[syn.DeBruijn]:
+			case caseTermTabDeBruijn:
+				t := (*syn.Case[syn.DeBruijn])(termIface.data)
 				if !m.spendStepNoSlippage(ExCase) {
 					return nil, m.budgetErrorForStep(ExCase)
 				}
