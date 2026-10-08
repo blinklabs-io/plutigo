@@ -1827,10 +1827,16 @@ func (d *decoder) word64() (uint64, error) {
 		}
 	}
 
-	word8, err := d.bits8(8)
-	if err != nil {
-		return 0, err
+	var word8 byte
+	if d.pos >= len(d.buffer) {
+		return 0, errors.New("end of buffer")
 	}
+	if d.pos+1 >= len(d.buffer) {
+		return 0, fmt.Errorf("NotEnoughBits(%d)", 8)
+	}
+	word8 = (d.buffer[d.pos] << byte(d.usedBits)) |
+		(d.buffer[d.pos+1] >> (8 - byte(d.usedBits)))
+	d.pos++
 	word7 := uint64(word8 & 127)
 	if word8&128 == 0 {
 		return word7, nil
