@@ -1,7 +1,5 @@
 # Blink Labs
 #
-* @wolf31o2
-
-# Plutigo maintainers
-#
-* @microproofs @rvcas @Salvionied
+* @blinklabs-io/core
+*.md @blinklabs-io/core @blinklabs-io/docs @blinklabs-io/pms
+LICENSE @blinklabs-io/core @blinklabs-io/pms
