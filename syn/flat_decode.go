@@ -1945,19 +1945,17 @@ func (d *decoder) bits4() (byte, error) {
 		return b0 & 0x0f, nil
 	}
 
-	unusedBits := 8 - d.usedBits
-	if unusedBits < 4 && d.pos+1 >= len(d.buffer) {
+	x := (b0 << byte(d.usedBits)) >> 4
+	if d.usedBits < 4 {
+		d.usedBits += 4
+		return x, nil
+	}
+	if d.pos+1 >= len(d.buffer) {
 		return 0, fmt.Errorf("NotEnoughBits(%d)", 4)
 	}
-
-	x := (b0 << byte(d.usedBits)) >> 4
-	if unusedBits < 4 {
-		x |= d.buffer[d.pos+1] >> (unusedBits + 4)
-	}
-
-	allUsedBits := d.usedBits + 4
-	d.usedBits = allUsedBits % 8
-	d.pos += int(allUsedBits / 8)
+	x |= d.buffer[d.pos+1] >> byte(12-d.usedBits)
+	d.usedBits -= 4
+	d.pos++
 	return x, nil
 }
 
