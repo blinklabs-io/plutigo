@@ -75,6 +75,38 @@ func lookupEnvDeBruijn(
 			return zero, false
 		}
 		return env.data, true
+	case 4:
+		env = env.next
+		if env == nil {
+			return zero, false
+		}
+		env = env.next
+		if env == nil {
+			return zero, false
+		}
+		env = env.next
+		if env == nil {
+			return zero, false
+		}
+		return env.data, true
+	case 5:
+		env = env.next
+		if env == nil {
+			return zero, false
+		}
+		env = env.next
+		if env == nil {
+			return zero, false
+		}
+		env = env.next
+		if env == nil {
+			return zero, false
+		}
+		env = env.next
+		if env == nil {
+			return zero, false
+		}
+		return env.data, true
 	}
 	env = envAncestor(env, idx-1)
 	if env == nil {
