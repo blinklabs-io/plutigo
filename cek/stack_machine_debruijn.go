@@ -35,8 +35,11 @@ func termTabDeBruijn(term syn.Term[syn.DeBruijn]) unsafe.Pointer {
 
 func isImmediateTermDeBruijn(term syn.Term[syn.DeBruijn]) bool {
 	termIface := (*termInterfaceDeBruijn)(unsafe.Pointer(&term))
+	if termIface.tab == applyTermTabDeBruijn {
+		return false
+	}
 	switch termIface.tab {
-	case applyTermTabDeBruijn, forceTermTabDeBruijn, caseTermTabDeBruijn:
+	case forceTermTabDeBruijn, caseTermTabDeBruijn:
 		return false
 	case constrTermTabDeBruijn:
 		return len((*syn.Constr[syn.DeBruijn])(termIface.data).Fields) == 0

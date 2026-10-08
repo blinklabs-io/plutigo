@@ -171,7 +171,7 @@ func (m *Machine[T]) spendStepNoSlippage(step StepKind) bool {
 	cpuCost := m.stepCostCpu[step]
 	m.ExBudget.Mem -= memCost
 	m.ExBudget.Cpu -= cpuCost
-	return m.ExBudget.Mem >= 0 && m.ExBudget.Cpu >= 0
+	return (m.ExBudget.Mem | m.ExBudget.Cpu) >= 0
 }
 
 func (m *Machine[T]) budgetErrorForStep(step StepKind) *BudgetError {
