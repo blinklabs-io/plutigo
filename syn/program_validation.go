@@ -195,7 +195,9 @@ func DecodeWithContext[T Binder](bytes []byte, context ProgramContext) (*Program
 // ParseWithContext parses and validates a textual UPLC program against the
 // selected ledger language and protocol version.
 func ParseWithContext(input string, context ProgramContext) (*Program[Name], error) {
-	program, err := Parse(input)
+	p := NewParser(input)
+	p.maxConstrFields = constrFieldLimit(context.ProtocolMajor)
+	program, err := p.ParseProgram()
 	if err != nil {
 		return nil, err
 	}
