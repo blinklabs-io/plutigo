@@ -35,6 +35,12 @@ func (l *Lexer) readChar() {
 	l.readPos++
 }
 
+// atEOF reports whether the lexer has consumed all input. EOF is tracked by
+// position rather than by l.ch, so an embedded U+0000 is not mistaken for it.
+func (l *Lexer) atEOF() bool {
+	return l.pos >= len(l.input)
+}
+
 func (l *Lexer) peekChar() rune {
 	if l.readPos >= len(l.input) {
 		return 0
@@ -57,7 +63,7 @@ func (l *Lexer) skipWhitespace() {
 			l.readChar() // Consume second '-'
 
 			// Skip until newline or EOF
-			for l.ch != '\n' && l.ch != 0 {
+			for l.ch != '\n' && !l.atEOF() {
 				l.readChar()
 			}
 
@@ -69,7 +75,7 @@ func (l *Lexer) skipWhitespace() {
 			}
 
 			// If we hit EOF, break
-			if l.ch == 0 {
+			if l.atEOF() {
 				break
 			}
 		} else {
@@ -121,7 +127,7 @@ func (l *Lexer) readString() (string, error) {
 		}
 		leftoverChar = false
 
-		if l.ch == 0 {
+		if l.atEOF() {
 			return "", fmt.Errorf("unterminated string at position %d", l.pos)
 		}
 
@@ -305,7 +311,7 @@ func (l *Lexer) readByteString() (string, error) {
 		l.readChar()
 
 		switch {
-		case l.ch == 0,
+		case l.atEOF(),
 			unicode.IsSpace(l.ch),
 			l.ch == ')',
 			l.ch == ']',
@@ -340,6 +346,12 @@ func (l *Lexer) NextToken() Token {
 	l.skipWhitespace()
 
 	tok := Token{Position: l.pos}
+
+	if l.atEOF() {
+		tok.Type = TokenEOF
+
+		return tok
+	}
 
 	switch l.ch {
 	case '(':
@@ -487,10 +499,6 @@ func (l *Lexer) NextToken() Token {
 		tok.Literal = literal
 
 		tok.Value = literal
-	case 0:
-		tok.Type = TokenEOF
-
-		tok.Literal = ""
 	default:
 		if unicode.IsLetter(l.ch) {
 			literal := l.readIdentifier()

@@ -332,3 +332,58 @@ func FuzzLexerNextToken(f *testing.F) {
 		t.Fatalf("lexer did not reach EOF after %d tokens", maxTokens)
 	})
 }
+
+// TestLexerEmbeddedNulIsNotEOF checks that the lexer reports a NUL between
+// tokens as an error token rather than end of input, and then keeps reading:
+// the closing parenthesis after the NUL must still be returned, followed by
+// TokenEOF only once the input is really exhausted.
+func TestLexerEmbeddedNulIsNotEOF(t *testing.T) {
+	lexer := NewLexer("(\x00)")
+	expected := []TokenType{TokenLParen, TokenError, TokenRParen, TokenEOF}
+	for i, want := range expected {
+		token := lexer.NextToken()
+		if token.Type != want {
+			t.Fatalf(
+				"token %d: expected type %v, got %v (literal %q)",
+				i,
+				want,
+				token.Type,
+				token.Literal,
+			)
+		}
+	}
+}
+
+// TestLexerEmbeddedNulInStringAndByteString checks NUL handling inside
+// literals: a NUL inside a string literal is kept as a character, a NUL
+// inside a bytestring is rejected as an invalid hex character, and a NUL in an
+// unclosed string does not hide the missing closing quote.
+func TestLexerEmbeddedNulInStringAndByteString(t *testing.T) {
+	token := NewLexer("\"a\x00b\"").NextToken()
+	if token.Type != TokenString || token.Value != "a\x00b" {
+		t.Fatalf(
+			"expected string token with embedded NUL, got %v (literal %q)",
+			token.Type,
+			token.Literal,
+		)
+	}
+	// A NUL is not a hex digit, so the bytestring is invalid.
+	token = NewLexer("#00\x0000").NextToken()
+	if token.Type != TokenError {
+		t.Fatalf(
+			"expected error for NUL in bytestring, got %v (literal %q)",
+			token.Type,
+			token.Literal,
+		)
+	}
+	// The string never closes; the NUL must not be treated as its end.
+	token = NewLexer("\"abc\x00").NextToken()
+	if token.Type != TokenError ||
+		!strings.Contains(token.Literal, "unterminated string") {
+		t.Fatalf(
+			"expected unterminated string error, got %v (literal %q)",
+			token.Type,
+			token.Literal,
+		)
+	}
+}
