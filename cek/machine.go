@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 	"math/big"
+	"math/bits"
 	"sync"
 	"unsafe"
 
@@ -320,15 +321,16 @@ func (m *Machine[T]) getFrameCases() *FrameCases[T] {
 
 // allocArenaSlot allocates one slot of S from a chunked arena.
 // chunkSize must be a positive power of two; the value-arena chunk sizes
-// returned by nextValueArenaChunkSize satisfy this. We exploit that to
-// compute the in-chunk offset with a cheap mask instead of a modulo.
+// returned by nextValueArenaChunkSize satisfy this. We use its shift and mask
+// to compute the chunk index and in-chunk offset without division or modulo.
 func allocArenaSlot[S any](chunks *[][]S, pos *int, chunkSize int) *S {
 	if chunkSize <= 0 {
 		chunkSize = valueColdChunkSize
 	}
 	posVal := *pos
 	chunkMask := chunkSize - 1
-	chunkIdx := posVal / chunkSize
+	chunkShift := bits.TrailingZeros(uint(chunkSize))
+	chunkIdx := posVal >> chunkShift
 	if chunkIdx == len(*chunks) {
 		*chunks = append(*chunks, make([]S, chunkSize))
 	}

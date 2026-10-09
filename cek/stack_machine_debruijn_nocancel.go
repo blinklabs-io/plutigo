@@ -1,192 +1,16 @@
-// <nilaway skip stack-machine>
+// Copyright 2026 Blink Labs Software
+
 package cek
 
 import (
-	"context"
 	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
-// termInterfaceDeBruijn mirrors Go's runtime layout for an interface value
-// holding a syn.Term[syn.DeBruijn]. Its itab pointer supports fast dispatch in
-// the evaluator loop and in immediate-term checks.
-type termInterfaceDeBruijn struct {
-	tab  unsafe.Pointer
-	data unsafe.Pointer
-}
-
-var (
-	varTermTabDeBruijn     = termTabDeBruijn(&syn.Var[syn.DeBruijn]{})
-	delayTermTabDeBruijn   = termTabDeBruijn(&syn.Delay[syn.DeBruijn]{})
-	applyTermTabDeBruijn   = termTabDeBruijn(&syn.Apply[syn.DeBruijn]{})
-	forceTermTabDeBruijn   = termTabDeBruijn(&syn.Force[syn.DeBruijn]{})
-	constantTermTab        = termTabDeBruijn(&syn.Constant{})
-	errorTermTab           = termTabDeBruijn(&syn.Error{})
-	caseTermTabDeBruijn    = termTabDeBruijn(&syn.Case[syn.DeBruijn]{})
-	constrTermTabDeBruijn  = termTabDeBruijn(&syn.Constr[syn.DeBruijn]{})
-	lambdaTermTabDeBruijn  = termTabDeBruijn(&syn.Lambda[syn.DeBruijn]{})
-	builtinTermTabDeBruijn = termTabDeBruijn(&syn.Builtin{})
-)
-
-func termTabDeBruijn(term syn.Term[syn.DeBruijn]) unsafe.Pointer {
-	return (*termInterfaceDeBruijn)(unsafe.Pointer(&term)).tab
-}
-
-func isImmediateTermDeBruijn(term syn.Term[syn.DeBruijn]) bool {
-	termIface := (*termInterfaceDeBruijn)(unsafe.Pointer(&term))
-	if termIface.tab == applyTermTabDeBruijn {
-		return false
-	}
-	switch termIface.tab {
-	case forceTermTabDeBruijn, caseTermTabDeBruijn:
-		return false
-	case constrTermTabDeBruijn:
-		return len((*syn.Constr[syn.DeBruijn])(termIface.data).Fields) == 0
-	default:
-		return true
-	}
-}
-
-func lookupEnvDeBruijn(
-	env *Env[syn.DeBruijn],
-	idx int,
-) (Value[syn.DeBruijn], bool) {
-	var zero Value[syn.DeBruijn]
-	if idx <= 0 || env == nil {
-		return zero, false
-	}
-	switch idx {
-	case 1:
-		return env.data, true
-	case 2:
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		return env.data, true
-	case 3:
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		return env.data, true
-	case 4:
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		return env.data, true
-	case 5:
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		env = env.next
-		if env == nil {
-			return zero, false
-		}
-		return env.data, true
-	}
-	env = envAncestor(env, idx-1)
-	if env == nil {
-		return zero, false
-	}
-	return env.data, true
-}
-
-func computeKnownImmediateValueNoSlippageDeBruijn(
-	m *Machine[syn.DeBruijn],
-	env *Env[syn.DeBruijn],
-	term syn.Term[syn.DeBruijn],
-) (Value[syn.DeBruijn], error) {
-	termIface := (*termInterfaceDeBruijn)(unsafe.Pointer(&term))
-	switch termIface.tab {
-	case varTermTabDeBruijn:
-		t := (*syn.Var[syn.DeBruijn])(termIface.data)
-		if !m.spendStepNoSlippage(ExVar) {
-			return nil, m.budgetErrorForStep(ExVar)
-		}
-		value, ok := lookupEnvDeBruijn(env, int(t.Name))
-		if !ok {
-			return nil, &TypeError{Code: ErrCodeOpenTerm, Message: "open term evaluated"}
-		}
-		return value, nil
-	case delayTermTabDeBruijn:
-		t := (*syn.Delay[syn.DeBruijn])(termIface.data)
-		if !m.spendStepNoSlippage(ExDelay) {
-			return nil, m.budgetErrorForStep(ExDelay)
-		}
-		return m.allocDelay(t, env), nil
-	case lambdaTermTabDeBruijn:
-		t := (*syn.Lambda[syn.DeBruijn])(termIface.data)
-		if !m.spendStepNoSlippage(ExLambda) {
-			return nil, m.budgetErrorForStep(ExLambda)
-		}
-		return m.allocLambda(t, env), nil
-	case constantTermTab:
-		t := (*syn.Constant)(termIface.data)
-		if !m.spendStepNoSlippage(ExConstant) {
-			return nil, m.budgetErrorForStep(ExConstant)
-		}
-		return machineConstantValue(m, t.Con), nil
-	case errorTermTab:
-		return nil, &ScriptError{Code: ErrCodeExplicitError, Message: "error explicitly called"}
-	case builtinTermTabDeBruijn:
-		t := (*syn.Builtin)(termIface.data)
-		if !m.spendStepNoSlippage(ExBuiltin) {
-			return nil, m.budgetErrorForStep(ExBuiltin)
-		}
-		return m.builtinNoArgValues[t.DefaultFunction][0], nil
-	case constrTermTabDeBruijn:
-		t := (*syn.Constr[syn.DeBruijn])(termIface.data)
-		if !m.spendStepNoSlippage(ExConstr) {
-			return nil, m.budgetErrorForStep(ExConstr)
-		}
-		return m.allocConstr(t.Tag, nil), nil
-	default:
-		return nil, &InternalError{
-			Code:    ErrCodeInternalError,
-			Message: "non-immediate term passed to computeKnownImmediateValueNoSlippageDeBruijn",
-		}
-	}
-}
-
-func runStackNoSlippageDeBruijn(
-	ctx context.Context,
-	checkCancellation bool,
-	m *Machine[syn.DeBruijn],
-	term syn.Term[syn.DeBruijn],
-) (syn.Term[syn.DeBruijn], error) {
-	// Select the loop once per run so Run's hot path carries no context state.
-	if checkCancellation {
-		return runStackNoSlippageDeBruijnChecked(ctx, m, term)
-	}
-	return runStackNoSlippageDeBruijnUnchecked(m, term)
-}
-
-func runStackNoSlippageDeBruijnChecked(
-	ctx context.Context,
+// This loop mirrors the checked variant so Machine.Run does not carry
+// cancellation state through every CEK step.
+func runStackNoSlippageDeBruijnUnchecked(
 	m *Machine[syn.DeBruijn],
 	term syn.Term[syn.DeBruijn],
 ) (syn.Term[syn.DeBruijn], error) {
@@ -196,9 +20,6 @@ func runStackNoSlippageDeBruijnChecked(
 	returning := false
 
 	for {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
 		if !returning {
 			if currentTerm == nil {
 				return nil, internalError("DeBruijn stack machine current term is nil")
@@ -447,7 +268,7 @@ func runStackNoSlippageDeBruijnChecked(
 			return nil, internalError("DeBruijn stack machine current value is nil")
 		}
 		if len(m.frameStack) == 0 {
-			return m.finishValueContext(ctx, true, currentValue)
+			return m.finishValue(currentValue)
 		}
 		frameIdx := len(m.frameStack) - 1
 		frame := &m.frameStack[frameIdx]

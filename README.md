@@ -194,9 +194,17 @@ make test
 # Run benchmarks
 make bench
 
+# Run use-case benchmarks with profile-guided optimization
+make bench-pgo
+
 # Run fuzz tests
 make fuzz
 ```
+
+`make bench-pgo` uses `tests/use_cases.pgo`, a CPU profile recorded from all 89
+use-case programs. The profile guides compiler optimizations for that workload;
+the target architecture and CPU features still come from the normal Go build
+settings.
 
 ### Code Quality
 

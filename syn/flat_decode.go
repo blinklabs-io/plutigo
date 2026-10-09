@@ -1793,6 +1793,21 @@ func (d *decoder) word64() (uint64, error) {
 	shl := 0
 
 	if d.usedBits == 0 {
+		if d.pos >= len(d.buffer) {
+			return 0, errors.New("end of buffer")
+		}
+		word8 := d.buffer[d.pos]
+		if word8&128 == 0 {
+			d.pos++
+			return uint64(word8), nil
+		}
+		if d.pos+1 < len(d.buffer) {
+			nextWord8 := d.buffer[d.pos+1]
+			if nextWord8&128 == 0 {
+				d.pos += 2
+				return uint64(word8&127) | uint64(nextWord8)<<7, nil
+			}
+		}
 		for {
 			if d.pos >= len(d.buffer) {
 				return 0, errors.New("end of buffer")
@@ -1811,6 +1826,23 @@ func (d *decoder) word64() (uint64, error) {
 			}
 		}
 	}
+
+	var word8 byte
+	if d.pos >= len(d.buffer) {
+		return 0, errors.New("end of buffer")
+	}
+	if d.pos+1 >= len(d.buffer) {
+		return 0, fmt.Errorf("NotEnoughBits(%d)", 8)
+	}
+	word8 = (d.buffer[d.pos] << byte(d.usedBits)) |
+		(d.buffer[d.pos+1] >> (8 - byte(d.usedBits)))
+	d.pos++
+	word7 := uint64(word8 & 127)
+	if word8&128 == 0 {
+		return word7, nil
+	}
+	finalWord = word7
+	shl = 7
 
 	for {
 		word8, err := d.bits8(8)
@@ -1919,19 +1951,17 @@ func (d *decoder) bits4() (byte, error) {
 		return b0 & 0x0f, nil
 	}
 
-	unusedBits := 8 - d.usedBits
-	if unusedBits < 4 && d.pos+1 >= len(d.buffer) {
+	x := (b0 << byte(d.usedBits)) >> 4
+	if d.usedBits < 4 {
+		d.usedBits += 4
+		return x, nil
+	}
+	if d.pos+1 >= len(d.buffer) {
 		return 0, fmt.Errorf("NotEnoughBits(%d)", 4)
 	}
-
-	x := (b0 << byte(d.usedBits)) >> 4
-	if unusedBits < 4 {
-		x |= d.buffer[d.pos+1] >> (unusedBits + 4)
-	}
-
-	allUsedBits := d.usedBits + 4
-	d.usedBits = allUsedBits % 8
-	d.pos += int(allUsedBits / 8)
+	x |= d.buffer[d.pos+1] >> byte(12-d.usedBits)
+	d.usedBits -= 4
+	d.pos++
 	return x, nil
 }
 
