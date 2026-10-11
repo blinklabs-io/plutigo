@@ -195,6 +195,38 @@ func TestNormalizeNilConstrTagStaysNil(t *testing.T) {
 	}
 }
 
+func TestNormalizeTypedNilContainers(t *testing.T) {
+	var nilConstr *Constr
+	var nilMap *Map
+	var nilList *List
+	var nilValue *Value
+	tests := []struct {
+		name  string
+		input PlutusData
+	}{
+		{"constr", nilConstr},
+		{"map", nilMap},
+		{"list", nilList},
+		{"value", nilValue},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			func() {
+				defer func() {
+					if recovered := recover(); recovered != nil {
+						t.Errorf("Normalize(typed-nil %s) panicked: %v", tc.name, recovered)
+					}
+				}()
+
+				if got := Normalize(tc.input); got != tc.input {
+					t.Errorf("Normalize(typed-nil %s) = %v, want the original typed nil", tc.name, got)
+				}
+			}()
+		})
+	}
+}
+
 // TestNormalizeLeafPassthrough documents that Integer and ByteString carry
 // no encoding-style state, so Normalize returns them untouched.
 func TestNormalizeLeafPassthrough(t *testing.T) {

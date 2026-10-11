@@ -45,12 +45,15 @@ import "math/big"
 // Every container node is rebuilt, so resetting the encoding never writes
 // through to the input. Integer and ByteString leaves are returned as-is:
 // they hold no encoding state, and this package treats their contents as
-// read-only. Container nodes held in their value form rather than as a
-// pointer are normalized too, and come back as pointers, the same conversion
-// Clone makes.
+// read-only. Typed-nil container pointers are returned unchanged. Container
+// nodes held in their value form rather than as a pointer are normalized too,
+// and come back as pointers, the same conversion Clone makes.
 func Normalize(pd PlutusData) PlutusData {
 	switch v := pd.(type) {
 	case *Constr:
+		if v == nil {
+			return pd
+		}
 		fields := make([]PlutusData, len(v.Fields))
 		for i, f := range v.Fields {
 			fields[i] = Normalize(f)
@@ -64,12 +67,18 @@ func Normalize(pd PlutusData) PlutusData {
 		}
 		return &Constr{Tag: tag, Fields: fields}
 	case *Map:
+		if v == nil {
+			return pd
+		}
 		pairs := make([][2]PlutusData, len(v.Pairs))
 		for i, p := range v.Pairs {
 			pairs[i] = [2]PlutusData{Normalize(p[0]), Normalize(p[1])}
 		}
 		return &Map{Pairs: pairs}
 	case *List:
+		if v == nil {
+			return pd
+		}
 		items := make([]PlutusData, len(v.Items))
 		for i, item := range v.Items {
 			items[i] = Normalize(item)
