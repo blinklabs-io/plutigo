@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"math/bits"
 
 	"github.com/blinklabs-io/plutigo/data"
 )
@@ -367,41 +368,43 @@ func (e *encoder) integer(i *big.Int) *encoder {
 }
 
 // bigWord encodes an unsigned integer to the buffer.
-// It is byte-alignment agnostic. Encodes 7-bit chunks, setting the MSB to 1
-// if more chunks follow, or 0 if it’s the last chunk.
+// It is byte-alignment agnostic. Encodes 7-bit chunks, least significant
+// first, setting the MSB to 1 if more chunks follow, or 0 if it’s the last
+// chunk. The chunks are read directly from the integer's words, so the work is
+// linear in its bit length. c must be non-negative.
 func (e *encoder) bigWord(c *big.Int) *encoder {
-	d := new(big.Int).Set(c)
+	if c.IsUint64() {
+		return e.word64(c.Uint64())
+	}
 
-	for {
-		// temp = d % 128
-		temp := new(big.Int)
-		temp.Mod(d, big.NewInt(128))
+	words := c.Bits()
+	bitLen := c.BitLen()
 
-		// Convert to uint8
-		temp64 := temp.Int64()
-		if temp64 < 0 || temp64 > 255 {
-			panic("unexpected value")
-		}
-		w := uint8(temp64)
+	for pos := 0; pos < bitLen; pos += 7 {
+		w := bigWordChunk(words, pos)
 
-		// d >>= 7
-		d.Rsh(d, 7)
-
-		// If d != 0, set MSB (w |= 128)
-		if d.Sign() != 0 {
+		if pos+7 < bitLen {
 			w |= 128
 		}
 
-		// Write 8 bits
 		e.bits(8, w)
-
-		// Stop if d == 0
-		if d.Sign() == 0 {
-			break
-		}
 	}
 
 	return e
+}
+
+// bigWordChunk returns the 7 bits of the little-endian words starting at bit
+// position pos, combining two words when the chunk crosses a word boundary.
+func bigWordChunk(words []big.Word, pos int) uint8 {
+	i := pos / bits.UintSize
+	shift := uint(pos % bits.UintSize) //nolint:gosec
+
+	chunk := uint(words[i]) >> shift
+	if shift > bits.UintSize-7 && i+1 < len(words) {
+		chunk |= uint(words[i+1]) << (bits.UintSize - shift)
+	}
+
+	return uint8(chunk & 127) //nolint:gosec
 }
 
 func EncodeConstant(e *encoder, constant IConstant) error {
