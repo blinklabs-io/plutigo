@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/blinklabs-io/plutigo/builtin"
+	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/lang"
 )
 
@@ -114,6 +115,12 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 		return err
 	}
 
+	// PlutusData Value is a V4 constructor; earlier ledger languages must not
+	// carry it in any constant. valueDataNodes is the node budget the walk
+	// shares across all of the program's constants.
+	checkValueData := plutusVersion < builtin.PlutusV4
+	valueDataNodes := 0
+
 	// The worklist starts on the stack; it holds pending siblings along one
 	// path, so ledger scripts rarely outgrow it.
 	var stack [128]Term[T]
@@ -130,6 +137,18 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 		case *Var[T], *Error:
 			// No version-dependent validation is needed for these terms.
 		case *Constant:
+			if checkValueData && constantMayHoldData(t.Con) {
+				found, err := constantHasValueData(t.Con, &valueDataNodes)
+				if err != nil {
+					return err
+				}
+				if found {
+					return fmt.Errorf(
+						"Value data is not available in Plutus V%d",
+						plutusVersion,
+					)
+				}
+			}
 			if t.Con != nil &&
 				context.ProtocolMajor >= builtin.VanRossemProtoVersion {
 				size := constantSize(t.Con)
@@ -188,6 +207,144 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 		}
 	}
 	return nil
+}
+
+// valueDataFrame is one level of the constantHasValueData walk: the
+// remaining elements of a single constant, a constant list or array, a
+// PlutusData list or constructor, or a PlutusData map.
+type valueDataFrame struct {
+	constant  IConstant
+	constants []IConstant
+	items     []data.PlutusData
+	pairs     [][2]data.PlutusData
+}
+
+// constantMayHoldData reports whether con is, or is a container whose type
+// can hold, PlutusData.
+func constantMayHoldData(con IConstant) bool {
+	switch k := con.(type) {
+	case *Data:
+		return k != nil
+	case *ProtoList:
+		return k != nil && typeHoldsData(k.LTyp)
+	case *ProtoArray:
+		return k != nil && typeHoldsData(k.ATyp)
+	case *ProtoPair:
+		return k != nil &&
+			(typeHoldsData(k.FstType) || typeHoldsData(k.SndType))
+	default:
+		return false
+	}
+}
+
+// constantHasValueData reports whether any PlutusData within con, at any
+// depth, is a Value. Every constant and PlutusData item visited is counted in
+// *nodes against maxProgramNodes, so a caller-constructed program cannot make
+// validation walk unbounded data. Collections are stepped through in place, so
+// the frame stack grows with nesting depth rather than collection width, and
+// it starts on the stack like ValidateProgram's term worklist.
+func constantHasValueData(con IConstant, nodes *int) (bool, error) {
+	var frameStack [16]valueDataFrame
+	frames := append(frameStack[:0], valueDataFrame{constant: con})
+	for len(frames) > 0 {
+		frame := &frames[len(frames)-1]
+		var (
+			constant IConstant
+			item     data.PlutusData
+		)
+		switch {
+		case frame.constant != nil:
+			constant = frame.constant
+			frame.constant = nil
+		case len(frame.constants) > 0:
+			constant = frame.constants[0]
+			frame.constants = frame.constants[1:]
+		case len(frame.items) > 0:
+			item = frame.items[0]
+			frame.items = frame.items[1:]
+		case len(frame.pairs) > 0:
+			pair := &frame.pairs[0]
+			frame.pairs = frame.pairs[1:]
+			frames = append(frames, valueDataFrame{items: pair[:]})
+			continue
+		default:
+			frames = frames[:len(frames)-1]
+			continue
+		}
+
+		*nodes++
+		if *nodes > maxProgramNodes {
+			return false, errors.New("program has too many nodes")
+		}
+
+		switch k := constant.(type) {
+		case *Data:
+			if k != nil {
+				item = k.Inner
+			}
+		case *ProtoList:
+			if k != nil && typeHoldsData(k.LTyp) {
+				frames = append(frames, valueDataFrame{constants: k.List})
+			}
+		case *ProtoArray:
+			if k != nil && typeHoldsData(k.ATyp) {
+				frames = append(frames, valueDataFrame{constants: k.Array})
+			}
+		case *ProtoPair:
+			if k != nil &&
+				(typeHoldsData(k.FstType) || typeHoldsData(k.SndType)) {
+				frames = append(
+					frames,
+					valueDataFrame{constant: k.Second},
+					valueDataFrame{constant: k.First},
+				)
+			}
+		}
+
+		switch d := item.(type) {
+		case *data.Value:
+			return true, nil
+		case *data.Constr:
+			if d != nil {
+				frames = append(frames, valueDataFrame{items: d.Fields})
+			}
+		case *data.List:
+			if d != nil {
+				frames = append(frames, valueDataFrame{items: d.Items})
+			}
+		case *data.Map:
+			if d != nil {
+				frames = append(frames, valueDataFrame{pairs: d.Pairs})
+			}
+		}
+	}
+	return false, nil
+}
+
+// typeHoldsData reports whether a constant of type typ can contain
+// PlutusData.
+func typeHoldsData(typ Typ) bool {
+	for {
+		switch t := typ.(type) {
+		case *TData:
+			return true
+		case *TList:
+			if t == nil {
+				return false
+			}
+			typ = t.Typ
+		case *TArray:
+			if t == nil {
+				return false
+			}
+			typ = t.Typ
+		case *TPair:
+			return t != nil &&
+				(typeHoldsData(t.First) || typeHoldsData(t.Second))
+		default:
+			return false
+		}
+	}
 }
 
 // DecodeWithContext decodes and validates a FLAT-encoded UPLC program before
