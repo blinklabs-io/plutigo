@@ -493,6 +493,129 @@ func (m *Machine[T]) CostOne(b *builtin.DefaultFunction, x func() ExMem) error {
 	})
 }
 
+func (m *Machine[T]) oneArgumentCost(
+	b *builtin.DefaultFunction,
+	x ExMem,
+) (ExBudget, OneArgument, OneArgument) {
+	model := &m.costCaches.one[*b]
+	mem := model.mem
+	cpu := model.cpu
+	if mem == nil || cpu == nil {
+		fallbackModel := m.costs.builtinCosts[*b]
+		mem = fallbackModel.mem.(OneArgument)
+		cpu = fallbackModel.cpu.(OneArgument)
+	}
+	return ExBudget{
+		Mem: int64(mem.Cost(x)),
+		Cpu: int64(cpu.Cost(x)),
+	}, mem, cpu
+}
+
+func (m *Machine[T]) costOneExMem(
+	b *builtin.DefaultFunction,
+	x ExMem,
+) error {
+	cost, _, _ := m.oneArgumentCost(b, x)
+	return m.spendBudget(cost)
+}
+
+func oneArgumentNondecreasing(model OneArgument) bool {
+	switch m := model.(type) {
+	case *ConstantCost:
+		return true
+	case *LinearCost:
+		return m.slope >= 0
+	case *QuadraticInXModel:
+		return m.coeff0 >= 0 && m.coeff1 >= 0 && m.coeff2 >= 0
+	default:
+		return false
+	}
+}
+
+func (m *Machine[T]) costDataOne(
+	b *builtin.DefaultFunction,
+	d data.PlutusData,
+	nodeCount bool,
+) error {
+	_, mem, cpu := m.oneArgumentCost(b, 0)
+	canBound := oneArgumentNondecreasing(mem) && oneArgumentNondecreasing(cpu)
+	check := func(size ExMem) error {
+		if m.activeContext != nil {
+			if err := m.activeContext.Err(); err != nil {
+				return err
+			}
+		}
+		if canBound {
+			cost, _, _ := m.oneArgumentCost(b, size)
+			if cost.Mem > m.ExBudget.Mem || cost.Cpu > m.ExBudget.Cpu {
+				return m.budgetError(cost, "out of budget")
+			}
+		}
+		return nil
+	}
+
+	var (
+		size ExMem
+		err  error
+	)
+	if nodeCount {
+		size, err = dataNodeCountExMemChecked(d, check)
+	} else {
+		size, err = dataExMemChecked(d, check)
+	}
+	if err != nil {
+		return err
+	}
+	return m.costOneExMem(b, size)
+}
+
+func twoArgumentDiagonalNondecreasing(model TwoArgument) bool {
+	switch m := model.(type) {
+	case *ConstantCost:
+		return true
+	case *MinSizeModel:
+		return m.slope >= 0
+	case *LinearOnDiagonalModel:
+		return m.slope >= 0
+	default:
+		return false
+	}
+}
+
+func (m *Machine[T]) costEqualsData(
+	b *builtin.DefaultFunction,
+	x data.PlutusData,
+	y data.PlutusData,
+) error {
+	model := m.costs.builtinCosts[*b]
+	mem := model.mem.(TwoArgument)
+	cpu := model.cpu.(TwoArgument)
+	canBound := twoArgumentDiagonalNondecreasing(mem) &&
+		twoArgumentDiagonalNondecreasing(cpu)
+	check := func(size ExMem) error {
+		if m.activeContext != nil {
+			if err := m.activeContext.Err(); err != nil {
+				return err
+			}
+		}
+		if canBound {
+			cost := ExBudget{
+				Mem: mem.CostTwo(size, size),
+				Cpu: cpu.CostTwo(size, size),
+			}
+			if cost.Mem > m.ExBudget.Mem || cost.Cpu > m.ExBudget.Cpu {
+				return m.budgetError(cost, "out of budget")
+			}
+		}
+		return nil
+	}
+	size, err := equalsDataMinExMemChecked(x, y, check)
+	if err != nil {
+		return err
+	}
+	return m.CostTwoExMem(b, size, size)
+}
+
 func (m *Machine[T]) CostTwo(
 	b *builtin.DefaultFunction,
 	x, y func() ExMem,

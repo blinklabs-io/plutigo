@@ -204,6 +204,9 @@ func normalizeBuiltinError(fn string, err error) error {
 	if errors.As(err, &evalErr) {
 		return err
 	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
 	return &BuiltinError{
 		Code:    ErrCodeBuiltinFailure,
 		Builtin: fn,

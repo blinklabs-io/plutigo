@@ -2303,8 +2303,7 @@ func equalsData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	size := equalsDataMinExMem(arg1, arg2)
-	err = m.CostTwoExMem(&b.Func, size, size)
+	err = m.costEqualsData(&b.Func, arg1, arg2)
 	if err != nil {
 		return nil, err
 	}
@@ -2320,7 +2319,7 @@ func serialiseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	err = m.CostOne(&b.Func, dataExMem(arg1))
+	err = m.costDataOne(&b.Func, arg1, false)
 	if err != nil {
 		return nil, err
 	}
@@ -5191,7 +5190,7 @@ func unValueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	// Spend budget for unValueData (1 arg: data)
 	// Cost model uses quadratic_in_x with node count
-	if err := m.CostOne(&b.Func, dataNodeCountExMem(d)); err != nil {
+	if err := m.costDataOne(&b.Func, d, true); err != nil {
 		return nil, err
 	}
 
