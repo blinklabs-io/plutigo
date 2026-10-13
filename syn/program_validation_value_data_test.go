@@ -39,6 +39,9 @@ var valueDataPrograms = map[string]string{
 	"in list constant":  `(con (list data) [I 1, ` + valueData + `])`,
 	"in pair constant":  `(con (pair integer data) (1, ` + valueData + `))`,
 	"in array constant": `(con (array data) [` + valueData + `])`,
+	"in pair first":     `(con (pair data integer) (` + valueData + `, 1))`,
+	"nested list":       `(con (list (list data)) [[` + valueData + `]])`,
+	"in array of lists": `(con (array (list data)) [[I 1, ` + valueData + `]])`,
 	"in dead lambda":    `(lam x (con data (` + valueData + `)))`,
 }
 
@@ -144,6 +147,138 @@ func TestValidateProgramBoundsValueDataTraversal(t *testing.T) {
 		Term:    &Constant{Con: &Data{Inner: data.NewList(items...)}},
 	}
 	err := ValidateProgram(program, valueDataContext(lang.LanguageVersionV3))
+	if err == nil || !strings.Contains(err.Error(), "too many nodes") {
+		t.Fatalf("expected node limit error, got %v", err)
+	}
+}
+
+// valueDataV3 validates a single caller-constructed constant as a V3 program.
+func valueDataV3(con IConstant) error {
+	program := &Program[DeBruijn]{
+		Version: lang.LanguageVersion{1, 1, 0},
+		Term:    &Constant{Con: con},
+	}
+	return ValidateProgram(program, valueDataContext(lang.LanguageVersionV3))
+}
+
+func newValueData() *data.Value {
+	return &data.Value{Inner: data.NewMap(nil).(*data.Map)}
+}
+
+// TestValidateProgramRejectsValueDataInCallerConstants checks caller-built
+// constants the parser and decoder never produce: children that do not match
+// their container's declared type, and constants and data in value form
+// rather than pointer form. The Value must be found in each.
+func TestValidateProgramRejectsValueDataInCallerConstants(t *testing.T) {
+	integer := &Integer{Inner: big.NewInt(1)}
+	cases := map[string]IConstant{
+		"pair child under a declared integer pair": &ProtoList{
+			LTyp: &TPair{First: &TInteger{}, Second: &TInteger{}},
+			List: []IConstant{&ProtoPair{
+				FstType: &TInteger{},
+				SndType: &TInteger{},
+				First:   integer,
+				Second:  &Data{Inner: newValueData()},
+			}},
+		},
+		"data child under a declared integer list": &ProtoList{
+			LTyp: &TInteger{},
+			List: []IConstant{&Data{Inner: newValueData()}},
+		},
+		"data child under a declared integer array": &ProtoArray{
+			ATyp:  &TInteger{},
+			Array: []IConstant{&Data{Inner: newValueData()}},
+		},
+		"value-form Data":       Data{Inner: newValueData()},
+		"value-form data.Value": &Data{Inner: *newValueData()},
+		"value-form containers": ProtoList{
+			LTyp: &TData{},
+			List: []IConstant{ProtoPair{
+				FstType: &TData{},
+				SndType: &TData{},
+				First:   Data{Inner: data.List{Items: []data.PlutusData{data.Constr{Fields: []data.PlutusData{data.Map{Pairs: [][2]data.PlutusData{{data.Integer{}, *newValueData()}}}}}}}},
+				Second:  Data{Inner: data.Integer{}},
+			}},
+		},
+		"value-form array": ProtoArray{
+			ATyp:  &TData{},
+			Array: []IConstant{Data{Inner: newValueData()}},
+		},
+	}
+	for name, con := range cases {
+		t.Run(name, func(t *testing.T) {
+			err := valueDataV3(con)
+			if err == nil || !strings.Contains(err.Error(), "Value data is not available") {
+				t.Fatalf("expected Value data rejection, got %v", err)
+			}
+		})
+	}
+}
+
+// TestValidateProgramRejectsDeeplyNestedValueData nests a Value deeper than
+// the walk's inline frame stack, so the stack must grow and the Value must
+// still be found.
+func TestValidateProgramRejectsDeeplyNestedValueData(t *testing.T) {
+	var nested data.PlutusData = newValueData()
+	for range 40 {
+		nested = data.NewList(data.NewInteger(big.NewInt(0)), nested)
+	}
+	err := valueDataV3(&Data{Inner: nested})
+	if err == nil || !strings.Contains(err.Error(), "Value data is not available") {
+		t.Fatalf("expected Value data rejection, got %v", err)
+	}
+}
+
+// TestValidateProgramValueDataMatchesDecoderAccounting checks that the walk
+// charges what the decoders charge, so programs they accept stay valid: one
+// node per constant list item with pair fields free, and data counted per data
+// constant (each FLAT data blob has its own decode limit) rather than across
+// the program.
+func TestValidateProgramValueDataMatchesDecoderAccounting(t *testing.T) {
+	pairs := make([]IConstant, 400_000)
+	pair := &ProtoPair{
+		FstType: &TInteger{},
+		SndType: &TInteger{},
+		First:   &Integer{Inner: big.NewInt(1)},
+		Second:  &Integer{Inner: big.NewInt(2)},
+	}
+	for i := range pairs {
+		pairs[i] = pair
+	}
+	pairList := &ProtoList{
+		LTyp: &TPair{First: &TInteger{}, Second: &TInteger{}},
+		List: pairs,
+	}
+	if err := valueDataV3(pairList); err != nil {
+		t.Fatalf("list of 400,000 pairs rejected: %v", err)
+	}
+
+	item := data.NewInteger(big.NewInt(0))
+	items := make([]data.PlutusData, 600_000)
+	for i := range items {
+		items[i] = item
+	}
+	blob := &Data{Inner: data.NewList(items...)}
+	twoBlobs := &ProtoPair{
+		FstType: &TData{},
+		SndType: &TData{},
+		First:   blob,
+		Second:  blob,
+	}
+	if err := valueDataV3(twoBlobs); err != nil {
+		t.Fatalf("two data constants of 600,001 nodes each rejected: %v", err)
+	}
+}
+
+// TestValidateProgramBoundsConstantItems checks that constant list items are
+// charged program-wide against the node limit.
+func TestValidateProgramBoundsConstantItems(t *testing.T) {
+	integer := &Integer{Inner: big.NewInt(1)}
+	list := make([]IConstant, maxProgramNodes+1)
+	for i := range list {
+		list[i] = integer
+	}
+	err := valueDataV3(&ProtoList{LTyp: &TInteger{}, List: list})
 	if err == nil || !strings.Contains(err.Error(), "too many nodes") {
 		t.Fatalf("expected node limit error, got %v", err)
 	}
