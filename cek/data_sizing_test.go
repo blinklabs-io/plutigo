@@ -115,18 +115,18 @@ func TestDataSizingObservesRunContextCancellation(t *testing.T) {
 	}
 }
 
-func TestDataSizingDoesNotQueueWideChildrenBeforeStopping(t *testing.T) {
-	stop := errors.New("stop")
-	checks := 0
-	_, err := dataExMemChecked(oversizedDataList(100_000), func(ExMem) error {
-		checks++
-		return stop
-	})
-	if !errors.Is(err, stop) {
-		t.Fatalf("dataExMemChecked error = %v, want stop", err)
+func TestDataWalkerKeepsWideContainerStateBounded(t *testing.T) {
+	root := oversizedDataList(100_000)
+	walker := newPlutusDataWalker(root)
+	node, ok := walker.next()
+	if !ok || node != root {
+		t.Fatalf("first node = %T %v, want root list", node, ok)
 	}
-	if checks != 1 {
-		t.Fatalf("size checks = %d, want one root check", checks)
+	if len(walker.stack) != 1 {
+		t.Fatalf("pending frames = %d, want one root frame", len(walker.stack))
+	}
+	if walker.stack[0].next != 1 {
+		t.Fatalf("root child index = %d, want 1", walker.stack[0].next)
 	}
 }
 
