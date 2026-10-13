@@ -2724,6 +2724,43 @@ func TestTypedErrorsBuiltinValidation(t *testing.T) {
 		}
 	})
 
+	t.Run("integerToByteString/large_negative_input_is_metered_before_error", func(t *testing.T) {
+		m := newTestMachine()
+		m.ExBudget = ExBudget{}
+		b := newTestBuiltin(builtin.IntegerToByteString)
+		large := new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), 4096))
+
+		b = b.ApplyArg(&Constant{&syn.Bool{Inner: true}})
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: large}})
+
+		_, err := evalBuiltinWithError(t, m, b)
+		var budgetErr *BudgetError
+		if !errors.As(err, &budgetErr) {
+			t.Fatalf("expected cost failure before invalid-input error, got %T: %v", err, err)
+		}
+	})
+
+	t.Run("integerToByteString/large_negative_input_error_is_bounded", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.IntegerToByteString)
+		large := new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), 4096))
+
+		b = b.ApplyArg(&Constant{&syn.Bool{Inner: true}})
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: large}})
+
+		_, err := evalBuiltinWithError(t, m, b)
+		var builtinErr *BuiltinError
+		if !errors.As(err, &builtinErr) {
+			t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+		}
+		want := "negative input (sign=-1, bit length=4097)"
+		if builtinErr.Message != want {
+			t.Fatalf("message = %q, want %q", builtinErr.Message, want)
+		}
+	})
+
 	// integerToByteString: negative size (line ~2989)
 	t.Run("integerToByteString/negative_size", func(t *testing.T) {
 		m := newTestMachine()
@@ -2844,6 +2881,40 @@ func TestTypedErrorsBuiltinValidation(t *testing.T) {
 		}
 		if builtinErr.Code != ErrCodeInvalidArgument {
 			t.Fatalf("expected ErrCodeInvalidArgument, got %v", builtinErr.Code)
+		}
+	})
+
+	t.Run("replicateByte/cost_is_charged_before_invalid_byte_error", func(t *testing.T) {
+		m := newTestMachine()
+		m.ExBudget = ExBudget{}
+		b := newTestBuiltin(builtin.ReplicateByte)
+
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(256)}})
+
+		_, err := evalBuiltinWithError(t, m, b)
+		var budgetErr *BudgetError
+		if !errors.As(err, &budgetErr) {
+			t.Fatalf("expected cost failure before invalid-input error, got %T: %v", err, err)
+		}
+	})
+
+	t.Run("replicateByte/large_byte_value_error_is_bounded", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.ReplicateByte)
+		large := new(big.Int).Lsh(big.NewInt(1), 4096)
+
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: large}})
+
+		_, err := evalBuiltinWithError(t, m, b)
+		var builtinErr *BuiltinError
+		if !errors.As(err, &builtinErr) {
+			t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+		}
+		want := "byte value out of bounds (sign=1, bit length=4097; want 0-255)"
+		if builtinErr.Message != want {
+			t.Fatalf("message = %q, want %q", builtinErr.Message, want)
 		}
 	})
 
