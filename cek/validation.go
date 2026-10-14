@@ -17,6 +17,7 @@ package cek
 import (
 	"context"
 	"fmt"
+	"math/big"
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
@@ -72,6 +73,22 @@ func (b *structureValidationBudget) consume(kind string) error {
 	}
 	b.remaining--
 	return nil
+}
+
+func (b *structureValidationBudget) consumeScalarBytes(size int64) error {
+	if b.discharge == nil {
+		return nil
+	}
+	return b.discharge.consumeScalarBytes(size)
+}
+
+func integerMagnitudeBytes(value *big.Int) int64 {
+	bits := value.BitLen()
+	bytes := bits / 8
+	if bits%8 != 0 {
+		bytes++
+	}
+	return int64(bytes)
 }
 
 func scheduleValidationItem[T any](
@@ -231,13 +248,22 @@ func validateConstantStructureWithBudget(
 			if c == nil || c.Inner == nil {
 				return malformedASTError("constant contains a nil Integer")
 			}
+			if err := budget.consumeScalarBytes(integerMagnitudeBytes(c.Inner)); err != nil {
+				return err
+			}
 		case *syn.ByteString:
 			if c == nil {
 				return malformedASTError("constant contains a nil ByteString")
 			}
+			if err := budget.consumeScalarBytes(int64(len(c.Inner))); err != nil {
+				return err
+			}
 		case *syn.String:
 			if c == nil {
 				return malformedASTError("constant contains a nil String")
+			}
+			if err := budget.consumeScalarBytes(int64(len(c.Inner))); err != nil {
+				return err
 			}
 		case *syn.Unit:
 			if c == nil {
@@ -447,14 +473,26 @@ func validateDataStructureWithBudget(
 		switch d := item.value.(type) {
 		case *data.Constr, data.Constr:
 			var fields []data.PlutusData
+			var tag *big.Int
 			switch value := d.(type) {
 			case *data.Constr:
 				if value == nil {
 					return malformedASTError("constant contains a nil PlutusData constructor")
 				}
 				fields = value.Fields
+				if value.Tag != nil {
+					tag = value.Tag
+				}
 			case data.Constr:
 				fields = value.Fields
+				if value.Tag != nil {
+					tag = value.Tag
+				}
+			}
+			if tag != nil {
+				if err := budget.consumeScalarBytes(integerMagnitudeBytes(tag)); err != nil {
+					return err
+				}
 			}
 			for _, child := range fields {
 				if err := scheduleValidationItem(budget, "PlutusData", &work, dataValidationItem{value: child, depth: nextDepth}); err != nil {
@@ -500,15 +538,27 @@ func validateDataStructureWithBudget(
 			if d == nil || d.Inner == nil {
 				return malformedASTError("constant contains a nil PlutusData Integer")
 			}
+			if err := budget.consumeScalarBytes(integerMagnitudeBytes(d.Inner)); err != nil {
+				return err
+			}
 		case data.Integer:
 			if d.Inner == nil {
 				return malformedASTError("constant contains a nil PlutusData Integer")
+			}
+			if err := budget.consumeScalarBytes(integerMagnitudeBytes(d.Inner)); err != nil {
+				return err
 			}
 		case *data.ByteString:
 			if d == nil {
 				return malformedASTError("constant contains a nil PlutusData ByteString")
 			}
+			if err := budget.consumeScalarBytes(int64(len(d.Inner))); err != nil {
+				return err
+			}
 		case data.ByteString:
+			if err := budget.consumeScalarBytes(int64(len(d.Inner))); err != nil {
+				return err
+			}
 		case *data.List, data.List:
 			var items []data.PlutusData
 			switch value := d.(type) {

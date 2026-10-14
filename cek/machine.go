@@ -1920,8 +1920,14 @@ const maxDischargeDepth = 100_000
 // discharge, independently of evaluation budget.
 const maxDischargeWork = 1_000_000
 
+// maxDischargeScalarBytes bounds scalar storage copied into an independently
+// owned result. It is deliberately separate from the structural node limit:
+// repeated references to one caller-owned scalar are distinct result copies.
+const maxDischargeScalarBytes int64 = 64 << 20
+
 type dischargeWorkBudget struct {
-	remaining int
+	remaining   int
+	scalarBytes int64
 }
 
 func (b *dischargeWorkBudget) consume(work int) error {
@@ -1932,6 +1938,17 @@ func (b *dischargeWorkBudget) consume(work int) error {
 		return dischargeWorkLimitError()
 	}
 	b.remaining -= work
+	return nil
+}
+
+func (b *dischargeWorkBudget) consumeScalarBytes(size int64) error {
+	if b == nil {
+		return nil
+	}
+	if size < 0 || size > maxDischargeScalarBytes-b.scalarBytes {
+		return dischargeWorkLimitError()
+	}
+	b.scalarBytes += size
 	return nil
 }
 
