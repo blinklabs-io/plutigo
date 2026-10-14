@@ -69,6 +69,17 @@ func TestCloneConstantCopiesIntegerValue(t *testing.T) {
 	}
 }
 
+func TestCloneConstantRejectsNilInteger(t *testing.T) {
+	_, err := cloneConstant(&syn.Integer{})
+	var typeErr *TypeError
+	if !errors.As(err, &typeErr) {
+		t.Fatalf("cloneConstant error = %T %v, want TypeError", err, err)
+	}
+	if typeErr.Code != ErrCodeTypeMismatch {
+		t.Fatalf("error code = %d, want %d", typeErr.Code, ErrCodeTypeMismatch)
+	}
+}
+
 func TestCloneConstantRejectsMalformedConstant(t *testing.T) {
 	_, err := cloneConstant((*syn.String)(nil))
 	var typeErr *TypeError

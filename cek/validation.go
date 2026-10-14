@@ -47,6 +47,11 @@ type structureValidationBudget struct {
 	ctx               context.Context
 	checkCancellation bool
 	remaining         int
+	discharge         *dischargeWorkBudget
+	credits           int
+	// Machine-created materializations derive their types from values that
+	// were validated before evaluation.
+	skipConstantTypes bool
 }
 
 func (b *structureValidationBudget) consume(kind string) error {
@@ -58,7 +63,27 @@ func (b *structureValidationBudget) consume(kind string) error {
 	if b.remaining == 0 {
 		return malformedASTError("%s structure exceeds %d nodes", kind, maxDischargeWork)
 	}
+	if b.discharge != nil {
+		if b.credits > 0 {
+			b.credits--
+		} else if err := b.discharge.consume(1); err != nil {
+			return err
+		}
+	}
 	b.remaining--
+	return nil
+}
+
+func scheduleValidationItem[T any](
+	budget *structureValidationBudget,
+	kind string,
+	work *[]T,
+	item T,
+) error {
+	if err := budget.consume(kind); err != nil {
+		return err
+	}
+	*work = append(*work, item)
 	return nil
 }
 
@@ -74,19 +99,24 @@ func validateTermStructure[T syn.Eval](
 	checkCancellation bool,
 	term syn.Term[T],
 ) error {
-	work := []termValidationItem[T]{{term: term}}
 	budget := structureValidationBudget{
 		ctx:               ctx,
 		checkCancellation: checkCancellation,
 		remaining:         maxDischargeWork,
 	}
+	work := make([]termValidationItem[T], 0, 1)
+	if err := scheduleValidationItem(
+		&budget,
+		"term",
+		&work,
+		termValidationItem[T]{term: term},
+	); err != nil {
+		return err
+	}
 	for len(work) > 0 {
 		last := len(work) - 1
 		item := work[last]
 		work = work[:last]
-		if err := budget.consume("term"); err != nil {
-			return err
-		}
 		if item.depth > maxDischargeDepth {
 			return malformedASTError("term structure exceeds depth %d", maxDischargeDepth)
 		}
@@ -101,26 +131,33 @@ func validateTermStructure[T syn.Eval](
 			if t == nil {
 				return malformedASTError("term contains a nil delay")
 			}
-			work = append(work, termValidationItem[T]{term: t.Term, depth: nextDepth})
+			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Term, depth: nextDepth}); err != nil {
+				return err
+			}
 		case *syn.Force[T]:
 			if t == nil {
 				return malformedASTError("term contains a nil force")
 			}
-			work = append(work, termValidationItem[T]{term: t.Term, depth: nextDepth})
+			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Term, depth: nextDepth}); err != nil {
+				return err
+			}
 		case *syn.Lambda[T]:
 			if t == nil {
 				return malformedASTError("term contains a nil lambda")
 			}
-			work = append(work, termValidationItem[T]{term: t.Body, depth: nextDepth})
+			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Body, depth: nextDepth}); err != nil {
+				return err
+			}
 		case *syn.Apply[T]:
 			if t == nil {
 				return malformedASTError("term contains a nil application")
 			}
-			work = append(
-				work,
-				termValidationItem[T]{term: t.Function, depth: nextDepth},
-				termValidationItem[T]{term: t.Argument, depth: nextDepth},
-			)
+			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Function, depth: nextDepth}); err != nil {
+				return err
+			}
+			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Argument, depth: nextDepth}); err != nil {
+				return err
+			}
 		case *syn.Builtin:
 			if t == nil {
 				return malformedASTError("term contains a nil builtin")
@@ -133,15 +170,21 @@ func validateTermStructure[T syn.Eval](
 				return malformedASTError("term contains a nil constructor")
 			}
 			for _, field := range t.Fields {
-				work = append(work, termValidationItem[T]{term: field, depth: nextDepth})
+				if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: field, depth: nextDepth}); err != nil {
+					return err
+				}
 			}
 		case *syn.Case[T]:
 			if t == nil {
 				return malformedASTError("term contains a nil case")
 			}
-			work = append(work, termValidationItem[T]{term: t.Constr, depth: nextDepth})
+			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Constr, depth: nextDepth}); err != nil {
+				return err
+			}
 			for _, branch := range t.Branches {
-				work = append(work, termValidationItem[T]{term: branch, depth: nextDepth})
+				if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: branch, depth: nextDepth}); err != nil {
+					return err
+				}
 			}
 		case *syn.Error:
 			if t == nil {
@@ -165,14 +208,19 @@ func validateConstantStructureWithBudget(
 	constant syn.IConstant,
 	budget *structureValidationBudget,
 ) error {
-	work := []constantValidationItem{{constant: constant}}
+	work := make([]constantValidationItem, 0, 1)
+	if err := scheduleValidationItem(
+		budget,
+		"constant",
+		&work,
+		constantValidationItem{constant: constant},
+	); err != nil {
+		return err
+	}
 	for len(work) > 0 {
 		last := len(work) - 1
 		item := work[last]
 		work = work[:last]
-		if err := budget.consume("constant"); err != nil {
-			return err
-		}
 		if item.depth > maxDischargeDepth {
 			return malformedASTError("constant structure exceeds depth %d", maxDischargeDepth)
 		}
@@ -203,44 +251,57 @@ func validateConstantStructureWithBudget(
 			if c == nil {
 				return malformedASTError("constant contains a nil ProtoList")
 			}
-			if err := validateTypeStructureWithBudget(c.LTyp, budget); err != nil {
-				return err
+			if !budget.skipConstantTypes {
+				if err := validateTypeStructureWithBudget(c.LTyp, budget); err != nil {
+					return err
+				}
 			}
 			for _, child := range c.List {
-				work = append(work, constantValidationItem{constant: child, depth: nextDepth})
+				if err := scheduleValidationItem(budget, "constant", &work, constantValidationItem{constant: child, depth: nextDepth}); err != nil {
+					return err
+				}
 			}
 		case *syn.ProtoArray:
 			if c == nil {
 				return malformedASTError("constant contains a nil ProtoArray")
 			}
-			if err := validateTypeStructureWithBudget(c.ATyp, budget); err != nil {
-				return err
+			if !budget.skipConstantTypes {
+				if err := validateTypeStructureWithBudget(c.ATyp, budget); err != nil {
+					return err
+				}
 			}
 			for _, child := range c.Array {
-				work = append(work, constantValidationItem{constant: child, depth: nextDepth})
+				if err := scheduleValidationItem(budget, "constant", &work, constantValidationItem{constant: child, depth: nextDepth}); err != nil {
+					return err
+				}
 			}
 		case *syn.Value:
 			if c == nil {
 				return malformedASTError("constant contains a nil Value")
 			}
 			for _, child := range c.Entries {
-				work = append(work, constantValidationItem{constant: child, depth: nextDepth})
+				if err := scheduleValidationItem(budget, "constant", &work, constantValidationItem{constant: child, depth: nextDepth}); err != nil {
+					return err
+				}
 			}
 		case *syn.ProtoPair:
 			if c == nil {
 				return malformedASTError("constant contains a nil ProtoPair")
 			}
-			if err := validateTypeStructureWithBudget(c.FstType, budget); err != nil {
+			if !budget.skipConstantTypes {
+				if err := validateTypeStructureWithBudget(c.FstType, budget); err != nil {
+					return err
+				}
+				if err := validateTypeStructureWithBudget(c.SndType, budget); err != nil {
+					return err
+				}
+			}
+			if err := scheduleValidationItem(budget, "constant", &work, constantValidationItem{constant: c.First, depth: nextDepth}); err != nil {
 				return err
 			}
-			if err := validateTypeStructureWithBudget(c.SndType, budget); err != nil {
+			if err := scheduleValidationItem(budget, "constant", &work, constantValidationItem{constant: c.Second, depth: nextDepth}); err != nil {
 				return err
 			}
-			work = append(
-				work,
-				constantValidationItem{constant: c.First, depth: nextDepth},
-				constantValidationItem{constant: c.Second, depth: nextDepth},
-			)
 		case *syn.Data:
 			if c == nil {
 				return malformedASTError("constant contains a nil Data")
@@ -271,14 +332,19 @@ func validateTypeStructureWithBudget(
 	value syn.Typ,
 	budget *structureValidationBudget,
 ) error {
-	work := []typeValidationItem{{value: value}}
+	work := make([]typeValidationItem, 0, 1)
+	if err := scheduleValidationItem(
+		budget,
+		"constant type",
+		&work,
+		typeValidationItem{value: value},
+	); err != nil {
+		return err
+	}
 	for len(work) > 0 {
 		last := len(work) - 1
 		item := work[last]
 		work = work[:last]
-		if err := budget.consume("constant type"); err != nil {
-			return err
-		}
 		if item.depth > maxDischargeDepth {
 			return malformedASTError("constant type structure exceeds depth %d", maxDischargeDepth)
 		}
@@ -329,21 +395,26 @@ func validateTypeStructureWithBudget(
 			if typ == nil {
 				return malformedASTError("constant contains a nil List type")
 			}
-			work = append(work, typeValidationItem{value: typ.Typ, depth: nextDepth})
+			if err := scheduleValidationItem(budget, "constant type", &work, typeValidationItem{value: typ.Typ, depth: nextDepth}); err != nil {
+				return err
+			}
 		case *syn.TArray:
 			if typ == nil {
 				return malformedASTError("constant contains a nil Array type")
 			}
-			work = append(work, typeValidationItem{value: typ.Typ, depth: nextDepth})
+			if err := scheduleValidationItem(budget, "constant type", &work, typeValidationItem{value: typ.Typ, depth: nextDepth}); err != nil {
+				return err
+			}
 		case *syn.TPair:
 			if typ == nil {
 				return malformedASTError("constant contains a nil Pair type")
 			}
-			work = append(
-				work,
-				typeValidationItem{value: typ.First, depth: nextDepth},
-				typeValidationItem{value: typ.Second, depth: nextDepth},
-			)
+			if err := scheduleValidationItem(budget, "constant type", &work, typeValidationItem{value: typ.First, depth: nextDepth}); err != nil {
+				return err
+			}
+			if err := scheduleValidationItem(budget, "constant type", &work, typeValidationItem{value: typ.Second, depth: nextDepth}); err != nil {
+				return err
+			}
 		default:
 			return malformedASTError("unsupported constant type metadata %T", item.value)
 		}
@@ -351,71 +422,108 @@ func validateTypeStructureWithBudget(
 	return nil
 }
 
-func validateDataStructure(value data.PlutusData) error {
-	budget := structureValidationBudget{
-		ctx:       context.Background(),
-		remaining: maxDischargeWork,
-	}
-	return validateDataStructureWithBudget(value, &budget)
-}
-
 func validateDataStructureWithBudget(
 	value data.PlutusData,
 	budget *structureValidationBudget,
 ) error {
-	work := []dataValidationItem{{value: value}}
+	work := make([]dataValidationItem, 0, 1)
+	if err := scheduleValidationItem(
+		budget,
+		"PlutusData",
+		&work,
+		dataValidationItem{value: value},
+	); err != nil {
+		return err
+	}
 	for len(work) > 0 {
 		last := len(work) - 1
 		item := work[last]
 		work = work[:last]
-		if err := budget.consume("PlutusData"); err != nil {
-			return err
-		}
 		if item.depth > maxDischargeDepth {
 			return malformedASTError("PlutusData structure exceeds depth %d", maxDischargeDepth)
 		}
 
 		nextDepth := item.depth + 1
 		switch d := item.value.(type) {
-		case *data.Constr:
-			if d == nil {
-				return malformedASTError("constant contains a nil PlutusData constructor")
+		case *data.Constr, data.Constr:
+			var fields []data.PlutusData
+			switch value := d.(type) {
+			case *data.Constr:
+				if value == nil {
+					return malformedASTError("constant contains a nil PlutusData constructor")
+				}
+				fields = value.Fields
+			case data.Constr:
+				fields = value.Fields
 			}
-			for _, child := range d.Fields {
-				work = append(work, dataValidationItem{value: child, depth: nextDepth})
+			for _, child := range fields {
+				if err := scheduleValidationItem(budget, "PlutusData", &work, dataValidationItem{value: child, depth: nextDepth}); err != nil {
+					return err
+				}
 			}
-		case *data.Map:
-			if d == nil {
-				return malformedASTError("constant contains a nil PlutusData map")
+		case *data.Map, data.Map:
+			var pairs [][2]data.PlutusData
+			switch value := d.(type) {
+			case *data.Map:
+				if value == nil {
+					return malformedASTError("constant contains a nil PlutusData map")
+				}
+				pairs = value.Pairs
+			case data.Map:
+				pairs = value.Pairs
 			}
-			for _, pair := range d.Pairs {
-				work = append(
-					work,
-					dataValidationItem{value: pair[0], depth: nextDepth},
-					dataValidationItem{value: pair[1], depth: nextDepth},
-				)
+			for _, pair := range pairs {
+				if err := scheduleValidationItem(budget, "PlutusData", &work, dataValidationItem{value: pair[0], depth: nextDepth}); err != nil {
+					return err
+				}
+				if err := scheduleValidationItem(budget, "PlutusData", &work, dataValidationItem{value: pair[1], depth: nextDepth}); err != nil {
+					return err
+				}
 			}
-		case *data.Value:
-			if d == nil {
-				return malformedASTError("constant contains a nil PlutusData Value")
+		case *data.Value, data.Value:
+			var inner *data.Map
+			switch value := d.(type) {
+			case *data.Value:
+				if value == nil {
+					return malformedASTError("constant contains a nil PlutusData Value")
+				}
+				inner = value.Inner
+			case data.Value:
+				inner = value.Inner
 			}
-			if d.Inner != nil {
-				work = append(work, dataValidationItem{value: d.Inner, depth: nextDepth})
+			if inner != nil {
+				if err := scheduleValidationItem(budget, "PlutusData", &work, dataValidationItem{value: inner, depth: nextDepth}); err != nil {
+					return err
+				}
 			}
 		case *data.Integer:
 			if d == nil || d.Inner == nil {
+				return malformedASTError("constant contains a nil PlutusData Integer")
+			}
+		case data.Integer:
+			if d.Inner == nil {
 				return malformedASTError("constant contains a nil PlutusData Integer")
 			}
 		case *data.ByteString:
 			if d == nil {
 				return malformedASTError("constant contains a nil PlutusData ByteString")
 			}
-		case *data.List:
-			if d == nil {
-				return malformedASTError("constant contains a nil PlutusData list")
+		case data.ByteString:
+		case *data.List, data.List:
+			var items []data.PlutusData
+			switch value := d.(type) {
+			case *data.List:
+				if value == nil {
+					return malformedASTError("constant contains a nil PlutusData list")
+				}
+				items = value.Items
+			case data.List:
+				items = value.Items
 			}
-			for _, child := range d.Items {
-				work = append(work, dataValidationItem{value: child, depth: nextDepth})
+			for _, child := range items {
+				if err := scheduleValidationItem(budget, "PlutusData", &work, dataValidationItem{value: child, depth: nextDepth}); err != nil {
+					return err
+				}
 			}
 		default:
 			return malformedASTError("unsupported PlutusData type %T", item.value)

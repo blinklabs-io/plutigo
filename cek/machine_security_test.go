@@ -94,6 +94,55 @@ func TestDischargePairChargesEachValueOnce(t *testing.T) {
 	}
 }
 
+func TestDischargeSharesConstantCloneWorkBudget(t *testing.T) {
+	items := []syn.IConstant{
+		&syn.Integer{Inner: big.NewInt(1)},
+		&syn.Integer{Inner: big.NewInt(2)},
+		&syn.Integer{Inner: big.NewInt(3)},
+	}
+	constant := &Constant{Constant: &syn.ProtoList{
+		LTyp: &syn.TInteger{},
+		List: items,
+	}}
+	result := &Constr[syn.DeBruijn]{
+		Fields: []Value[syn.DeBruijn]{constant, constant},
+	}
+	budget := dischargeWorkBudget{remaining: 8}
+
+	_, err := dischargeValueDepth[syn.DeBruijn](
+		context.Background(),
+		false,
+		result,
+		&budget,
+		0,
+	)
+	var budgetErr *BudgetError
+	if !errors.As(err, &budgetErr) {
+		t.Fatalf("discharge duplicated composite constant error = %T %v, want BudgetError", err, err)
+	}
+}
+
+func TestDischargeSharesConstantTypeValidationBudget(t *testing.T) {
+	constantType := &syn.TList{Typ: &syn.TList{Typ: &syn.TInteger{}}}
+	constant := &Constant{Constant: &syn.ProtoList{LTyp: constantType}}
+	result := &Constr[syn.DeBruijn]{
+		Fields: []Value[syn.DeBruijn]{constant, constant},
+	}
+	budget := dischargeWorkBudget{remaining: 8}
+
+	_, err := dischargeValueDepth[syn.DeBruijn](
+		context.Background(),
+		false,
+		result,
+		&budget,
+		0,
+	)
+	var budgetErr *BudgetError
+	if !errors.As(err, &budgetErr) {
+		t.Fatalf("discharge duplicated constant type error = %T %v, want BudgetError", err, err)
+	}
+}
+
 // A delayed term can capture a small shared value graph whose discharged tree
 // is exponentially larger. Bound total work as well as recursion depth.
 func TestDischargeValueBoundsCapturedExpansion(t *testing.T) {

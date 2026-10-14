@@ -187,3 +187,35 @@ func TestRunMethodsPreserveValidASTSemantics(t *testing.T) {
 		})
 	}
 }
+
+func TestRunAcceptsValueFormPlutusData(t *testing.T) {
+	tests := []struct {
+		name string
+		data data.PlutusData
+	}{
+		{name: "constructor", data: data.Constr{Tag: big.NewInt(0)}},
+		{name: "map", data: data.Map{}},
+		{name: "value", data: data.Value{Inner: &data.Map{}}},
+		{name: "integer", data: data.Integer{Inner: big.NewInt(1)}},
+		{name: "byte string", data: data.ByteString{Inner: []byte{1}}},
+		{name: "list", data: data.List{}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result, err := newTestMachineFlow().Run(
+				&syn.Constant{Con: &syn.Data{Inner: test.data}},
+			)
+			if err != nil {
+				t.Fatalf("Run() returned error for value-form PlutusData: %v", err)
+			}
+			constant, ok := result.(*syn.Constant)
+			if !ok {
+				t.Fatalf("Run() result = %T, want *syn.Constant", result)
+			}
+			if _, ok := constant.Con.(*syn.Data); !ok {
+				t.Fatalf("Run() constant = %T, want *syn.Data", constant.Con)
+			}
+		})
+	}
+}

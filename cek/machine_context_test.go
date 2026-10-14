@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 )
@@ -98,6 +99,81 @@ func TestRunContextStopsDuringTermValidation(t *testing.T) {
 	}
 	if machine.ExBudget != initial {
 		t.Fatalf("RunContext() spent budget during term validation")
+	}
+}
+
+func TestDischargeStopsDuringConstantClone(t *testing.T) {
+	items := make([]syn.IConstant, 64)
+	for i := range items {
+		items[i] = &syn.Integer{Inner: big.NewInt(int64(i))}
+	}
+	ctx := &cancelAfterChecksContext{limit: 3, done: make(chan struct{})}
+
+	_, err := dischargeValueContext[syn.DeBruijn](
+		ctx,
+		true,
+		&Constant{Constant: &syn.ProtoList{
+			LTyp: &syn.TInteger{},
+			List: items,
+		}},
+	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("dischargeValueContext() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestDischargeStopsDuringPlutusDataClone(t *testing.T) {
+	items := make([]data.PlutusData, 64)
+	for i := range items {
+		items[i] = &data.Integer{Inner: big.NewInt(int64(i))}
+	}
+	ctx := &cancelAfterChecksContext{limit: 70, done: make(chan struct{})}
+
+	_, err := dischargeValueContext[syn.DeBruijn](
+		ctx,
+		true,
+		&Constant{Constant: &syn.Data{Inner: &data.List{Items: items}}},
+	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("dischargeValueContext() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestDischargeStopsDuringByteStringClone(t *testing.T) {
+	tests := []struct {
+		name     string
+		constant syn.IConstant
+		limit    int
+	}{
+		{
+			name:     "constant",
+			constant: &syn.ByteString{Inner: make([]byte, 1024*1024)},
+			limit:    7,
+		},
+		{
+			name: "PlutusData",
+			constant: &syn.Data{Inner: &data.ByteString{
+				Inner: make([]byte, 1024*1024),
+			}},
+			limit: 10,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := &cancelAfterChecksContext{
+				limit: test.limit,
+				done:  make(chan struct{}),
+			}
+			_, err := dischargeValueContext[syn.DeBruijn](
+				ctx,
+				true,
+				&Constant{Constant: test.constant},
+			)
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("dischargeValueContext() error = %v, want context.Canceled", err)
+			}
+		})
 	}
 }
 

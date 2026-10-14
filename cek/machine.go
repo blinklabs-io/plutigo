@@ -1986,20 +1986,42 @@ func dischargeValueDepth[T syn.Eval](
 
 	switch v := value.(type) {
 	case *Constant:
-		return constantTerm[T](v.Constant)
+		return constantTermContext[T](ctx, checkCancellation, v.Constant, budget, 1, false)
 	case *dataValue[T]:
-		return constantTerm[T](&syn.Data{Inner: v.item})
+		return constantTermContext[T](
+			ctx,
+			checkCancellation,
+			&syn.Data{Inner: v.item},
+			budget,
+			1,
+			false,
+		)
 	case *dataListValue[T]:
 		if err := budget.consume(len(v.items)); err != nil {
 			return nil, err
 		}
-		return constantTerm[T](materializeDataListConstant(v.items))
+		return constantTermContext[T](
+			ctx,
+			checkCancellation,
+			materializeDataListConstant(v.items),
+			budget,
+			1+len(v.items),
+			true,
+		)
 	case *dataMapValue[T]:
 		if err := budget.consume(len(v.items)); err != nil {
 			return nil, err
 		}
-		return constantTerm[T](materializeDataMapConstant(v.items))
+		return constantTermContext[T](
+			ctx,
+			checkCancellation,
+			materializeDataMapConstant(v.items),
+			budget,
+			1+len(v.items),
+			true,
+		)
 	case *pairValue[T]:
+		remainingBeforeMaterialize := budget.remaining
 		constant, ok, err := materializeConstantValueDepthWithBudget[T](
 			v,
 			depth,
@@ -2015,7 +2037,14 @@ func dischargeValueDepth[T syn.Eval](
 				Message: fmt.Sprintf("cannot discharge non-constant pair value: %T", v),
 			}
 		}
-		return constantTerm[T](constant)
+		return constantTermContext[T](
+			ctx,
+			checkCancellation,
+			constant,
+			budget,
+			remainingBeforeMaterialize-budget.remaining,
+			true,
+		)
 	case *Builtin[T]:
 		// Reconstruct the term that represents this builtin application
 		var forcedTerm syn.Term[T]
