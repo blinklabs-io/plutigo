@@ -117,7 +117,7 @@ func TestRunCaseMatchesEvaluationFailure(t *testing.T) {
 	}
 }
 
-func TestEvaluateRecoversMachinePanic(t *testing.T) {
+func TestEvaluateRejectsMalformedMachineTerm(t *testing.T) {
 	replayCase := baseCase(t, &syn.Error{}, nil)
 	decoded, err := replayCase.validate()
 	if err != nil {
@@ -132,11 +132,25 @@ func TestEvaluateRecoversMachinePanic(t *testing.T) {
 	if actual.SetupError {
 		t.Fatalf("evaluate() reported setup error: %s", actual.Error)
 	}
-	if !strings.Contains(actual.Error, "panic during script evaluation") {
-		t.Fatalf("evaluate() error = %q, want recovered panic", actual.Error)
+	if !strings.Contains(actual.Error, "term contains a nil application") {
+		t.Fatalf("evaluate() error = %q, want malformed-term error", actual.Error)
 	}
-	if actual.ExUnits == (ExUnits{}) {
-		t.Fatal("evaluate() did not preserve consumed execution units")
+	if actual.ErrorCode == nil || *actual.ErrorCode != cek.ErrCodeTypeMismatch {
+		t.Fatalf("evaluate() error code = %v, want %d", actual.ErrorCode, cek.ErrCodeTypeMismatch)
+	}
+	if actual.ExUnits != (ExUnits{}) {
+		t.Fatalf("evaluate() consumed units = %+v before rejecting malformed term", actual.ExUnits)
+	}
+}
+
+func TestRunMachineRecoversUnexpectedPanic(t *testing.T) {
+	err := runMachine(
+		context.Background(),
+		nil,
+		&syn.Constant{Con: &syn.Integer{Inner: big.NewInt(1)}},
+	)
+	if err == nil || !strings.Contains(err.Error(), "panic during script evaluation") {
+		t.Fatalf("runMachine() error = %v, want recovered panic", err)
 	}
 }
 

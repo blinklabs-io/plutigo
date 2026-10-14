@@ -1056,6 +1056,9 @@ func (m *Machine[T]) runContext(
 	checkCancellation bool,
 	term syn.Term[T],
 ) (syn.Term[T], error) {
+	if err := validateTermStructure[T](ctx, checkCancellation, term); err != nil {
+		return nil, err
+	}
 	firstRun := !m.hasRun
 	if m.hasRun {
 		if m.valueArenaChunkSize <= 0 {
@@ -1983,19 +1986,19 @@ func dischargeValueDepth[T syn.Eval](
 
 	switch v := value.(type) {
 	case *Constant:
-		return constantTerm[T](v.Constant), nil
+		return constantTerm[T](v.Constant)
 	case *dataValue[T]:
-		return constantTerm[T](&syn.Data{Inner: v.item}), nil
+		return constantTerm[T](&syn.Data{Inner: v.item})
 	case *dataListValue[T]:
 		if err := budget.consume(len(v.items)); err != nil {
 			return nil, err
 		}
-		return constantTerm[T](materializeDataListConstant(v.items)), nil
+		return constantTerm[T](materializeDataListConstant(v.items))
 	case *dataMapValue[T]:
 		if err := budget.consume(len(v.items)); err != nil {
 			return nil, err
 		}
-		return constantTerm[T](materializeDataMapConstant(v.items)), nil
+		return constantTerm[T](materializeDataMapConstant(v.items))
 	case *pairValue[T]:
 		constant, ok, err := materializeConstantValueDepthWithBudget[T](
 			v,
@@ -2012,7 +2015,7 @@ func dischargeValueDepth[T syn.Eval](
 				Message: fmt.Sprintf("cannot discharge non-constant pair value: %T", v),
 			}
 		}
-		return constantTerm[T](constant), nil
+		return constantTerm[T](constant)
 	case *Builtin[T]:
 		// Reconstruct the term that represents this builtin application
 		var forcedTerm syn.Term[T]

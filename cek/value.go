@@ -139,8 +139,12 @@ func machineConstantValue[T syn.Eval](m *Machine[T], constant syn.IConstant) Val
 	return m.allocConstant(constant)
 }
 
-func constantTerm[T syn.Eval](constant syn.IConstant) syn.Term[T] {
-	return &syn.Constant{Con: cloneConstant(constant)}
+func constantTerm[T syn.Eval](constant syn.IConstant) (syn.Term[T], error) {
+	cloned, err := cloneConstant(constant)
+	if err != nil {
+		return nil, err
+	}
+	return &syn.Constant{Con: cloned}, nil
 }
 
 func (c Constant) String() string {
@@ -345,77 +349,126 @@ func materializeConstantValueDepthWithBudget[T syn.Eval](
 	}
 }
 
-func cloneConstant(constant syn.IConstant) syn.IConstant {
+func cloneConstant(constant syn.IConstant) (syn.IConstant, error) {
 	switch c := constant.(type) {
 	case *syn.Integer:
-		ret := &syn.Integer{}
-		if c.Inner == nil {
-			ret.SetInner(nil)
-			return ret
+		if c == nil || c.Inner == nil {
+			return nil, malformedASTError("cannot clone a nil Integer constant")
 		}
+		ret := &syn.Integer{}
 		ret.SetInner(new(big.Int).Set(c.Inner))
-		return ret
+		return ret, nil
 	case *syn.ByteString:
-		return &syn.ByteString{Inner: bytes.Clone(c.Inner)}
+		if c == nil {
+			return nil, malformedASTError("cannot clone a nil ByteString constant")
+		}
+		return &syn.ByteString{Inner: bytes.Clone(c.Inner)}, nil
 	case *syn.String:
-		return &syn.String{Inner: c.Inner}
+		if c == nil {
+			return nil, malformedASTError("cannot clone a nil String constant")
+		}
+		return &syn.String{Inner: c.Inner}, nil
 	case *syn.Unit:
-		return &syn.Unit{}
+		if c == nil {
+			return nil, malformedASTError("cannot clone a nil Unit constant")
+		}
+		return &syn.Unit{}, nil
 	case *syn.Bool:
-		return &syn.Bool{Inner: c.Inner}
+		if c == nil {
+			return nil, malformedASTError("cannot clone a nil Bool constant")
+		}
+		return &syn.Bool{Inner: c.Inner}, nil
 	case *syn.ProtoList:
+		if c == nil {
+			return nil, malformedASTError("cannot clone a nil ProtoList constant")
+		}
 		items := make([]syn.IConstant, len(c.List))
 		for i := range c.List {
-			items[i] = cloneConstant(c.List[i])
+			var err error
+			items[i], err = cloneConstant(c.List[i])
+			if err != nil {
+				return nil, err
+			}
 		}
 		return &syn.ProtoList{
 			LTyp: c.LTyp,
 			List: items,
-		}
+		}, nil
 	case *syn.ProtoArray:
+		if c == nil {
+			return nil, malformedASTError("cannot clone a nil ProtoArray constant")
+		}
 		items := make([]syn.IConstant, len(c.Array))
 		for i := range c.Array {
-			items[i] = cloneConstant(c.Array[i])
+			var err error
+			items[i], err = cloneConstant(c.Array[i])
+			if err != nil {
+				return nil, err
+			}
 		}
 		return &syn.ProtoArray{
 			ATyp:  c.ATyp,
 			Array: items,
-		}
+		}, nil
 	case *syn.Value:
+		if c == nil {
+			return nil, malformedASTError("cannot clone a nil Value constant")
+		}
 		entries := make([]syn.IConstant, len(c.Entries))
 		for i := range c.Entries {
-			entries[i] = cloneConstant(c.Entries[i])
+			var err error
+			entries[i], err = cloneConstant(c.Entries[i])
+			if err != nil {
+				return nil, err
+			}
 		}
-		return &syn.Value{Entries: entries}
+		return &syn.Value{Entries: entries}, nil
 	case *syn.ProtoPair:
+		if c == nil {
+			return nil, malformedASTError("cannot clone a nil ProtoPair constant")
+		}
+		first, err := cloneConstant(c.First)
+		if err != nil {
+			return nil, err
+		}
+		second, err := cloneConstant(c.Second)
+		if err != nil {
+			return nil, err
+		}
 		return &syn.ProtoPair{
 			FstType: c.FstType,
 			SndType: c.SndType,
-			First:   cloneConstant(c.First),
-			Second:  cloneConstant(c.Second),
-		}
+			First:   first,
+			Second:  second,
+		}, nil
 	case *syn.Data:
-		return &syn.Data{Inner: c.Inner.Clone()}
+		if c == nil {
+			return nil, malformedASTError("cannot clone a nil Data constant")
+		}
+		if err := validateDataStructure(c.Inner); err != nil {
+			return nil, err
+		}
+		return &syn.Data{Inner: c.Inner.Clone()}, nil
 	case *syn.Bls12_381G1Element:
-		if c.Inner == nil {
-			return &syn.Bls12_381G1Element{}
+		if c == nil || c.Inner == nil {
+			return nil, malformedASTError("cannot clone a nil BLS G1 constant")
 		}
 		tmp := *c.Inner
-		return &syn.Bls12_381G1Element{Inner: &tmp}
+		return &syn.Bls12_381G1Element{Inner: &tmp}, nil
 	case *syn.Bls12_381G2Element:
-		if c.Inner == nil {
-			return &syn.Bls12_381G2Element{}
+		if c == nil || c.Inner == nil {
+			return nil, malformedASTError("cannot clone a nil BLS G2 constant")
 		}
 		tmp := *c.Inner
-		return &syn.Bls12_381G2Element{Inner: &tmp}
+		return &syn.Bls12_381G2Element{Inner: &tmp}, nil
 	case *syn.Bls12_381MlResult:
-		if c.Inner == nil {
-			return &syn.Bls12_381MlResult{}
+		if c == nil || c.Inner == nil {
+			return nil, malformedASTError("cannot clone a nil BLS Miller loop constant")
 		}
 		tmp := *c.Inner
-		return &syn.Bls12_381MlResult{Inner: &tmp}
+		return &syn.Bls12_381MlResult{Inner: &tmp}, nil
 	default:
-		panic(fmt.Sprintf("unsupported constant type: %T", constant))
+		return nil, malformedASTError("unsupported constant type %T", constant)
 	}
 }
 

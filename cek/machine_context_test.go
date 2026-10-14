@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"math/big"
 	"testing"
 	"time"
 
@@ -76,6 +77,27 @@ func TestRunContextStopsOnCancellation(t *testing.T) {
 			machine.lastRunEnvHighWatermark,
 			maxEnvironments,
 		)
+	}
+}
+
+func TestRunContextStopsDuringTermValidation(t *testing.T) {
+	machine := NewMachine[syn.DeBruijn](
+		lang.LanguageVersionV1,
+		200,
+		testEvalContext(),
+	)
+	initial := machine.ExBudget
+	ctx := &cancelAfterChecksContext{limit: 2, done: make(chan struct{})}
+
+	_, err := machine.RunContext(
+		ctx,
+		&syn.Constant{Con: &syn.Integer{Inner: big.NewInt(1)}},
+	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("RunContext() error = %v, want context.Canceled", err)
+	}
+	if machine.ExBudget != initial {
+		t.Fatalf("RunContext() spent budget during term validation")
 	}
 }
 
