@@ -23,6 +23,7 @@ import (
 	"math"
 	"math/big"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -2960,6 +2961,39 @@ func TestTypedErrorsBuiltinValidation(t *testing.T) {
 		}
 		if builtinErr.Code != ErrCodeInvalidArgument {
 			t.Fatalf("expected ErrCodeInvalidArgument, got %v", builtinErr.Code)
+		}
+	})
+
+	t.Run("expModInteger/large_invalid_integer_errors_are_bounded", func(t *testing.T) {
+		large := new(big.Int).Lsh(big.NewInt(1), 4096)
+		for _, tt := range []struct {
+			name string
+			base *big.Int
+			exp  *big.Int
+			mod  *big.Int
+		}{
+			{name: "zero base", base: big.NewInt(0), exp: new(big.Int).Neg(large), mod: big.NewInt(5)},
+			{name: "non-invertible", base: new(big.Int).Lsh(big.NewInt(1), 4096), exp: big.NewInt(-1), mod: new(big.Int).Lsh(big.NewInt(1), 4000)},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				m := newTestMachine()
+				b := newTestBuiltin(builtin.ExpModInteger)
+				b = b.ApplyArg(&Constant{&syn.Integer{Inner: tt.base}})
+				b = b.ApplyArg(&Constant{&syn.Integer{Inner: tt.exp}})
+				b = b.ApplyArg(&Constant{&syn.Integer{Inner: tt.mod}})
+
+				_, err := evalBuiltinWithError(t, m, b)
+				var builtinErr *BuiltinError
+				if !errors.As(err, &builtinErr) {
+					t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+				}
+				if len(builtinErr.Message) > 160 {
+					t.Fatalf("error message is not bounded (%d bytes): %q", len(builtinErr.Message), builtinErr.Message)
+				}
+				if !strings.Contains(builtinErr.Message, "bit length=") {
+					t.Fatalf("error message lacks bounded integer metadata: %q", builtinErr.Message)
+				}
+			})
 		}
 	})
 }

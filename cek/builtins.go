@@ -4165,7 +4165,7 @@ func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
 			Builtin: "expModInteger",
-			Message: fmt.Sprintf("0^%s is undefined", e.String()),
+			Message: fmt.Sprintf("0^negative exponent (%s) is undefined", integerMetadata(e)),
 		}
 
 	default:
@@ -4182,10 +4182,10 @@ func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 				Code:    ErrCodeInvalidArgument,
 				Builtin: "expModInteger",
 				Message: fmt.Sprintf(
-					"%s is not invertible modulo %s (gcd = %s)",
-					bb.String(),
-					mm.String(),
-					gcd.String(),
+					"base (%s) is not invertible modulo modulus (%s) (gcd = %s)",
+					integerMetadata(bb),
+					integerMetadata(mm),
+					integerMetadata(gcd),
 				),
 			}
 		}
