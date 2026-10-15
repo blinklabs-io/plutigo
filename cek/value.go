@@ -16,6 +16,7 @@ package cek
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math/big"
 	"sync"
@@ -139,8 +140,35 @@ func machineConstantValue[T syn.Eval](m *Machine[T], constant syn.IConstant) Val
 	return m.allocConstant(constant)
 }
 
-func constantTerm[T syn.Eval](constant syn.IConstant) syn.Term[T] {
-	return &syn.Constant{Con: cloneConstant(constant)}
+func constantTermContext[T syn.Eval](
+	ctx context.Context,
+	checkCancellation bool,
+	constant syn.IConstant,
+	dischargeBudget *dischargeWorkBudget,
+	credits int,
+	trustedTypes bool,
+) (syn.Term[T], error) {
+	validationBudget := structureValidationBudget{
+		ctx:               ctx,
+		checkCancellation: checkCancellation,
+		remaining:         maxDischargeWork,
+		discharge:         dischargeBudget,
+		credits:           credits,
+		skipConstantTypes: trustedTypes,
+	}
+	if err := validateConstantStructureWithBudget(constant, &validationBudget); err != nil {
+		return nil, err
+	}
+	cloned, err := cloneConstantContext(
+		ctx,
+		checkCancellation,
+		constant,
+		0,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &syn.Constant{Con: cloned}, nil
 }
 
 func (c Constant) String() string {
@@ -345,78 +373,229 @@ func materializeConstantValueDepthWithBudget[T syn.Eval](
 	}
 }
 
-func cloneConstant(constant syn.IConstant) syn.IConstant {
+func cloneConstant(constant syn.IConstant) (syn.IConstant, error) {
+	validationBudget := structureValidationBudget{
+		ctx:       context.Background(),
+		remaining: maxDischargeWork,
+	}
+	if err := validateConstantStructureWithBudget(constant, &validationBudget); err != nil {
+		return nil, err
+	}
+	return cloneConstantContext(
+		context.Background(),
+		false,
+		constant,
+		0,
+	)
+}
+
+func cloneConstantContext(
+	ctx context.Context,
+	checkCancellation bool,
+	constant syn.IConstant,
+	depth int,
+) (syn.IConstant, error) {
+	if checkCancellation {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+	}
+	if depth > maxDischargeDepth {
+		return nil, dischargeDepthLimitError()
+	}
 	switch c := constant.(type) {
 	case *syn.Integer:
-		ret := &syn.Integer{}
-		if c.Inner == nil {
-			ret.SetInner(nil)
-			return ret
+		if c == nil || c.Inner == nil {
+			return nil, malformedASTError("cannot clone a nil Integer constant")
 		}
+		ret := &syn.Integer{}
 		ret.SetInner(new(big.Int).Set(c.Inner))
-		return ret
+		if checkCancellation {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
+		return ret, nil
 	case *syn.ByteString:
-		return &syn.ByteString{Inner: bytes.Clone(c.Inner)}
+		if c == nil {
+			return nil, malformedASTError("cannot clone a nil ByteString constant")
+		}
+		cloned, err := cloneBytesContext(ctx, checkCancellation, c.Inner)
+		if err != nil {
+			return nil, err
+		}
+		return &syn.ByteString{Inner: cloned}, nil
 	case *syn.String:
-		return &syn.String{Inner: c.Inner}
+		if c == nil {
+			return nil, malformedASTError("cannot clone a nil String constant")
+		}
+		return &syn.String{Inner: c.Inner}, nil
 	case *syn.Unit:
-		return &syn.Unit{}
+		if c == nil {
+			return nil, malformedASTError("cannot clone a nil Unit constant")
+		}
+		return &syn.Unit{}, nil
 	case *syn.Bool:
-		return &syn.Bool{Inner: c.Inner}
+		if c == nil {
+			return nil, malformedASTError("cannot clone a nil Bool constant")
+		}
+		return &syn.Bool{Inner: c.Inner}, nil
 	case *syn.ProtoList:
+		if c == nil {
+			return nil, malformedASTError("cannot clone a nil ProtoList constant")
+		}
 		items := make([]syn.IConstant, len(c.List))
 		for i := range c.List {
-			items[i] = cloneConstant(c.List[i])
+			var err error
+			items[i], err = cloneConstantContext(
+				ctx,
+				checkCancellation,
+				c.List[i],
+				depth+1,
+			)
+			if err != nil {
+				return nil, err
+			}
 		}
 		return &syn.ProtoList{
 			LTyp: c.LTyp,
 			List: items,
-		}
+		}, nil
 	case *syn.ProtoArray:
+		if c == nil {
+			return nil, malformedASTError("cannot clone a nil ProtoArray constant")
+		}
 		items := make([]syn.IConstant, len(c.Array))
 		for i := range c.Array {
-			items[i] = cloneConstant(c.Array[i])
+			var err error
+			items[i], err = cloneConstantContext(
+				ctx,
+				checkCancellation,
+				c.Array[i],
+				depth+1,
+			)
+			if err != nil {
+				return nil, err
+			}
 		}
 		return &syn.ProtoArray{
 			ATyp:  c.ATyp,
 			Array: items,
-		}
+		}, nil
 	case *syn.Value:
+		if c == nil {
+			return nil, malformedASTError("cannot clone a nil Value constant")
+		}
 		entries := make([]syn.IConstant, len(c.Entries))
 		for i := range c.Entries {
-			entries[i] = cloneConstant(c.Entries[i])
+			var err error
+			entries[i], err = cloneConstantContext(
+				ctx,
+				checkCancellation,
+				c.Entries[i],
+				depth+1,
+			)
+			if err != nil {
+				return nil, err
+			}
 		}
-		return &syn.Value{Entries: entries}
+		return &syn.Value{Entries: entries}, nil
 	case *syn.ProtoPair:
+		if c == nil {
+			return nil, malformedASTError("cannot clone a nil ProtoPair constant")
+		}
+		first, err := cloneConstantContext(
+			ctx,
+			checkCancellation,
+			c.First,
+			depth+1,
+		)
+		if err != nil {
+			return nil, err
+		}
+		second, err := cloneConstantContext(
+			ctx,
+			checkCancellation,
+			c.Second,
+			depth+1,
+		)
+		if err != nil {
+			return nil, err
+		}
 		return &syn.ProtoPair{
 			FstType: c.FstType,
 			SndType: c.SndType,
-			First:   cloneConstant(c.First),
-			Second:  cloneConstant(c.Second),
-		}
+			First:   first,
+			Second:  second,
+		}, nil
 	case *syn.Data:
-		return &syn.Data{Inner: c.Inner.Clone()}
+		if c == nil {
+			return nil, malformedASTError("cannot clone a nil Data constant")
+		}
+		cloneCtx := context.Background()
+		if checkCancellation {
+			cloneCtx = ctx
+		}
+		cloned, err := data.CloneContext(
+			cloneCtx,
+			c.Inner,
+			maxDischargeDepth,
+			maxDischargeWork,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return &syn.Data{Inner: cloned}, nil
 	case *syn.Bls12_381G1Element:
-		if c.Inner == nil {
-			return &syn.Bls12_381G1Element{}
+		if c == nil || c.Inner == nil {
+			return nil, malformedASTError("cannot clone a nil BLS G1 constant")
 		}
 		tmp := *c.Inner
-		return &syn.Bls12_381G1Element{Inner: &tmp}
+		return &syn.Bls12_381G1Element{Inner: &tmp}, nil
 	case *syn.Bls12_381G2Element:
-		if c.Inner == nil {
-			return &syn.Bls12_381G2Element{}
+		if c == nil || c.Inner == nil {
+			return nil, malformedASTError("cannot clone a nil BLS G2 constant")
 		}
 		tmp := *c.Inner
-		return &syn.Bls12_381G2Element{Inner: &tmp}
+		return &syn.Bls12_381G2Element{Inner: &tmp}, nil
 	case *syn.Bls12_381MlResult:
-		if c.Inner == nil {
-			return &syn.Bls12_381MlResult{}
+		if c == nil || c.Inner == nil {
+			return nil, malformedASTError("cannot clone a nil BLS Miller loop constant")
 		}
 		tmp := *c.Inner
-		return &syn.Bls12_381MlResult{Inner: &tmp}
+		return &syn.Bls12_381MlResult{Inner: &tmp}, nil
 	default:
-		panic(fmt.Sprintf("unsupported constant type: %T", constant))
+		return nil, malformedASTError("unsupported constant type %T", constant)
 	}
+}
+
+const cloneBytesChunkSize = 64 * 1024
+
+func cloneBytesContext(
+	ctx context.Context,
+	checkCancellation bool,
+	source []byte,
+) ([]byte, error) {
+	if !checkCancellation {
+		return bytes.Clone(source), nil
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if source == nil {
+		return nil, nil
+	}
+	target := make([]byte, len(source))
+	for offset := 0; offset < len(source); offset += cloneBytesChunkSize {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		copy(target[offset:min(offset+cloneBytesChunkSize, len(source))], source[offset:])
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return target, nil
 }
 
 type Delay[T syn.Eval] struct {
