@@ -110,6 +110,10 @@ type Machine[T syn.Eval] struct {
 	protoMajor uint
 	ExBudget   ExBudget
 	Logs       []string
+	// activeContext is non-nil only while RunContext is evaluating. Builtin
+	// helpers that perform substantial work inside one CEK transition use it
+	// to preserve cooperative cancellation.
+	activeContext context.Context
 
 	argHolder argHolder[T]
 	// Scratch for evalBuiltinAppReady and evalBuiltinAppWithArg.
@@ -1056,6 +1060,12 @@ func (m *Machine[T]) runContext(
 	checkCancellation bool,
 	term syn.Term[T],
 ) (syn.Term[T], error) {
+	if checkCancellation {
+		m.activeContext = ctx
+	} else {
+		m.activeContext = nil
+	}
+	defer func() { m.activeContext = nil }()
 	if err := validateTermStructure[T](ctx, checkCancellation, term); err != nil {
 		return nil, err
 	}
