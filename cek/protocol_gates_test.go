@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/lang"
+	"github.com/blinklabs-io/plutigo/syn"
 )
 
 func evalTextAt(t *testing.T, src string, major uint) error {
@@ -94,5 +95,52 @@ func TestWriteBitsInputLimit(t *testing.T) {
 	}
 	if err := evalTextAt(t, program(writeBitsMaximumInputLength+1), 10); err != nil {
 		t.Fatalf("over-limit input before van Rossem: %v", err)
+	}
+}
+
+func TestCaseOnBuiltinDataRequiresVanRossem(t *testing.T) {
+	t.Parallel()
+
+	// constrData yields a built-in Data value; casing on Data stays
+	// unsupported after the gate lifts, so only the earlier protocol's error
+	// is distinguishable.
+	const src = `(program 1.1.0
+  (case [ [ (builtin constrData) (con integer 0) ] (con (list data) []) ]
+    (con integer 1)))`
+	err := evalTextAt(t, src, 10)
+	if err == nil || !strings.Contains(err.Error(), "before protocol version 11") {
+		t.Fatalf("protocol version 10: %v", err)
+	}
+}
+
+func TestCaseOnByteStringKeepsItsOwnError(t *testing.T) {
+	t.Parallel()
+
+	const src = `(program 1.1.0 (case (con bytestring #00) (con integer 1)))`
+	for _, major := range []uint{10, 11} {
+		err := evalTextAt(t, src, major)
+		if err == nil || !strings.Contains(err.Error(), "bytestring") {
+			t.Fatalf("protocol version %d: %v", major, err)
+		}
+	}
+}
+
+func TestCaseWithoutProtocolVersionIsUnrestricted(t *testing.T) {
+	t.Parallel()
+
+	program, err := syn.Parse(
+		`(program 1.1.0 (case (con bool True) (con integer 1) (con integer 2)))`,
+	)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	deBruijn, err := syn.NameToDeBruijn(program)
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	// testEvalContext leaves the protocol major unset.
+	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+	if _, err := machine.Run(deBruijn.Term); err != nil {
+		t.Fatalf("protocol major 0: %v", err)
 	}
 }
