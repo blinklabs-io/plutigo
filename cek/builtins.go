@@ -271,6 +271,10 @@ func integerBuiltinName(fn builtin.DefaultFunction) string {
 	}
 }
 
+func integerMetadata(i *big.Int) string {
+	return fmt.Sprintf("sign=%d, bit length=%d", i.Sign(), i.BitLen())
+}
+
 func (m *Machine[T]) evalBinaryIntegerBuiltin(
 	fn builtin.DefaultFunction,
 	leftVal Value[T],
@@ -3146,15 +3150,6 @@ func integerToByteString[T syn.Eval](
 		return nil, err
 	}
 
-	// Check for negative input
-	if input.Sign() < 0 {
-		return nil, &BuiltinError{
-			Code:    ErrCodeInvalidArgument,
-			Builtin: "integerToByteString",
-			Message: fmt.Sprintf("negative input %v", input),
-		}
-	}
-
 	// Convert size to int64
 	if !size.IsInt64() {
 		return nil, &BuiltinError{
@@ -3193,6 +3188,14 @@ func integerToByteString[T syn.Eval](
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	if input.Sign() < 0 {
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "integerToByteString",
+			Message: "negative input (" + integerMetadata(input) + ")",
+		}
 	}
 
 	// NOTE:
@@ -3775,21 +3778,19 @@ func replicateByte[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 
-	// Validate byte
-	if !byteVal.IsInt64() || byteVal.Int64() < 0 || byteVal.Int64() > 255 {
-		return nil, &BuiltinError{
-			Code:    ErrCodeInvalidArgument,
-			Builtin: "replicateByte",
-			Message: fmt.Sprintf("byte value %v out of bounds (0-255)", byteVal),
-		}
-	}
-	byteUint := byte(byteVal.Int64())
-
-	// Apply cost
 	err = m.CostTwo(&b.Func, sizeExMem(sizeInt), bigIntExMem(byteVal))
 	if err != nil {
 		return nil, err
 	}
+
+	if !byteVal.IsInt64() || byteVal.Int64() < 0 || byteVal.Int64() > 255 {
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "replicateByte",
+			Message: "byte value out of bounds (" + integerMetadata(byteVal) + "; want 0-255)",
+		}
+	}
+	byteUint := byte(byteVal.Int64())
 
 	// Create result
 	var result []byte
@@ -4163,7 +4164,7 @@ func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
 			Builtin: "expModInteger",
-			Message: fmt.Sprintf("0^%s is undefined", e.String()),
+			Message: fmt.Sprintf("0^negative exponent (%s) is undefined", integerMetadata(e)),
 		}
 
 	default:
@@ -4180,10 +4181,10 @@ func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 				Code:    ErrCodeInvalidArgument,
 				Builtin: "expModInteger",
 				Message: fmt.Sprintf(
-					"%s is not invertible modulo %s (gcd = %s)",
-					bb.String(),
-					mm.String(),
-					gcd.String(),
+					"base (%s) is not invertible modulo modulus (%s) (gcd = %s)",
+					integerMetadata(bb),
+					integerMetadata(mm),
+					integerMetadata(gcd),
 				),
 			}
 		}

@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/blinklabs-io/plutigo/builtin"
+	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/lang"
 )
 
@@ -114,6 +115,12 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 		return err
 	}
 
+	// PlutusData Value is a V4 constructor; earlier ledger languages must not
+	// carry it in any constant. valueDataItems counts constant list and array
+	// items across the program, as the decoder does.
+	checkValueData := plutusVersion < builtin.PlutusV4
+	valueDataItems := 0
+
 	// The worklist starts on the stack; it holds pending siblings along one
 	// path, so ledger scripts rarely outgrow it.
 	var stack [128]Term[T]
@@ -130,6 +137,18 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 		case *Var[T], *Error:
 			// No version-dependent validation is needed for these terms.
 		case *Constant:
+			if checkValueData && isCompositeConstant(t.Con) {
+				found, err := constantHasValueData(t.Con, &valueDataItems)
+				if err != nil {
+					return err
+				}
+				if found {
+					return fmt.Errorf(
+						"Value data is not available in Plutus V%d",
+						plutusVersion,
+					)
+				}
+			}
 			if t.Con != nil &&
 				context.ProtocolMajor >= builtin.VanRossemProtoVersion {
 				size := constantSize(t.Con)
@@ -188,6 +207,150 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 		}
 	}
 	return nil
+}
+
+// valueDataFrame is one level of the constantHasValueData walk: the
+// remaining elements of a single constant, a constant list or array, a
+// PlutusData list or constructor, or a PlutusData map.
+type valueDataFrame struct {
+	constant  IConstant
+	constants []IConstant
+	items     []data.PlutusData
+	pairs     [][2]data.PlutusData
+}
+
+// isCompositeConstant reports whether con is data or a container that can
+// hold other constants, in pointer or value form.
+func isCompositeConstant(con IConstant) bool {
+	switch con.(type) {
+	case *Data, Data, *ProtoList, ProtoList, *ProtoArray, ProtoArray,
+		*ProtoPair, ProtoPair:
+		return true
+	default:
+		return false
+	}
+}
+
+// constantHasValueData reports whether any PlutusData within con, at any
+// depth, is a Value. It walks the constant's actual contents rather than its
+// declared type, and accepts constants and data in pointer or value form, so
+// a caller-constructed constant cannot hide a Value behind a type that
+// claims to hold no data.
+//
+// Work is charged as the decoders charge it, so every program they accept
+// still validates: each constant list or array item is counted in *items
+// against maxProgramNodes across the program (pair fields are not counted),
+// and each PlutusData value is counted against maxProgramNodes per data
+// constant, which covers the per-blob data decode limit. Collections are
+// stepped through in place, so the frame stack grows with nesting depth
+// rather than width, and it starts on the stack like ValidateProgram's term
+// worklist.
+func constantHasValueData(con IConstant, items *int) (bool, error) {
+	var frameStack [16]valueDataFrame
+	frames := append(frameStack[:0], valueDataFrame{constant: con})
+	dataNodes := 0
+	for len(frames) > 0 {
+		frame := &frames[len(frames)-1]
+		var (
+			constant IConstant
+			item     data.PlutusData
+		)
+		switch {
+		case frame.constant != nil:
+			constant = frame.constant
+			frame.constant = nil
+		case len(frame.constants) > 0:
+			constant = frame.constants[0]
+			frame.constants = frame.constants[1:]
+		case len(frame.items) > 0:
+			item = frame.items[0]
+			frame.items = frame.items[1:]
+		case len(frame.pairs) > 0:
+			pair := &frame.pairs[0]
+			frame.pairs = frame.pairs[1:]
+			frames = append(frames, valueDataFrame{items: pair[:]})
+			continue
+		default:
+			frames = frames[:len(frames)-1]
+			continue
+		}
+
+		if constant != nil {
+			var collection []IConstant
+			switch k := constant.(type) {
+			case *Data:
+				if k != nil {
+					item, dataNodes = k.Inner, 0
+				}
+			case Data:
+				item, dataNodes = k.Inner, 0
+			case *ProtoList:
+				if k != nil {
+					collection = k.List
+				}
+			case ProtoList:
+				collection = k.List
+			case *ProtoArray:
+				if k != nil {
+					collection = k.Array
+				}
+			case ProtoArray:
+				collection = k.Array
+			case *ProtoPair:
+				if k != nil {
+					frames = append(
+						frames,
+						valueDataFrame{constant: k.Second},
+						valueDataFrame{constant: k.First},
+					)
+				}
+			case ProtoPair:
+				frames = append(
+					frames,
+					valueDataFrame{constant: k.Second},
+					valueDataFrame{constant: k.First},
+				)
+			}
+			if len(collection) > 0 {
+				*items += len(collection)
+				if *items > maxProgramNodes {
+					return false, errors.New("program has too many nodes")
+				}
+				frames = append(frames, valueDataFrame{constants: collection})
+			}
+		}
+		if item == nil {
+			continue
+		}
+
+		dataNodes++
+		if dataNodes > maxProgramNodes {
+			return false, errors.New("program has too many nodes")
+		}
+		switch d := item.(type) {
+		case *data.Value, data.Value:
+			return true, nil
+		case *data.Constr:
+			if d != nil {
+				frames = append(frames, valueDataFrame{items: d.Fields})
+			}
+		case data.Constr:
+			frames = append(frames, valueDataFrame{items: d.Fields})
+		case *data.List:
+			if d != nil {
+				frames = append(frames, valueDataFrame{items: d.Items})
+			}
+		case data.List:
+			frames = append(frames, valueDataFrame{items: d.Items})
+		case *data.Map:
+			if d != nil {
+				frames = append(frames, valueDataFrame{pairs: d.Pairs})
+			}
+		case data.Map:
+			frames = append(frames, valueDataFrame{pairs: d.Pairs})
+		}
+	}
+	return false, nil
 }
 
 // DecodeWithContext decodes and validates a FLAT-encoded UPLC program before
