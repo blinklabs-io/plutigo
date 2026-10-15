@@ -5019,6 +5019,82 @@ func TestValueDataEntryLimitChargesCostFirst(t *testing.T) {
 	}
 }
 
+// TestAssetCountEntryLimit verifies assetCount bounds its traversal at the
+// same valueDataMaxSize limit enforced for valueData/unValueData. Unlike the
+// upstream reference Value, which caches its total token count and so costs
+// assetCount as O(1), this implementation recounts entries by traversal, so
+// the fixed charge is only sound if that traversal is bounded.
+func TestAssetCountEntryLimit(t *testing.T) {
+	tests := []struct {
+		name    string
+		entries int
+		wantErr bool
+	}{
+		{name: "below limit", entries: valueDataMaxSize - 1},
+		{name: "at limit", entries: valueDataMaxSize},
+		{name: "above limit", entries: valueDataMaxSize + 1, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachineV4()
+			b := newTestBuiltin(builtin.AssetCount).
+				ApplyArg(newValueDataBoundaryInput(tt.entries))
+
+			val, err := assetCount(m, b)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected oversized assetCount input to fail")
+				}
+				var builtinErr *BuiltinError
+				if !errors.As(err, &builtinErr) {
+					t.Fatalf("expected BuiltinError, got %T: %v", err, err)
+				}
+				if builtinErr.Code != ErrCodeInvalidArgument {
+					t.Fatalf("expected ErrCodeInvalidArgument, got %d", builtinErr.Code)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("assetCount(%d entries) returned error: %v", tt.entries, err)
+			}
+			got := expectInteger(t, expectConstant(t, val))
+			if got.Inner.Int64() != int64(tt.entries) {
+				t.Fatalf("assetCount = %v, want %d", got.Inner, tt.entries)
+			}
+		})
+	}
+}
+
+func TestAssetCountEntryLimitChargesCostFirst(t *testing.T) {
+	oversizedValue := newValueDataBoundaryInput(valueDataMaxSize + 1)
+	m := newTestMachineV4()
+	m.ExBudget = ExBudget{}
+	b := newTestBuiltin(builtin.AssetCount).ApplyArg(oversizedValue)
+
+	_, err := assetCount(m, b)
+	if err == nil {
+		t.Fatal("expected insufficient budget to reject oversized assetCount input")
+	}
+	var budgetErr *BudgetError
+	if !errors.As(err, &budgetErr) {
+		t.Fatalf(
+			"expected assetCount cost to be charged before the size check, got %T: %v",
+			err,
+			err,
+		)
+	}
+	if budgetErr.Code != ErrCodeBudgetExhausted {
+		t.Fatalf("expected ErrCodeBudgetExhausted, got %d", budgetErr.Code)
+	}
+	if budgetErr.Requested.Cpu <= 0 || budgetErr.Requested.Mem <= 0 {
+		t.Fatalf("expected positive assetCount cost, got %+v", budgetErr.Requested)
+	}
+	if budgetErr.Available != (ExBudget{}) {
+		t.Fatalf("expected zero available budget, got %+v", budgetErr.Available)
+	}
+}
+
 func TestBigIntMod256Byte(t *testing.T) {
 	hugePlus5 := new(big.Int).Lsh(big.NewInt(1), 4096)
 	hugePlus5.Add(hugePlus5, big.NewInt(5))

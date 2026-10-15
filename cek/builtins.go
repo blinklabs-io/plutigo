@@ -4607,10 +4607,23 @@ func assetCount[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected value constant",
 		}
 	}
-	if err := m.CostOne(&b.Func, valueInnerCountExMem(entries)); err != nil {
+	countFn := valueInnerCountExMem(entries)
+	if err := m.CostOne(&b.Func, countFn); err != nil {
 		return nil, err
 	}
-	count := valueInnerCountExMem(entries)()
+	// The upstream Value caches its total token count, so assetCount is
+	// O(1) there; this cost model assumes the same. Here entries are
+	// recounted by traversal, so the fixed charge above is only sound if
+	// that traversal is bounded. Cap it at the same valueDataMaxSize limit
+	// already enforced for valueData/unValueData.
+	count := countFn()
+	if count > valueDataMaxSize {
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "assetCount",
+			Message: "maximum input size (40000) exceeded",
+		}
+	}
 	return &Constant{&syn.Integer{Inner: big.NewInt(int64(count))}}, nil
 }
 
