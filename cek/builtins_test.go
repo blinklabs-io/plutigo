@@ -5066,6 +5066,64 @@ func TestAssetCountEntryLimit(t *testing.T) {
 	}
 }
 
+// newManyPoliciesValue builds a Value with policyCount distinct policies,
+// each holding an empty token list. This violates the upstream Value
+// invariant of "no empty inner map", but nothing in the constant decoder
+// enforces that invariant, so it is a reachable shape for a crafted program.
+// It keeps the summed token count at zero regardless of policyCount, which
+// is what distinguishes a bound on outer (policy) traversal from a bound on
+// total token count.
+func newManyPoliciesValue(policyCount int) *Constant {
+	entries := make([]syn.IConstant, policyCount)
+	for i := range entries {
+		entries[i] = &syn.ProtoPair{
+			FstType: &syn.TByteString{},
+			SndType: &syn.TList{Typ: &syn.TPair{
+				First:  &syn.TByteString{},
+				Second: &syn.TInteger{},
+			}},
+			First: &syn.ByteString{Inner: []byte{
+				byte(i >> 24),
+				byte(i >> 16),
+				byte(i >> 8),
+				byte(i),
+			}},
+			Second: &syn.ProtoList{
+				LTyp: &syn.TPair{
+					First:  &syn.TByteString{},
+					Second: &syn.TInteger{},
+				},
+				List: []syn.IConstant{},
+			},
+		}
+	}
+	return &Constant{&syn.Value{Entries: entries}}
+}
+
+// TestAssetCountBoundsOuterPolicyTraversal verifies assetCount rejects a
+// Value with more policies than valueDataMaxSize even when every policy's
+// token list is empty, so the summed token count never exceeds the limit.
+// Bounding only the token-count sum would let the outer (policy) traversal
+// itself run unbounded in this shape; assetCount must reject on outer size
+// before performing that traversal.
+func TestAssetCountBoundsOuterPolicyTraversal(t *testing.T) {
+	m := newTestMachineV4()
+	b := newTestBuiltin(builtin.AssetCount).
+		ApplyArg(newManyPoliciesValue(valueDataMaxSize + 1))
+
+	_, err := assetCount(m, b)
+	if err == nil {
+		t.Fatal("expected assetCount to reject a value with too many policies")
+	}
+	var builtinErr *BuiltinError
+	if !errors.As(err, &builtinErr) {
+		t.Fatalf("expected BuiltinError, got %T: %v", err, err)
+	}
+	if builtinErr.Code != ErrCodeInvalidArgument {
+		t.Fatalf("expected ErrCodeInvalidArgument, got %d", builtinErr.Code)
+	}
+}
+
 func TestAssetCountEntryLimitChargesCostFirst(t *testing.T) {
 	oversizedValue := newValueDataBoundaryInput(valueDataMaxSize + 1)
 	m := newTestMachineV4()
