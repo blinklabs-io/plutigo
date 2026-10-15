@@ -542,7 +542,12 @@ func (m *Machine[T]) costDataOne(
 ) error {
 	_, mem, cpu := m.oneArgumentCost(b, 0)
 	canBound := oneArgumentNondecreasing(mem) && oneArgumentNondecreasing(cpu)
+	checks := 0
 	check := func(size ExMem) error {
+		checks++
+		if (checks-1)%64 != 0 {
+			return nil
+		}
 		if m.activeContext != nil {
 			if err := m.activeContext.Err(); err != nil {
 				return err
