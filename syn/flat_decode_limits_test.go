@@ -235,6 +235,36 @@ func TestWord64Boundary(t *testing.T) {
 	}
 }
 
+func TestInvalidUTF8ErrorIsBounded(t *testing.T) {
+	input := bytes.Repeat([]byte{0xff}, 300)
+	e := newEncoder()
+	if err := e.bytes(input); err != nil {
+		t.Fatalf("encode bytes: %v", err)
+	}
+
+	tests := []struct {
+		name   string
+		decode func(*decoder) (string, error)
+	}{
+		{name: "standard", decode: func(d *decoder) (string, error) { return d.utf8() }},
+		{name: "arena", decode: func(d *decoder) (string, error) {
+			return d.utf8WithArena(&constantArena{})
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := tt.decode(newDecoder(e.buffer))
+			if err == nil {
+				t.Fatal("expected invalid UTF-8 error")
+			}
+			want := "bytes are not valid utf8 (length 300)"
+			if err.Error() != want {
+				t.Fatalf("error = %q, want %q", err, want)
+			}
+		})
+	}
+}
+
 // TestDecodeConstrTagPreservesWord64 verifies that constructor tags retain
 // their complete FLAT word on every architecture. In particular, a tag with
 // bit 32 set must not be narrowed through uint on 32-bit targets.

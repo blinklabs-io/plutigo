@@ -23,6 +23,7 @@ import (
 	"math"
 	"math/big"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -2724,6 +2725,43 @@ func TestTypedErrorsBuiltinValidation(t *testing.T) {
 		}
 	})
 
+	t.Run("integerToByteString/large_negative_input_is_metered_before_error", func(t *testing.T) {
+		m := newTestMachine()
+		m.ExBudget = ExBudget{}
+		b := newTestBuiltin(builtin.IntegerToByteString)
+		large := new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), 4096))
+
+		b = b.ApplyArg(&Constant{&syn.Bool{Inner: true}})
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: large}})
+
+		_, err := evalBuiltinWithError(t, m, b)
+		var budgetErr *BudgetError
+		if !errors.As(err, &budgetErr) {
+			t.Fatalf("expected cost failure before invalid-input error, got %T: %v", err, err)
+		}
+	})
+
+	t.Run("integerToByteString/large_negative_input_error_is_bounded", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.IntegerToByteString)
+		large := new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), 4096))
+
+		b = b.ApplyArg(&Constant{&syn.Bool{Inner: true}})
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: large}})
+
+		_, err := evalBuiltinWithError(t, m, b)
+		var builtinErr *BuiltinError
+		if !errors.As(err, &builtinErr) {
+			t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+		}
+		want := "negative input (sign=-1, bit length=4097)"
+		if builtinErr.Message != want {
+			t.Fatalf("message = %q, want %q", builtinErr.Message, want)
+		}
+	})
+
 	// integerToByteString: negative size (line ~2989)
 	t.Run("integerToByteString/negative_size", func(t *testing.T) {
 		m := newTestMachine()
@@ -2847,6 +2885,40 @@ func TestTypedErrorsBuiltinValidation(t *testing.T) {
 		}
 	})
 
+	t.Run("replicateByte/cost_is_charged_before_invalid_byte_error", func(t *testing.T) {
+		m := newTestMachine()
+		m.ExBudget = ExBudget{}
+		b := newTestBuiltin(builtin.ReplicateByte)
+
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(256)}})
+
+		_, err := evalBuiltinWithError(t, m, b)
+		var budgetErr *BudgetError
+		if !errors.As(err, &budgetErr) {
+			t.Fatalf("expected cost failure before invalid-input error, got %T: %v", err, err)
+		}
+	})
+
+	t.Run("replicateByte/large_byte_value_error_is_bounded", func(t *testing.T) {
+		m := newTestMachine()
+		b := newTestBuiltin(builtin.ReplicateByte)
+		large := new(big.Int).Lsh(big.NewInt(1), 4096)
+
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: large}})
+
+		_, err := evalBuiltinWithError(t, m, b)
+		var builtinErr *BuiltinError
+		if !errors.As(err, &builtinErr) {
+			t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+		}
+		want := "byte value out of bounds (sign=1, bit length=4097; want 0-255)"
+		if builtinErr.Message != want {
+			t.Fatalf("message = %q, want %q", builtinErr.Message, want)
+		}
+	})
+
 	// expModInteger: 0^negative is undefined (line ~3952)
 	t.Run("expModInteger/zero_to_negative_exponent", func(t *testing.T) {
 		m := newTestMachine()
@@ -2889,6 +2961,39 @@ func TestTypedErrorsBuiltinValidation(t *testing.T) {
 		}
 		if builtinErr.Code != ErrCodeInvalidArgument {
 			t.Fatalf("expected ErrCodeInvalidArgument, got %v", builtinErr.Code)
+		}
+	})
+
+	t.Run("expModInteger/large_invalid_integer_errors_are_bounded", func(t *testing.T) {
+		large := new(big.Int).Lsh(big.NewInt(1), 4096)
+		for _, tt := range []struct {
+			name string
+			base *big.Int
+			exp  *big.Int
+			mod  *big.Int
+		}{
+			{name: "zero base", base: big.NewInt(0), exp: new(big.Int).Neg(large), mod: big.NewInt(5)},
+			{name: "non-invertible", base: new(big.Int).Lsh(big.NewInt(1), 4096), exp: big.NewInt(-1), mod: new(big.Int).Lsh(big.NewInt(1), 4000)},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				m := newTestMachine()
+				b := newTestBuiltin(builtin.ExpModInteger)
+				b = b.ApplyArg(&Constant{&syn.Integer{Inner: tt.base}})
+				b = b.ApplyArg(&Constant{&syn.Integer{Inner: tt.exp}})
+				b = b.ApplyArg(&Constant{&syn.Integer{Inner: tt.mod}})
+
+				_, err := evalBuiltinWithError(t, m, b)
+				var builtinErr *BuiltinError
+				if !errors.As(err, &builtinErr) {
+					t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+				}
+				if len(builtinErr.Message) > 160 {
+					t.Fatalf("error message is not bounded (%d bytes): %q", len(builtinErr.Message), builtinErr.Message)
+				}
+				if !strings.Contains(builtinErr.Message, "bit length=") {
+					t.Fatalf("error message lacks bounded integer metadata: %q", builtinErr.Message)
+				}
+			})
 		}
 	})
 }
