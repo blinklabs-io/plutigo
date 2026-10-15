@@ -31,7 +31,10 @@ const IntegerToByteStringMaximumOutputLength = 8192
 
 type Builtins[T syn.Eval] [builtin.TotalBuiltinCount]func(*Machine[T], *Builtin[T]) (Value[T], error)
 
-func builtinArityForVersion(fn builtin.DefaultFunction, version lang.LanguageVersion) uint {
+func builtinArityForVersion(
+	fn builtin.DefaultFunction,
+	version lang.LanguageVersion,
+) uint {
 	if fn == builtin.ChooseData && version == lang.LanguageVersionV4 {
 		return fn.Arity() + 1
 	}
@@ -592,7 +595,14 @@ func (m *Machine[T]) costEqualsData(
 	cpu := model.cpu.(TwoArgument)
 	canBound := twoArgumentDiagonalNondecreasing(mem) &&
 		twoArgumentDiagonalNondecreasing(cpu)
+	// Check the root immediately, then amortize model and context calls over
+	// at most 64 traversal steps. The completed size is always charged exactly.
+	checks := 0
 	check := func(size ExMem) error {
+		checks++
+		if (checks-1)%64 != 0 {
+			return nil
+		}
 		if m.activeContext != nil {
 			if err := m.activeContext.Err(); err != nil {
 				return err

@@ -17,6 +17,7 @@ package cek
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -51,7 +52,11 @@ func TestSerialiseDataSizingStopsAtBudgetLowerBound(t *testing.T) {
 	// empty budget, so none of its children need to be visited.
 	want := ExBudget{Mem: 2 * DataCost, Cpu: 955506 + 213312*DataCost}
 	if budgetErr.Requested != want {
-		t.Fatalf("requested budget = %+v, want root lower bound %+v", budgetErr.Requested, want)
+		t.Fatalf(
+			"requested budget = %+v, want root lower bound %+v",
+			budgetErr.Requested,
+			want,
+		)
 	}
 }
 
@@ -69,7 +74,11 @@ func TestEqualsDataSizingStopsAtBudgetLowerBound(t *testing.T) {
 	}
 	want := ExBudget{Mem: 1, Cpu: 898148 + 27279*DataCost}
 	if budgetErr.Requested != want {
-		t.Fatalf("requested budget = %+v, want root lower bound %+v", budgetErr.Requested, want)
+		t.Fatalf(
+			"requested budget = %+v, want root lower bound %+v",
+			budgetErr.Requested,
+			want,
+		)
 	}
 }
 
@@ -87,46 +96,61 @@ func TestUnValueDataSizingStopsAtBudgetLowerBound(t *testing.T) {
 	}
 	want := ExBudget{Mem: 12, Cpu: 96934}
 	if budgetErr.Requested != want {
-		t.Fatalf("requested budget = %+v, want root lower bound %+v", budgetErr.Requested, want)
+		t.Fatalf(
+			"requested budget = %+v, want root lower bound %+v",
+			budgetErr.Requested,
+			want,
+		)
 	}
 }
 
 func TestDataSizingObservesRunContextCancellation(t *testing.T) {
-	term := &syn.Apply[syn.DeBruijn]{
-		Function: &syn.Builtin{DefaultFunction: builtin.SerialiseData},
-		Argument: &syn.Constant{
-			Con: &syn.Data{Inner: oversizedDataList(100_000)},
-		},
-	}
-	m := NewMachine[syn.DeBruijn](
-		lang.LanguageVersionV3,
-		0,
-		testEvalContext(),
-	)
-	m.ExBudget = ExBudget{Cpu: 1 << 62, Mem: 1 << 62}
-	ctx := &cancelAfterChecksContext{limit: 16, done: make(chan struct{})}
-
-	_, err := m.RunContext(ctx, term)
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("RunContext error = %T %v, want context.Canceled", err, err)
-	}
-	if ctx.checks != ctx.limit {
-		t.Fatalf("context checks = %d, want %d", ctx.checks, ctx.limit)
+	for _, fn := range []builtin.DefaultFunction{builtin.SerialiseData, builtin.EqualsData, builtin.UnValueData} {
+		t.Run(fmt.Sprint(fn), func(t *testing.T) {
+			arg := &syn.Constant{
+				Con: &syn.Data{Inner: oversizedDataList(100_000)},
+			}
+			var term syn.Term[syn.DeBruijn] = &syn.Apply[syn.DeBruijn]{Function: &syn.Builtin{DefaultFunction: fn}, Argument: arg}
+			if fn == builtin.EqualsData {
+				term = &syn.Apply[syn.DeBruijn]{Function: term, Argument: arg}
+			}
+			version := lang.LanguageVersionV3
+			if fn == builtin.UnValueData {
+				version = lang.LanguageVersionV4
+			}
+			m := NewMachine[syn.DeBruijn](version, 0, testEvalContext())
+			m.ExBudget = ExBudget{Cpu: 1 << 62, Mem: 1 << 62}
+			ctx := &cancelAfterChecksContext{
+				limit: 16,
+				done:  make(chan struct{}),
+			}
+			_, err := m.RunContext(ctx, term)
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf(
+					"RunContext error = %T %v, want context.Canceled",
+					err,
+					err,
+				)
+			}
+			if ctx.checks != ctx.limit {
+				t.Fatalf("context checks = %d, want %d", ctx.checks, ctx.limit)
+			}
+		})
 	}
 }
 
 func TestDataWalkerKeepsWideContainerStateBounded(t *testing.T) {
 	root := oversizedDataList(100_000)
 	walker := newPlutusDataWalker(root)
-	node, ok := walker.next()
+	node, stack, ok := walker.next(nil)
 	if !ok || node != root {
 		t.Fatalf("first node = %T %v, want root list", node, ok)
 	}
-	if len(walker.stack) != 1 {
-		t.Fatalf("pending frames = %d, want one root frame", len(walker.stack))
+	if len(stack) != 1 {
+		t.Fatalf("pending frames = %d, want one root frame", len(stack))
 	}
-	if walker.stack[0].next != 1 {
-		t.Fatalf("root child index = %d, want 1", walker.stack[0].next)
+	if stack[0].next != 1 {
+		t.Fatalf("root child index = %d, want 1", stack[0].next)
 	}
 }
 
@@ -197,7 +221,11 @@ func TestDataSizingRejectsNilNodes(t *testing.T) {
 				t.Fatalf("error = %T %v, want BuiltinError", err, err)
 			}
 			if builtinErr.Code != ErrCodeInvalidArgument {
-				t.Fatalf("error code = %d, want %d", builtinErr.Code, ErrCodeInvalidArgument)
+				t.Fatalf(
+					"error code = %d, want %d",
+					builtinErr.Code,
+					ErrCodeInvalidArgument,
+				)
 			}
 		})
 	}
@@ -228,8 +256,6 @@ func TestLegacyDataSizingClosuresFailClosed(t *testing.T) {
 		size func() ExMem
 	}{
 		{"data size", dataExMem(malformed)},
-		{"node count", dataNodeCountExMem(malformed)},
-		{"equals data", func() ExMem { return equalsDataMinExMem(malformed, malformed) }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -239,10 +265,91 @@ func TestLegacyDataSizingClosuresFailClosed(t *testing.T) {
 					t.Fatal("malformed data returned a partial size")
 				}
 				if _, ok := recovered.(*BuiltinError); !ok {
-					t.Fatalf("panic = %T %v, want *BuiltinError", recovered, recovered)
+					t.Fatalf(
+						"panic = %T %v, want *BuiltinError",
+						recovered,
+						recovered,
+					)
 				}
 			}()
 			_ = tt.size()
+		})
+	}
+}
+
+func BenchmarkEqualsDataSizing(b *testing.B) {
+	for _, n := range []int{2, 2000} {
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			m := newTestMachine()
+			arg := &Constant{
+				Constant: &syn.Data{
+					Inner: &data.Constr{
+						Tag:    big.NewInt(0),
+						Fields: []data.PlutusData{oversizedDataList(n)},
+					},
+				},
+			}
+			fn := newTestBuiltin(builtin.EqualsData).ApplyArg(arg).ApplyArg(arg)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				m.ExBudget = ExBudget{Cpu: 1 << 62, Mem: 1 << 62}
+				if _, err := m.evalBuiltinApp(fn); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func TestDataSizingBudgetBoundary(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		fn    builtin.DefaultFunction
+		input data.PlutusData
+		cost  ExBudget
+		v4    bool
+	}{
+		{"serialiseData root", builtin.SerialiseData, &data.List{}, ExBudget{Mem: 8, Cpu: 1808754}, false},
+		{"equalsData root", builtin.EqualsData, &data.List{}, ExBudget{Mem: 1, Cpu: 1007264}, false},
+		{"unValueData root", builtin.UnValueData, &data.Map{}, ExBudget{Mem: 12, Cpu: 96934}, true},
+		{"serialiseData list", builtin.SerialiseData, oversizedDataList(128), ExBudget{Mem: 1288, Cpu: 138328434}, false},
+		{"equalsData list", builtin.EqualsData, oversizedDataList(128), ExBudget{Mem: 1, Cpu: 18465824}, false},
+		{"unValueData map", builtin.UnValueData, unValueDataInput(unValueDataPolicy(nil, unValueDataToken(nil, big.NewInt(1)))), ExBudget{Mem: 56, Cpu: 480690}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, short := range []int64{0, 1} {
+				t.Run(fmt.Sprintf("cpu short %d", short), func(t *testing.T) {
+					m := newTestMachine()
+					if tc.v4 {
+						m = newTestMachineV4()
+					}
+					m.ExBudget = tc.cost
+					m.ExBudget.Cpu -= short
+					arg := &Constant{Constant: &syn.Data{Inner: tc.input}}
+					fn := newTestBuiltin(tc.fn).ApplyArg(arg)
+					if tc.fn == builtin.EqualsData {
+						fn = fn.ApplyArg(arg)
+					}
+					_, err := m.evalBuiltinApp(fn)
+					if short == 0 {
+						if err != nil {
+							t.Fatalf("exact budget: %v", err)
+						}
+						if m.ExBudget != (ExBudget{}) {
+							t.Fatalf(
+								"remaining budget = %+v, want zero",
+								m.ExBudget,
+							)
+						}
+					} else {
+						var budgetErr *BudgetError
+						if !errors.As(err, &budgetErr) {
+							t.Fatalf("one CPU short: %T %v, want BudgetError", err, err)
+						}
+					}
+				})
+			}
 		})
 	}
 }

@@ -32,16 +32,25 @@ func TestV4ValueCostModelsMatchPlutusSpec(t *testing.T) {
 	valueDataCPU := valueData.cpu.(*LinearCost)
 	valueDataMem := valueData.mem.(*LinearCost)
 	if valueDataCPU.intercept != 1000 || valueDataCPU.slope != 38159 {
-		t.Fatalf("valueData CPU model = (%d, %d), want (1000, 38159)", valueDataCPU.intercept, valueDataCPU.slope)
+		t.Fatalf(
+			"valueData CPU model = (%d, %d), want (1000, 38159)",
+			valueDataCPU.intercept,
+			valueDataCPU.slope,
+		)
 	}
 	if valueDataMem.intercept != 2 || valueDataMem.slope != 22 {
-		t.Fatalf("valueData memory model = (%d, %d), want (2, 22)", valueDataMem.intercept, valueDataMem.slope)
+		t.Fatalf(
+			"valueData memory model = (%d, %d), want (2, 22)",
+			valueDataMem.intercept,
+			valueDataMem.slope,
+		)
 	}
 
 	unValueData := DefaultBuiltinCosts[builtin.UnValueData]
 	unValueDataCPU := unValueData.cpu.(*QuadraticInXModel)
 	unValueDataMem := unValueData.mem.(*LinearCost)
-	if unValueDataCPU.coeff0 != 1000 || unValueDataCPU.coeff1 != 95933 || unValueDataCPU.coeff2 != 1 {
+	if unValueDataCPU.coeff0 != 1000 || unValueDataCPU.coeff1 != 95933 ||
+		unValueDataCPU.coeff2 != 1 {
 		t.Fatalf(
 			"unValueData CPU model = (%d, %d, %d), want (1000, 95933, 1)",
 			unValueDataCPU.coeff0,
@@ -50,7 +59,11 @@ func TestV4ValueCostModelsMatchPlutusSpec(t *testing.T) {
 		)
 	}
 	if unValueDataMem.intercept != 1 || unValueDataMem.slope != 11 {
-		t.Fatalf("unValueData memory model = (%d, %d), want (1, 11)", unValueDataMem.intercept, unValueDataMem.slope)
+		t.Fatalf(
+			"unValueData memory model = (%d, %d), want (1, 11)",
+			unValueDataMem.intercept,
+			unValueDataMem.slope,
+		)
 	}
 
 	multiIndexArray := DefaultBuiltinCosts[builtin.MultiIndexArray]
@@ -66,17 +79,29 @@ func TestV4ValueCostModelsMatchPlutusSpec(t *testing.T) {
 		)
 	}
 	if multiIndexArrayMem.intercept != 4 || multiIndexArrayMem.slope != 3 {
-		t.Fatalf("multiIndexArray memory model = (%d, %d), want (4, 3)", multiIndexArrayMem.intercept, multiIndexArrayMem.slope)
+		t.Fatalf(
+			"multiIndexArray memory model = (%d, %d), want (4, 3)",
+			multiIndexArrayMem.intercept,
+			multiIndexArrayMem.slope,
+		)
 	}
 
 	policies := DefaultBuiltinCosts[builtin.Policies]
 	policiesCPU := policies.cpu.(*LinearInX)
 	policiesMem := policies.mem.(*LinearInX)
 	if policiesCPU.intercept != 930912 || policiesCPU.slope != 13220 {
-		t.Fatalf("policies CPU model = (%d, %d), want (930912, 13220)", policiesCPU.intercept, policiesCPU.slope)
+		t.Fatalf(
+			"policies CPU model = (%d, %d), want (930912, 13220)",
+			policiesCPU.intercept,
+			policiesCPU.slope,
+		)
 	}
 	if policiesMem.intercept != 4 || policiesMem.slope != 3 {
-		t.Fatalf("policies memory model = (%d, %d), want (4, 3)", policiesMem.intercept, policiesMem.slope)
+		t.Fatalf(
+			"policies memory model = (%d, %d), want (4, 3)",
+			policiesMem.intercept,
+			policiesMem.slope,
+		)
 	}
 
 	assetCount := DefaultBuiltinCosts[builtin.AssetCount]
@@ -171,7 +196,12 @@ func TestV4ValueBuiltinScriptBudgetMatchesCostModel(t *testing.T) {
 			}
 
 			spent := runV4ScriptBudget(t, tt.builtin, tt.script, context)
-			controlSpent := runV4ScriptBudget(t, tt.builtin, tt.script, controlContext)
+			controlSpent := runV4ScriptBudget(
+				t,
+				tt.builtin,
+				tt.script,
+				controlContext,
+			)
 			if got := spent.Sub(&controlSpent); got != tt.wantBudget {
 				t.Fatalf("builtin budget = %+v, want %+v", got, tt.wantBudget)
 			}
@@ -223,7 +253,11 @@ func TestDataNodeCountIncludesValueInner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("construct Value: %v", err)
 	}
-	if got, want := dataNodeCountExMem(value)(), ExMem(6); got != want {
+	got, err := dataNodeCountExMemChecked(value, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := ExMem(6); got != want {
 		t.Fatalf("dataNodeCountExMem(Value) = %d, want %d", got, want)
 	}
 }
@@ -547,13 +581,22 @@ func TestUpdateV3CostModelWithExpModCoefficientNames(t *testing.T) {
 
 	expModCPU := updatedCM.builtinCosts[builtin.ExpModInteger].cpu.(*ExpMod)
 	if expModCPU.coeff00 != 607153 {
-		t.Fatalf("expected expMod coeff00 to be 607153, got %d", expModCPU.coeff00)
+		t.Fatalf(
+			"expected expMod coeff00 to be 607153, got %d",
+			expModCPU.coeff00,
+		)
 	}
 	if expModCPU.coeff11 != 231697 {
-		t.Fatalf("expected expMod coeff11 to be 231697, got %d", expModCPU.coeff11)
+		t.Fatalf(
+			"expected expMod coeff11 to be 231697, got %d",
+			expModCPU.coeff11,
+		)
 	}
 	if expModCPU.coeff12 != 53144 {
-		t.Fatalf("expected expMod coeff12 to be 53144, got %d", expModCPU.coeff12)
+		t.Fatalf(
+			"expected expMod coeff12 to be 53144, got %d",
+			expModCPU.coeff12,
+		)
 	}
 }
 
@@ -588,7 +631,8 @@ func TestV1V2SignatureCostsFollowSemanticsVariant(t *testing.T) {
 			default:
 				t.Fatalf("unexpected Ed25519 CPU model %T", cpu)
 			}
-			if model != tt.wantModel || intercept != tt.intercept || slope != tt.slope {
+			if model != tt.wantModel || intercept != tt.intercept ||
+				slope != tt.slope {
 				t.Fatalf(
 					"Ed25519 model = %s(%d,%d), want %s(%d,%d)",
 					model,
@@ -639,13 +683,22 @@ func TestVariantBIntegerCosts(t *testing.T) {
 	} {
 		cpu, ok := costs[fn].cpu.(*ConstAboveDiagonalModel)
 		if !ok {
-			t.Fatalf("%s CPU model = %T, want *ConstAboveDiagonalModel", fn, costs[fn].cpu)
+			t.Fatalf(
+				"%s CPU model = %T, want *ConstAboveDiagonalModel",
+				fn,
+				costs[fn].cpu,
+			)
 		}
 		model, ok := cpu.model.(*MultipliedSizesModel)
 		if !ok {
-			t.Fatalf("%s nested CPU model = %T, want *MultipliedSizesModel", fn, cpu.model)
+			t.Fatalf(
+				"%s nested CPU model = %T, want *MultipliedSizesModel",
+				fn,
+				cpu.model,
+			)
 		}
-		if cpu.constant != 85848 || model.intercept != 228465 || model.slope != 122 {
+		if cpu.constant != 85848 || model.intercept != 228465 ||
+			model.slope != 122 {
 			t.Fatalf(
 				"%s CPU model = constant %d, intercept %d, slope %d",
 				fn,
@@ -655,7 +708,11 @@ func TestVariantBIntegerCosts(t *testing.T) {
 			)
 		}
 		if _, ok := costs[fn].mem.(*SubtractedSizesModel); !ok {
-			t.Fatalf("%s memory model = %T, want *SubtractedSizesModel", fn, costs[fn].mem)
+			t.Fatalf(
+				"%s memory model = %T, want *SubtractedSizesModel",
+				fn,
+				costs[fn].mem,
+			)
 		}
 	}
 }
@@ -672,13 +729,19 @@ func TestExpModIntegerCostOverflowReturnsBudgetError(t *testing.T) {
 		func() ExMem { return ExMem(55_779) },
 	)
 	if err == nil {
-		t.Fatal("expected budget error for overflowing expModInteger cost, got nil")
+		t.Fatal(
+			"expected budget error for overflowing expModInteger cost, got nil",
+		)
 	}
 	if !IsBudgetError(err) {
 		t.Fatalf("expected budget error, got %T: %v", err, err)
 	}
 	if m.ExBudget != originalBudget {
-		t.Fatalf("budget mutated after cost overflow: got %+v, want %+v", m.ExBudget, originalBudget)
+		t.Fatalf(
+			"budget mutated after cost overflow: got %+v, want %+v",
+			m.ExBudget,
+			originalBudget,
+		)
 	}
 }
 
@@ -690,7 +753,11 @@ func TestExpModCostThreeSaturatesOnOverflow(t *testing.T) {
 	}.CostThree(ExMem(1), ExMem(55_779), ExMem(55_779))
 
 	if cost != math.MaxInt64 {
-		t.Fatalf("overflowing expModInteger cost = %d, want %d", cost, int64(math.MaxInt64))
+		t.Fatalf(
+			"overflowing expModInteger cost = %d, want %d",
+			cost,
+			int64(math.MaxInt64),
+		)
 	}
 }
 
@@ -706,7 +773,11 @@ func TestSpendBudgetRejectsNegativeCost(t *testing.T) {
 		t.Fatalf("expected budget error, got %T: %v", err, err)
 	}
 	if m.ExBudget != originalBudget {
-		t.Fatalf("budget mutated after negative cost: got %+v, want %+v", m.ExBudget, originalBudget)
+		t.Fatalf(
+			"budget mutated after negative cost: got %+v, want %+v",
+			m.ExBudget,
+			originalBudget,
+		)
 	}
 }
 

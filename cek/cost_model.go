@@ -402,18 +402,6 @@ func valueMaxCountExMem(l []syn.IConstant) func() ExMem {
 	}
 }
 
-// dataNodeCountExMem counts the number of nodes in a Data structure.
-// Used by unValueData which costs based on node count.
-func dataNodeCountExMem(d data.PlutusData) func() ExMem {
-	return func() ExMem {
-		size, err := dataNodeCountExMemChecked(d, nil)
-		if err != nil {
-			panic(err)
-		}
-		return size
-	}
-}
-
 func dataExMem(x data.PlutusData) func() ExMem {
 	return func() ExMem {
 		size, err := dataExMemChecked(x, nil)
@@ -431,14 +419,12 @@ type dataWalkFrame struct {
 
 type plutusDataWalker struct {
 	nextNode data.PlutusData
-	stack    []dataWalkFrame
 	hasNext  bool
 }
 
 func newPlutusDataWalker(root data.PlutusData) plutusDataWalker {
 	return plutusDataWalker{
 		nextNode: root,
-		stack:    make([]dataWalkFrame, 0, 16),
 		hasNext:  true,
 	}
 }
@@ -497,36 +483,41 @@ func nextDataChild(frame *dataWalkFrame) (data.PlutusData, bool) {
 	return nil, false
 }
 
-func (w *plutusDataWalker) next() (data.PlutusData, bool) {
+func (w *plutusDataWalker) next(
+	stack []dataWalkFrame,
+) (data.PlutusData, []dataWalkFrame, bool) {
 	if !w.hasNext {
-		return nil, false
+		return nil, stack, false
 	}
 	node := w.nextNode
 	frame := dataWalkFrame{node: node}
 	if child, ok := nextDataChild(&frame); ok {
-		w.stack = append(w.stack, frame)
+		stack = append(stack, frame)
 		w.nextNode = child
-		return node, true
+		return node, stack, true
 	}
-	for len(w.stack) > 0 {
-		top := &w.stack[len(w.stack)-1]
+	for len(stack) > 0 {
+		top := &stack[len(stack)-1]
 		if child, ok := nextDataChild(top); ok {
 			w.nextNode = child
-			return node, true
+			return node, stack, true
 		}
-		w.stack = w.stack[:len(w.stack)-1]
+		stack = stack[:len(stack)-1]
 	}
 	w.hasNext = false
-	return node, true
+	return node, stack, true
 }
 
 func walkPlutusData(
 	root data.PlutusData,
 	visit func(data.PlutusData) error,
 ) error {
+	var buf [32]dataWalkFrame
 	walker := newPlutusDataWalker(root)
+	stack := buf[:0]
 	for walker.hasNext {
-		node, _ := walker.next()
+		var node data.PlutusData
+		node, stack, _ = walker.next(stack)
 		if err := visit(node); err != nil {
 			return err
 		}
@@ -571,7 +562,7 @@ func dataExMemChecked(
 	return acc, err
 }
 
-// equalsDataMinExMem returns min(size(x), size(y)) in the dataExMem measure.
+// equalsDataMinExMemChecked returns min(size(x), size(y)) in the dataExMem measure.
 //
 // Equals Data is an exceptional case where the cost for the full traversal
 // of 2 plutus data objects may far exceed what ends up being costed by the
@@ -587,14 +578,6 @@ func dataExMemChecked(
 // side has been counted completely and is no larger than the other's partial
 // count, so the minimum is always an exact full size. Pending traversal state
 // grows with nesting depth rather than container width.
-func equalsDataMinExMem(x data.PlutusData, y data.PlutusData) ExMem {
-	size, err := equalsDataMinExMemChecked(x, y, nil)
-	if err != nil {
-		panic(err)
-	}
-	return size
-}
-
 func equalsDataMinExMemChecked(
 	x data.PlutusData,
 	y data.PlutusData,
@@ -602,18 +585,25 @@ func equalsDataMinExMemChecked(
 ) (ExMem, error) {
 	var xAcc ExMem
 	var yAcc ExMem
+	var bufX, bufY [32]dataWalkFrame
 	xWalker := newPlutusDataWalker(x)
 	yWalker := newPlutusDataWalker(y)
+	stackX := bufX[:0]
+	stackY := bufY[:0]
 
 	for (xWalker.hasNext || xAcc > yAcc) && (yWalker.hasNext || yAcc > xAcc) {
-		if d, ok := xWalker.next(); ok {
+		d, nextX, ok := xWalker.next(stackX)
+		stackX = nextX
+		if ok {
 			size, err := dataNodeExMem(d)
 			if err != nil {
 				return 0, err
 			}
 			xAcc += size
 		}
-		if d, ok := yWalker.next(); ok {
+		d, nextY, ok := yWalker.next(stackY)
+		stackY = nextY
+		if ok {
 			size, err := dataNodeExMem(d)
 			if err != nil {
 				return 0, err
