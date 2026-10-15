@@ -4607,12 +4607,19 @@ func assetCount[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected value constant",
 		}
 	}
+	count, ok := valueConstant.TotalSize()
+	if !ok {
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "assetCount",
+			Message: "uncached value constant",
+		}
+	}
 	if err := m.CostOne(&b.Func, func() ExMem {
-		return ExMem(valueConstant.TotalSize())
+		return ExMem(count)
 	}); err != nil {
 		return nil, err
 	}
-	count := valueConstant.TotalSize()
 	return &Constant{&syn.Integer{Inner: big.NewInt(int64(count))}}, nil
 }
 

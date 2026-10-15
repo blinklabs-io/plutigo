@@ -5047,6 +5047,26 @@ func TestAssetCountHasNoValueDataLimit(t *testing.T) {
 	}
 }
 
+func TestAssetCountRejectsUncachedValueBeforeCosting(t *testing.T) {
+	m := newTestMachineV4()
+	m.ExBudget = ExBudget{}
+	cached := newValueDataBoundaryInput(1).Constant.(*syn.Value)
+	uncached := &syn.Value{Entries: cached.Entries}
+	b := newTestBuiltin(builtin.AssetCount).ApplyArg(&Constant{uncached})
+
+	_, err := assetCount(m, b)
+	if err == nil {
+		t.Fatal("expected uncached Value to fail")
+	}
+	var builtinErr *BuiltinError
+	if !errors.As(err, &builtinErr) {
+		t.Fatalf("expected BuiltinError before costing, got %T: %v", err, err)
+	}
+	if builtinErr.Code != ErrCodeInvalidArgument {
+		t.Fatalf("expected ErrCodeInvalidArgument, got %d", builtinErr.Code)
+	}
+}
+
 func TestBigIntMod256Byte(t *testing.T) {
 	hugePlus5 := new(big.Int).Lsh(big.NewInt(1), 4096)
 	hugePlus5.Add(hugePlus5, big.NewInt(5))

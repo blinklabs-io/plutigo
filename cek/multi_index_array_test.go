@@ -328,10 +328,10 @@ func testValueEntry(policy string, tokenNames ...string) syn.IConstant {
 }
 
 func TestPoliciesAndAssetCountMatchValueSemantics(t *testing.T) {
-	value := &Constant{&syn.Value{Entries: []syn.IConstant{
+	value := &Constant{syn.NewValue([]syn.IConstant{
 		testValueEntry("alpha", "a", "b"),
 		testValueEntry("zeta", "c"),
-	}}}
+	})}
 
 	policyMachine := newTestMachineV4()
 	policyMachine.ExBudget = ExBudget{Cpu: 100000000001, Mem: 100000000001}

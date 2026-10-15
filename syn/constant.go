@@ -174,14 +174,13 @@ func NewValue(entries []IConstant) *Value {
 	}
 }
 
-// TotalSize returns the number of distinct policy and token pairs.
-func (v Value) TotalSize() int {
-	if v.cachedTotalSize > 0 {
-		return v.cachedTotalSize - 1
+// TotalSize returns the cached number of distinct policy and token pairs.
+// The boolean is false for Values that bypassed NewValue.
+func (v Value) TotalSize() (int, bool) {
+	if v.cachedTotalSize == 0 {
+		return 0, false
 	}
-	// Preserve compatibility for callers that construct Value literals
-	// directly instead of using NewValue.
-	return valueTotalSize(v.Entries)
+	return v.cachedTotalSize - 1, true
 }
 
 func valueTotalSize(entries []IConstant) int {
