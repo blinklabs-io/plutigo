@@ -386,7 +386,7 @@ func cloneConstant(constant syn.IConstant) syn.IConstant {
 		for i := range c.Entries {
 			entries[i] = cloneConstant(c.Entries[i])
 		}
-		return &syn.Value{Entries: entries}
+		return syn.NewValue(entries)
 	case *syn.ProtoPair:
 		return &syn.ProtoPair{
 			FstType: c.FstType,

@@ -4599,7 +4599,7 @@ func assetCount[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected value constant",
 		}
 	}
-	entries, ok := valueEntries(value.Constant)
+	valueConstant, ok := value.Constant.(*syn.Value)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
@@ -4607,38 +4607,12 @@ func assetCount[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected value constant",
 		}
 	}
-	// valueInnerCountExMem sums every policy's inner (token) list length,
-	// which is an O(1) slice-length read per policy but still requires
-	// visiting every outer (policy) entry. A Value with an unbounded
-	// number of policies, each holding few or no tokens, keeps the summed
-	// token count low while that outer traversal itself stays unbounded.
-	// Reject on outer size alone, before doing any traversal, so a huge
-	// policy count can't hide behind a small token total.
-	if len(entries) > valueDataMaxSize {
-		return nil, &BuiltinError{
-			Code:    ErrCodeInvalidArgument,
-			Builtin: "assetCount",
-			Message: "maximum input size (40000) exceeded",
-		}
-	}
-	countFn := valueInnerCountExMem(entries)
-	if err := m.CostOne(&b.Func, countFn); err != nil {
+	if err := m.CostOne(&b.Func, func() ExMem {
+		return ExMem(valueConstant.TotalSize())
+	}); err != nil {
 		return nil, err
 	}
-	// The upstream Value caches its total token count, so assetCount is
-	// O(1) there; this cost model assumes the same. Here the count is
-	// recomputed by traversal, so the fixed charge above is only sound
-	// because the outer size was already bounded above. Cap the total
-	// token count too, matching the limit already enforced for
-	// valueData/unValueData.
-	count := countFn()
-	if count > valueDataMaxSize {
-		return nil, &BuiltinError{
-			Code:    ErrCodeInvalidArgument,
-			Builtin: "assetCount",
-			Message: "maximum input size (40000) exceeded",
-		}
-	}
+	count := valueConstant.TotalSize()
 	return &Constant{&syn.Integer{Inner: big.NewInt(int64(count))}}, nil
 }
 
@@ -4747,7 +4721,7 @@ func mapToValue(mapp map[string]map[string]*big.Int) *syn.Value {
 		})
 	}
 
-	return &syn.Value{Entries: res}
+	return syn.NewValue(res)
 }
 
 func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -5281,5 +5255,5 @@ func unValueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		})
 	}
 
-	return &Constant{&syn.Value{Entries: result}}, nil
+	return &Constant{syn.NewValue(result)}, nil
 }

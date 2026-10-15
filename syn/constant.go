@@ -160,7 +160,44 @@ func (pa ProtoArray) Typ() Typ {
 }
 
 type Value struct {
-	Entries []IConstant
+	Entries         []IConstant
+	cachedTotalSize int
+}
+
+// NewValue builds a Value and caches its number of asset entries. Value
+// builtins use this cache for the same constant-time total-size lookup as the
+// reference implementation.
+func NewValue(entries []IConstant) *Value {
+	return &Value{
+		Entries:         entries,
+		cachedTotalSize: valueTotalSize(entries) + 1,
+	}
+}
+
+// TotalSize returns the number of distinct policy and token pairs.
+func (v Value) TotalSize() int {
+	if v.cachedTotalSize > 0 {
+		return v.cachedTotalSize - 1
+	}
+	// Preserve compatibility for callers that construct Value literals
+	// directly instead of using NewValue.
+	return valueTotalSize(v.Entries)
+}
+
+func valueTotalSize(entries []IConstant) int {
+	total := 0
+	for _, entry := range entries {
+		policy, ok := entry.(*ProtoPair)
+		if !ok {
+			continue
+		}
+		tokens, ok := policy.Second.(*ProtoList)
+		if !ok {
+			continue
+		}
+		total += len(tokens.List)
+	}
+	return total
 }
 
 func (Value) isConstant() {}

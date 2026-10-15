@@ -948,6 +948,7 @@ func (a *constantArena) allocProtoArray(typ Typ, items []IConstant) *ProtoArray 
 func (a *constantArena) allocValue(entries []IConstant) *Value {
 	value := a.values.alloc()
 	value.Entries = entries
+	value.cachedTotalSize = valueTotalSize(entries) + 1
 	return value
 }
 
@@ -1404,7 +1405,7 @@ func decodeConstantValue(d *decoder, typ Typ) (IConstant, error) {
 		if err := validateValueEntries(entries); err != nil {
 			return nil, err
 		}
-		constant = &Value{Entries: entries}
+		constant = NewValue(entries)
 
 	case *TBls12_381G1Element:
 		return nil, errors.New("cannot decode bls12_381_G1_element constants")

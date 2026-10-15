@@ -4881,25 +4881,23 @@ func newValueDataBoundaryInput(tokenCount int) *Constant {
 		}
 	}
 
-	return &Constant{&syn.Value{
-		Entries: []syn.IConstant{
-			&syn.ProtoPair{
-				FstType: &syn.TByteString{},
-				SndType: &syn.TList{Typ: &syn.TPair{
+	return &Constant{syn.NewValue([]syn.IConstant{
+		&syn.ProtoPair{
+			FstType: &syn.TByteString{},
+			SndType: &syn.TList{Typ: &syn.TPair{
+				First:  &syn.TByteString{},
+				Second: &syn.TInteger{},
+			}},
+			First: &syn.ByteString{Inner: []byte{}},
+			Second: &syn.ProtoList{
+				LTyp: &syn.TPair{
 					First:  &syn.TByteString{},
 					Second: &syn.TInteger{},
-				}},
-				First: &syn.ByteString{Inner: []byte{}},
-				Second: &syn.ProtoList{
-					LTyp: &syn.TPair{
-						First:  &syn.TByteString{},
-						Second: &syn.TInteger{},
-					},
-					List: tokens,
 				},
+				List: tokens,
 			},
 		},
-	}}
+	})}
 }
 
 // TestValueDataEntryLimit follows the upstream Plutus boundary: valueData
@@ -5019,20 +5017,16 @@ func TestValueDataEntryLimitChargesCostFirst(t *testing.T) {
 	}
 }
 
-// TestAssetCountEntryLimit verifies assetCount bounds its traversal at the
-// same valueDataMaxSize limit enforced for valueData/unValueData. Unlike the
-// upstream reference Value, which caches its total token count and so costs
-// assetCount as O(1), this implementation recounts entries by traversal, so
-// the fixed charge is only sound if that traversal is bounded.
-func TestAssetCountEntryLimit(t *testing.T) {
+// TestAssetCountHasNoValueDataLimit verifies that assetCount accepts values
+// larger than the limit used only by valueData and unValueData.
+func TestAssetCountHasNoValueDataLimit(t *testing.T) {
 	tests := []struct {
 		name    string
 		entries int
-		wantErr bool
 	}{
 		{name: "below limit", entries: valueDataMaxSize - 1},
 		{name: "at limit", entries: valueDataMaxSize},
-		{name: "above limit", entries: valueDataMaxSize + 1, wantErr: true},
+		{name: "above limit", entries: valueDataMaxSize + 1},
 	}
 
 	for _, tt := range tests {
@@ -5042,19 +5036,6 @@ func TestAssetCountEntryLimit(t *testing.T) {
 				ApplyArg(newValueDataBoundaryInput(tt.entries))
 
 			val, err := assetCount(m, b)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatal("expected oversized assetCount input to fail")
-				}
-				var builtinErr *BuiltinError
-				if !errors.As(err, &builtinErr) {
-					t.Fatalf("expected BuiltinError, got %T: %v", err, err)
-				}
-				if builtinErr.Code != ErrCodeInvalidArgument {
-					t.Fatalf("expected ErrCodeInvalidArgument, got %d", builtinErr.Code)
-				}
-				return
-			}
 			if err != nil {
 				t.Fatalf("assetCount(%d entries) returned error: %v", tt.entries, err)
 			}
@@ -5063,93 +5044,6 @@ func TestAssetCountEntryLimit(t *testing.T) {
 				t.Fatalf("assetCount = %v, want %d", got.Inner, tt.entries)
 			}
 		})
-	}
-}
-
-// newManyPoliciesValue builds a Value with policyCount distinct policies,
-// each holding an empty token list. This violates the upstream Value
-// invariant of "no empty inner map", but nothing in the constant decoder
-// enforces that invariant, so it is a reachable shape for a crafted program.
-// It keeps the summed token count at zero regardless of policyCount, which
-// is what distinguishes a bound on outer (policy) traversal from a bound on
-// total token count.
-func newManyPoliciesValue(policyCount int) *Constant {
-	entries := make([]syn.IConstant, policyCount)
-	for i := range entries {
-		entries[i] = &syn.ProtoPair{
-			FstType: &syn.TByteString{},
-			SndType: &syn.TList{Typ: &syn.TPair{
-				First:  &syn.TByteString{},
-				Second: &syn.TInteger{},
-			}},
-			First: &syn.ByteString{Inner: []byte{
-				byte(i >> 24),
-				byte(i >> 16),
-				byte(i >> 8),
-				byte(i),
-			}},
-			Second: &syn.ProtoList{
-				LTyp: &syn.TPair{
-					First:  &syn.TByteString{},
-					Second: &syn.TInteger{},
-				},
-				List: []syn.IConstant{},
-			},
-		}
-	}
-	return &Constant{&syn.Value{Entries: entries}}
-}
-
-// TestAssetCountBoundsOuterPolicyTraversal verifies assetCount rejects a
-// Value with more policies than valueDataMaxSize even when every policy's
-// token list is empty, so the summed token count never exceeds the limit.
-// Bounding only the token-count sum would let the outer (policy) traversal
-// itself run unbounded in this shape; assetCount must reject on outer size
-// before performing that traversal.
-func TestAssetCountBoundsOuterPolicyTraversal(t *testing.T) {
-	m := newTestMachineV4()
-	b := newTestBuiltin(builtin.AssetCount).
-		ApplyArg(newManyPoliciesValue(valueDataMaxSize + 1))
-
-	_, err := assetCount(m, b)
-	if err == nil {
-		t.Fatal("expected assetCount to reject a value with too many policies")
-	}
-	var builtinErr *BuiltinError
-	if !errors.As(err, &builtinErr) {
-		t.Fatalf("expected BuiltinError, got %T: %v", err, err)
-	}
-	if builtinErr.Code != ErrCodeInvalidArgument {
-		t.Fatalf("expected ErrCodeInvalidArgument, got %d", builtinErr.Code)
-	}
-}
-
-func TestAssetCountEntryLimitChargesCostFirst(t *testing.T) {
-	oversizedValue := newValueDataBoundaryInput(valueDataMaxSize + 1)
-	m := newTestMachineV4()
-	m.ExBudget = ExBudget{}
-	b := newTestBuiltin(builtin.AssetCount).ApplyArg(oversizedValue)
-
-	_, err := assetCount(m, b)
-	if err == nil {
-		t.Fatal("expected insufficient budget to reject oversized assetCount input")
-	}
-	var budgetErr *BudgetError
-	if !errors.As(err, &budgetErr) {
-		t.Fatalf(
-			"expected assetCount cost to be charged before the size check, got %T: %v",
-			err,
-			err,
-		)
-	}
-	if budgetErr.Code != ErrCodeBudgetExhausted {
-		t.Fatalf("expected ErrCodeBudgetExhausted, got %d", budgetErr.Code)
-	}
-	if budgetErr.Requested.Cpu <= 0 || budgetErr.Requested.Mem <= 0 {
-		t.Fatalf("expected positive assetCount cost, got %+v", budgetErr.Requested)
-	}
-	if budgetErr.Available != (ExBudget{}) {
-		t.Fatalf("expected zero available budget, got %+v", budgetErr.Available)
 	}
 }
 
