@@ -43,14 +43,15 @@ const (
 	ErrCodeCPUExhausted    ErrorCode = 102
 
 	// Script errors (contract logic failures)
-	ErrCodeExplicitError      ErrorCode = 200
-	ErrCodeMissingCaseBranch  ErrorCode = 201
-	ErrCodeInvalidCaseBranch  ErrorCode = 202
-	ErrCodeCaseOnNegativeInt  ErrorCode = 203
-	ErrCodeCaseIntOutOfRange  ErrorCode = 204
-	ErrCodeCaseOnByteString   ErrorCode = 205
-	ErrCodeMaxIntExceeded     ErrorCode = 206
-	ErrCodeInvalidBranchCount ErrorCode = 207
+	ErrCodeExplicitError            ErrorCode = 200
+	ErrCodeMissingCaseBranch        ErrorCode = 201
+	ErrCodeInvalidCaseBranch        ErrorCode = 202
+	ErrCodeCaseOnNegativeInt        ErrorCode = 203
+	ErrCodeCaseIntOutOfRange        ErrorCode = 204
+	ErrCodeCaseOnByteString         ErrorCode = 205
+	ErrCodeMaxIntExceeded           ErrorCode = 206
+	ErrCodeInvalidBranchCount       ErrorCode = 207
+	ErrCodeCaseOnBuiltinUnavailable ErrorCode = 208
 
 	// Type errors (malformed script structure)
 	ErrCodeOpenTerm             ErrorCode = 300
