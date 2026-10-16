@@ -47,7 +47,10 @@ func TestCaseOnBuiltinValuesRequiresVanRossem(t *testing.T) {
 		"bool":    `(program 1.1.0 (case (con bool True) (con integer 1) (con integer 2)))`,
 		"integer": `(program 1.1.0 (case (con integer 1) (con integer 10) (con integer 20)))`,
 		"list":    `(program 1.1.0 (case (con (list integer) [7, 8]) (lam h (lam t h)) (con integer 0)))`,
-		"unit":    `(program 1.1.0 (case (con unit ()) (con integer 3)))`,
+		"pair": `(program 1.1.0 (case
+  [ [ (builtin mkPairData) (con data (I 1)) ] (con data (I 2)) ]
+  (lam first (lam second first))))`,
+		"unit": `(program 1.1.0 (case (con unit ()) (con integer 3)))`,
 	}
 	for name, src := range tests {
 		t.Run(name, func(t *testing.T) {
