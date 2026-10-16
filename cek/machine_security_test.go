@@ -20,6 +20,7 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
@@ -91,6 +92,105 @@ func TestDischargePairChargesEachValueOnce(t *testing.T) {
 	}
 	if budget.remaining != 0 {
 		t.Fatalf("expected three values to consume three work units, %d remain", budget.remaining)
+	}
+}
+
+func TestDischargeSharesConstantCloneWorkBudget(t *testing.T) {
+	items := []syn.IConstant{
+		&syn.Integer{Inner: big.NewInt(1)},
+		&syn.Integer{Inner: big.NewInt(2)},
+		&syn.Integer{Inner: big.NewInt(3)},
+	}
+	constant := &Constant{Constant: &syn.ProtoList{
+		LTyp: &syn.TInteger{},
+		List: items,
+	}}
+	result := &Constr[syn.DeBruijn]{
+		Fields: []Value[syn.DeBruijn]{constant, constant},
+	}
+	budget := dischargeWorkBudget{remaining: 8}
+
+	_, err := dischargeValueDepth[syn.DeBruijn](
+		context.Background(),
+		false,
+		result,
+		&budget,
+		0,
+	)
+	var budgetErr *BudgetError
+	if !errors.As(err, &budgetErr) {
+		t.Fatalf("discharge duplicated composite constant error = %T %v, want BudgetError", err, err)
+	}
+}
+
+func TestDischargeSharesConstantTypeValidationBudget(t *testing.T) {
+	constantType := &syn.TList{Typ: &syn.TList{Typ: &syn.TInteger{}}}
+	constant := &Constant{Constant: &syn.ProtoList{LTyp: constantType}}
+	result := &Constr[syn.DeBruijn]{
+		Fields: []Value[syn.DeBruijn]{constant, constant},
+	}
+	budget := dischargeWorkBudget{remaining: 8}
+
+	_, err := dischargeValueDepth[syn.DeBruijn](
+		context.Background(),
+		false,
+		result,
+		&budget,
+		0,
+	)
+	var budgetErr *BudgetError
+	if !errors.As(err, &budgetErr) {
+		t.Fatalf("discharge duplicated constant type error = %T %v, want BudgetError", err, err)
+	}
+}
+
+func TestRunBoundsRepeatedScalarResultCopies(t *testing.T) {
+	shared := &syn.ByteString{Inner: make([]byte, 1<<20)}
+	items := make([]syn.IConstant, 65)
+	for i := range items {
+		items[i] = shared
+	}
+	term := &syn.Constant{Con: &syn.ProtoList{
+		LTyp: &syn.TByteString{},
+		List: items,
+	}}
+
+	_, err := newTestMachineFlow().Run(term)
+	var budgetErr *BudgetError
+	if !errors.As(err, &budgetErr) {
+		t.Fatalf("Run() error = %T %v, want BudgetError", err, err)
+	}
+}
+
+func TestDischargeScalarBudgetCoversScalarOwners(t *testing.T) {
+	tests := []struct {
+		name     string
+		constant syn.IConstant
+	}{
+		{"byte string", &syn.ByteString{Inner: []byte{1, 2}}},
+		{"string", &syn.String{Inner: "ab"}},
+		{"integer", &syn.Integer{Inner: big.NewInt(256)}},
+		{"data byte string", &syn.Data{Inner: data.NewByteString([]byte{1, 2})}},
+		{"data integer", &syn.Data{Inner: data.NewInteger(big.NewInt(256))}},
+		{"data constructor tag", &syn.Data{Inner: &data.Constr{Tag: big.NewInt(256)}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			discharge := dischargeWorkBudget{
+				remaining:   maxDischargeWork,
+				scalarBytes: maxDischargeScalarBytes - 1,
+			}
+			budget := structureValidationBudget{
+				ctx:       context.Background(),
+				remaining: maxDischargeWork,
+				discharge: &discharge,
+			}
+			err := validateConstantStructureWithBudget(test.constant, &budget)
+			var budgetErr *BudgetError
+			if !errors.As(err, &budgetErr) {
+				t.Fatalf("validation error = %T %v, want BudgetError", err, err)
+			}
+		})
 	}
 }
 

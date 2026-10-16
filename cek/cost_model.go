@@ -406,81 +406,167 @@ func valueMaxCountExMem(l []syn.IConstant) func() ExMem {
 	}
 }
 
-// dataNodeCountExMem counts the number of nodes in a Data structure.
-// Used by unValueData which costs based on node count.
-func dataNodeCountExMem(d data.PlutusData) func() ExMem {
-	return func() ExMem {
-		count := 0
-		stack := []data.PlutusData{d}
-		for len(stack) > 0 {
-			node := stack[0]
-			stack = stack[1:]
-			count++
-			switch n := node.(type) {
-			case *data.Constr:
-				if n != nil {
-					stack = append(stack, n.Fields...)
-				}
-			case *data.List:
-				if n != nil {
-					stack = append(stack, n.Items...)
-				}
-			case *data.Map:
-				if n == nil {
-					continue
-				}
-				for _, pair := range n.Pairs {
-					stack = append(stack, pair[0], pair[1])
-				}
-			case *data.Value:
-				if n != nil && n.Inner != nil {
-					stack = append(stack, n.Inner)
-				}
-			}
-		}
-		return ExMem(count)
-	}
-}
-
 func dataExMem(x data.PlutusData) func() ExMem {
 	return func() ExMem {
-		var acc ExMem
-		costStack := []data.PlutusData{
-			x,
+		size, err := dataExMemChecked(x, nil)
+		if err != nil {
+			panic(err)
 		}
-
-		for len(costStack) != 0 {
-			d := costStack[0]
-			costStack = costStack[1:]
-			// Cost 4 per item switch
-			acc += DataCost
-			switch dat := d.(type) {
-			case *data.Constr:
-				costStack = append(costStack, dat.Fields...)
-			case *data.List:
-				costStack = append(costStack, dat.Items...)
-			case *data.Map:
-				for _, pair := range dat.Pairs {
-					costStack = append(costStack, pair[0], pair[1])
-				}
-			case *data.Value:
-				if dat.Inner != nil {
-					costStack = append(costStack, dat.Inner)
-				}
-			case *data.Integer:
-				acc += bigIntExMem(dat.Inner)()
-			case *data.ByteString:
-				acc += byteArrayExMem(dat.Inner)()
-			default:
-				panic("Unreachable")
-			}
-		}
-
-		return acc
+		return size
 	}
 }
 
-// equalsDataMinExMem returns min(size(x), size(y)) in the dataExMem measure.
+type dataWalkFrame struct {
+	node data.PlutusData
+	next int
+}
+
+type plutusDataWalker struct {
+	nextNode data.PlutusData
+	hasNext  bool
+}
+
+func newPlutusDataWalker(root data.PlutusData) plutusDataWalker {
+	return plutusDataWalker{
+		nextNode: root,
+		hasNext:  true,
+	}
+}
+
+func nextDataChild(frame *dataWalkFrame) (data.PlutusData, bool) {
+	switch node := frame.node.(type) {
+	case *data.Constr:
+		if node != nil && frame.next < len(node.Fields) {
+			child := node.Fields[frame.next]
+			frame.next++
+			return child, true
+		}
+	case data.Constr:
+		if frame.next < len(node.Fields) {
+			child := node.Fields[frame.next]
+			frame.next++
+			return child, true
+		}
+	case *data.List:
+		if node != nil && frame.next < len(node.Items) {
+			child := node.Items[frame.next]
+			frame.next++
+			return child, true
+		}
+	case data.List:
+		if frame.next < len(node.Items) {
+			child := node.Items[frame.next]
+			frame.next++
+			return child, true
+		}
+	case *data.Map:
+		if node != nil && frame.next < len(node.Pairs)*2 {
+			pair := node.Pairs[frame.next/2]
+			child := pair[frame.next%2]
+			frame.next++
+			return child, true
+		}
+	case data.Map:
+		if frame.next < len(node.Pairs)*2 {
+			pair := node.Pairs[frame.next/2]
+			child := pair[frame.next%2]
+			frame.next++
+			return child, true
+		}
+	case *data.Value:
+		if node != nil && node.Inner != nil && frame.next == 0 {
+			frame.next++
+			return node.Inner, true
+		}
+	case data.Value:
+		if node.Inner != nil && frame.next == 0 {
+			frame.next++
+			return node.Inner, true
+		}
+	}
+	return nil, false
+}
+
+func (w *plutusDataWalker) next(
+	stack []dataWalkFrame,
+) (data.PlutusData, []dataWalkFrame, bool) {
+	if !w.hasNext {
+		return nil, stack, false
+	}
+	node := w.nextNode
+	frame := dataWalkFrame{node: node}
+	if child, ok := nextDataChild(&frame); ok {
+		stack = append(stack, frame)
+		w.nextNode = child
+		return node, stack, true
+	}
+	for len(stack) > 0 {
+		top := &stack[len(stack)-1]
+		if child, ok := nextDataChild(top); ok {
+			w.nextNode = child
+			return node, stack, true
+		}
+		stack = stack[:len(stack)-1]
+	}
+	w.hasNext = false
+	return node, stack, true
+}
+
+func walkPlutusData(
+	root data.PlutusData,
+	visit func(data.PlutusData) error,
+) error {
+	var buf [32]dataWalkFrame
+	walker := newPlutusDataWalker(root)
+	stack := buf[:0]
+	for walker.hasNext {
+		var node data.PlutusData
+		node, stack, _ = walker.next(stack)
+		if err := visit(node); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func dataNodeCountExMemChecked(
+	d data.PlutusData,
+	check func(ExMem) error,
+) (ExMem, error) {
+	var count ExMem
+	err := walkPlutusData(d, func(node data.PlutusData) error {
+		if _, err := dataNodeExMem(node); err != nil {
+			return err
+		}
+		count++
+		if check != nil {
+			return check(count)
+		}
+		return nil
+	})
+	return count, err
+}
+
+func dataExMemChecked(
+	x data.PlutusData,
+	check func(ExMem) error,
+) (ExMem, error) {
+	var acc ExMem
+	err := walkPlutusData(x, func(d data.PlutusData) error {
+		size, err := dataNodeExMem(d)
+		if err != nil {
+			return err
+		}
+		acc += size
+		if check != nil {
+			return check(acc)
+		}
+		return nil
+	})
+	return acc, err
+}
+
+// equalsDataMinExMemChecked returns min(size(x), size(y)) in the dataExMem measure.
 //
 // Equals Data is an exceptional case where the cost for the full traversal
 // of 2 plutus data objects may far exceed what ends up being costed by the
@@ -494,66 +580,97 @@ func dataExMem(x data.PlutusData) func() ExMem {
 //
 // The result does not depend on traversal order: the loop only stops once one
 // side has been counted completely and is no larger than the other's partial
-// count, so the minimum is always an exact full size. That lets the pending
-// nodes live on LIFO stacks whose backing arrays start on the goroutine stack.
-func equalsDataMinExMem(x data.PlutusData, y data.PlutusData) ExMem {
+// count, so the minimum is always an exact full size. Pending traversal state
+// grows with nesting depth rather than container width.
+func equalsDataMinExMemChecked(
+	x data.PlutusData,
+	y data.PlutusData,
+	check func(ExMem) error,
+) (ExMem, error) {
 	var xAcc ExMem
 	var yAcc ExMem
-	var bufX, bufY [32]data.PlutusData
-	costStackX := append(bufX[:0], x)
-	costStackY := append(bufY[:0], y)
+	var bufX, bufY [32]dataWalkFrame
+	xWalker := newPlutusDataWalker(x)
+	yWalker := newPlutusDataWalker(y)
+	stackX := bufX[:0]
+	stackY := bufY[:0]
 
-	for xLen, yLen := true, true; (xLen || xAcc > yAcc) && (yLen || yAcc > xAcc); xLen,
-		yLen = len(costStackX) != 0, len(costStackY) != 0 {
-		if xLen {
-			last := len(costStackX) - 1
-			d := costStackX[last]
-			costStackX = costStackX[:last]
-			var size ExMem
-			size, costStackX = equalsDataNodeExMem(d, costStackX)
+	for (xWalker.hasNext || xAcc > yAcc) && (yWalker.hasNext || yAcc > xAcc) {
+		d, nextX, ok := xWalker.next(stackX)
+		stackX = nextX
+		if ok {
+			size, err := dataNodeExMem(d)
+			if err != nil {
+				return 0, err
+			}
 			xAcc += size
 		}
-
-		if yLen {
-			last := len(costStackY) - 1
-			d := costStackY[last]
-			costStackY = costStackY[:last]
-			var size ExMem
-			size, costStackY = equalsDataNodeExMem(d, costStackY)
+		d, nextY, ok := yWalker.next(stackY)
+		stackY = nextY
+		if ok {
+			size, err := dataNodeExMem(d)
+			if err != nil {
+				return 0, err
+			}
 			yAcc += size
 		}
+		if check != nil {
+			if err := check(min(xAcc, yAcc)); err != nil {
+				return 0, err
+			}
+		}
 	}
 
-	return min(xAcc, yAcc)
+	return min(xAcc, yAcc), nil
 }
 
-// equalsDataNodeExMem costs one node in the dataExMem measure and pushes its
-// children onto stack.
-func equalsDataNodeExMem(
-	d data.PlutusData,
-	stack []data.PlutusData,
-) (ExMem, []data.PlutusData) {
-	// Cost 4 per item switch
+func dataNodeExMem(d data.PlutusData) (ExMem, error) {
 	size := ExMem(DataCost)
 	switch dat := d.(type) {
+	case data.Constr, data.List, data.Map, data.Value:
 	case *data.Constr:
-		stack = append(stack, dat.Fields...)
+		if dat == nil {
+			return 0, invalidPlutusDataNode(d)
+		}
 	case *data.List:
-		stack = append(stack, dat.Items...)
+		if dat == nil {
+			return 0, invalidPlutusDataNode(d)
+		}
 	case *data.Map:
-		for _, pair := range dat.Pairs {
-			stack = append(stack, pair[0], pair[1])
+		if dat == nil {
+			return 0, invalidPlutusDataNode(d)
 		}
 	case *data.Value:
-		if dat.Inner != nil {
-			stack = append(stack, dat.Inner)
+		if dat == nil {
+			return 0, invalidPlutusDataNode(d)
 		}
-	case *data.Integer:
+	case data.Integer:
+		if dat.Inner == nil {
+			return 0, invalidPlutusDataNode(d)
+		}
 		size += bigIntExMemValue(dat.Inner)
+	case *data.Integer:
+		if dat == nil || dat.Inner == nil {
+			return 0, invalidPlutusDataNode(d)
+		}
+		size += bigIntExMemValue(dat.Inner)
+	case data.ByteString:
+		size += byteArrayExMemValue(dat.Inner)
 	case *data.ByteString:
+		if dat == nil {
+			return 0, invalidPlutusDataNode(d)
+		}
 		size += byteArrayExMemValue(dat.Inner)
 	default:
-		panic("Unreachable")
+		return 0, invalidPlutusDataNode(d)
 	}
-	return size, stack
+	return size, nil
+}
+
+func invalidPlutusDataNode(d data.PlutusData) *BuiltinError {
+	return &BuiltinError{
+		Code:    ErrCodeInvalidArgument,
+		Builtin: "data sizing",
+		Message: fmt.Sprintf("invalid PlutusData node %T", d),
+	}
 }

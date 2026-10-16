@@ -110,6 +110,10 @@ type Machine[T syn.Eval] struct {
 	protoMajor uint
 	ExBudget   ExBudget
 	Logs       []string
+	// activeContext is non-nil only while RunContext is evaluating. Builtin
+	// helpers that perform substantial work inside one CEK transition use it
+	// to preserve cooperative cancellation.
+	activeContext context.Context
 
 	argHolder argHolder[T]
 	// Scratch for evalBuiltinAppReady and evalBuiltinAppWithArg.
@@ -1056,6 +1060,15 @@ func (m *Machine[T]) runContext(
 	checkCancellation bool,
 	term syn.Term[T],
 ) (syn.Term[T], error) {
+	if checkCancellation {
+		m.activeContext = ctx
+	} else {
+		m.activeContext = nil
+	}
+	defer func() { m.activeContext = nil }()
+	if err := validateTermStructure[T](ctx, checkCancellation, term); err != nil {
+		return nil, err
+	}
 	firstRun := !m.hasRun
 	if m.hasRun {
 		if m.valueArenaChunkSize <= 0 {
@@ -1917,8 +1930,14 @@ const maxDischargeDepth = 100_000
 // discharge, independently of evaluation budget.
 const maxDischargeWork = 1_000_000
 
+// maxDischargeScalarBytes bounds scalar storage copied into an independently
+// owned result. It is deliberately separate from the structural node limit:
+// repeated references to one caller-owned scalar are distinct result copies.
+const maxDischargeScalarBytes int64 = 64 << 20
+
 type dischargeWorkBudget struct {
-	remaining int
+	remaining   int
+	scalarBytes int64
 }
 
 func (b *dischargeWorkBudget) consume(work int) error {
@@ -1929,6 +1948,17 @@ func (b *dischargeWorkBudget) consume(work int) error {
 		return dischargeWorkLimitError()
 	}
 	b.remaining -= work
+	return nil
+}
+
+func (b *dischargeWorkBudget) consumeScalarBytes(size int64) error {
+	if b == nil {
+		return nil
+	}
+	if size < 0 || size > maxDischargeScalarBytes-b.scalarBytes {
+		return dischargeWorkLimitError()
+	}
+	b.scalarBytes += size
 	return nil
 }
 
@@ -1983,20 +2013,42 @@ func dischargeValueDepth[T syn.Eval](
 
 	switch v := value.(type) {
 	case *Constant:
-		return constantTerm[T](v.Constant), nil
+		return constantTermContext[T](ctx, checkCancellation, v.Constant, budget, 1, false)
 	case *dataValue[T]:
-		return constantTerm[T](&syn.Data{Inner: v.item}), nil
+		return constantTermContext[T](
+			ctx,
+			checkCancellation,
+			&syn.Data{Inner: v.item},
+			budget,
+			1,
+			false,
+		)
 	case *dataListValue[T]:
 		if err := budget.consume(len(v.items)); err != nil {
 			return nil, err
 		}
-		return constantTerm[T](materializeDataListConstant(v.items)), nil
+		return constantTermContext[T](
+			ctx,
+			checkCancellation,
+			materializeDataListConstant(v.items),
+			budget,
+			1+len(v.items),
+			true,
+		)
 	case *dataMapValue[T]:
 		if err := budget.consume(len(v.items)); err != nil {
 			return nil, err
 		}
-		return constantTerm[T](materializeDataMapConstant(v.items)), nil
+		return constantTermContext[T](
+			ctx,
+			checkCancellation,
+			materializeDataMapConstant(v.items),
+			budget,
+			1+len(v.items),
+			true,
+		)
 	case *pairValue[T]:
+		remainingBeforeMaterialize := budget.remaining
 		constant, ok, err := materializeConstantValueDepthWithBudget[T](
 			v,
 			depth,
@@ -2012,7 +2064,14 @@ func dischargeValueDepth[T syn.Eval](
 				Message: fmt.Sprintf("cannot discharge non-constant pair value: %T", v),
 			}
 		}
-		return constantTerm[T](constant), nil
+		return constantTermContext[T](
+			ctx,
+			checkCancellation,
+			constant,
+			budget,
+			remainingBeforeMaterialize-budget.remaining,
+			true,
+		)
 	case *Builtin[T]:
 		// Reconstruct the term that represents this builtin application
 		var forcedTerm syn.Term[T]

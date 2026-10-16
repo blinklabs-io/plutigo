@@ -15,6 +15,7 @@
 package cek
 
 import (
+	"errors"
 	"math/big"
 	"testing"
 
@@ -48,24 +49,15 @@ func TestBoolConstantReturnsDistinctValues(t *testing.T) {
 	}
 }
 
-func TestCloneConstantPreservesNilInteger(t *testing.T) {
-	cloned, ok := cloneConstant(&syn.Integer{}).(*syn.Integer)
-	if !ok {
-		t.Fatalf("cloneConstant returned %T, want *syn.Integer", cloned)
-	}
-	if cloned.Inner != nil {
-		t.Fatalf("cloned integer Inner = %v, want nil", cloned.Inner)
-	}
-	if got := cloned.ExMemWords(); got != 1 {
-		t.Fatalf("cloned integer ExMemWords() = %d, want 1", got)
-	}
-}
-
 func TestCloneConstantCopiesIntegerValue(t *testing.T) {
 	original := &syn.Integer{}
 	original.SetInner(big.NewInt(7))
 
-	cloned, ok := cloneConstant(original).(*syn.Integer)
+	constant, err := cloneConstant(original)
+	if err != nil {
+		t.Fatalf("cloneConstant returned error: %v", err)
+	}
+	cloned, ok := constant.(*syn.Integer)
 	if !ok {
 		t.Fatalf("cloneConstant returned %T, want *syn.Integer", cloned)
 	}
@@ -74,5 +66,27 @@ func TestCloneConstantCopiesIntegerValue(t *testing.T) {
 	}
 	if cloned.Inner == original.Inner {
 		t.Fatal("cloneConstant reused the original big.Int pointer")
+	}
+}
+
+func TestCloneConstantRejectsNilInteger(t *testing.T) {
+	_, err := cloneConstant(&syn.Integer{})
+	var typeErr *TypeError
+	if !errors.As(err, &typeErr) {
+		t.Fatalf("cloneConstant error = %T %v, want TypeError", err, err)
+	}
+	if typeErr.Code != ErrCodeTypeMismatch {
+		t.Fatalf("error code = %d, want %d", typeErr.Code, ErrCodeTypeMismatch)
+	}
+}
+
+func TestCloneConstantRejectsMalformedConstant(t *testing.T) {
+	_, err := cloneConstant((*syn.String)(nil))
+	var typeErr *TypeError
+	if !errors.As(err, &typeErr) {
+		t.Fatalf("cloneConstant error = %T %v, want TypeError", err, err)
+	}
+	if typeErr.Code != ErrCodeTypeMismatch {
+		t.Fatalf("error code = %d, want %d", typeErr.Code, ErrCodeTypeMismatch)
 	}
 }

@@ -2033,7 +2033,7 @@ func (d *decoder) utf8() (string, error) {
 	}
 
 	if !utf8.Valid(b) {
-		return "", fmt.Errorf("bytes are not valid utf8 %v", b)
+		return "", fmt.Errorf("bytes are not valid utf8 (length %d)", len(b))
 	}
 
 	return string(b), nil
@@ -2046,7 +2046,7 @@ func (d *decoder) utf8WithArena(arena *constantArena) (string, error) {
 	}
 
 	if !utf8.Valid(b) {
-		return "", fmt.Errorf("bytes are not valid utf8 %v", b)
+		return "", fmt.Errorf("bytes are not valid utf8 (length %d)", len(b))
 	}
 
 	return string(b), nil
