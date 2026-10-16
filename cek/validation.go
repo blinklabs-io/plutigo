@@ -48,6 +48,7 @@ type structureValidationBudget struct {
 	ctx               context.Context
 	checkCancellation bool
 	remaining         int
+	trustedData       map[*syn.Data]struct{}
 	discharge         *dischargeWorkBudget
 	credits           int
 	// Machine-created materializations derive their types from values that
@@ -115,11 +116,13 @@ func validateTermStructure[T syn.Eval](
 	ctx context.Context,
 	checkCancellation bool,
 	term syn.Term[T],
+	trustedData map[*syn.Data]struct{},
 ) error {
 	budget := structureValidationBudget{
 		ctx:               ctx,
 		checkCancellation: checkCancellation,
 		remaining:         maxDischargeWork,
+		trustedData:       trustedData,
 	}
 	work := make([]termValidationItem[T], 0, 1)
 	if err := scheduleValidationItem(
@@ -329,6 +332,9 @@ func validateConstantStructureWithBudget(
 		case *syn.Data:
 			if c == nil {
 				return malformedASTError("constant contains a nil Data")
+			}
+			if _, ok := budget.trustedData[c]; ok {
+				continue
 			}
 			if err := validateDataStructureWithBudget(c.Inner, budget); err != nil {
 				return err

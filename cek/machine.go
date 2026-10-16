@@ -1038,7 +1038,7 @@ func (m *Machine[T]) finishValueContext(
 // budget restoration and frame-stack reset (the latter also defends against
 // tests or other callers that tamper with the frame stack between runs).
 func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
-	return m.runContext(context.Background(), false, term)
+	return m.runContext(context.Background(), false, term, nil)
 }
 
 // RunContext executes a Plutus term using the CEK machine.
@@ -1052,13 +1052,69 @@ func (m *Machine[T]) RunContext(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return m.runContext(ctx, true, term)
+	return m.runContext(ctx, true, term, nil)
+}
+
+// RunContextWithTrustedDataArguments applies ledger-supplied data arguments to
+// a UPLC program. It validates the program and generated application nodes but
+// does not walk the argument data trees, which must be validated at their
+// source and must be acyclic. Use RunContext for caller-built terms or
+// untrusted data.
+func (m *Machine[T]) RunContextWithTrustedDataArguments(
+	ctx context.Context,
+	term syn.Term[T],
+	arguments ...data.PlutusData,
+) (syn.Term[T], error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if len(arguments) > (maxDischargeWork-1)/3 {
+		return nil, malformedASTError("too many trusted data arguments: %d", len(arguments))
+	}
+	trustedData := make(map[*syn.Data]struct{}, len(arguments))
+	for i, argument := range arguments {
+		if isNilPlutusData(argument) {
+			return nil, malformedASTError("trusted data argument %d is nil", i)
+		}
+		constant := &syn.Data{Inner: argument}
+		trustedData[constant] = struct{}{}
+		term = &syn.Apply[T]{
+			Function: term,
+			Argument: &syn.Constant{Con: constant},
+		}
+	}
+	return m.runContext(ctx, true, term, trustedData)
+}
+
+func isNilPlutusData(value data.PlutusData) bool {
+	switch value := value.(type) {
+	case nil:
+		return true
+	case *data.Constr:
+		return value == nil
+	case *data.Map:
+		return value == nil
+	case *data.Value:
+		return value == nil
+	case *data.Integer:
+		return value == nil
+	case *data.ByteString:
+		return value == nil
+	case *data.List:
+		return value == nil
+	default:
+		return false
+	}
 }
 
 func (m *Machine[T]) runContext(
 	ctx context.Context,
 	checkCancellation bool,
 	term syn.Term[T],
+	trustedData map[*syn.Data]struct{},
 ) (syn.Term[T], error) {
 	if checkCancellation {
 		m.activeContext = ctx
@@ -1066,7 +1122,7 @@ func (m *Machine[T]) runContext(
 		m.activeContext = nil
 	}
 	defer func() { m.activeContext = nil }()
-	if err := validateTermStructure[T](ctx, checkCancellation, term); err != nil {
+	if err := validateTermStructure[T](ctx, checkCancellation, term, trustedData); err != nil {
 		return nil, err
 	}
 	firstRun := !m.hasRun
