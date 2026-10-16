@@ -89,25 +89,20 @@ else
     echo "Install: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest"
 fi
 
-# Step 4: Run nilaway
-echo_step "Running nilaway"
-if command -v nilaway &> /dev/null; then
-    if nilaway -include-pkgs=github.com/blinklabs-io/plutigo -exclude-file-docstrings="<nilaway skip stack-machine>" ./... 2>/dev/null; then
-        echo_pass "nilaway"
-    else
-        echo_fail "nilaway found nil safety issues"
-        echo "Run 'nilaway -include-pkgs=github.com/blinklabs-io/plutigo -exclude-file-docstrings=\"<nilaway skip stack-machine>\" ./...' for details"
-    fi
+# Step 4: Run the repository-pinned NilAway version
+echo_step "Running NilAway"
+if make nilaway; then
+    echo_pass "NilAway"
 else
-    echo -e "${YELLOW}SKIP${NC}: nilaway not installed"
-    echo "Install: go install go.uber.org/nilaway/cmd/nilaway@latest"
+    echo_fail "NilAway found issues"
+    echo "Run 'make nilaway' for details"
 fi
 
 # Step 5: Check for common issues
 echo_step "Checking for common issues"
 
 # Check for TODO/FIXME that should be tracked
-TODO_COUNT=$(grep -rE "TODO|FIXME" --include="*.go" . 2>/dev/null | grep -v vendor | grep -v "_test.go" | wc -l)
+TODO_COUNT=$(grep -rE "TODO|FIXME" --include="*.go" . 2>/dev/null | grep -v vendor | grep -v "_test.go" | awk 'END { print NR }')
 if [ "$TODO_COUNT" -gt 0 ]; then
     echo -e "${YELLOW}NOTE${NC}: Found $TODO_COUNT TODO/FIXME comments in non-test code"
 fi

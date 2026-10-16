@@ -1,4 +1,4 @@
-# Generated automatically by org-governance-bot. Do not edit manually.
+# Managed locally so reusable workflow revisions are reviewed with this repository.
 name: "Conventional Commits"
 
 on:
@@ -6,4 +6,6 @@ on:
 
 jobs:
   orchestrate:
-    uses: blinklabs-io/actions/.github/workflows/reuseable-conventional-commits.yml@main
+    permissions:
+      contents: read
+    uses: blinklabs-io/actions/.github/workflows/reuseable-conventional-commits.yml@d3aa875070b18acdcb31256100558d44c16b512f
