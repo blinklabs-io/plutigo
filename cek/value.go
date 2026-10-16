@@ -486,7 +486,11 @@ func cloneConstantContext(
 		if c == nil {
 			return nil, malformedASTError("cannot clone a nil Value constant")
 		}
-		return c, nil
+		cloned, err := syn.NewValue(c.Entries())
+		if err != nil {
+			return nil, err
+		}
+		return cloned, nil
 	case *syn.ProtoPair:
 		if c == nil {
 			return nil, malformedASTError("cannot clone a nil ProtoPair constant")
