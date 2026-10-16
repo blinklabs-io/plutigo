@@ -31,6 +31,13 @@ const IntegerToByteStringMaximumOutputLength = 8192
 
 type Builtins[T syn.Eval] [builtin.TotalBuiltinCount]func(*Machine[T], *Builtin[T]) (Value[T], error)
 
+func (m *Machine[T]) checkBuiltinCancellation() error {
+	if m.activeContext == nil {
+		return nil
+	}
+	return m.activeContext.Err()
+}
+
 func builtinArityForVersion(
 	fn builtin.DefaultFunction,
 	version lang.LanguageVersion,

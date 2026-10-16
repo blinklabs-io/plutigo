@@ -67,11 +67,15 @@ func validBLSMSMScalar(scalar *big.Int) bool {
 	return scalar.Cmp(blsMSMScalarLimit) < 0
 }
 
-func validateBLSMSMScalars(
+func validateBLSMSMScalars[T syn.Eval](
+	m *Machine[T],
 	scalars []syn.IConstant,
 	builtinName string,
 ) error {
 	for _, scalar := range scalars {
+		if err := m.checkBuiltinCancellation(); err != nil {
+			return err
+		}
 		integer, ok := scalar.(*syn.Integer)
 		if !ok || integer == nil || integer.Inner == nil {
 			return &BuiltinError{
@@ -2739,6 +2743,7 @@ func bls12381G1MultiScalarMul[T syn.Eval](
 		return nil, err
 	}
 	if err := validateBLSMSMScalars(
+		m,
 		ints.List,
 		"bls12_381_G1_multiScalarMul",
 	); err != nil {
@@ -2751,6 +2756,9 @@ func bls12381G1MultiScalarMul[T syn.Eval](
 	n := min(len(elems.List), len(ints.List))
 
 	for i := range n {
+		if err := m.checkBuiltinCancellation(); err != nil {
+			return nil, err
+		}
 		ni, ok := ints.List[i].(*syn.Integer)
 		if !ok {
 			return nil, &BuiltinError{
@@ -2773,6 +2781,9 @@ func bls12381G1MultiScalarMul[T syn.Eval](
 			normalizeBLSScalar(ni.Inner),
 		)
 		res.AddAssign(tmp)
+		if err := m.checkBuiltinCancellation(); err != nil {
+			return nil, err
+		}
 	}
 
 	return &Constant{&syn.Bls12_381G1Element{Inner: res}}, nil
@@ -2804,6 +2815,7 @@ func bls12381G2MultiScalarMul[T syn.Eval](
 		return nil, err
 	}
 	if err := validateBLSMSMScalars(
+		m,
 		ints.List,
 		"bls12_381_G2_multiScalarMul",
 	); err != nil {
@@ -2816,6 +2828,9 @@ func bls12381G2MultiScalarMul[T syn.Eval](
 	n := min(len(elems.List), len(ints.List))
 
 	for i := range n {
+		if err := m.checkBuiltinCancellation(); err != nil {
+			return nil, err
+		}
 		ni, ok := ints.List[i].(*syn.Integer)
 		if !ok {
 			return nil, &BuiltinError{
@@ -2838,6 +2853,9 @@ func bls12381G2MultiScalarMul[T syn.Eval](
 			normalizeBLSScalar(ni.Inner),
 		)
 		res.AddAssign(tmp)
+		if err := m.checkBuiltinCancellation(); err != nil {
+			return nil, err
+		}
 	}
 
 	return &Constant{&syn.Bls12_381G2Element{Inner: res}}, nil
@@ -4614,10 +4632,37 @@ func assetCount[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return &Constant{&syn.Integer{Inner: big.NewInt(int64(count))}}, nil
 }
 
+func valueTokenCountWithContext[T syn.Eval](
+	m *Machine[T],
+	entries []syn.IConstant,
+) (ExMem, error) {
+	var count ExMem
+	for _, entry := range entries {
+		if err := m.checkBuiltinCancellation(); err != nil {
+			return 0, err
+		}
+		pair, ok := entry.(*syn.ProtoPair)
+		if !ok {
+			continue
+		}
+		inner, ok := pair.Second.(*syn.ProtoList)
+		if ok {
+			count += ExMem(len(inner.List))
+		}
+	}
+	return count, nil
+}
+
 // valueToMap converts a Value payload to map[string]map[string]*big.Int.
-func valueToMap(entries []syn.IConstant) map[string]map[string]*big.Int {
+func valueToMap[T syn.Eval](
+	m *Machine[T],
+	entries []syn.IConstant,
+) (map[string]map[string]*big.Int, error) {
 	out := make(map[string]map[string]*big.Int)
 	for _, entry := range entries {
+		if err := m.checkBuiltinCancellation(); err != nil {
+			return nil, err
+		}
 		pair, ok := entry.(*syn.ProtoPair)
 		if !ok {
 			continue
@@ -4636,6 +4681,9 @@ func valueToMap(entries []syn.IConstant) map[string]map[string]*big.Int {
 		}
 		if lst, ok := pair.Second.(*syn.ProtoList); ok {
 			for _, tk := range lst.List {
+				if err := m.checkBuiltinCancellation(); err != nil {
+					return nil, err
+				}
 				tkp, ok := tk.(*syn.ProtoPair)
 				if !ok {
 					continue
@@ -4658,20 +4706,35 @@ func valueToMap(entries []syn.IConstant) map[string]map[string]*big.Int {
 		}
 		out[policy] = tokenMap
 	}
-	return out
+	return out, nil
 }
 
 // mapToValue converts a map back to canonical Value order: empty policy
 // entries are removed and policy/token keys are sorted.
-func mapToValue(mapp map[string]map[string]*big.Int) *syn.Value {
+func mapToValue[T syn.Eval](
+	m *Machine[T],
+	mapp map[string]map[string]*big.Int,
+) (*syn.Value, error) {
 	res := make([]syn.IConstant, 0)
 	// deterministically sort policies
 	policies := make([]string, 0, len(mapp))
 	for p := range mapp {
+		if err := m.checkBuiltinCancellation(); err != nil {
+			return nil, err
+		}
 		policies = append(policies, p)
 	}
+	if err := m.checkBuiltinCancellation(); err != nil {
+		return nil, err
+	}
 	sort.Strings(policies)
+	if err := m.checkBuiltinCancellation(); err != nil {
+		return nil, err
+	}
 	for _, policy := range policies {
+		if err := m.checkBuiltinCancellation(); err != nil {
+			return nil, err
+		}
 		tokens := mapp[policy]
 		if len(tokens) == 0 {
 			continue
@@ -4679,11 +4742,23 @@ func mapToValue(mapp map[string]map[string]*big.Int) *syn.Value {
 		// sort tokens
 		tks := make([]string, 0, len(tokens))
 		for t := range tokens {
+			if err := m.checkBuiltinCancellation(); err != nil {
+				return nil, err
+			}
 			tks = append(tks, t)
 		}
+		if err := m.checkBuiltinCancellation(); err != nil {
+			return nil, err
+		}
 		sort.Strings(tks)
+		if err := m.checkBuiltinCancellation(); err != nil {
+			return nil, err
+		}
 		toks := make([]syn.IConstant, 0, len(tks))
 		for _, t := range tks {
+			if err := m.checkBuiltinCancellation(); err != nil {
+				return nil, err
+			}
 			amt := tokens[t]
 			if amt == nil || amt.Sign() == 0 {
 				continue
@@ -4719,7 +4794,7 @@ func mapToValue(mapp map[string]map[string]*big.Int) *syn.Value {
 		})
 	}
 
-	return &syn.Value{Entries: res}
+	return &syn.Value{Entries: res}, nil
 }
 
 func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -4797,7 +4872,10 @@ func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 
-	vm := valueToMap(entries)
+	vm, err := valueToMap(m, entries)
+	if err != nil {
+		return nil, err
+	}
 	pol := string(policyBs)
 	if _, ok := vm[pol]; !ok {
 		vm[pol] = make(map[string]*big.Int)
@@ -4813,7 +4891,11 @@ func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		vm[pol][string(tokenBs)] = new(big.Int).Set(amt)
 	}
 
-	return &Constant{mapToValue(vm)}, nil
+	value, err := mapToValue(m, vm)
+	if err != nil {
+		return nil, err
+	}
+	return &Constant{value}, nil
 }
 
 func lookupCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -4853,7 +4935,10 @@ func lookupCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	); err != nil {
 		return nil, err
 	}
-	vm := valueToMap(entries)
+	vm, err := valueToMap(m, entries)
+	if err != nil {
+		return nil, err
+	}
 	if tokens, ok := vm[string(policyBs)]; ok {
 		if amt, ok2 := tokens[string(tokenBs)]; ok2 {
 			return &Constant{&syn.Integer{Inner: amt}}, nil
@@ -4895,7 +4980,10 @@ func scaleValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	); err != nil {
 		return nil, err
 	}
-	vm := valueToMap(entries)
+	vm, err := valueToMap(m, entries)
+	if err != nil {
+		return nil, err
+	}
 	if vm == nil {
 		vm = make(map[string]map[string]*big.Int)
 	}
@@ -4903,11 +4991,17 @@ func scaleValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	limitMinusOne := new(big.Int).Sub(limit, big.NewInt(1))
 	negLimit := new(big.Int).Neg(limit)
 	for pol, toks := range vm {
+		if err := m.checkBuiltinCancellation(); err != nil {
+			return nil, err
+		}
 		if toks == nil {
 			toks = make(map[string]*big.Int)
 			vm[pol] = toks
 		}
 		for t, amt := range toks {
+			if err := m.checkBuiltinCancellation(); err != nil {
+				return nil, err
+			}
 			prod := new(big.Int).Mul(amt, factor)
 			// Check bounds: [-(2^127), 2^127-1]
 			if prod.Sign() >= 0 {
@@ -4926,7 +5020,11 @@ func scaleValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			toks[t] = prod
 		}
 	}
-	return &Constant{mapToValue(vm)}, nil
+	value, err := mapToValue(m, vm)
+	if err != nil {
+		return nil, err
+	}
+	return &Constant{value}, nil
 }
 
 func unionValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -4966,23 +5064,40 @@ func unionValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	// Spend budget for unionValue (2 args: value a, value b)
 	// Cost model uses with_interaction_in_x_and_y, where x and y are each
 	// argument's total size, with c11 charging the x*y interaction term.
-	if err := m.CostTwo(&b.Func,
-		valueTotalSizeExMem(aEntries),
-		valueTotalSizeExMem(bEntries),
-	); err != nil {
+	aSize, err := valueTokenCountWithContext(m, aEntries)
+	if err != nil {
 		return nil, err
 	}
-	am := valueToMap(aEntries)
-	bm := valueToMap(bEntries)
+	bSize, err := valueTokenCountWithContext(m, bEntries)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.CostTwoExMem(&b.Func, aSize, bSize); err != nil {
+		return nil, err
+	}
+	am, err := valueToMap(m, aEntries)
+	if err != nil {
+		return nil, err
+	}
+	bm, err := valueToMap(m, bEntries)
+	if err != nil {
+		return nil, err
+	}
 	// sum
 	limit := new(big.Int).Lsh(big.NewInt(1), 127)
 	limitMinusOne := new(big.Int).Sub(limit, big.NewInt(1))
 	negLimit := new(big.Int).Neg(limit)
 	for pol, tokens := range bm {
+		if err := m.checkBuiltinCancellation(); err != nil {
+			return nil, err
+		}
 		if _, ok := am[pol]; !ok {
 			am[pol] = make(map[string]*big.Int)
 		}
 		for t, amt := range tokens {
+			if err := m.checkBuiltinCancellation(); err != nil {
+				return nil, err
+			}
 			cur := am[pol][t]
 			if cur == nil {
 				cur = big.NewInt(0)
@@ -5005,7 +5120,11 @@ func unionValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			am[pol][t] = cur
 		}
 	}
-	return &Constant{mapToValue(am)}, nil
+	value, err := mapToValue(m, am)
+	if err != nil {
+		return nil, err
+	}
+	return &Constant{value}, nil
 }
 
 func valueContains[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -5052,11 +5171,23 @@ func valueContains[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	vm := valueToMap(valEntries)
-	rm := valueToMap(reqEntries)
+	vm, err := valueToMap(m, valEntries)
+	if err != nil {
+		return nil, err
+	}
+	rm, err := valueToMap(m, reqEntries)
+	if err != nil {
+		return nil, err
+	}
 	// Neither value nor required value may contain negative amounts
 	for _, tokens := range rm {
+		if err := m.checkBuiltinCancellation(); err != nil {
+			return nil, err
+		}
 		for _, amt := range tokens {
+			if err := m.checkBuiltinCancellation(); err != nil {
+				return nil, err
+			}
 			if amt.Sign() < 0 {
 				return nil, &BuiltinError{
 					Code:    ErrCodeInvalidArgument,
@@ -5067,7 +5198,13 @@ func valueContains[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 	for _, tokens := range vm {
+		if err := m.checkBuiltinCancellation(); err != nil {
+			return nil, err
+		}
 		for _, amt := range tokens {
+			if err := m.checkBuiltinCancellation(); err != nil {
+				return nil, err
+			}
 			if amt.Sign() < 0 {
 				return nil, &BuiltinError{
 					Code:    ErrCodeInvalidArgument,
@@ -5079,7 +5216,13 @@ func valueContains[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 	// Check
 	for pol, tokens := range rm {
+		if err := m.checkBuiltinCancellation(); err != nil {
+			return nil, err
+		}
 		for t, amt := range tokens {
+			if err := m.checkBuiltinCancellation(); err != nil {
+				return nil, err
+			}
 			if vmPol, ok := vm[pol]; ok {
 				if cur, ok2 := vmPol[t]; ok2 {
 					if cur.Cmp(amt) < 0 {
