@@ -61,6 +61,13 @@ the others are failures of the script. See `Example_budgetAndErrors`.
 `machine.RunContext(ctx, term)` stops cooperatively when `ctx` is canceled; it
 starts no goroutine, so a builtin already executing finishes first.
 
+### Value constants
+
+Construct `syn.Value` constants with `syn.NewValue`. It validates canonical
+ordering and takes an immutable snapshot because the evaluator's fixed-cost
+shape lookups must remain consistent with the entries it later processes.
+`Value.Entries()` returns a deep copy for inspection or modification.
+
 ### Metrics
 
 `machine.EnableMetrics()` opts in to step counts by kind, the maximum frame

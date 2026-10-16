@@ -65,7 +65,11 @@ func newValueCostTestInput(policyCount, tokensPerPolicy int) *Constant {
 			},
 		})
 	}
-	return &Constant{&syn.Value{Entries: entries}}
+	value, err := syn.NewValue(entries)
+	if err != nil {
+		panic(err)
+	}
+	return &Constant{value}
 }
 
 // builtinCost runs a builtin over the given arguments on a fresh V4 machine and

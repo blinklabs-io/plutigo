@@ -4986,25 +4986,27 @@ func newValueDataBoundaryInput(tokenCount int) *Constant {
 		}
 	}
 
-	return &Constant{&syn.Value{
-		Entries: []syn.IConstant{
-			&syn.ProtoPair{
-				FstType: &syn.TByteString{},
-				SndType: &syn.TList{Typ: &syn.TPair{
+	value, err := syn.NewValue([]syn.IConstant{
+		&syn.ProtoPair{
+			FstType: &syn.TByteString{},
+			SndType: &syn.TList{Typ: &syn.TPair{
+				First:  &syn.TByteString{},
+				Second: &syn.TInteger{},
+			}},
+			First: &syn.ByteString{Inner: []byte{}},
+			Second: &syn.ProtoList{
+				LTyp: &syn.TPair{
 					First:  &syn.TByteString{},
 					Second: &syn.TInteger{},
-				}},
-				First: &syn.ByteString{Inner: []byte{}},
-				Second: &syn.ProtoList{
-					LTyp: &syn.TPair{
-						First:  &syn.TByteString{},
-						Second: &syn.TInteger{},
-					},
-					List: tokens,
 				},
+				List: tokens,
 			},
 		},
-	}}
+	})
+	if err != nil {
+		panic(err)
+	}
+	return &Constant{value}
 }
 
 // TestValueDataEntryLimit follows the upstream Plutus boundary: valueData
@@ -5121,6 +5123,55 @@ func TestValueDataEntryLimitChargesCostFirst(t *testing.T) {
 				)
 			}
 		})
+	}
+}
+
+// TestAssetCountHasNoValueDataLimit verifies that assetCount accepts values
+// larger than the limit used only by valueData and unValueData.
+func TestAssetCountHasNoValueDataLimit(t *testing.T) {
+	tests := []struct {
+		name    string
+		entries int
+	}{
+		{name: "below limit", entries: valueDataMaxSize - 1},
+		{name: "at limit", entries: valueDataMaxSize},
+		{name: "above limit", entries: valueDataMaxSize + 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachineV4()
+			b := newTestBuiltin(builtin.AssetCount).
+				ApplyArg(newValueDataBoundaryInput(tt.entries))
+
+			val, err := assetCount(m, b)
+			if err != nil {
+				t.Fatalf("assetCount(%d entries) returned error: %v", tt.entries, err)
+			}
+			got := expectInteger(t, expectConstant(t, val))
+			if got.Inner.Int64() != int64(tt.entries) {
+				t.Fatalf("assetCount = %v, want %d", got.Inner, tt.entries)
+			}
+		})
+	}
+}
+
+func TestAssetCountRejectsUncachedValueBeforeCosting(t *testing.T) {
+	m := newTestMachineV4()
+	m.ExBudget = ExBudget{}
+	uncached := &syn.Value{}
+	b := newTestBuiltin(builtin.AssetCount).ApplyArg(&Constant{uncached})
+
+	_, err := assetCount(m, b)
+	if err == nil {
+		t.Fatal("expected uncached Value to fail")
+	}
+	var builtinErr *BuiltinError
+	if !errors.As(err, &builtinErr) {
+		t.Fatalf("expected BuiltinError before costing, got %T: %v", err, err)
+	}
+	if builtinErr.Code != ErrCodeInvalidArgument {
+		t.Fatalf("expected ErrCodeInvalidArgument, got %d", builtinErr.Code)
 	}
 }
 

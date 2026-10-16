@@ -813,7 +813,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			return nil, err
 		}
 
-		return &Constant{Con: &Value{Entries: items}}, nil
+		return &Constant{Con: newOwnedValue(items)}, nil
 	default:
 		return nil, fmt.Errorf("unexpected type spec %v at position %d", typeSpec, p.curToken.Position)
 	}
@@ -1009,7 +1009,7 @@ func (p *Parser) parseConstantValue(typ Typ) (IConstant, error) {
 		if err := validateValueEntries(items); err != nil {
 			return nil, err
 		}
-		return &Value{Entries: items}, nil
+		return newOwnedValue(items), nil
 	case *TPair:
 		if err := p.expect(lex.TokenLParen); err != nil {
 			return nil, err

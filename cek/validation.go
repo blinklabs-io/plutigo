@@ -305,10 +305,8 @@ func validateConstantStructureWithBudget(
 			if c == nil {
 				return malformedASTError("constant contains a nil Value")
 			}
-			for _, child := range c.Entries {
-				if err := scheduleValidationItem(budget, "constant", &work, constantValidationItem{constant: child, depth: nextDepth}); err != nil {
-					return err
-				}
+			if _, _, _, ok := c.Sizes(); !ok {
+				return malformedASTError("constant contains an uninitialized Value")
 			}
 		case *syn.ProtoPair:
 			if c == nil {
