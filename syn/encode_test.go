@@ -423,8 +423,12 @@ func TestDeBruijnDecoderReuse(t *testing.T) {
 				t.Fatalf("Encode failed: %v", err)
 			}
 
-			for i := 0; i < 2; i++ {
-				decoded, err := decoder.Decode(encoded)
+			for i := 0; i < 4; i++ {
+				decode := decoder.Decode
+				if i%2 == 1 {
+					decode = decoder.DecodeBorrowed
+				}
+				decoded, err := decode(encoded)
 				if err != nil {
 					t.Fatalf("Decode %d failed: %v", i, err)
 				}
@@ -496,50 +500,56 @@ func TestDeBruijnDecoderReuseOverwritesBigInts(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			decoder := NewDeBruijnDecoder()
-
-			for _, programCase := range tt.programSequence {
-				programName := programCase.name
-				program := programCase.program
-				expectedValue := programCase.expectedValue
-
-				expectedEncoded, err := Encode(program)
-				if err != nil {
-					t.Fatalf("Encode %s failed: %v", programName, err)
+		for _, method := range []string{"Decode", "DecodeBorrowed"} {
+			t.Run(tt.name+"/"+method, func(t *testing.T) {
+				decoder := NewDeBruijnDecoder()
+				decode := decoder.Decode
+				if method == "DecodeBorrowed" {
+					decode = decoder.DecodeBorrowed
 				}
 
-				decoded, err := decoder.Decode(expectedEncoded)
-				if err != nil {
-					t.Fatalf("Decode %s failed: %v", programName, err)
-				}
+				for _, programCase := range tt.programSequence {
+					programName := programCase.name
+					program := programCase.program
+					expectedValue := programCase.expectedValue
 
-				constant, ok := decoded.Term.(*Constant)
-				if !ok {
-					t.Fatalf("decoded %s term = %T, want *Constant", programName, decoded.Term)
-				}
-				integer, ok := constant.Con.(*Integer)
-				if !ok {
-					t.Fatalf("decoded %s constant = %T, want *Integer", programName, constant.Con)
-				}
-				if expectedValue.IsInt64() {
-					if got, want := integer.Inner.Int64(), expectedValue.Int64(); got != want {
-						t.Fatalf("decoded %s integer = %d, want %d", programName, got, want)
+					expectedEncoded, err := Encode(program)
+					if err != nil {
+						t.Fatalf("Encode %s failed: %v", programName, err)
+					}
+
+					decoded, err := decode(expectedEncoded)
+					if err != nil {
+						t.Fatalf("Decode %s failed: %v", programName, err)
+					}
+
+					constant, ok := decoded.Term.(*Constant)
+					if !ok {
+						t.Fatalf("decoded %s term = %T, want *Constant", programName, decoded.Term)
+					}
+					integer, ok := constant.Con.(*Integer)
+					if !ok {
+						t.Fatalf("decoded %s constant = %T, want *Integer", programName, constant.Con)
+					}
+					if expectedValue.IsInt64() {
+						if got, want := integer.Inner.Int64(), expectedValue.Int64(); got != want {
+							t.Fatalf("decoded %s integer = %d, want %d", programName, got, want)
+						}
+					}
+					if integer.Inner.Cmp(expectedValue) != 0 {
+						t.Fatalf("decoded %s integer = %s, want %s", programName, integer.Inner, expectedValue)
+					}
+
+					reencoded, err := Encode(decoded)
+					if err != nil {
+						t.Fatalf("Re-encode %s failed: %v", programName, err)
+					}
+					if !bytes.Equal(expectedEncoded, reencoded) {
+						t.Fatalf("%s integer roundtrip mismatch after decoder reuse", programName)
 					}
 				}
-				if integer.Inner.Cmp(expectedValue) != 0 {
-					t.Fatalf("decoded %s integer = %s, want %s", programName, integer.Inner, expectedValue)
-				}
-
-				reencoded, err := Encode(decoded)
-				if err != nil {
-					t.Fatalf("Re-encode %s failed: %v", programName, err)
-				}
-				if !bytes.Equal(expectedEncoded, reencoded) {
-					t.Fatalf("%s integer roundtrip mismatch after decoder reuse", programName)
-				}
-			}
-		})
+			})
+		}
 	}
 }
 
