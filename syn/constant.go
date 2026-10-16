@@ -15,7 +15,9 @@
 package syn
 
 import (
+	"bytes"
 	"math/big"
+	"sort"
 
 	"github.com/blinklabs-io/plutigo/data"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
@@ -160,27 +162,137 @@ func (pa ProtoArray) Typ() Typ {
 }
 
 type Value struct {
-	Entries         []IConstant
+	entries         []IConstant
 	cachedTotalSize int
+	cachedMaxInner  int
 }
 
-// NewValue builds a Value and caches its number of asset entries. Value
-// builtins use this cache for the same constant-time total-size lookup as the
-// reference implementation.
-func NewValue(entries []IConstant) *Value {
+// NewValue validates and snapshots entries into an immutable Value. Value
+// builtins use the cached shape metrics for the same constant-time lookups as
+// the reference implementation.
+func NewValue(entries []IConstant) (*Value, error) {
+	if err := validateValueEntries(entries); err != nil {
+		return nil, err
+	}
+	return newOwnedValue(cloneValueEntries(entries)), nil
+}
+
+func newOwnedValue(entries []IConstant) *Value {
 	return &Value{
-		Entries:         entries,
+		entries:         entries,
 		cachedTotalSize: valueTotalSize(entries) + 1,
+		cachedMaxInner:  valueMaxInnerSize(entries),
 	}
 }
 
 // TotalSize returns the cached number of distinct policy and token pairs.
 // The boolean is false for Values that bypassed NewValue.
-func (v Value) TotalSize() (int, bool) {
-	if v.cachedTotalSize == 0 {
+func (v *Value) TotalSize() (int, bool) {
+	if v == nil || v.cachedTotalSize == 0 {
 		return 0, false
 	}
 	return v.cachedTotalSize - 1, true
+}
+
+// Sizes returns the cached total asset count, policy count, and largest token
+// count. The boolean is false for a zero Value that bypassed NewValue.
+func (v *Value) Sizes() (int, int, int, bool) {
+	total, ok := v.TotalSize()
+	if !ok {
+		return 0, 0, 0, false
+	}
+	return total, len(v.entries), v.cachedMaxInner, true
+}
+
+// Entries returns a deep copy of the canonical entries. Mutating the returned
+// value cannot change the Value or invalidate its cached shape metrics.
+func (v *Value) Entries() []IConstant {
+	if _, ok := v.TotalSize(); !ok {
+		return nil
+	}
+	return cloneValueEntries(v.entries)
+}
+
+// PolicyIDs returns copies of the canonical policy IDs without traversing
+// their token maps. The boolean is false for an uninitialized Value.
+func (v *Value) PolicyIDs() ([][]byte, bool) {
+	if _, ok := v.TotalSize(); !ok {
+		return nil, false
+	}
+	ret := make([][]byte, len(v.entries))
+	for i, entry := range v.entries {
+		policy := entry.(*ProtoPair).First.(*ByteString)
+		ret[i] = append([]byte(nil), policy.Inner...)
+	}
+	return ret, true
+}
+
+// LookupCoin returns a copy of the quantity for a policy and token. It uses
+// the canonical ordering to avoid traversing unrelated assets.
+func (v *Value) LookupCoin(policyID, tokenID []byte) (*big.Int, bool) {
+	if _, ok := v.TotalSize(); !ok {
+		return nil, false
+	}
+	policyIndex := sort.Search(len(v.entries), func(i int) bool {
+		policy := v.entries[i].(*ProtoPair).First.(*ByteString)
+		return bytes.Compare(policy.Inner, policyID) >= 0
+	})
+	if policyIndex == len(v.entries) {
+		return nil, false
+	}
+	policy := v.entries[policyIndex].(*ProtoPair)
+	if !bytes.Equal(policy.First.(*ByteString).Inner, policyID) {
+		return nil, false
+	}
+	tokens := policy.Second.(*ProtoList).List
+	tokenIndex := sort.Search(len(tokens), func(i int) bool {
+		token := tokens[i].(*ProtoPair).First.(*ByteString)
+		return bytes.Compare(token.Inner, tokenID) >= 0
+	})
+	if tokenIndex == len(tokens) {
+		return nil, false
+	}
+	token := tokens[tokenIndex].(*ProtoPair)
+	if !bytes.Equal(token.First.(*ByteString).Inner, tokenID) {
+		return nil, false
+	}
+	return new(big.Int).Set(token.Second.(*Integer).Inner), true
+}
+
+func cloneValueEntries(entries []IConstant) []IConstant {
+	ret := make([]IConstant, len(entries))
+	for i, entry := range entries {
+		policy := entry.(*ProtoPair)
+		policyID := policy.First.(*ByteString)
+		tokens := policy.Second.(*ProtoList)
+		tokenEntries := make([]IConstant, len(tokens.List))
+		for j, tokenEntry := range tokens.List {
+			token := tokenEntry.(*ProtoPair)
+			tokenID := token.First.(*ByteString)
+			quantity := token.Second.(*Integer)
+			tokenEntries[j] = &ProtoPair{
+				FstType: &TByteString{},
+				SndType: &TInteger{},
+				First: &ByteString{
+					Inner: append([]byte(nil), tokenID.Inner...),
+				},
+				Second: newInteger(new(big.Int).Set(quantity.Inner)),
+			}
+		}
+		ret[i] = &ProtoPair{
+			FstType: &TByteString{},
+			SndType: &TList{Typ: &TPair{
+				First:  &TByteString{},
+				Second: &TInteger{},
+			}},
+			First: &ByteString{Inner: append([]byte(nil), policyID.Inner...)},
+			Second: &ProtoList{
+				LTyp: &TPair{First: &TByteString{}, Second: &TInteger{}},
+				List: tokenEntries,
+			},
+		}
+	}
+	return ret
 }
 
 func valueTotalSize(entries []IConstant) int {
@@ -197,6 +309,22 @@ func valueTotalSize(entries []IConstant) int {
 		total += len(tokens.List)
 	}
 	return total
+}
+
+func valueMaxInnerSize(entries []IConstant) int {
+	maxInner := 0
+	for _, entry := range entries {
+		policy, ok := entry.(*ProtoPair)
+		if !ok || policy == nil {
+			continue
+		}
+		tokens, ok := policy.Second.(*ProtoList)
+		if !ok || tokens == nil {
+			continue
+		}
+		maxInner = max(maxInner, len(tokens.List))
+	}
+	return maxInner
 }
 
 func (Value) isConstant() {}

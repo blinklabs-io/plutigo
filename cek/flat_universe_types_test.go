@@ -201,7 +201,7 @@ func TestFlatUniverseConstantExMem(t *testing.T) {
 	})
 
 	t.Run("value uses total token count", func(t *testing.T) {
-		constant := &syn.Value{Entries: []syn.IConstant{
+		constant, err := syn.NewValue([]syn.IConstant{
 			&syn.ProtoPair{
 				FstType: &syn.TByteString{},
 				SndType: &syn.TList{Typ: &syn.TPair{
@@ -230,7 +230,10 @@ func TestFlatUniverseConstantExMem(t *testing.T) {
 					},
 				},
 			},
-		}}
+		})
+		if err != nil {
+			t.Fatalf("new value: %v", err)
+		}
 		if got, want := iconstantExMem(constant)(), ExMem(2); got != want {
 			t.Fatalf("value ExMem = %d, want total token count %d", got, want)
 		}

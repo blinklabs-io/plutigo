@@ -946,9 +946,12 @@ func (a *constantArena) allocProtoArray(typ Typ, items []IConstant) *ProtoArray 
 }
 
 func (a *constantArena) allocValue(entries []IConstant) *Value {
+	// Decoded entries are owned by this arena and cannot be reached except
+	// through the immutable Value.
 	value := a.values.alloc()
-	value.Entries = entries
+	value.entries = entries
 	value.cachedTotalSize = valueTotalSize(entries) + 1
+	value.cachedMaxInner = valueMaxInnerSize(entries)
 	return value
 }
 
@@ -1405,7 +1408,7 @@ func decodeConstantValue(d *decoder, typ Typ) (IConstant, error) {
 		if err := validateValueEntries(entries); err != nil {
 			return nil, err
 		}
-		constant = NewValue(entries)
+		constant = newOwnedValue(entries)
 
 	case *TBls12_381G1Element:
 		return nil, errors.New("cannot decode bls12_381_G1_element constants")

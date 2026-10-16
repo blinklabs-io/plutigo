@@ -4881,7 +4881,7 @@ func newValueDataBoundaryInput(tokenCount int) *Constant {
 		}
 	}
 
-	return &Constant{syn.NewValue([]syn.IConstant{
+	value, err := syn.NewValue([]syn.IConstant{
 		&syn.ProtoPair{
 			FstType: &syn.TByteString{},
 			SndType: &syn.TList{Typ: &syn.TPair{
@@ -4897,7 +4897,11 @@ func newValueDataBoundaryInput(tokenCount int) *Constant {
 				List: tokens,
 			},
 		},
-	})}
+	})
+	if err != nil {
+		panic(err)
+	}
+	return &Constant{value}
 }
 
 // TestValueDataEntryLimit follows the upstream Plutus boundary: valueData
@@ -5050,8 +5054,7 @@ func TestAssetCountHasNoValueDataLimit(t *testing.T) {
 func TestAssetCountRejectsUncachedValueBeforeCosting(t *testing.T) {
 	m := newTestMachineV4()
 	m.ExBudget = ExBudget{}
-	cached := newValueDataBoundaryInput(1).Constant.(*syn.Value)
-	uncached := &syn.Value{Entries: cached.Entries}
+	uncached := &syn.Value{}
 	b := newTestBuiltin(builtin.AssetCount).ApplyArg(&Constant{uncached})
 
 	_, err := assetCount(m, b)

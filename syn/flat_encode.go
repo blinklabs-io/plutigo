@@ -519,10 +519,13 @@ func encodeConstantValue(e *encoder, constant IConstant) error {
 			return encodeConstantValue(e, item)
 		})
 	case *Value:
-		if err := validateValueEntries(c.Entries); err != nil {
+		if _, ok := c.TotalSize(); !ok {
+			return errors.New("cannot encode uninitialized value")
+		}
+		if err := validateValueEntries(c.entries); err != nil {
 			return err
 		}
-		return EncodeList(e, c.Entries, func(e *encoder, item IConstant) error {
+		return EncodeList(e, c.entries, func(e *encoder, item IConstant) error {
 			return encodeConstantValue(e, item)
 		})
 	case *ProtoPair:

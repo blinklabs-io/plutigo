@@ -429,7 +429,7 @@ func (pp *PrettyPrinter) printConstant(c *Constant, inCollection bool) {
 		if !inCollection {
 			pp.write("value ")
 		}
-		pp.printConstantCollection(con.Entries)
+		pp.printConstantCollection(con.entries)
 	case *ProtoPair:
 		if !inCollection {
 			pp.write("(pair ")

@@ -15,12 +15,171 @@
 package syn
 
 import (
+	"bytes"
 	"math/big"
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/data"
+	"github.com/blinklabs-io/plutigo/lang"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
+
+func testValueEntries() []IConstant {
+	return []IConstant{&ProtoPair{
+		FstType: &TByteString{},
+		SndType: &TList{Typ: &TPair{
+			First:  &TByteString{},
+			Second: &TInteger{},
+		}},
+		First: &ByteString{Inner: []byte{1}},
+		Second: &ProtoList{
+			LTyp: &TPair{First: &TByteString{}, Second: &TInteger{}},
+			List: []IConstant{&ProtoPair{
+				FstType: &TByteString{},
+				SndType: &TInteger{},
+				First:   &ByteString{Inner: []byte{2}},
+				Second:  &Integer{Inner: big.NewInt(3)},
+			}},
+		},
+	}}
+}
+
+func TestValueSnapshotPreservesCachedShape(t *testing.T) {
+	input := testValueEntries()
+	value, err := NewValue(input)
+	if err != nil {
+		t.Fatalf("NewValue: %v", err)
+	}
+	program := &Program[DeBruijn]{
+		Version: lang.LanguageVersionV4,
+		Term:    &Constant{Con: value},
+	}
+	wantPretty := Pretty(program)
+	wantFlat, err := Encode(program)
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+
+	inputPolicy := input[0].(*ProtoPair)
+	inputPolicy.First.(*ByteString).Inner[0] = 9
+	inputTokens := inputPolicy.Second.(*ProtoList)
+	inputTokens.List[0].(*ProtoPair).Second.(*Integer).Inner.SetInt64(99)
+	inputTokens.List = append(inputTokens.List, inputTokens.List[0])
+
+	returned := value.Entries()
+	if len(returned) != 1 {
+		t.Fatalf("Entries() returned %d policies, want 1", len(returned))
+	}
+	returnedPolicy := returned[0].(*ProtoPair)
+	returnedPolicy.First.(*ByteString).Inner[0] = 8
+	returnedTokens := returnedPolicy.Second.(*ProtoList)
+	returnedTokens.List[0].(*ProtoPair).Second.(*Integer).Inner.SetInt64(88)
+	returnedTokens.List = nil
+
+	total, outer, maxInner, ok := value.Sizes()
+	if !ok || total != 1 || outer != 1 || maxInner != 1 {
+		t.Fatalf(
+			"Sizes() = (%d, %d, %d, %t), want (1, 1, 1, true)",
+			total,
+			outer,
+			maxInner,
+			ok,
+		)
+	}
+	gotEntries := value.Entries()
+	if len(gotEntries) != 1 {
+		t.Fatalf("Entries() after mutation returned %d policies, want 1", len(gotEntries))
+	}
+	gotPolicy := gotEntries[0].(*ProtoPair)
+	if got := gotPolicy.First.(*ByteString).Inner; !bytes.Equal(got, []byte{1}) {
+		t.Fatalf("policy ID = %x, want 01", got)
+	}
+	gotTokens := gotPolicy.Second.(*ProtoList).List
+	if len(gotTokens) != 1 {
+		t.Fatalf("token count = %d, want 1", len(gotTokens))
+	}
+	if got := gotTokens[0].(*ProtoPair).Second.(*Integer).Inner; got.Cmp(big.NewInt(3)) != 0 {
+		t.Fatalf("quantity = %s, want 3", got)
+	}
+	if got := Pretty(program); got != wantPretty {
+		t.Fatalf("Pretty changed after external mutation: %q != %q", got, wantPretty)
+	}
+	gotFlat, err := Encode(program)
+	if err != nil {
+		t.Fatalf("Encode after external mutation: %v", err)
+	}
+	if !bytes.Equal(gotFlat, wantFlat) {
+		t.Fatalf("FLAT encoding changed after external mutation: %x != %x", gotFlat, wantFlat)
+	}
+}
+
+func TestNewValueRejectsTypedNilEntries(t *testing.T) {
+	var nilPolicy *ProtoPair
+	var nilTokens *ProtoList
+	var nilToken *ProtoPair
+	tests := map[string][]IConstant{
+		"policy": {nilPolicy},
+		"token list": {&ProtoPair{
+			First:  &ByteString{Inner: []byte{1}},
+			Second: nilTokens,
+		}},
+		"token": {&ProtoPair{
+			First: &ByteString{Inner: []byte{1}},
+			Second: &ProtoList{
+				List: []IConstant{nilToken},
+			},
+		}},
+	}
+	for name, entries := range tests {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					t.Fatalf("NewValue panicked for typed-nil %s: %v", name, recovered)
+				}
+			}()
+			if _, err := NewValue(entries); err == nil {
+				t.Fatalf("NewValue accepted typed-nil %s", name)
+			}
+		})
+	}
+}
+
+func TestValueNarrowReadsReturnCopies(t *testing.T) {
+	entries := testValueEntries()
+	second := testValueEntries()[0].(*ProtoPair)
+	second.First.(*ByteString).Inner[0] = 4
+	secondToken := second.Second.(*ProtoList).List[0].(*ProtoPair)
+	secondToken.First.(*ByteString).Inner[0] = 5
+	secondToken.Second.(*Integer).Inner.SetInt64(6)
+	entries = append(entries, second)
+
+	value, err := NewValue(entries)
+	if err != nil {
+		t.Fatalf("NewValue: %v", err)
+	}
+	policyIDs, ok := value.PolicyIDs()
+	if !ok || len(policyIDs) != 2 {
+		t.Fatalf("PolicyIDs() returned %d IDs with ok=%t, want 2 and true", len(policyIDs), ok)
+	}
+	policyIDs[0][0] = 9
+	policyIDs, ok = value.PolicyIDs()
+	if !ok || !bytes.Equal(policyIDs[0], []byte{1}) {
+		t.Fatalf("PolicyIDs()[0] = %x with ok=%t, want 01 and true", policyIDs[0], ok)
+	}
+
+	quantity, ok := value.LookupCoin([]byte{4}, []byte{5})
+	if !ok || quantity.Cmp(big.NewInt(6)) != 0 {
+		t.Fatalf("LookupCoin() = (%v, %t), want (6, true)", quantity, ok)
+	}
+	quantity.SetInt64(99)
+	quantity, ok = value.LookupCoin([]byte{4}, []byte{5})
+	if !ok || quantity.Cmp(big.NewInt(6)) != 0 {
+		t.Fatalf("LookupCoin() after mutation = (%v, %t), want (6, true)", quantity, ok)
+	}
+	if quantity, ok := value.LookupCoin([]byte{4}, []byte{6}); ok || quantity != nil {
+		t.Fatalf("LookupCoin() missing token = (%v, %t), want (nil, false)", quantity, ok)
+	}
+}
 
 func TestIntegerTyp(t *testing.T) {
 	integer := Integer{Inner: big.NewInt(42)}
