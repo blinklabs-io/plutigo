@@ -20,6 +20,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 )
@@ -171,6 +172,80 @@ func TestLoadEnforcesInputByteLimit(t *testing.T) {
 	})
 }
 
+func TestLoadStopsReadingOversizedCaseAtCaseLimit(t *testing.T) {
+	t.Parallel()
+
+	limits := defaultCorpusDecodeLimits
+	limits.caseJSONBytes = 4096
+	encoded := []byte(`{"schema_version":1,"network":"mainnet","reference":{},"cases":[{"metadata":"` +
+		strings.Repeat("x", 1<<20) + `"}]}`)
+	reader := &countingReader{r: bytes.NewReader(encoded)}
+	_, err := load(context.Background(), reader, limits)
+	if err == nil || !strings.Contains(err.Error(), "exceeds JSON byte limit") {
+		t.Fatalf("load() error = %v, want per-case byte limit error", err)
+	}
+	if reader.n > int64(limits.caseJSONBytes+1024) {
+		t.Fatalf("read %d bytes before rejecting case; want at most %d", reader.n, limits.caseJSONBytes+1024)
+	}
+}
+
+func TestLoadAcceptsCaseAtExactByteLimit(t *testing.T) {
+	t.Parallel()
+
+	replayCase := successfulCase(t)
+	caseJSON, err := json.Marshal(replayCase)
+	if err != nil {
+		t.Fatalf("json.Marshal(case) failed: %v", err)
+	}
+	encoded, err := json.Marshal(validCorpus(replayCase))
+	if err != nil {
+		t.Fatalf("json.Marshal(corpus) failed: %v", err)
+	}
+	limits := defaultCorpusDecodeLimits
+	limits.caseJSONBytes = len(caseJSON)
+	if _, err := load(context.Background(), bytes.NewReader(encoded), limits); err != nil {
+		t.Fatalf("load() rejected a case exactly at its byte limit: %v", err)
+	}
+}
+
+func TestLoadDoesNotChargeLeadingWhitespaceToCaseLimit(t *testing.T) {
+	t.Parallel()
+
+	replayCase := successfulCase(t)
+	caseJSON, err := json.Marshal(replayCase)
+	if err != nil {
+		t.Fatalf("json.Marshal(case) failed: %v", err)
+	}
+	encoded, err := json.Marshal(validCorpus(replayCase))
+	if err != nil {
+		t.Fatalf("json.Marshal(corpus) failed: %v", err)
+	}
+	encoded = bytes.Replace(encoded, []byte(`"cases":[`), []byte(`"cases":[`+strings.Repeat(" ", 1024)), 1)
+	limits := defaultCorpusDecodeLimits
+	limits.caseJSONBytes = len(caseJSON)
+	if _, err := load(context.Background(), bytes.NewReader(encoded), limits); err != nil {
+		t.Fatalf("load() charged leading whitespace to the case limit: %v", err)
+	}
+}
+
+func TestByteLimitReaderDoesNotChargeLeadingWhitespaceToCaseLimit(t *testing.T) {
+	t.Parallel()
+
+	const object = `{"a":1}`
+	reader := &byteLimitReader{
+		r:         strings.NewReader("   " + object),
+		remaining: int64(len("   " + object)),
+	}
+	reader.startCase(len(object), false)
+	got := make([]byte, len("   ")+len(object))
+	if _, err := io.ReadFull(reader, got); err != nil {
+		t.Fatalf("ReadFull() failed: %v", err)
+	}
+	if string(got) != "   "+object {
+		t.Fatalf("read %q, want leading whitespace and object", got)
+	}
+}
+
 func TestLoadedCorpusReusesDecodedCases(t *testing.T) {
 	t.Parallel()
 
@@ -201,16 +276,58 @@ func TestLoadedCorpusReusesDecodedCases(t *testing.T) {
 	}
 }
 
-func TestRunCaseCancelsDuringPreprocessing(t *testing.T) {
+func TestLoadedCorpusCachesValidMutation(t *testing.T) {
+	t.Parallel()
+
+	encoded, err := json.Marshal(validCorpus(successfulCase(t)))
+	if err != nil {
+		t.Fatalf("json.Marshal() failed: %v", err)
+	}
+	corpus, err := Load(context.Background(), bytes.NewReader(encoded))
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	originalProgram := corpus.cache.cases[0].program
+	corpus.Cases[0].ID += "-updated"
+
+	first, err := corpus.validateCases(context.Background())
+	if err != nil {
+		t.Fatalf("first validateCases() failed: %v", err)
+	}
+	if first[0].program == originalProgram {
+		t.Fatal("validateCases() reused decoded data after the corpus changed")
+	}
+	second, err := corpus.validateCases(context.Background())
+	if err != nil {
+		t.Fatalf("second validateCases() failed: %v", err)
+	}
+	if second[0].program != first[0].program {
+		t.Fatal("validateCases() did not cache the successfully decoded mutation")
+	}
+}
+
+func TestCaseBoundsCancelsDuringPreprocessing(t *testing.T) {
 	t.Parallel()
 
 	replayCase := successfulCase(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	result := RunCase(ctx, &replayCase)
-	if !result.Actual.SetupError ||
-		!strings.Contains(result.Actual.Error, context.Canceled.Error()) {
-		t.Fatalf("RunCase() = %+v, want preprocessing cancellation", result)
+	ctx := &cancelAfterErrCalls{limit: 1, done: make(chan struct{})}
+	var decodedBytes int64
+	err := replayCase.validateBounds(ctx, &decodedBytes, defaultCorpusDecodeLimits)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("validateBounds() error = %v, want cancellation during argument validation", err)
 	}
+	if got := ctx.calls.Load(); got != 1 {
+		t.Fatalf("context checked %d times, want cancellation at the first argument", got)
+	}
+}
+
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (r *countingReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	r.n += int64(n)
+	return n, err
 }

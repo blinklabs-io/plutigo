@@ -17,6 +17,7 @@
 package replay
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -224,6 +225,7 @@ func load(
 		ids,
 		&decodedBytes,
 		limits,
+		limitedReader,
 	); err != nil {
 		if limitedReader.exceeded {
 			return nil, fmt.Errorf("decode replay corpus: %w", errCorpusJSONTooLarge)
@@ -282,6 +284,7 @@ func decodeCorpusObject(
 	ids map[string]struct{},
 	decodedBytes *int64,
 	limits corpusDecodeLimits,
+	limitedReader *byteLimitReader,
 ) error {
 	token, err := decoder.Token()
 	if err != nil {
@@ -325,6 +328,7 @@ func decodeCorpusObject(
 				ids,
 				decodedBytes,
 				limits,
+				limitedReader,
 			)
 		default:
 			return fmt.Errorf("json: unknown field %q", key)
@@ -347,6 +351,7 @@ func decodeCorpusCases(
 	ids map[string]struct{},
 	decodedBytes *int64,
 	limits corpusDecodeLimits,
+	limitedReader *byteLimitReader,
 ) error {
 	token, err := decoder.Token()
 	if err != nil {
@@ -366,9 +371,37 @@ func decodeCorpusCases(
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		var rawCase json.RawMessage
-		if err := decoder.Decode(&rawCase); err != nil {
+		prefixBytes, complete, err := jsonObjectPrefixLength(
+			decoder.Buffered(),
+			limits.caseJSONBytes,
+		)
+		if errors.Is(err, errCorpusCaseJSONTooLarge) {
+			return fmt.Errorf(
+				"case %d exceeds JSON byte limit %d",
+				caseIndex,
+				limits.caseJSONBytes,
+			)
+		}
+		if err != nil {
 			return fmt.Errorf("case %d: %w", caseIndex, err)
+		}
+		if !complete {
+			limitedReader.startCase(limits.caseJSONBytes-prefixBytes, prefixBytes > 0)
+		}
+		var rawCase json.RawMessage
+		decodeErr := decoder.Decode(&rawCase)
+		if !complete {
+			limitedReader.endCase()
+		}
+		if errors.Is(decodeErr, errCorpusCaseJSONTooLarge) {
+			return fmt.Errorf(
+				"case %d exceeds JSON byte limit %d",
+				caseIndex,
+				limits.caseJSONBytes,
+			)
+		}
+		if decodeErr != nil {
+			return fmt.Errorf("case %d: %w", caseIndex, decodeErr)
 		}
 		if len(rawCase) > limits.caseJSONBytes {
 			return fmt.Errorf(
@@ -398,6 +431,78 @@ func decodeCorpusCases(
 		return err
 	}
 	return nil
+}
+
+func jsonObjectPrefixLength(r io.Reader, maxBytes int) (int, bool, error) {
+	reader := bufio.NewReaderSize(r, 256)
+	first, err := firstJSONByte(reader)
+	if errors.Is(err, io.EOF) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	if first != '{' {
+		return 0, false, errors.New("case must be a JSON object")
+	}
+
+	closing := []byte{'}'}
+	inString := false
+	escaped := false
+	byteCount := 1
+	for {
+		value, readErr := reader.ReadByte()
+		if errors.Is(readErr, io.EOF) {
+			return byteCount, false, nil
+		}
+		if readErr != nil {
+			return 0, false, readErr
+		}
+		byteCount++
+		if byteCount > maxBytes {
+			return 0, false, errCorpusCaseJSONTooLarge
+		}
+		if inString {
+			switch {
+			case escaped:
+				escaped = false
+			case value == '\\':
+				escaped = true
+			case value == '"':
+				inString = false
+			}
+			continue
+		}
+		switch value {
+		case '"':
+			inString = true
+		case '{':
+			closing = append(closing, '}')
+		case '[':
+			closing = append(closing, ']')
+		case '}', ']':
+			if value != closing[len(closing)-1] {
+				return 0, false, errors.New("invalid JSON object")
+			}
+			closing = closing[:len(closing)-1]
+			if len(closing) == 0 {
+				return byteCount, true, nil
+			}
+		}
+	}
+}
+
+func firstJSONByte(reader *bufio.Reader) (byte, error) {
+	for {
+		value, err := reader.ReadByte()
+		if err != nil || (!isJSONWhitespace(value) && value != ',') {
+			return value, err
+		}
+	}
+}
+
+func isJSONWhitespace(value byte) bool {
+	return value == ' ' || value == '\t' || value == '\n' || value == '\r'
 }
 
 // Validate checks the corpus, including that every case's cost model builds
@@ -444,6 +549,7 @@ func (c *Corpus) validateCases(ctx context.Context) ([]decodedCase, error) {
 		ids[replayCase.ID] = struct{}{}
 		decodedCases[i] = decoded
 	}
+	c.cache = &decodedCorpus{fingerprint: fingerprint, cases: decodedCases}
 	return decodedCases, nil
 }
 
@@ -915,12 +1021,71 @@ func (c contextReader) Read(p []byte) (int, error) {
 }
 
 type byteLimitReader struct {
-	r         io.Reader
-	remaining int64
-	exceeded  bool
+	r               io.Reader
+	remaining       int64
+	exceeded        bool
+	caseRemaining   int64
+	caseLimitActive bool
+	caseStarted     bool
+}
+
+var errCorpusCaseJSONTooLarge = errors.New("replay corpus case exceeds byte limit")
+
+func (r *byteLimitReader) startCase(remaining int, started bool) {
+	r.caseRemaining = int64(remaining)
+	r.caseLimitActive = true
+	r.caseStarted = started
+}
+
+func (r *byteLimitReader) endCase() {
+	r.caseLimitActive = false
+	r.caseStarted = false
 }
 
 func (r *byteLimitReader) Read(p []byte) (int, error) {
+	if r.caseLimitActive {
+		if !r.caseStarted {
+			if len(p) == 0 {
+				return 0, nil
+			}
+			if r.remaining <= 0 {
+				probe := make([]byte, 1)
+				n, err := r.r.Read(probe)
+				if n > 0 {
+					r.exceeded = true
+					return 0, errCorpusJSONTooLarge
+				}
+				return n, err
+			}
+			n, err := r.r.Read(p[:1])
+			r.remaining -= int64(n)
+			if n > 0 && !isJSONWhitespace(p[0]) && p[0] != ',' {
+				r.caseStarted = true
+				r.caseRemaining--
+			}
+			return n, err
+		}
+		if r.caseRemaining <= 0 {
+			return 0, errCorpusCaseJSONTooLarge
+		}
+		if r.remaining <= 0 {
+			probe := make([]byte, 1)
+			n, err := r.r.Read(probe)
+			if n > 0 {
+				r.exceeded = true
+				return 0, errCorpusJSONTooLarge
+			}
+			return n, err
+		}
+		readLimit := min(r.caseRemaining, r.remaining)
+		if int64(len(p)) > readLimit {
+			p = p[:readLimit]
+		}
+		n, err := r.r.Read(p)
+		r.caseRemaining -= int64(n)
+		r.remaining -= int64(n)
+		return n, err
+	}
 	if int64(len(p)) < r.remaining {
 		n, err := r.r.Read(p)
 		r.remaining -= int64(n)
