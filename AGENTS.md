@@ -111,7 +111,7 @@ CBOR encoding/decoding for Plutus data types.
 # Required checks
 make test                    # Must pass
 golangci-lint run ./...      # Must have 0 issues
-go tool nilaway ./...        # Nil safety check
+make nilaway                 # Nil safety check
 
 # Recommended
 make bench                   # If touching hot paths

@@ -91,11 +91,11 @@ fi
 
 # Step 4: Run the repository-pinned NilAway version
 echo_step "Running NilAway"
-if go tool nilaway -include-pkgs=github.com/blinklabs-io/plutigo -exclude-file-docstrings="<nilaway skip stack-machine>" ./... 2>/dev/null; then
+if make nilaway; then
     echo_pass "NilAway"
 else
     echo_fail "NilAway found issues"
-    echo "Run 'go tool nilaway -include-pkgs=github.com/blinklabs-io/plutigo -exclude-file-docstrings=\"<nilaway skip stack-machine>\" ./...' for details"
+    echo "Run 'make nilaway' for details"
 fi
 
 # Step 5: Check for common issues

@@ -20,6 +20,7 @@ jobs:
     with:
       nilaway-exclude-file-docstrings: <nilaway skip stack-machine>
       nilaway-include-pkgs: github.com/blinklabs-io/plutigo
+      nilaway-version: v0.0.0-20260918162853-acb8859b9031
       pre-test-command: make test
       run-golangci-lint: true
       run-nilaway: true

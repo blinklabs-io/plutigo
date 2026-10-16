@@ -84,5 +84,5 @@ validate-quick: ## Run quick pre-commit validation (skip benchmarks)
 validate-fix: ## Run validation and auto-fix formatting issues
 	@./scripts/validate.sh --fix
 
-nilaway: mod-tidy ## Run nilaway nil safety analysis
-	go run go.uber.org/nilaway/cmd/nilaway@latest $(NILAWAY_FLAGS) ./...
+nilaway: ## Run nilaway nil safety analysis
+	go run go.uber.org/nilaway/cmd/nilaway@v0.0.0-20260918162853-acb8859b9031 $(NILAWAY_FLAGS) ./...
