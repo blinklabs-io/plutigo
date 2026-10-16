@@ -82,18 +82,93 @@ func TestBLSMultiScalarMulStopsOnCancellation(t *testing.T) {
 }
 
 func TestUnionValueStopsOnCancellation(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		limit int
+	}{
+		{name: "token counting", limit: 3},
+		{name: "value conversion", limit: 17},
+		{name: "merge", limit: 161},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachineV4()
+			ctx := &cancelAfterChecksContext{limit: tt.limit, done: make(chan struct{})}
+			m.activeContext = ctx
+			t.Cleanup(func() { m.activeContext = nil })
+
+			value := newValueCostTestInput(8, 8)
+			b := newTestBuiltin(builtin.UnionValue)
+			b = b.ApplyArg(value)
+			b = b.ApplyArg(value)
+
+			_, err := evalBuiltinWithError(t, m, b)
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("unionValue error = %v, want context.Canceled", err)
+			}
+			if ctx.checks != tt.limit {
+				t.Fatalf("context checks = %d, want cancellation at check %d", ctx.checks, tt.limit)
+			}
+		})
+	}
+}
+
+func TestUnionValueStopsDuringValueConversion(t *testing.T) {
 	m := newTestMachineV4()
-	ctx := &cancelAfterChecksContext{limit: 3, done: make(chan struct{})}
+	ctx := &cancelAfterChecksContext{limit: 5, done: make(chan struct{})}
 	m.activeContext = ctx
 	t.Cleanup(func() { m.activeContext = nil })
 
-	value := newValueCostTestInput(8, 8)
-	b := newTestBuiltin(builtin.UnionValue)
-	b = b.ApplyArg(value)
-	b = b.ApplyArg(value)
+	value := &Constant{&syn.Value{Entries: []syn.IConstant{&syn.ProtoPair{
+		First: &syn.ByteString{Inner: []byte{1}},
+		Second: &syn.ProtoList{List: []syn.IConstant{
+			&syn.ProtoPair{
+				First:  &syn.ByteString{Inner: []byte{2}},
+				Second: &syn.Integer{Inner: big.NewInt(1)},
+			},
+			&syn.ProtoPair{
+				First:  &syn.ByteString{Inner: []byte{3}},
+				Second: &syn.Integer{},
+			},
+		}},
+	}}}}
+	b := newTestBuiltin(builtin.UnionValue).ApplyArg(value).ApplyArg(value)
 
 	_, err := evalBuiltinWithError(t, m, b)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("unionValue error = %v, want context.Canceled", err)
+	}
+	if ctx.checks != ctx.limit {
+		t.Fatalf("context checks = %d, want cancellation at check %d", ctx.checks, ctx.limit)
+	}
+}
+
+func TestUnionValueStopsDuringMerge(t *testing.T) {
+	value := func(quantity *big.Int) *Constant {
+		return &Constant{&syn.Value{Entries: []syn.IConstant{&syn.ProtoPair{
+			First: &syn.ByteString{Inner: []byte{1}},
+			Second: &syn.ProtoList{List: []syn.IConstant{&syn.ProtoPair{
+				First:  &syn.ByteString{Inner: []byte{2}},
+				Second: &syn.Integer{Inner: quantity},
+			}}},
+		}}}}
+	}
+	maxQuantity := new(big.Int).Sub(
+		new(big.Int).Lsh(big.NewInt(1), 127),
+		big.NewInt(1),
+	)
+
+	m := newTestMachineV4()
+	ctx := &cancelAfterChecksContext{limit: 8, done: make(chan struct{})}
+	m.activeContext = ctx
+	t.Cleanup(func() { m.activeContext = nil })
+	b := newTestBuiltin(builtin.UnionValue).
+		ApplyArg(value(maxQuantity)).ApplyArg(value(big.NewInt(1)))
+
+	_, err := evalBuiltinWithError(t, m, b)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("unionValue error = %v, want context.Canceled", err)
+	}
+	if ctx.checks != ctx.limit {
+		t.Fatalf("context checks = %d, want cancellation at check %d", ctx.checks, ctx.limit)
 	}
 }
