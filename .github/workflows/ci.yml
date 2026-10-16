@@ -1,4 +1,4 @@
-# Managed locally so reusable workflow revisions are reviewed with this repository.
+# Generated automatically by org-governance-bot. Do not edit manually.
 name: "ci"
 
 on:
@@ -11,16 +11,12 @@ on:
       - v*.*.*
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
   go-test:
-    uses: blinklabs-io/actions/.github/workflows/reuseable-go-test.yml@d3aa875070b18acdcb31256100558d44c16b512f
+    uses: blinklabs-io/actions/.github/workflows/reuseable-go-test.yml@main
     with:
       nilaway-exclude-file-docstrings: <nilaway skip stack-machine>
       nilaway-include-pkgs: github.com/blinklabs-io/plutigo
-      nilaway-version: v0.0.0-20260918162853-acb8859b9031
       pre-test-command: make test
       run-golangci-lint: true
       run-nilaway: true
@@ -32,4 +28,6 @@ jobs:
     if: github.event_name == 'push' && github.ref_type == 'tag'
     uses: blinklabs-io/actions/.github/workflows/reuseable-go-library-release.yml@d3aa875070b18acdcb31256100558d44c16b512f
     permissions:
+      attestations: write
       contents: write
+      id-token: write
