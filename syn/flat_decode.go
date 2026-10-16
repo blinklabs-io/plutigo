@@ -77,9 +77,10 @@ var (
 	emptyByteArray        = []byte{}
 )
 
-// DeBruijnDecoder decodes FLAT programs and keeps its scratch memory between
-// calls. Decode returns independently owned programs; DecodeBorrowed trades
-// that ownership for fewer allocations. It is not safe for concurrent use.
+// DeBruijnDecoder decodes FLAT programs. Decode allocates fresh storage on
+// every call and returns independently owned programs. DecodeBorrowed reuses
+// scratch memory held by the decoder across calls, trading that ownership for
+// fewer allocations. A DeBruijnDecoder is not safe for concurrent use.
 type DeBruijnDecoder struct {
 	decoder decoder
 	arena   termArena[DeBruijn]
