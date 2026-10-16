@@ -191,7 +191,12 @@ func RunCase(ctx context.Context, replayCase *Case) CaseResult {
 			Mismatches: compare(Expected{}, actual),
 		}
 	}
-	decoded, err := replayCase.validate()
+	var decodedBytes int64
+	decoded, err := replayCase.decode(
+		ctx,
+		&decodedBytes,
+		defaultCorpusDecodeLimits,
+	)
 	if err != nil {
 		actual := setupFailure(err)
 		return CaseResult{
