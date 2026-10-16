@@ -3637,6 +3637,10 @@ func readBit[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return value, nil
 }
 
+// writeBitsMaximumInputLength is the longest input writeBits accepts from
+// van Rossem on.
+const writeBitsMaximumInputLength = 4096
+
 func writeBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
@@ -3665,6 +3669,18 @@ func writeBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	if (m.semantics == SemanticsVariantD || m.semantics == SemanticsVariantE) &&
+		len(bytes) > writeBitsMaximumInputLength {
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "writeBits",
+			Message: fmt.Sprintf(
+				"input too long (maximum is %d bytes)",
+				writeBitsMaximumInputLength,
+			),
+		}
 	}
 
 	// Clone bytes to avoid modifying the input

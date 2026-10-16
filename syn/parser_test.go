@@ -65,6 +65,20 @@ func TestParsePrettyRoundTrip(t *testing.T) {
 	}
 }
 
+func TestParseLegacyVerifySignatureBuiltin(t *testing.T) {
+	legacy, err := Parse(`(program 1.0.0 (builtin verifySignature))`)
+	if err != nil {
+		t.Fatalf("parse legacy verifySignature builtin: %v", err)
+	}
+	canonical, err := Parse(`(program 1.0.0 (builtin verifyEd25519Signature))`)
+	if err != nil {
+		t.Fatalf("parse canonical verifyEd25519Signature builtin: %v", err)
+	}
+	if got, want := Pretty(legacy), Pretty(canonical); got != want {
+		t.Fatalf("legacy builtin prints as %q, canonical builtin prints as %q", got, want)
+	}
+}
+
 func TestParseRejectsBareArrayType(t *testing.T) {
 	_, err := Parse(`(program 1.3.0 (con array integer []))`)
 	if err == nil {

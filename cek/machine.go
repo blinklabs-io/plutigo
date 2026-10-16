@@ -1462,6 +1462,30 @@ func (m *Machine[T]) computeImmediateValue(
 	}
 }
 
+// checkCaseOnBuiltin rejects casing on a built-in value before van Rossem.
+// Only constructor values can be scrutinized until then. A byte string is
+// left to the caser, which rejects it at every protocol version with its own
+// error. A zero protocol major means no protocol version was selected and
+// imposes no restriction.
+func (m *Machine[T]) checkCaseOnBuiltin(value Value[T]) error {
+	if m.protoMajor == 0 || m.protoMajor >= vanRossemProtoMajorVersion {
+		return nil
+	}
+	switch v := value.(type) {
+	case *Constant:
+		if _, isByteString := v.Constant.(*syn.ByteString); isByteString {
+			return nil
+		}
+	case *dataValue[T], *dataListValue[T], *dataMapValue[T], *pairValue[T]:
+	default:
+		return nil
+	}
+	return &ScriptError{
+		Code:    ErrCodeCaseOnBuiltinUnavailable,
+		Message: "case on built-in values is unavailable before protocol version 11",
+	}
+}
+
 func (m *Machine[T]) caseEvaluate(
 	env *Env[T],
 	branches []syn.Term[T],
@@ -1470,6 +1494,10 @@ func (m *Machine[T]) caseEvaluate(
 ) (MachineState[T], error) {
 	if value == nil {
 		return nil, internalError("case evaluated nil value")
+	}
+
+	if err := m.checkCaseOnBuiltin(value); err != nil {
+		return nil, err
 	}
 
 	switch v := value.(type) {
