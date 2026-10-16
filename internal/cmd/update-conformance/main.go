@@ -129,6 +129,22 @@ func installCorpus(
 	expectedDigest string,
 	expectedRoot string,
 ) error {
+	return installCorpusWithRename(
+		archivePath,
+		destination,
+		expectedDigest,
+		expectedRoot,
+		os.Rename,
+	)
+}
+
+func installCorpusWithRename(
+	archivePath string,
+	destination string,
+	expectedDigest string,
+	expectedRoot string,
+	rename func(string, string) error,
+) error {
 	if err := verifyArchiveDigest(archivePath, expectedDigest); err != nil {
 		return err
 	}
@@ -138,7 +154,12 @@ func installCorpus(
 	if err != nil {
 		return fmt.Errorf("create staging directory: %w", err)
 	}
-	defer os.RemoveAll(stagingRoot)
+	keepStaging := false
+	defer func() {
+		if !keepStaging {
+			_ = os.RemoveAll(stagingRoot)
+		}
+	}()
 
 	stagedCorpus := filepath.Join(stagingRoot, "new")
 	if err := os.Mkdir(stagedCorpus, 0o755); err != nil {
@@ -161,18 +182,20 @@ func installCorpus(
 
 	backup := filepath.Join(stagingRoot, "previous")
 	hadDestination := false
-	if err := os.Rename(destination, backup); err == nil {
+	if err := rename(destination, backup); err == nil {
 		hadDestination = true
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("stage existing corpus: %w", err)
 	}
-	if err := os.Rename(stagedCorpus, destination); err != nil {
+	if err := rename(stagedCorpus, destination); err != nil {
 		if hadDestination {
-			if restoreErr := os.Rename(backup, destination); restoreErr != nil {
+			if restoreErr := rename(backup, destination); restoreErr != nil {
+				keepStaging = true
 				return fmt.Errorf(
-					"install corpus: %w; restore previous corpus: %v",
+					"install corpus: %w; restore previous corpus: %v; previous corpus preserved at %s",
 					err,
 					restoreErr,
+					backup,
 				)
 			}
 		}

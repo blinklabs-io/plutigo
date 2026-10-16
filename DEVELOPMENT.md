@@ -34,7 +34,7 @@ For organization-wide contributing guidelines (conventional commits, DCO sign-of
 
 Optional but recommended:
 - **golangci-lint** - Linting (`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest`)
-- **NilAway** - Nil safety analysis pinned by `go.mod` (`go tool nilaway`)
+- **NilAway** - Nil safety analysis pinned by `go.mod` (`go tool nilaway ./...`)
 
 ### Setup
 

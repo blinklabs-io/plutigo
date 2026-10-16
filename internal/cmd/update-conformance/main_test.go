@@ -141,6 +141,35 @@ func TestInstallCorpusRejectsDigestMismatchBeforeReplacement(t *testing.T) {
 	assertFileContents(t, filepath.Join(destination, "old.txt"), "old corpus")
 }
 
+func TestInstallCorpusPreservesBackupWhenRestoreFails(t *testing.T) {
+	root := "plutus-test-revision"
+	prefix := root + "/plutus-conformance/test-cases/uplc/evaluation/case"
+	archive, digest := writeTestArchive(t, []archiveEntry{
+		{name: prefix + "/sample.uplc", body: "program"},
+		{name: prefix + "/sample.uplc.expected", body: "result"},
+		{name: prefix + "/sample.budget.expected", body: "budget"},
+	})
+	destination := existingCorpus(t)
+	renameCalls := 0
+	rename := func(oldPath, newPath string) error {
+		renameCalls++
+		if renameCalls > 1 {
+			return os.ErrPermission
+		}
+		return os.Rename(oldPath, newPath)
+	}
+
+	err := installCorpusWithRename(archive, destination, digest, root, rename)
+	if err == nil || !strings.Contains(err.Error(), "previous corpus preserved at") {
+		t.Fatalf("installCorpusWithRename() error = %v, want preserved backup path", err)
+	}
+	if renameCalls != 3 {
+		t.Fatalf("rename called %d times, want install and restore failures after backup", renameCalls)
+	}
+	backup := strings.SplitN(err.Error(), "; previous corpus preserved at ", 2)[1]
+	assertFileContents(t, filepath.Join(backup, "old.txt"), "old corpus")
+}
+
 func appendCopy(entries []archiveEntry, extra archiveEntry) []archiveEntry {
 	result := append([]archiveEntry(nil), entries...)
 	return append(result, extra)
