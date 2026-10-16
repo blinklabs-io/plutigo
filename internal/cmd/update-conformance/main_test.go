@@ -141,6 +141,23 @@ func TestInstallCorpusRejectsDigestMismatchBeforeReplacement(t *testing.T) {
 	assertFileContents(t, filepath.Join(destination, "old.txt"), "old corpus")
 }
 
+func TestFixtureTargetValidatesLocalPath(t *testing.T) {
+	destination := t.TempDir()
+
+	got, err := fixtureTarget(destination, "case/sample.uplc")
+	if err != nil {
+		t.Fatalf("fixtureTarget() error = %v", err)
+	}
+	if want := filepath.Join(destination, "case", "sample.uplc"); got != want {
+		t.Fatalf("fixtureTarget() = %q, want %q", got, want)
+	}
+
+	got, err = fixtureTarget(destination, "../escape.uplc")
+	if err == nil || got != "" {
+		t.Fatalf("fixtureTarget() = (%q, %v), want rejected path", got, err)
+	}
+}
+
 func TestInstallCorpusPreservesBackupWhenRestoreFails(t *testing.T) {
 	root := "plutus-test-revision"
 	prefix := root + "/plutus-conformance/test-cases/uplc/evaluation/case"

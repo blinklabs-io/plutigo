@@ -17,7 +17,7 @@ For organization-wide contributing guidelines (conventional commits, DCO sign-of
 | Fix formatting + validate | `make validate-fix` |
 | Run all tests | `make test` |
 | Run one test | `make test-match TEST=TestName` |
-| Check my code | `golangci-lint run ./... && go tool nilaway ./...` |
+| Check my code | `golangci-lint run ./... && nilaway ./...` |
 | Format code | `make format` |
 | Run benchmarks | `make bench` |
 | See coverage | `make test-cover && open coverage.html` |
@@ -34,7 +34,7 @@ For organization-wide contributing guidelines (conventional commits, DCO sign-of
 
 Optional but recommended:
 - **golangci-lint** - Linting (`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest`)
-- **NilAway** - Nil safety analysis pinned by `go.mod` (`go tool nilaway ./...`)
+- **nilaway** - Nil safety analysis (`go install go.uber.org/nilaway/cmd/nilaway@latest`)
 
 ### Setup
 
@@ -129,8 +129,8 @@ Both linters must pass with **zero issues** before committing:
 # Run golangci-lint (style, performance, security)
 golangci-lint run ./...
 
-# Run the pinned NilAway version (nil pointer safety)
-go tool nilaway ./...
+# Run nilaway (nil pointer safety)
+nilaway ./...
 ```
 
 The CI pipeline enforces these checks on all pull requests.
@@ -153,7 +153,7 @@ go tool cover -html=coverage.out -o coverage.html
 Before committing:
 1. `make format` - Format code
 2. `golangci-lint run ./...` - Pass linting
-3. `go tool nilaway ./...` - Pass nil safety
+3. `nilaway ./...` - Pass nil safety
 4. `make test` - All tests pass
 5. `make bench` - No performance regressions (for performance-related changes)
 
@@ -468,9 +468,9 @@ The parser is a recursive descent parser with:
 
 ### Build Issues
 
-**Run NilAway:**
+**`nilaway` not found:**
 ```sh
-go tool nilaway ./...
+go install go.uber.org/nilaway/cmd/nilaway@latest
 ```
 
 **`golangci-lint` not found:**

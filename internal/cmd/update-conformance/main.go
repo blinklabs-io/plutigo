@@ -287,7 +287,10 @@ func extractFixtures(archivePath, destination, expectedRoot string) error {
 			continue
 		}
 
-		target := filepath.Join(destination, filepath.FromSlash(relative))
+		target, err := fixtureTarget(destination, relative)
+		if err != nil {
+			return err
+		}
 		switch header.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(target, 0o755); err != nil {
@@ -319,6 +322,14 @@ func extractFixtures(archivePath, destination, expectedRoot string) error {
 		return errors.New("archive contains no allowed fixtures")
 	}
 	return nil
+}
+
+func fixtureTarget(destination, relative string) (string, error) {
+	localPath := filepath.FromSlash(relative)
+	if !filepath.IsLocal(localPath) {
+		return "", fmt.Errorf("fixture path %q is not local", relative)
+	}
+	return filepath.Join(destination, localPath), nil
 }
 
 func validateArchivePath(name, expectedRoot string) (string, error) {
