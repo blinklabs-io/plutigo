@@ -81,6 +81,7 @@ func TestDecodeIntegerConstantsShareNoMagnitude(t *testing.T) {
 		}{
 			{"fresh", Decode[DeBruijn]},
 			{"reused", NewDeBruijnDecoder().Decode},
+			{"borrowed", NewDeBruijnDecoder().DecodeBorrowed},
 		} {
 			t.Run(fmt.Sprintf("%s/bump-%d-bits", decode.name, bump.BitLen()), func(t *testing.T) {
 				program, err := decode.fn(encodeIntegerListProgram(t, values))

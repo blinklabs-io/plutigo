@@ -77,18 +77,24 @@ var (
 	emptyByteArray        = []byte{}
 )
 
+// DeBruijnDecoder decodes FLAT programs. Decode allocates fresh storage on
+// every call and returns independently owned programs. DecodeBorrowed reuses
+// scratch memory held by the decoder across calls, trading that ownership for
+// fewer allocations. A DeBruijnDecoder is not safe for concurrent use.
 type DeBruijnDecoder struct {
 	decoder decoder
 	arena   termArena[DeBruijn]
 	consts  constantArena
 }
 
+// NewDeBruijnDecoder returns an empty decoder.
 func NewDeBruijnDecoder() *DeBruijnDecoder {
 	return &DeBruijnDecoder{}
 }
 
+// DecodeDeBruijn decodes a FLAT program. The result is independently owned.
 func DecodeDeBruijn(bytes []byte) (*Program[DeBruijn], error) {
-	return NewDeBruijnDecoder().Decode(bytes)
+	return decodeDeBruijn(bytes)
 }
 
 func decodeDeBruijn(bytes []byte) (*Program[DeBruijn], error) {
@@ -98,11 +104,26 @@ func decodeDeBruijn(bytes []byte) (*Program[DeBruijn], error) {
 	return decodeDeBruijnProgram(d, arena, consts, nil)
 }
 
-func (d *DeBruijnDecoder) Decode(bytes []byte) (*Program[DeBruijn], error) {
+// DecodeBorrowed decodes a FLAT program like Decode but allocates its nodes
+// and constants from arenas owned by the decoder, which later calls recycle.
+// The returned program, every term in it, and every constant reachable from
+// it are valid only until the next call to Decode or DecodeBorrowed on the
+// same decoder; after that their contents are unspecified. Copy or re-decode
+// a program that must outlive the next call. A DeBruijnDecoder is not safe for
+// concurrent use.
+func (d *DeBruijnDecoder) DecodeBorrowed(bytes []byte) (*Program[DeBruijn], error) {
 	d.decoder.reset(bytes)
 	d.arena.reset()
 	d.consts.reset()
 	return decodeDeBruijnProgram(&d.decoder, &d.arena, &d.consts, nil)
+}
+
+// Decode decodes a FLAT program. Unlike DecodeBorrowed, the returned program
+// is independently owned: it is never modified by a later call on the same
+// decoder and may be retained and shared freely. A DeBruijnDecoder is not safe
+// for concurrent use.
+func (d *DeBruijnDecoder) Decode(bytes []byte) (*Program[DeBruijn], error) {
+	return decodeDeBruijn(bytes)
 }
 
 func Decode[T Binder](bytes []byte) (*Program[T], error) {

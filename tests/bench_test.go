@@ -92,7 +92,7 @@ func benchFlatFiles(b *testing.B, includeDecode, includeEval bool) {
 				program := decodedProgram
 				if includeDecode {
 					var decodeErr error
-					program, decodeErr = decoder.Decode(content)
+					program, decodeErr = decoder.DecodeBorrowed(content)
 					if decodeErr != nil {
 						b.Fatalf("decode error: %v", decodeErr)
 					}
