@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/builtin"
@@ -186,6 +187,154 @@ func TestRunMethodsPreserveValidASTSemantics(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRunContextWithTrustedDataArgumentsExcludesDataFromAggregateLimit(t *testing.T) {
+	leaf := &data.Integer{Inner: big.NewInt(0)}
+	fields := make([]data.PlutusData, maxDischargeWork/2)
+	for i := range fields {
+		fields[i] = leaf
+	}
+	firstData := data.Constr{Tag: big.NewInt(1), Fields: fields}
+	secondData := data.Constr{Tag: big.NewInt(2), Fields: fields}
+	term := syn.Term[syn.DeBruijn](&syn.Lambda[syn.DeBruijn]{
+		ParameterName: syn.DeBruijn(0),
+		Body: &syn.Lambda[syn.DeBruijn]{
+			ParameterName: syn.DeBruijn(0),
+			Body:          &syn.Var[syn.DeBruijn]{Name: syn.DeBruijn(2)},
+		},
+	})
+	callerAppliedTerm := &syn.Apply[syn.DeBruijn]{
+		Function: &syn.Apply[syn.DeBruijn]{
+			Function: term,
+			Argument: &syn.Constant{Con: &syn.Data{Inner: firstData}},
+		},
+		Argument: &syn.Constant{Con: &syn.Data{Inner: secondData}},
+	}
+
+	_, err := newTestMachineFlow().RunContext(context.Background(), callerAppliedTerm)
+	var typeErr *TypeError
+	if !errors.As(err, &typeErr) {
+		t.Fatalf("RunContext() error = %T %v, want TypeError", err, err)
+	}
+	if !strings.HasPrefix(typeErr.Message, "PlutusData structure exceeds ") {
+		t.Fatalf("RunContext() error = %q, want aggregate PlutusData node limit", typeErr.Message)
+	}
+
+	result, err := newTestMachineFlow().RunContextWithTrustedDataArguments(
+		context.Background(),
+		term,
+		firstData,
+		secondData,
+	)
+	if err != nil {
+		t.Fatalf("RunContextWithTrustedDataArguments() error = %v", err)
+	}
+	constant, ok := result.(*syn.Constant)
+	if !ok {
+		t.Fatalf("RunContextWithTrustedDataArguments() result = %T, want *syn.Constant", result)
+	}
+	resultData, ok := constant.Con.(*syn.Data)
+	if !ok {
+		t.Fatalf("RunContextWithTrustedDataArguments() constant = %T, want *syn.Data", constant.Con)
+	}
+	if !firstData.Equal(resultData.Inner) {
+		t.Fatalf("RunContextWithTrustedDataArguments() returned data different from the first argument")
+	}
+}
+
+func TestRunContextWithTrustedDataArgumentsRejectsNilAndMalformedInputs(t *testing.T) {
+	t.Run("nil context", func(t *testing.T) {
+		_, err := newTestMachineFlow().RunContextWithTrustedDataArguments(
+			nil,
+			&syn.Constant{Con: &syn.Unit{}},
+		)
+		if err != nil {
+			t.Fatalf("RunContextWithTrustedDataArguments() error = %v", err)
+		}
+	})
+
+	t.Run("cancelled context", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, err := newTestMachineFlow().RunContextWithTrustedDataArguments(
+			ctx,
+			&syn.Constant{Con: &syn.Unit{}},
+		)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("RunContextWithTrustedDataArguments() error = %v, want context.Canceled", err)
+		}
+	})
+
+	t.Run("typed nil data", func(t *testing.T) {
+		var (
+			constr     *data.Constr
+			mapValue   *data.Map
+			value      *data.Value
+			integer    *data.Integer
+			byteString *data.ByteString
+			list       *data.List
+		)
+		tests := []struct {
+			name  string
+			value data.PlutusData
+		}{
+			{name: "untyped nil", value: nil},
+			{name: "constructor", value: constr},
+			{name: "map", value: mapValue},
+			{name: "value", value: value},
+			{name: "integer", value: integer},
+			{name: "byte string", value: byteString},
+			{name: "list", value: list},
+		}
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				_, err := newTestMachineFlow().RunContextWithTrustedDataArguments(
+					context.Background(),
+					&syn.Constant{Con: &syn.Unit{}},
+					test.value,
+				)
+				var typeErr *TypeError
+				if !errors.As(err, &typeErr) {
+					t.Fatalf("error = %T %v, want TypeError", err, err)
+				}
+				if !strings.Contains(typeErr.Message, "trusted data argument 0 is nil") {
+					t.Fatalf("error = %q, want nil trusted data argument rejection", typeErr.Message)
+				}
+			})
+		}
+	})
+
+	t.Run("too many arguments", func(t *testing.T) {
+		arguments := make([]data.PlutusData, (maxDischargeWork-1)/3+1)
+		_, err := newTestMachineFlow().RunContextWithTrustedDataArguments(
+			context.Background(),
+			&syn.Constant{Con: &syn.Unit{}},
+			arguments...,
+		)
+		var typeErr *TypeError
+		if !errors.As(err, &typeErr) {
+			t.Fatalf("error = %T %v, want TypeError", err, err)
+		}
+		if !strings.Contains(typeErr.Message, "too many trusted data arguments") {
+			t.Fatalf("error = %q, want trusted data argument limit rejection", typeErr.Message)
+		}
+	})
+
+	t.Run("malformed program", func(t *testing.T) {
+		_, err := newTestMachineFlow().RunContextWithTrustedDataArguments(
+			context.Background(),
+			&syn.Builtin{DefaultFunction: builtin.MaxDefaultFunction + 1},
+			data.Integer{Inner: big.NewInt(0)},
+		)
+		var typeErr *TypeError
+		if !errors.As(err, &typeErr) {
+			t.Fatalf("error = %T %v, want TypeError", err, err)
+		}
+		if !strings.Contains(typeErr.Message, "builtin tag") {
+			t.Fatalf("error = %q, want malformed program rejection", typeErr.Message)
+		}
+	})
 }
 
 func TestRunAcceptsValueFormPlutusData(t *testing.T) {
