@@ -211,17 +211,25 @@ func TestDecodeUnsupportedBLSConstantsFailsClosed(t *testing.T) {
 	}
 }
 
-func TestDecodeValueRejectsZeroQuantity(t *testing.T) {
+func TestDecodeValueDropsZeroQuantity(t *testing.T) {
 	input, err := hex.DecodeString("0101004ea10081000001")
 	if err != nil {
 		t.Fatalf("decode fixture: %v", err)
 	}
 
-	_, err = Decode[DeBruijn](input)
-	if err == nil {
-		t.Fatal("Decode() error = nil, want zero-quantity rejection")
+	program, err := Decode[DeBruijn](input)
+	if err != nil {
+		t.Fatalf("Decode(): %v", err)
 	}
-	if !strings.Contains(err.Error(), "zero quantity") {
-		t.Fatalf("Decode() error = %q, want zero-quantity rejection", err)
+	constant, ok := program.Term.(*Constant)
+	if !ok {
+		t.Fatalf("program term has type %T, want *Constant", program.Term)
+	}
+	value, ok := constant.Con.(*Value)
+	if !ok {
+		t.Fatalf("constant has type %T, want *Value", constant.Con)
+	}
+	if entries := value.Entries(); len(entries) != 0 {
+		t.Fatalf("decoded Value has %d entries, want zero", len(entries))
 	}
 }

@@ -1217,10 +1217,11 @@ func decodeConstantValueWithArena(
 		if err != nil {
 			return nil, err
 		}
-		if err := validateValueEntries(entries); err != nil {
+		normalized, err := normalizeValueEntries(entries)
+		if err != nil {
 			return nil, err
 		}
-		return arena.allocValue(entries), nil
+		return arena.allocValue(normalized), nil
 	case *TBls12_381G1Element:
 		return nil, errors.New("cannot decode bls12_381_G1_element constants")
 	case *TBls12_381G2Element:
@@ -1426,10 +1427,11 @@ func decodeConstantValue(d *decoder, typ Typ) (IConstant, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := validateValueEntries(entries); err != nil {
+		normalized, err := normalizeValueEntries(entries)
+		if err != nil {
 			return nil, err
 		}
-		constant = newOwnedValue(entries)
+		constant = newOwnedValue(normalized)
 
 	case *TBls12_381G1Element:
 		return nil, errors.New("cannot decode bls12_381_G1_element constants")

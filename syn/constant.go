@@ -16,6 +16,7 @@ package syn
 
 import (
 	"bytes"
+	"fmt"
 	"math/big"
 	"sort"
 
@@ -167,14 +168,15 @@ type Value struct {
 	cachedMaxInner  int
 }
 
-// NewValue validates and snapshots entries into an immutable Value. Value
+// NewValue normalizes and snapshots entries into an immutable Value. Value
 // builtins use the cached shape metrics for the same constant-time lookups as
 // the reference implementation.
 func NewValue(entries []IConstant) (*Value, error) {
-	if err := validateValueEntries(entries); err != nil {
+	normalized, err := normalizeValueEntries(entries)
+	if err != nil {
 		return nil, err
 	}
-	return newOwnedValue(cloneValueEntries(entries)), nil
+	return newOwnedValue(cloneValueEntries(normalized)), nil
 }
 
 func newOwnedValue(entries []IConstant) *Value {
@@ -183,6 +185,127 @@ func newOwnedValue(entries []IConstant) *Value {
 		cachedTotalSize: valueTotalSize(entries) + 1,
 		cachedMaxInner:  valueMaxInnerSize(entries),
 	}
+}
+
+func checkValueKeyLength(kind string, index int, key []byte) error {
+	if len(key) > data.MaxValueKeyLength {
+		return fmt.Errorf("Value %s %d key exceeds %d bytes", kind, index, data.MaxValueKeyLength)
+	}
+	return nil
+}
+
+func checkValueQuantityRange(policy, token int, quantity *big.Int) error {
+	if quantity == nil {
+		return fmt.Errorf("Value policy %d token %d quantity must be an integer", policy, token)
+	}
+	if quantity.Sign() == 0 {
+		return nil
+	}
+	return data.CheckValueQuantity(policy, token, quantity)
+}
+
+func normalizeValueEntries(entries []IConstant) ([]IConstant, error) {
+	if err := validateValueEntries(entries); err == nil {
+		return entries, nil
+	}
+
+	totals := make(map[string]map[string]*big.Int, len(entries))
+	for policyIndex, entry := range entries {
+		policy, ok := entry.(*ProtoPair)
+		if !ok || policy == nil {
+			return nil, fmt.Errorf("value policy entry %d is not a pair", policyIndex)
+		}
+		policyID, ok := policy.First.(*ByteString)
+		if !ok || policyID == nil {
+			return nil, fmt.Errorf("value policy entry %d has a non-bytestring key", policyIndex)
+		}
+		if err := checkValueKeyLength("policy", policyIndex, policyID.Inner); err != nil {
+			return nil, err
+		}
+		tokens, ok := policy.Second.(*ProtoList)
+		if !ok || tokens == nil {
+			return nil, fmt.Errorf("value policy entry %d has a non-list payload", policyIndex)
+		}
+
+		policyKey := string(policyID.Inner)
+		policyTotals := totals[policyKey]
+		if policyTotals == nil {
+			policyTotals = make(map[string]*big.Int, len(tokens.List))
+			totals[policyKey] = policyTotals
+		}
+		for tokenIndex, entry := range tokens.List {
+			token, ok := entry.(*ProtoPair)
+			if !ok || token == nil {
+				return nil, fmt.Errorf("value token entry %d:%d is not a pair", policyIndex, tokenIndex)
+			}
+			tokenID, ok := token.First.(*ByteString)
+			if !ok || tokenID == nil {
+				return nil, fmt.Errorf("value token entry %d:%d has a non-bytestring key", policyIndex, tokenIndex)
+			}
+			if err := checkValueKeyLength("token", tokenIndex, tokenID.Inner); err != nil {
+				return nil, err
+			}
+			quantity, ok := token.Second.(*Integer)
+			if !ok || quantity == nil || quantity.Inner == nil {
+				return nil, fmt.Errorf("value token entry %d:%d has a non-integer quantity", policyIndex, tokenIndex)
+			}
+			if err := checkValueQuantityRange(policyIndex, tokenIndex, quantity.Inner); err != nil {
+				return nil, err
+			}
+
+			tokenKey := string(tokenID.Inner)
+			total := policyTotals[tokenKey]
+			if total == nil {
+				policyTotals[tokenKey] = new(big.Int).Set(quantity.Inner)
+			} else {
+				total.Add(total, quantity.Inner)
+			}
+		}
+	}
+
+	policyIDs := make([]string, 0, len(totals))
+	for policyID, tokens := range totals {
+		for _, quantity := range tokens {
+			if quantity.Sign() != 0 {
+				policyIDs = append(policyIDs, policyID)
+				break
+			}
+		}
+	}
+	sort.Strings(policyIDs)
+	normalized := make([]IConstant, 0, len(policyIDs))
+	for _, policyID := range policyIDs {
+		tokenIDs := make([]string, 0, len(totals[policyID]))
+		for tokenID, quantity := range totals[policyID] {
+			if quantity.Sign() != 0 {
+				tokenIDs = append(tokenIDs, tokenID)
+			}
+		}
+		sort.Strings(tokenIDs)
+		tokenEntries := make([]IConstant, 0, len(tokenIDs))
+		for _, tokenID := range tokenIDs {
+			quantity := totals[policyID][tokenID]
+			if err := data.CheckValueQuantity(len(normalized), len(tokenEntries), quantity); err != nil {
+				return nil, err
+			}
+			tokenEntries = append(tokenEntries, &ProtoPair{
+				FstType: valueEntryType.Second.(*TList).Typ.(*TPair).First,
+				SndType: valueEntryType.Second.(*TList).Typ.(*TPair).Second,
+				First:   &ByteString{Inner: []byte(tokenID)},
+				Second:  newInteger(new(big.Int).Set(quantity)),
+			})
+		}
+		normalized = append(normalized, &ProtoPair{
+			FstType: valueEntryType.First,
+			SndType: valueEntryType.Second,
+			First:   &ByteString{Inner: []byte(policyID)},
+			Second:  &ProtoList{LTyp: valueEntryType.Second.(*TList).Typ, List: tokenEntries},
+		})
+	}
+	if err := validateValueEntries(normalized); err != nil {
+		return nil, err
+	}
+	return normalized, nil
 }
 
 // TotalSize returns the cached number of distinct policy and token pairs.
