@@ -244,16 +244,80 @@ func TestRunContextWithTrustedDataArgumentsExcludesDataFromAggregateLimit(t *tes
 }
 
 func TestRunContextWithTrustedDataArgumentsRejectsNilAndMalformedInputs(t *testing.T) {
+	t.Run("nil context", func(t *testing.T) {
+		_, err := newTestMachineFlow().RunContextWithTrustedDataArguments(
+			nil,
+			&syn.Constant{Con: &syn.Unit{}},
+		)
+		if err != nil {
+			t.Fatalf("RunContextWithTrustedDataArguments() error = %v", err)
+		}
+	})
+
+	t.Run("cancelled context", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, err := newTestMachineFlow().RunContextWithTrustedDataArguments(
+			ctx,
+			&syn.Constant{Con: &syn.Unit{}},
+		)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("RunContextWithTrustedDataArguments() error = %v, want context.Canceled", err)
+		}
+	})
+
 	t.Run("typed nil data", func(t *testing.T) {
-		var value *data.Integer
+		var (
+			constr     *data.Constr
+			mapValue   *data.Map
+			value      *data.Value
+			integer    *data.Integer
+			byteString *data.ByteString
+			list       *data.List
+		)
+		tests := []struct {
+			name  string
+			value data.PlutusData
+		}{
+			{name: "untyped nil", value: nil},
+			{name: "constructor", value: constr},
+			{name: "map", value: mapValue},
+			{name: "value", value: value},
+			{name: "integer", value: integer},
+			{name: "byte string", value: byteString},
+			{name: "list", value: list},
+		}
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				_, err := newTestMachineFlow().RunContextWithTrustedDataArguments(
+					context.Background(),
+					&syn.Constant{Con: &syn.Unit{}},
+					test.value,
+				)
+				var typeErr *TypeError
+				if !errors.As(err, &typeErr) {
+					t.Fatalf("error = %T %v, want TypeError", err, err)
+				}
+				if !strings.Contains(typeErr.Message, "trusted data argument 0 is nil") {
+					t.Fatalf("error = %q, want nil trusted data argument rejection", typeErr.Message)
+				}
+			})
+		}
+	})
+
+	t.Run("too many arguments", func(t *testing.T) {
+		arguments := make([]data.PlutusData, (maxDischargeWork-1)/3+1)
 		_, err := newTestMachineFlow().RunContextWithTrustedDataArguments(
 			context.Background(),
 			&syn.Constant{Con: &syn.Unit{}},
-			value,
+			arguments...,
 		)
 		var typeErr *TypeError
 		if !errors.As(err, &typeErr) {
 			t.Fatalf("error = %T %v, want TypeError", err, err)
+		}
+		if !strings.Contains(typeErr.Message, "too many trusted data arguments") {
+			t.Fatalf("error = %q, want trusted data argument limit rejection", typeErr.Message)
 		}
 	})
 
