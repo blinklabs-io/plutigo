@@ -192,6 +192,7 @@ var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
 	"keccak_256":                      Keccak_256,
 	"blake2b_224":                     Blake2b_224,
 	"verifyEd25519Signature":          VerifyEd25519Signature,
+	"verifySignature":                 VerifyEd25519Signature,
 	"verifyEcdsaSecp256k1Signature":   VerifyEcdsaSecp256k1Signature,
 	"verifySchnorrSecp256k1Signature": VerifySchnorrSecp256k1Signature,
 	// String functions

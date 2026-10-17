@@ -1,12 +1,3 @@
-# Determine root directory
-ROOT_DIR=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
-
-# Gather all .go files for use in dependencies below
-GO_FILES=$(shell find $(ROOT_DIR) -name '*.go')
-
-# Gather list of expected binaries
-BINARIES=$(shell cd $(ROOT_DIR)/cmd && ls -1 | grep -v ^common)
-
 # Common flags for fuzz tests
 FUZZ_FLAGS ?= -run='^$$' -fuzztime=10s
 NILAWAY_FLAGS ?= -include-pkgs=github.com/blinklabs-io/plutigo -exclude-file-docstrings="<nilaway skip stack-machine>"
@@ -72,29 +63,17 @@ fuzz: ## Run fuzz tests
 
 format: ## Format Go code
 	@go fmt ./...
-	@gofmt -s -w $(GO_FILES)
+	@find . -type f -name '*.go' -exec gofmt -s -w {} +
 
 golines:
 	@golines -w --ignore-generated --chain-split-dots --max-len=80 --reformat-tags .
 
 clean: ## Remove test cache
 	@go clean -testcache
-	@rm -f $(BINARIES)
+	@rm -f -- ./plutigo-replay
 
 download-plutus-tests:
-	@echo "Downloading latest plutus tests..."
-
-	@rm -rf tests/conformance
-
-	@curl -L -s https://github.com/IntersectMBO/plutus/archive/master.tar.gz | tar xz -C /tmp
-
-	@mkdir -p tests/conformance
-
-	@mv /tmp/plutus-master/plutus-conformance/test-cases/uplc/evaluation/* tests/conformance/
-
-	@rm -rf /tmp/plutus-master
-
-	@echo "Download complete. Test cases are now in tests/conformance/"
+	@go run ./internal/cmd/update-conformance
 
 validate: ## Run all pre-commit validation checks
 	@./scripts/validate.sh
@@ -105,5 +84,5 @@ validate-quick: ## Run quick pre-commit validation (skip benchmarks)
 validate-fix: ## Run validation and auto-fix formatting issues
 	@./scripts/validate.sh --fix
 
-nilaway: mod-tidy ## Run nilaway nil safety analysis
-	go run go.uber.org/nilaway/cmd/nilaway@latest $(NILAWAY_FLAGS) ./...
+nilaway: ## Run nilaway nil safety analysis
+	go run go.uber.org/nilaway/cmd/nilaway@v0.0.0-20260918162853-acb8859b9031 $(NILAWAY_FLAGS) ./...

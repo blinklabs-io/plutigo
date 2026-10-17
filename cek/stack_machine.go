@@ -1041,6 +1041,9 @@ func (m *Machine[T]) caseEvaluateStack(
 	if value == nil {
 		return nil, nil, nil, false, internalError("stack case evaluated nil value")
 	}
+	if err := m.checkCaseOnBuiltin(value); err != nil {
+		return nil, nil, nil, false, err
+	}
 
 	switch v := value.(type) {
 	case *Constr[T]:

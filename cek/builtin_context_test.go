@@ -86,9 +86,8 @@ func TestUnionValueStopsOnCancellation(t *testing.T) {
 		name  string
 		limit int
 	}{
-		{name: "token counting", limit: 3},
-		{name: "value conversion", limit: 17},
-		{name: "merge", limit: 161},
+		{name: "value conversion", limit: 1},
+		{name: "merge", limit: 145},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			m := newTestMachineV4()
@@ -114,11 +113,11 @@ func TestUnionValueStopsOnCancellation(t *testing.T) {
 
 func TestUnionValueStopsDuringValueConversion(t *testing.T) {
 	m := newTestMachineV4()
-	ctx := &cancelAfterChecksContext{limit: 5, done: make(chan struct{})}
+	ctx := &cancelAfterChecksContext{limit: 3, done: make(chan struct{})}
 	m.activeContext = ctx
 	t.Cleanup(func() { m.activeContext = nil })
 
-	value := &Constant{&syn.Value{Entries: []syn.IConstant{&syn.ProtoPair{
+	value := mustValueConstant(t, []syn.IConstant{&syn.ProtoPair{
 		First: &syn.ByteString{Inner: []byte{1}},
 		Second: &syn.ProtoList{List: []syn.IConstant{
 			&syn.ProtoPair{
@@ -127,10 +126,10 @@ func TestUnionValueStopsDuringValueConversion(t *testing.T) {
 			},
 			&syn.ProtoPair{
 				First:  &syn.ByteString{Inner: []byte{3}},
-				Second: &syn.Integer{},
+				Second: &syn.Integer{Inner: big.NewInt(1)},
 			},
 		}},
-	}}}}
+	}})
 	b := newTestBuiltin(builtin.UnionValue).ApplyArg(value).ApplyArg(value)
 
 	_, err := evalBuiltinWithError(t, m, b)
@@ -144,13 +143,13 @@ func TestUnionValueStopsDuringValueConversion(t *testing.T) {
 
 func TestUnionValueStopsDuringMerge(t *testing.T) {
 	value := func(quantity *big.Int) *Constant {
-		return &Constant{&syn.Value{Entries: []syn.IConstant{&syn.ProtoPair{
+		return mustValueConstant(t, []syn.IConstant{&syn.ProtoPair{
 			First: &syn.ByteString{Inner: []byte{1}},
 			Second: &syn.ProtoList{List: []syn.IConstant{&syn.ProtoPair{
 				First:  &syn.ByteString{Inner: []byte{2}},
 				Second: &syn.Integer{Inner: quantity},
 			}}},
-		}}}}
+		}})
 	}
 	maxQuantity := new(big.Int).Sub(
 		new(big.Int).Lsh(big.NewInt(1), 127),
@@ -158,7 +157,7 @@ func TestUnionValueStopsDuringMerge(t *testing.T) {
 	)
 
 	m := newTestMachineV4()
-	ctx := &cancelAfterChecksContext{limit: 8, done: make(chan struct{})}
+	ctx := &cancelAfterChecksContext{limit: 6, done: make(chan struct{})}
 	m.activeContext = ctx
 	t.Cleanup(func() { m.activeContext = nil })
 	b := newTestBuiltin(builtin.UnionValue).
@@ -171,4 +170,13 @@ func TestUnionValueStopsDuringMerge(t *testing.T) {
 	if ctx.checks != ctx.limit {
 		t.Fatalf("context checks = %d, want cancellation at check %d", ctx.checks, ctx.limit)
 	}
+}
+
+func mustValueConstant(t *testing.T, entries []syn.IConstant) *Constant {
+	t.Helper()
+	value, err := syn.NewValue(entries)
+	if err != nil {
+		t.Fatalf("construct value: %v", err)
+	}
+	return &Constant{value}
 }

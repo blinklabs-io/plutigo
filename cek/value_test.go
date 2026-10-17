@@ -19,6 +19,7 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
@@ -88,5 +89,65 @@ func TestCloneConstantRejectsMalformedConstant(t *testing.T) {
 	}
 	if typeErr.Code != ErrCodeTypeMismatch {
 		t.Fatalf("error code = %d, want %d", typeErr.Code, ErrCodeTypeMismatch)
+	}
+}
+
+func TestCloneConstantSnapshotsDecodedValue(t *testing.T) {
+	encodeValue := func(quantity int64) []byte {
+		t.Helper()
+		entries := []syn.IConstant{
+			&syn.ProtoPair{
+				FstType: &syn.TByteString{},
+				SndType: &syn.TList{Typ: &syn.TPair{
+					First:  &syn.TByteString{},
+					Second: &syn.TInteger{},
+				}},
+				First: &syn.ByteString{Inner: []byte{1}},
+				Second: &syn.ProtoList{
+					LTyp: &syn.TPair{
+						First:  &syn.TByteString{},
+						Second: &syn.TInteger{},
+					},
+					List: []syn.IConstant{&syn.ProtoPair{
+						FstType: &syn.TByteString{},
+						SndType: &syn.TInteger{},
+						First:   &syn.ByteString{Inner: []byte{2}},
+						Second:  &syn.Integer{Inner: big.NewInt(quantity)},
+					}},
+				},
+			},
+		}
+		value, err := syn.NewValue(entries)
+		if err != nil {
+			t.Fatalf("NewValue: %v", err)
+		}
+		encoded, err := syn.Encode(&syn.Program[syn.DeBruijn]{
+			Version: lang.LanguageVersionV4,
+			Term:    &syn.Constant{Con: value},
+		})
+		if err != nil {
+			t.Fatalf("Encode: %v", err)
+		}
+		return encoded
+	}
+
+	decoder := syn.NewDeBruijnDecoder()
+	program, err := decoder.Decode(encodeValue(1))
+	if err != nil {
+		t.Fatalf("decode initial program: %v", err)
+	}
+	original := program.Term.(*syn.Constant).Con.(*syn.Value)
+	clonedConstant, err := cloneConstant(original)
+	if err != nil {
+		t.Fatalf("cloneConstant: %v", err)
+	}
+	cloned := clonedConstant.(*syn.Value)
+
+	if _, err := decoder.Decode(encodeValue(9)); err != nil {
+		t.Fatalf("reuse decoder: %v", err)
+	}
+	got, ok := cloned.LookupCoin([]byte{1}, []byte{2})
+	if !ok || got.Cmp(big.NewInt(1)) != 0 {
+		t.Fatalf("cloned Value quantity = %v, %v; want 1, true", got, ok)
 	}
 }

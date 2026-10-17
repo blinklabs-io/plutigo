@@ -16,6 +16,7 @@ package cek
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/sha3"
 	"encoding/binary"
@@ -3655,6 +3656,10 @@ func readBit[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return value, nil
 }
 
+// writeBitsMaximumInputLength is the longest input writeBits accepts from
+// van Rossem on.
+const writeBitsMaximumInputLength = 4096
+
 func writeBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
@@ -3683,6 +3688,18 @@ func writeBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	if (m.semantics == SemanticsVariantD || m.semantics == SemanticsVariantE) &&
+		len(bytes) > writeBitsMaximumInputLength {
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "writeBits",
+			Message: fmt.Sprintf(
+				"input too long (maximum is %d bytes)",
+				writeBitsMaximumInputLength,
+			),
+		}
 	}
 
 	// Clone bytes to avoid modifying the input
@@ -4553,13 +4570,15 @@ func multiIndexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error)
 // Helpers: valueToMap, mapToValue
 // ============================================================================
 
-func valueEntries(constant syn.IConstant) ([]syn.IConstant, bool) {
-	switch value := constant.(type) {
-	case *syn.Value:
-		return value.Entries, true
-	default:
-		return nil, false
+func valueShape(
+	constant syn.IConstant,
+) (*syn.Value, int, int, int, bool) {
+	value, ok := constant.(*syn.Value)
+	if !ok {
+		return nil, 0, 0, 0, false
 	}
+	total, outer, maxInner, ok := value.Sizes()
+	return value, total, outer, maxInner, ok
 }
 
 // policies returns the policy IDs from a canonical Value. Value constants are
@@ -4575,7 +4594,7 @@ func policies[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected value constant",
 		}
 	}
-	entries, ok := valueEntries(value.Constant)
+	valueConstant, _, outer, _, ok := valueShape(value.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
@@ -4583,26 +4602,19 @@ func policies[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected value constant",
 		}
 	}
-	if err := m.CostOne(&b.Func, valueOuterCountExMem(entries)); err != nil {
+	if err := m.CostOne(&b.Func, func() ExMem { return ExMem(outer) }); err != nil {
 		return nil, err
 	}
-	result := make([]syn.IConstant, 0, len(entries))
-	for _, entry := range entries {
-		pair, ok := entry.(*syn.ProtoPair)
-		if !ok {
-			return nil, &InternalError{
-				Code:    ErrCodeInternalError,
-				Message: "invalid value policy entry",
-			}
+	policyIDs, ok := valueConstant.PolicyIDs()
+	if !ok {
+		return nil, &InternalError{
+			Code:    ErrCodeInternalError,
+			Message: "invalid value policy entries",
 		}
-		policy, ok := pair.First.(*syn.ByteString)
-		if !ok {
-			return nil, &InternalError{
-				Code:    ErrCodeInternalError,
-				Message: "invalid value policy key",
-			}
-		}
-		result = append(result, &syn.ByteString{Inner: append([]byte(nil), policy.Inner...)})
+	}
+	result := make([]syn.IConstant, len(policyIDs))
+	for i, policyID := range policyIDs {
+		result[i] = &syn.ByteString{Inner: policyID}
 	}
 	return &Constant{&syn.ProtoList{LTyp: &syn.TByteString{}, List: result}}, nil
 }
@@ -4617,7 +4629,7 @@ func assetCount[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected value constant",
 		}
 	}
-	entries, ok := valueEntries(value.Constant)
+	_, count, _, _, ok := valueShape(value.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
@@ -4625,32 +4637,12 @@ func assetCount[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected value constant",
 		}
 	}
-	if err := m.CostOne(&b.Func, valueInnerCountExMem(entries)); err != nil {
+	if err := m.CostOne(&b.Func, func() ExMem {
+		return ExMem(count)
+	}); err != nil {
 		return nil, err
 	}
-	count := valueInnerCountExMem(entries)()
 	return &Constant{&syn.Integer{Inner: big.NewInt(int64(count))}}, nil
-}
-
-func valueTokenCountWithContext[T syn.Eval](
-	m *Machine[T],
-	entries []syn.IConstant,
-) (ExMem, error) {
-	var count ExMem
-	for _, entry := range entries {
-		if err := m.checkBuiltinCancellation(); err != nil {
-			return 0, err
-		}
-		pair, ok := entry.(*syn.ProtoPair)
-		if !ok {
-			continue
-		}
-		inner, ok := pair.Second.(*syn.ProtoList)
-		if ok {
-			count += ExMem(len(inner.List))
-		}
-	}
-	return count, nil
 }
 
 // valueToMap converts a Value payload to map[string]map[string]*big.Int.
@@ -4707,6 +4699,20 @@ func valueToMap[T syn.Eval](
 		out[policy] = tokenMap
 	}
 	return out, nil
+}
+
+// valueConstructionError reports a failure to build a Value as an internal
+// error, but passes a cancellation through so callers can still match it with
+// errors.Is.
+func valueConstructionError(what string, err error) error {
+	if errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	return &InternalError{
+		Code:    ErrCodeInternalError,
+		Message: what + ": " + err.Error(),
+	}
 }
 
 // mapToValue converts a map back to canonical Value order: empty policy
@@ -4794,7 +4800,7 @@ func mapToValue[T syn.Eval](
 		})
 	}
 
-	return &syn.Value{Entries: res}, nil
+	return syn.NewValue(res)
 }
 
 func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -4822,7 +4828,7 @@ func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 
-	entries, ok := valueEntries(valConst.Constant)
+	valueConstant, _, outer, maxInner, ok := valueShape(valConst.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
@@ -4837,10 +4843,13 @@ func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		byteArrayExMem(policyBs),
 		byteArrayExMem(tokenBs),
 		bigIntExMem(amt),
-		valueMaxDepthExMem(entries),
+		func() ExMem {
+			return ExMem(bits.Len(uint(outer)) + bits.Len(uint(maxInner)))
+		},
 	); err != nil {
 		return nil, err
 	}
+	entries := valueConstant.Entries()
 
 	// Enforce key length constraints (<= 32 bytes) per builtin semantics, except
 	// allow oversize keys when inserting zero (effectively removing)
@@ -4891,11 +4900,11 @@ func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		vm[pol][string(tokenBs)] = new(big.Int).Set(amt)
 	}
 
-	value, err := mapToValue(m, vm)
+	result, err := mapToValue(m, vm)
 	if err != nil {
-		return nil, err
+		return nil, valueConstructionError("construct inserted value", err)
 	}
-	return &Constant{value}, nil
+	return &Constant{result}, nil
 }
 
 func lookupCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -4917,7 +4926,7 @@ func lookupCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected value constant",
 		}
 	}
-	entries, ok := valueEntries(valConst.Constant)
+	valueConstant, _, outer, maxInner, ok := valueShape(valConst.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
@@ -4931,18 +4940,14 @@ func lookupCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	if err := m.CostThree(&b.Func,
 		byteArrayExMem(policyBs),
 		byteArrayExMem(tokenBs),
-		valueMaxDepthExMem(entries),
+		func() ExMem {
+			return ExMem(bits.Len(uint(outer)) + bits.Len(uint(maxInner)))
+		},
 	); err != nil {
 		return nil, err
 	}
-	vm, err := valueToMap(m, entries)
-	if err != nil {
-		return nil, err
-	}
-	if tokens, ok := vm[string(policyBs)]; ok {
-		if amt, ok2 := tokens[string(tokenBs)]; ok2 {
-			return &Constant{&syn.Integer{Inner: amt}}, nil
-		}
+	if amount, ok := valueConstant.LookupCoin(policyBs, tokenBs); ok {
+		return &Constant{&syn.Integer{Inner: amount}}, nil
 	}
 	// Return zero
 	return &Constant{&syn.Integer{Inner: big.NewInt(0)}}, nil
@@ -4963,7 +4968,7 @@ func scaleValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected value constant",
 		}
 	}
-	entries, ok := valueEntries(valConst.Constant)
+	valueConstant, total, _, _, ok := valueShape(valConst.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
@@ -4976,10 +4981,11 @@ func scaleValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	// scaling touches every (policy, token) pair.
 	if err := m.CostTwo(&b.Func,
 		bigIntExMem(factor),
-		valueTotalSizeExMem(entries),
+		func() ExMem { return ExMem(total) },
 	); err != nil {
 		return nil, err
 	}
+	entries := valueConstant.Entries()
 	vm, err := valueToMap(m, entries)
 	if err != nil {
 		return nil, err
@@ -5020,11 +5026,11 @@ func scaleValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			toks[t] = prod
 		}
 	}
-	value, err := mapToValue(m, vm)
+	result, err := mapToValue(m, vm)
 	if err != nil {
-		return nil, err
+		return nil, valueConstructionError("construct scaled value", err)
 	}
-	return &Constant{value}, nil
+	return &Constant{result}, nil
 }
 
 func unionValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -5045,7 +5051,7 @@ func unionValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected value constant for b",
 		}
 	}
-	aEntries, ok := valueEntries(aConst.Constant)
+	aValue, aTotal, _, _, ok := valueShape(aConst.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
@@ -5053,7 +5059,7 @@ func unionValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected value constant for a",
 		}
 	}
-	bEntries, ok := valueEntries(bConst.Constant)
+	bValue, bTotal, _, _, ok := valueShape(bConst.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
@@ -5064,17 +5070,14 @@ func unionValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	// Spend budget for unionValue (2 args: value a, value b)
 	// Cost model uses with_interaction_in_x_and_y, where x and y are each
 	// argument's total size, with c11 charging the x*y interaction term.
-	aSize, err := valueTokenCountWithContext(m, aEntries)
-	if err != nil {
+	if err := m.CostTwo(&b.Func,
+		func() ExMem { return ExMem(aTotal) },
+		func() ExMem { return ExMem(bTotal) },
+	); err != nil {
 		return nil, err
 	}
-	bSize, err := valueTokenCountWithContext(m, bEntries)
-	if err != nil {
-		return nil, err
-	}
-	if err := m.CostTwoExMem(&b.Func, aSize, bSize); err != nil {
-		return nil, err
-	}
+	aEntries := aValue.Entries()
+	bEntries := bValue.Entries()
 	am, err := valueToMap(m, aEntries)
 	if err != nil {
 		return nil, err
@@ -5120,11 +5123,11 @@ func unionValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			am[pol][t] = cur
 		}
 	}
-	value, err := mapToValue(m, am)
+	result, err := mapToValue(m, am)
 	if err != nil {
-		return nil, err
+		return nil, valueConstructionError("construct union value", err)
 	}
-	return &Constant{value}, nil
+	return &Constant{result}, nil
 }
 
 func valueContains[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -5146,7 +5149,7 @@ func valueContains[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected required value constant",
 		}
 	}
-	valEntries, ok := valueEntries(valConst.Constant)
+	valValue, valTotal, _, _, ok := valueShape(valConst.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
@@ -5154,7 +5157,7 @@ func valueContains[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Message: "expected value constant",
 		}
 	}
-	reqEntries, ok := valueEntries(reqConst.Constant)
+	reqValue, reqTotal, _, _, ok := valueShape(reqConst.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
@@ -5165,11 +5168,13 @@ func valueContains[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	// Spend budget for valueContains (2 args: value, required value)
 	// Cost model uses const_above_diagonal with linear_in_x_and_y (token count)
 	if err := m.CostTwo(&b.Func,
-		valueInnerCountExMem(valEntries),
-		valueInnerCountExMem(reqEntries),
+		func() ExMem { return ExMem(valTotal) },
+		func() ExMem { return ExMem(reqTotal) },
 	); err != nil {
 		return nil, err
 	}
+	valEntries := valValue.Entries()
+	reqEntries := reqValue.Entries()
 
 	vm, err := valueToMap(m, valEntries)
 	if err != nil {
@@ -5254,7 +5259,7 @@ func valueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 
-	valueItems, ok := valueEntries(valConst.Constant)
+	valueConstant, total, outer, maxInner, ok := valueShape(valConst.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
@@ -5265,16 +5270,19 @@ func valueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	// Spend budget for valueData (1 arg: value)
 	// Cost model uses linear_in_x with max(outer, inner) size
-	if err := m.CostOne(&b.Func, valueMaxCountExMem(valueItems)); err != nil {
+	if err := m.CostOne(&b.Func, func() ExMem {
+		return ExMem(max(outer, maxInner))
+	}); err != nil {
 		return nil, err
 	}
-	if valueInnerCountExMem(valueItems)() > valueDataMaxSize {
+	if total > valueDataMaxSize {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
 			Builtin: "valueData",
 			Message: "maximum input size (40000) exceeded",
 		}
 	}
+	valueItems := valueConstant.Entries()
 
 	// Convert value to data map
 	entries := make([][2]data.PlutusData, 0, len(valueItems))
@@ -5396,5 +5404,12 @@ func unValueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		})
 	}
 
-	return &Constant{&syn.Value{Entries: result}}, nil
+	value, err := syn.NewValue(result)
+	if err != nil {
+		return nil, &InternalError{
+			Code:    ErrCodeInternalError,
+			Message: "construct decoded value: " + err.Error(),
+		}
+	}
+	return &Constant{value}, nil
 }

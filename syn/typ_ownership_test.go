@@ -106,6 +106,7 @@ func TestDecodedCompositeConstantTypesAreNotShared(t *testing.T) {
 	}{
 		{"fresh", Decode[DeBruijn]},
 		{"reused", NewDeBruijnDecoder().Decode},
+		{"borrowed", NewDeBruijnDecoder().DecodeBorrowed},
 	} {
 		t.Run(decode.name, func(t *testing.T) {
 			program, err := decode.fn(encoded)
