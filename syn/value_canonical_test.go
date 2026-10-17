@@ -69,6 +69,10 @@ func TestParsePlutusValueCanonicalForm(t *testing.T) {
 	}
 	for form, program := range valuePrograms {
 		for name, text := range invalid {
+			if form == "con" && name != "policy key too long" && name != "token key too long" &&
+				name != "quantity above range" && name != "quantity below range" {
+				continue
+			}
 			t.Run(form+"/rejects "+name, func(t *testing.T) {
 				t.Parallel()
 				if _, err := Parse(program(text)); err == nil {
@@ -77,6 +81,214 @@ func TestParsePlutusValueCanonicalForm(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestParseValueConstantNormalizes(t *testing.T) {
+	t.Parallel()
+	tests := map[string]struct {
+		input string
+		want  string
+	}{
+		"duplicate tokens add quantities": {
+			input: `[(#aa, [(#bb, 123), (#bb, 456)])]`,
+			want:  `[(#aa, [(#bb, 579)])]`,
+		},
+		"duplicate policies merge tokens": {
+			input: `[(#aa, [(#02, 3)]), (#aa, [(#01, 4)])]`,
+			want:  `[(#aa, [(#01, 4), (#02, 3)])]`,
+		},
+		"unordered entries sort": {
+			input: `[(#bb, [(#02, 2), (#01, 1)]), (#aa, [(#02, 4), (#01, 3)])]`,
+			want:  `[(#aa, [(#01, 3), (#02, 4)]), (#bb, [(#01, 1), (#02, 2)])]`,
+		},
+		"empty and zero entries are removed": {
+			input: `[(#aa, []), (#bb, [(#01, 0), (#02, 5)])]`,
+			want:  `[(#bb, [(#02, 5)])]`,
+		},
+		"zero duplicate total is removed": {
+			input: `[(#aa, [(#bb, 3)]), (#aa, [(#bb, -3)])]`,
+			want:  `[]`,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			parsed, err := Parse(valuePrograms["con"](tc.input))
+			if err != nil {
+				t.Fatalf("Parse input: %v", err)
+			}
+			want, err := Parse(valuePrograms["con"](tc.want))
+			if err != nil {
+				t.Fatalf("Parse expected value: %v", err)
+			}
+			if got, expected := Pretty(parsed), Pretty(want); got != expected {
+				t.Fatalf("normalized value = %q, want %q", got, expected)
+			}
+		})
+	}
+}
+
+func TestParseNestedValueConstantNormalizes(t *testing.T) {
+	input := `(program 1.3.0 (con (list value) [[(#aa, [(#bb, 1), (#bb, 2)])]]))`
+	want := `(program 1.3.0 (con (list value) [[(#aa, [(#bb, 3)])]]))`
+
+	parsed, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse input: %v", err)
+	}
+	expected, err := Parse(want)
+	if err != nil {
+		t.Fatalf("Parse expected value: %v", err)
+	}
+	if got, expected := Pretty(parsed), Pretty(expected); got != expected {
+		t.Fatalf("normalized nested value = %q, want %q", got, expected)
+	}
+}
+
+func TestParseValueConstantRejectsOutOfRangeMergedQuantity(t *testing.T) {
+	limit := new(big.Int).Lsh(big.NewInt(1), 127)
+	max := new(big.Int).Sub(new(big.Int).Set(limit), big.NewInt(1))
+	min := new(big.Int).Neg(limit)
+	tests := map[string]string{
+		"overflow":  `[(#aa, [(#bb, ` + max.String() + `), (#bb, 1)])]`,
+		"underflow": `[(#aa, [(#bb, ` + min.String() + `), (#bb, -1)])]`,
+	}
+	for name, valueText := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := Parse(valuePrograms["con"](valueText))
+			if err == nil || !strings.Contains(err.Error(), "quantity out of signed 128-bit range") {
+				t.Fatalf("Parse error = %v, want merged quantity range error", err)
+			}
+		})
+	}
+}
+
+func TestNewValueNormalizesEntries(t *testing.T) {
+	entries := []IConstant{
+		valueEntryForTest([]byte{0xbb},
+			valueTokenForTest([]byte{0x02}, big.NewInt(4)),
+			valueTokenForTest([]byte{0x02}, big.NewInt(-2)),
+		),
+		valueEntryForTest([]byte{0xaa},
+			valueTokenForTest([]byte{0x01}, big.NewInt(5)),
+			valueTokenForTest([]byte{0x01}, big.NewInt(-5)),
+			valueTokenForTest([]byte{0x02}, big.NewInt(3)),
+		),
+	}
+	value, err := NewValue(entries)
+	if err != nil {
+		t.Fatalf("NewValue: %v", err)
+	}
+	if got, want := valuePrettyForTest(value), valueTextPrettyForTest(t,
+		`[(#aa, [(#02, 3)]), (#bb, [(#02, 2)])]`); got != want {
+		t.Fatalf("NewValue normalized to %q, want %q", got, want)
+	}
+}
+
+func TestDecodeValueConstantNormalizes(t *testing.T) {
+	entries := []IConstant{
+		valueEntryForTest([]byte{0xbb},
+			valueTokenForTest([]byte{0x02}, big.NewInt(4)),
+			valueTokenForTest([]byte{0x02}, big.NewInt(-2)),
+		),
+		valueEntryForTest([]byte{0xaa},
+			valueTokenForTest([]byte{0x01}, big.NewInt(5)),
+			valueTokenForTest([]byte{0x01}, big.NewInt(-5)),
+			valueTokenForTest([]byte{0x02}, big.NewInt(3)),
+		),
+	}
+	encoded := newEncoder()
+	if err := EncodeList(encoded, entries, encodeConstantValue); err != nil {
+		t.Fatalf("encode raw Value entries: %v", err)
+	}
+	encoded.filler()
+
+	var arena *constantArena
+	for name, decode := range map[string]func(*decoder) (IConstant, error){
+		"owned": func(d *decoder) (IConstant, error) {
+			return decodeConstantValue(d, &TValue{})
+		},
+		"arena": func(d *decoder) (IConstant, error) {
+			arena = &constantArena{}
+			return decodeConstantValueWithArena(d, &TValue{}, arena)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			value, err := decode(newDecoder(encoded.buffer))
+			if err != nil {
+				t.Fatalf("decode Value constant: %v", err)
+			}
+			got, ok := value.(*Value)
+			if !ok {
+				t.Fatalf("decoded constant has type %T, want *Value", value)
+			}
+			if gotPretty, wantPretty := valuePrettyForTest(got), valueTextPrettyForTest(t,
+				`[(#aa, [(#02, 3)]), (#bb, [(#02, 2)])]`); gotPretty != wantPretty {
+				t.Fatalf("decoded Value normalized to %q, want %q", gotPretty, wantPretty)
+			}
+			if name == "arena" && arena.protoPairs.used() != 11 {
+				t.Fatalf("arena allocated %d pairs, want 11 including normalized entries", arena.protoPairs.used())
+			}
+		})
+	}
+}
+
+func TestNormalizeValueEntriesWithArenaClearsReusedZeroQuantity(t *testing.T) {
+	arena := &constantArena{}
+	seed := []IConstant{valueEntryForTest([]byte{0xaa},
+		valueTokenForTest([]byte{0xbb}, big.NewInt(2)),
+		valueTokenForTest([]byte{0xbb}, big.NewInt(3)),
+	)}
+	if _, err := normalizeValueEntriesWithArena(seed, arena); err != nil {
+		t.Fatalf("normalize seed Value: %v", err)
+	}
+	arena.reset()
+
+	zero := []IConstant{valueEntryForTest([]byte{0xaa},
+		valueTokenForTest([]byte{0xbb}, big.NewInt(0)),
+	)}
+	normalized, err := normalizeValueEntriesWithArena(zero, arena)
+	if err != nil {
+		t.Fatalf("normalize zero Value after arena reuse: %v", err)
+	}
+	if len(normalized) != 0 {
+		t.Fatalf("zero Value normalized to %s, want empty Value", valuePrettyForTest(newOwnedValue(normalized)))
+	}
+}
+
+func valueEntryForTest(policyID []byte, tokens ...IConstant) IConstant {
+	return &ProtoPair{
+		FstType: valueEntryType.First,
+		SndType: valueEntryType.Second,
+		First:   &ByteString{Inner: policyID},
+		Second:  &ProtoList{LTyp: valueEntryType.Second.(*TList).Typ, List: tokens},
+	}
+}
+
+func valueTokenForTest(tokenID []byte, quantity *big.Int) IConstant {
+	tokenType := valueEntryType.Second.(*TList).Typ.(*TPair)
+	return &ProtoPair{
+		FstType: tokenType.First,
+		SndType: tokenType.Second,
+		First:   &ByteString{Inner: tokenID},
+		Second:  newInteger(quantity),
+	}
+}
+
+func valuePrettyForTest(value *Value) string {
+	return Pretty(&Program[DeBruijn]{
+		Version: lang.LanguageVersionV4,
+		Term:    &Constant{Con: value},
+	})
+}
+
+func valueTextPrettyForTest(t testing.TB, valueText string) string {
+	t.Helper()
+	program, err := Parse(valuePrograms["con"](valueText))
+	if err != nil {
+		t.Fatalf("parse expected value: %v", err)
+	}
+	return Pretty(program)
 }
 
 func TestEncodeRejectsNonCanonicalDataValue(t *testing.T) {
@@ -114,6 +326,9 @@ func TestParseValueRejectsInvalidPrefix(t *testing.T) {
 	}
 	for form, program := range valuePrograms {
 		for name, tc := range invalid {
+			if form == "con" && name != "policy key" && name != "token key" && name != "quantity" {
+				continue
+			}
 			t.Run(form+"/"+name, func(t *testing.T) {
 				_, err := Parse(program(tc.text))
 				if err == nil || !strings.Contains(err.Error(), tc.errorText) {

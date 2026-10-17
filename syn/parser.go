@@ -674,7 +674,6 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			return nil, err
 		}
 
-		var prevPolicy []byte
 		items := make([]IConstant, 0, 8)
 
 		for p.curToken.Type != lex.TokenRBracket {
@@ -698,10 +697,9 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				return nil, fmt.Errorf("invalid bytestring key %s at position %d", p.curToken.Literal, p.curToken.Position)
 			}
 
-			if err := data.CheckValueKey("policy", len(items), kb, prevPolicy); err != nil {
+			if err := checkValueKeyLength("policy", len(items), kb); err != nil {
 				return nil, err
 			}
-			prevPolicy = kb
 			p.nextToken()
 
 			if err := p.expect(lex.TokenComma); err != nil {
@@ -713,7 +711,6 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				return nil, err
 			}
 
-			var prevToken []byte
 			innerItems := make([]IConstant, 0, 8)
 
 			for p.curToken.Type != lex.TokenRBracket {
@@ -736,10 +733,9 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 					return nil, fmt.Errorf("invalid bytestring value %s at position %d", p.curToken.Literal, p.curToken.Position)
 				}
 
-				if err := data.CheckValueKey("token", len(innerItems), ib, prevToken); err != nil {
+				if err := checkValueKeyLength("token", len(innerItems), ib); err != nil {
 					return nil, err
 				}
-				prevToken = ib
 				p.nextToken()
 
 				if err := p.expect(lex.TokenComma); err != nil {
@@ -754,7 +750,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				if !ok {
 					return nil, fmt.Errorf("invalid integer value %s at position %d", p.curToken.Literal, p.curToken.Position)
 				}
-				if err := data.CheckValueQuantity(len(items), len(innerItems), n); err != nil {
+				if err := checkValueQuantityRange(len(items), len(innerItems), n); err != nil {
 					return nil, err
 				}
 				p.nextToken()
@@ -772,9 +768,6 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				}
 			}
 
-			if err := data.CheckValueTokenCount(len(items), len(innerItems)); err != nil {
-				return nil, err
-			}
 			if err := p.expect(lex.TokenRBracket); err != nil {
 				return nil, err
 			}
@@ -807,13 +800,12 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			return nil, err
 		}
 
-		// Value constants are serialized canonically. Reject non-canonical text
-		// instead of silently sorting, merging, or dropping entries.
-		if err := validateValueEntries(items); err != nil {
+		normalized, err := normalizeValueEntries(items)
+		if err != nil {
 			return nil, err
 		}
 
-		return &Constant{Con: newOwnedValue(items)}, nil
+		return &Constant{Con: newOwnedValue(normalized)}, nil
 	default:
 		return nil, fmt.Errorf("unexpected type spec %v at position %d", typeSpec, p.curToken.Position)
 	}
@@ -1006,10 +998,11 @@ func (p *Parser) parseConstantValue(typ Typ) (IConstant, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := validateValueEntries(items); err != nil {
+		normalized, err := normalizeValueEntries(items)
+		if err != nil {
 			return nil, err
 		}
-		return newOwnedValue(items), nil
+		return newOwnedValue(normalized), nil
 	case *TPair:
 		if err := p.expect(lex.TokenLParen); err != nil {
 			return nil, err

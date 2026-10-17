@@ -924,6 +924,23 @@ func (a *constantArena) allocBigInt() *big.Int {
 	return a.bigInts.alloc()
 }
 
+func (a *constantArena) copyBigInt(value *big.Int) *big.Int {
+	ret := a.allocBigInt()
+	if value.Sign() == 0 {
+		ret.SetInt64(0)
+		return ret
+	}
+
+	words := value.Bits()
+	magnitude := a.words.alloc(len(words) + 1)
+	copy(magnitude, words)
+	ret.SetBits(magnitude[: len(words) : len(words)+1])
+	if value.Sign() < 0 {
+		ret.Neg(ret)
+	}
+	return ret
+}
+
 func (a *constantArena) allocInteger(inner *big.Int) *Integer {
 	integer := a.integers.alloc()
 	integer.SetInner(inner)
@@ -1217,10 +1234,11 @@ func decodeConstantValueWithArena(
 		if err != nil {
 			return nil, err
 		}
-		if err := validateValueEntries(entries); err != nil {
+		normalized, err := normalizeValueEntriesWithArena(entries, arena)
+		if err != nil {
 			return nil, err
 		}
-		return arena.allocValue(entries), nil
+		return arena.allocValue(normalized), nil
 	case *TBls12_381G1Element:
 		return nil, errors.New("cannot decode bls12_381_G1_element constants")
 	case *TBls12_381G2Element:
@@ -1426,10 +1444,11 @@ func decodeConstantValue(d *decoder, typ Typ) (IConstant, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := validateValueEntries(entries); err != nil {
+		normalized, err := normalizeValueEntries(entries)
+		if err != nil {
 			return nil, err
 		}
-		constant = newOwnedValue(entries)
+		constant = newOwnedValue(normalized)
 
 	case *TBls12_381G1Element:
 		return nil, errors.New("cannot decode bls12_381_G1_element constants")
