@@ -195,20 +195,21 @@ func TestRunContextWithTrustedDataArgumentsExcludesDataFromAggregateLimit(t *tes
 	for i := range fields {
 		fields[i] = leaf
 	}
-	largeData := data.Constr{Fields: fields}
+	firstData := data.Constr{Tag: big.NewInt(1), Fields: fields}
+	secondData := data.Constr{Tag: big.NewInt(2), Fields: fields}
 	term := syn.Term[syn.DeBruijn](&syn.Lambda[syn.DeBruijn]{
 		ParameterName: syn.DeBruijn(0),
 		Body: &syn.Lambda[syn.DeBruijn]{
 			ParameterName: syn.DeBruijn(0),
-			Body:          &syn.Constant{Con: &syn.Unit{}},
+			Body:          &syn.Var[syn.DeBruijn]{Name: syn.DeBruijn(2)},
 		},
 	})
 	callerAppliedTerm := &syn.Apply[syn.DeBruijn]{
 		Function: &syn.Apply[syn.DeBruijn]{
 			Function: term,
-			Argument: &syn.Constant{Con: &syn.Data{Inner: largeData}},
+			Argument: &syn.Constant{Con: &syn.Data{Inner: firstData}},
 		},
-		Argument: &syn.Constant{Con: &syn.Data{Inner: largeData}},
+		Argument: &syn.Constant{Con: &syn.Data{Inner: secondData}},
 	}
 
 	_, err := newTestMachineFlow().RunContext(context.Background(), callerAppliedTerm)
@@ -220,13 +221,25 @@ func TestRunContextWithTrustedDataArgumentsExcludesDataFromAggregateLimit(t *tes
 		t.Fatalf("RunContext() error = %q, want aggregate PlutusData node limit", typeErr.Message)
 	}
 
-	if _, err := newTestMachineFlow().RunContextWithTrustedDataArguments(
+	result, err := newTestMachineFlow().RunContextWithTrustedDataArguments(
 		context.Background(),
 		term,
-		largeData,
-		largeData,
-	); err != nil {
+		firstData,
+		secondData,
+	)
+	if err != nil {
 		t.Fatalf("RunContextWithTrustedDataArguments() error = %v", err)
+	}
+	constant, ok := result.(*syn.Constant)
+	if !ok {
+		t.Fatalf("RunContextWithTrustedDataArguments() result = %T, want *syn.Constant", result)
+	}
+	resultData, ok := constant.Con.(*syn.Data)
+	if !ok {
+		t.Fatalf("RunContextWithTrustedDataArguments() constant = %T, want *syn.Data", constant.Con)
+	}
+	if !firstData.Equal(resultData.Inner) {
+		t.Fatalf("RunContextWithTrustedDataArguments() returned data different from the first argument")
 	}
 }
 
