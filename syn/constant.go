@@ -205,11 +205,28 @@ func checkValueQuantityRange(policy, token int, quantity *big.Int) error {
 }
 
 func normalizeValueEntries(entries []IConstant) ([]IConstant, error) {
+	return normalizeValueEntriesWithArena(entries, nil)
+}
+
+type valueTokenTotal struct {
+	id     []byte
+	amount *big.Int
+}
+
+type valuePolicyTotal struct {
+	id     []byte
+	tokens map[string]valueTokenTotal
+}
+
+func normalizeValueEntriesWithArena(
+	entries []IConstant,
+	arena *constantArena,
+) ([]IConstant, error) {
 	if err := validateValueEntries(entries); err == nil {
 		return entries, nil
 	}
 
-	totals := make(map[string]map[string]*big.Int, len(entries))
+	policies := make(map[string]valuePolicyTotal, len(entries))
 	for policyIndex, entry := range entries {
 		policy, ok := entry.(*ProtoPair)
 		if !ok || policy == nil {
@@ -228,10 +245,12 @@ func normalizeValueEntries(entries []IConstant) ([]IConstant, error) {
 		}
 
 		policyKey := string(policyID.Inner)
-		policyTotals := totals[policyKey]
-		if policyTotals == nil {
-			policyTotals = make(map[string]*big.Int, len(tokens.List))
-			totals[policyKey] = policyTotals
+		policyTotals, ok := policies[policyKey]
+		if !ok {
+			policyTotals = valuePolicyTotal{
+				id:     policyID.Inner,
+				tokens: make(map[string]valueTokenTotal, len(tokens.List)),
+			}
 		}
 		for tokenIndex, entry := range tokens.List {
 			token, ok := entry.(*ProtoPair)
@@ -254,53 +273,99 @@ func normalizeValueEntries(entries []IConstant) ([]IConstant, error) {
 			}
 
 			tokenKey := string(tokenID.Inner)
-			total := policyTotals[tokenKey]
-			if total == nil {
-				policyTotals[tokenKey] = new(big.Int).Set(quantity.Inner)
+			total, ok := policyTotals.tokens[tokenKey]
+			if !ok {
+				amount := new(big.Int)
+				if arena == nil {
+					amount.Set(quantity.Inner)
+				} else {
+					amount = arena.copyBigInt(quantity.Inner)
+				}
+				total = valueTokenTotal{id: tokenID.Inner, amount: amount}
 			} else {
-				total.Add(total, quantity.Inner)
+				total.amount.Add(total.amount, quantity.Inner)
 			}
+			policyTotals.tokens[tokenKey] = total
 		}
+		policies[policyKey] = policyTotals
 	}
 
-	policyIDs := make([]string, 0, len(totals))
-	for policyID, tokens := range totals {
-		for _, quantity := range tokens {
-			if quantity.Sign() != 0 {
+	policyIDs := make([]string, 0, len(policies))
+	for policyID, policy := range policies {
+		for _, token := range policy.tokens {
+			if token.amount.Sign() != 0 {
 				policyIDs = append(policyIDs, policyID)
 				break
 			}
 		}
 	}
 	sort.Strings(policyIDs)
-	normalized := make([]IConstant, 0, len(policyIDs))
-	for _, policyID := range policyIDs {
-		tokenIDs := make([]string, 0, len(totals[policyID]))
-		for tokenID, quantity := range totals[policyID] {
-			if quantity.Sign() != 0 {
+	var normalized []IConstant
+	if arena == nil {
+		normalized = make([]IConstant, 0, len(policyIDs))
+	} else {
+		normalized = arena.allocList(len(policyIDs))
+	}
+	tokenPairType := valueEntryType.Second.(*TList).Typ.(*TPair)
+	policyListType := valueEntryType.Second.(*TList)
+	for policyIndex, policyID := range policyIDs {
+		policy := policies[policyID]
+		tokenIDs := make([]string, 0, len(policy.tokens))
+		for tokenID, token := range policy.tokens {
+			if token.amount.Sign() != 0 {
 				tokenIDs = append(tokenIDs, tokenID)
 			}
 		}
 		sort.Strings(tokenIDs)
-		tokenEntries := make([]IConstant, 0, len(tokenIDs))
-		for _, tokenID := range tokenIDs {
-			quantity := totals[policyID][tokenID]
-			if err := data.CheckValueQuantity(len(normalized), len(tokenEntries), quantity); err != nil {
+		var tokenEntries []IConstant
+		if arena == nil {
+			tokenEntries = make([]IConstant, len(tokenIDs))
+		} else {
+			tokenEntries = arena.allocList(len(tokenIDs))
+		}
+		for tokenIndex, tokenID := range tokenIDs {
+			token := policy.tokens[tokenID]
+			if err := data.CheckValueQuantity(policyIndex, tokenIndex, token.amount); err != nil {
 				return nil, err
 			}
-			tokenEntries = append(tokenEntries, &ProtoPair{
-				FstType: valueEntryType.Second.(*TList).Typ.(*TPair).First,
-				SndType: valueEntryType.Second.(*TList).Typ.(*TPair).Second,
-				First:   &ByteString{Inner: []byte(tokenID)},
-				Second:  newInteger(new(big.Int).Set(quantity)),
-			})
+			if arena == nil {
+				tokenEntries[tokenIndex] = &ProtoPair{
+					FstType: tokenPairType.First,
+					SndType: tokenPairType.Second,
+					First:   &ByteString{Inner: token.id},
+					Second:  newInteger(token.amount),
+				}
+				continue
+			}
+			tokenEntries[tokenIndex] = arena.allocProtoPair(
+				tokenPairType.First,
+				tokenPairType.Second,
+				arena.allocByteString(token.id),
+				arena.allocInteger(token.amount),
+			)
 		}
-		normalized = append(normalized, &ProtoPair{
-			FstType: valueEntryType.First,
-			SndType: valueEntryType.Second,
-			First:   &ByteString{Inner: []byte(policyID)},
-			Second:  &ProtoList{LTyp: valueEntryType.Second.(*TList).Typ, List: tokenEntries},
-		})
+
+		var tokenList *ProtoList
+		if arena == nil {
+			tokenList = &ProtoList{LTyp: policyListType.Typ, List: tokenEntries}
+		} else {
+			tokenList = arena.allocProtoList(policyListType.Typ, tokenEntries)
+		}
+		if arena == nil {
+			normalized = append(normalized, &ProtoPair{
+				FstType: valueEntryType.First,
+				SndType: valueEntryType.Second,
+				First:   &ByteString{Inner: policy.id},
+				Second:  tokenList,
+			})
+			continue
+		}
+		normalized[policyIndex] = arena.allocProtoPair(
+			valueEntryType.First,
+			valueEntryType.Second,
+			arena.allocByteString(policy.id),
+			tokenList,
+		)
 	}
 	if err := validateValueEntries(normalized); err != nil {
 		return nil, err

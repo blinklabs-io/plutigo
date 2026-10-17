@@ -145,6 +145,24 @@ func TestParseNestedValueConstantNormalizes(t *testing.T) {
 	}
 }
 
+func TestParseValueConstantRejectsOutOfRangeMergedQuantity(t *testing.T) {
+	limit := new(big.Int).Lsh(big.NewInt(1), 127)
+	max := new(big.Int).Sub(new(big.Int).Set(limit), big.NewInt(1))
+	min := new(big.Int).Neg(limit)
+	tests := map[string]string{
+		"overflow":  `[(#aa, [(#bb, ` + max.String() + `), (#bb, 1)])]`,
+		"underflow": `[(#aa, [(#bb, ` + min.String() + `), (#bb, -1)])]`,
+	}
+	for name, valueText := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := Parse(valuePrograms["con"](valueText))
+			if err == nil || !strings.Contains(err.Error(), "quantity out of signed 128-bit range") {
+				t.Fatalf("Parse error = %v, want merged quantity range error", err)
+			}
+		})
+	}
+}
+
 func TestNewValueNormalizesEntries(t *testing.T) {
 	entries := []IConstant{
 		valueEntryForTest([]byte{0xbb},
@@ -185,12 +203,14 @@ func TestDecodeValueConstantNormalizes(t *testing.T) {
 	}
 	encoded.filler()
 
+	var arena *constantArena
 	for name, decode := range map[string]func(*decoder) (IConstant, error){
 		"owned": func(d *decoder) (IConstant, error) {
 			return decodeConstantValue(d, &TValue{})
 		},
 		"arena": func(d *decoder) (IConstant, error) {
-			return decodeConstantValueWithArena(d, &TValue{}, &constantArena{})
+			arena = &constantArena{}
+			return decodeConstantValueWithArena(d, &TValue{}, arena)
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -206,7 +226,33 @@ func TestDecodeValueConstantNormalizes(t *testing.T) {
 				`[(#aa, [(#02, 3)]), (#bb, [(#02, 2)])]`); gotPretty != wantPretty {
 				t.Fatalf("decoded Value normalized to %q, want %q", gotPretty, wantPretty)
 			}
+			if name == "arena" && arena.protoPairs.used() != 11 {
+				t.Fatalf("arena allocated %d pairs, want 11 including normalized entries", arena.protoPairs.used())
+			}
 		})
+	}
+}
+
+func TestNormalizeValueEntriesWithArenaClearsReusedZeroQuantity(t *testing.T) {
+	arena := &constantArena{}
+	seed := []IConstant{valueEntryForTest([]byte{0xaa},
+		valueTokenForTest([]byte{0xbb}, big.NewInt(2)),
+		valueTokenForTest([]byte{0xbb}, big.NewInt(3)),
+	)}
+	if _, err := normalizeValueEntriesWithArena(seed, arena); err != nil {
+		t.Fatalf("normalize seed Value: %v", err)
+	}
+	arena.reset()
+
+	zero := []IConstant{valueEntryForTest([]byte{0xaa},
+		valueTokenForTest([]byte{0xbb}, big.NewInt(0)),
+	)}
+	normalized, err := normalizeValueEntriesWithArena(zero, arena)
+	if err != nil {
+		t.Fatalf("normalize zero Value after arena reuse: %v", err)
+	}
+	if len(normalized) != 0 {
+		t.Fatalf("zero Value normalized to %s, want empty Value", valuePrettyForTest(newOwnedValue(normalized)))
 	}
 }
 

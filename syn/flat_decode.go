@@ -924,6 +924,23 @@ func (a *constantArena) allocBigInt() *big.Int {
 	return a.bigInts.alloc()
 }
 
+func (a *constantArena) copyBigInt(value *big.Int) *big.Int {
+	ret := a.allocBigInt()
+	if value.Sign() == 0 {
+		ret.SetInt64(0)
+		return ret
+	}
+
+	words := value.Bits()
+	magnitude := a.words.alloc(len(words) + 1)
+	copy(magnitude, words)
+	ret.SetBits(magnitude[: len(words) : len(words)+1])
+	if value.Sign() < 0 {
+		ret.Neg(ret)
+	}
+	return ret
+}
+
 func (a *constantArena) allocInteger(inner *big.Int) *Integer {
 	integer := a.integers.alloc()
 	integer.SetInner(inner)
@@ -1217,7 +1234,7 @@ func decodeConstantValueWithArena(
 		if err != nil {
 			return nil, err
 		}
-		normalized, err := normalizeValueEntries(entries)
+		normalized, err := normalizeValueEntriesWithArena(entries, arena)
 		if err != nil {
 			return nil, err
 		}
