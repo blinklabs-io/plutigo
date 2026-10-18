@@ -74,6 +74,10 @@ func TestDefaultEvalContextUsesVariantACosts(t *testing.T) {
 		// 205665 + 812 * 1 CPU and 2 memory.
 		{"V1 addInteger before Chang", add, lang.LanguageVersionV1, 8, ExBudget{Cpu: 321577, Mem: 602}},
 		{"V2 addInteger before Chang", add, lang.LanguageVersionV2, 8, ExBudget{Cpu: 321577, Mem: 602}},
+		// startup 100 + five steps of 16000, plus addInteger at
+		// 100788 + 420 * 1 CPU and 2 memory.
+		{"V1 addInteger at Chang", add, lang.LanguageVersionV1, 9, ExBudget{Cpu: 181308, Mem: 602}},
+		{"V2 addInteger at Chang", add, lang.LanguageVersionV2, 9, ExBudget{Cpu: 181308, Mem: 602}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
