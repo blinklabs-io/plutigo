@@ -374,6 +374,7 @@ func DecodeWithContext[T Binder](bytes []byte, context ProgramContext) (*Program
 func ParseWithContext(input string, context ProgramContext) (*Program[Name], error) {
 	p := NewParser(input)
 	p.maxConstrFields = constrFieldLimit(context.ProtocolMajor)
+	p.strictValues = true
 	program, err := p.ParseProgram()
 	if err != nil {
 		return nil, err

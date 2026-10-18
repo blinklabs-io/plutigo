@@ -138,6 +138,7 @@ func decodeProgram[T Binder](bytes []byte, context *ProgramContext) (*Program[T]
 	var zero T
 	if _, ok := any(zero).(DeBruijn); ok {
 		d := newDecoder(bytes)
+		d.strictValues = true
 		arena := newTermArena[DeBruijn]()
 		consts := &constantArena{}
 		program, err := decodeDeBruijnProgram(d, arena, consts, context)
@@ -148,6 +149,7 @@ func decodeProgram[T Binder](bytes []byte, context *ProgramContext) (*Program[T]
 	}
 
 	d := newDecoder(bytes)
+	d.strictValues = true
 	arena := newTermArena[T]()
 	version, err := decodeProgramVersion(d, context)
 	if err != nil {
@@ -1234,11 +1236,11 @@ func decodeConstantValueWithArena(
 		if err != nil {
 			return nil, err
 		}
-		normalized, err := normalizeValueEntriesWithArena(entries, arena)
+		prepared, err := prepareValueEntries(entries, d.strictValues, arena)
 		if err != nil {
 			return nil, err
 		}
-		return arena.allocValue(normalized), nil
+		return arena.allocValue(prepared), nil
 	case *TBls12_381G1Element:
 		return nil, errors.New("cannot decode bls12_381_G1_element constants")
 	case *TBls12_381G2Element:
@@ -1444,11 +1446,11 @@ func decodeConstantValue(d *decoder, typ Typ) (IConstant, error) {
 		if err != nil {
 			return nil, err
 		}
-		normalized, err := normalizeValueEntries(entries)
+		prepared, err := prepareValueEntries(entries, d.strictValues, nil)
 		if err != nil {
 			return nil, err
 		}
-		constant = newOwnedValue(normalized)
+		constant = newOwnedValue(prepared)
 
 	case *TBls12_381G1Element:
 		return nil, errors.New("cannot decode bls12_381_G1_element constants")
@@ -1726,6 +1728,7 @@ type decoder struct {
 	nodes int
 	// maxConstrFields is the widest constr field list accepted.
 	maxConstrFields int
+	strictValues    bool
 }
 
 func newDecoder(bytes []byte) *decoder {
@@ -1735,7 +1738,7 @@ func newDecoder(bytes []byte) *decoder {
 }
 
 func (d *decoder) reset(bytes []byte) {
-	*d = decoder{buffer: bytes, maxConstrFields: maxCollectionWidth}
+	*d = decoder{buffer: bytes, maxConstrFields: maxCollectionWidth, strictValues: true}
 }
 
 // node charges one term or constant list item against the program's node
