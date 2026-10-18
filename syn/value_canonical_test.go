@@ -69,10 +69,6 @@ func TestParsePlutusValueCanonicalForm(t *testing.T) {
 	}
 	for form, program := range valuePrograms {
 		for name, text := range invalid {
-			if form == "con" && name != "policy key too long" && name != "token key too long" &&
-				name != "quantity above range" && name != "quantity below range" {
-				continue
-			}
 			t.Run(form+"/rejects "+name, func(t *testing.T) {
 				t.Parallel()
 				if _, err := Parse(program(text)); err == nil {
@@ -83,81 +79,53 @@ func TestParsePlutusValueCanonicalForm(t *testing.T) {
 	}
 }
 
-func TestParseValueConstantNormalizes(t *testing.T) {
+func TestParseValueConstantRejectsNonCanonicalEntries(t *testing.T) {
 	t.Parallel()
-	tests := map[string]struct {
-		input string
-		want  string
-	}{
-		"duplicate tokens add quantities": {
-			input: `[(#aa, [(#bb, 123), (#bb, 456)])]`,
-			want:  `[(#aa, [(#bb, 579)])]`,
-		},
-		"duplicate policies merge tokens": {
-			input: `[(#aa, [(#02, 3)]), (#aa, [(#01, 4)])]`,
-			want:  `[(#aa, [(#01, 4), (#02, 3)])]`,
-		},
-		"unordered entries sort": {
-			input: `[(#bb, [(#02, 2), (#01, 1)]), (#aa, [(#02, 4), (#01, 3)])]`,
-			want:  `[(#aa, [(#01, 3), (#02, 4)]), (#bb, [(#01, 1), (#02, 2)])]`,
-		},
-		"empty and zero entries are removed": {
-			input: `[(#aa, []), (#bb, [(#01, 0), (#02, 5)])]`,
-			want:  `[(#bb, [(#02, 5)])]`,
-		},
-		"zero duplicate total is removed": {
-			input: `[(#aa, [(#bb, 3)]), (#aa, [(#bb, -3)])]`,
-			want:  `[]`,
-		},
+	tests := map[string]string{
+		"duplicate tokens":        `[(#aa, [(#bb, 123), (#bb, 456)])]`,
+		"duplicate policies":      `[(#aa, [(#02, 3)]), (#aa, [(#01, 4)])]`,
+		"unordered policy keys":   `[(#bb, [(#01, 1)]), (#aa, [(#01, 1)])]`,
+		"unordered token keys":    `[(#aa, [(#02, 2), (#01, 1)])]`,
+		"empty token map":         `[(#aa, [])]`,
+		"zero quantity":           `[(#aa, [(#bb, 0)])]`,
+		"zero duplicate quantity": `[(#aa, [(#bb, 3)]), (#aa, [(#bb, -3)])]`,
 	}
-	for name, tc := range tests {
+	for name, valueText := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			parsed, err := Parse(valuePrograms["con"](tc.input))
-			if err != nil {
-				t.Fatalf("Parse input: %v", err)
-			}
-			want, err := Parse(valuePrograms["con"](tc.want))
-			if err != nil {
-				t.Fatalf("Parse expected value: %v", err)
-			}
-			if got, expected := Pretty(parsed), Pretty(want); got != expected {
-				t.Fatalf("normalized value = %q, want %q", got, expected)
+			if _, err := Parse(valuePrograms["con"](valueText)); err == nil {
+				t.Fatal("Parse accepted a non-canonical Value")
 			}
 		})
 	}
 }
 
-func TestParseNestedValueConstantNormalizes(t *testing.T) {
+func TestParseNestedValueConstantRejectsNonCanonicalEntries(t *testing.T) {
 	input := `(program 1.3.0 (con (list value) [[(#aa, [(#bb, 1), (#bb, 2)])]]))`
-	want := `(program 1.3.0 (con (list value) [[(#aa, [(#bb, 3)])]]))`
-
-	parsed, err := Parse(input)
-	if err != nil {
-		t.Fatalf("Parse input: %v", err)
-	}
-	expected, err := Parse(want)
-	if err != nil {
-		t.Fatalf("Parse expected value: %v", err)
-	}
-	if got, expected := Pretty(parsed), Pretty(expected); got != expected {
-		t.Fatalf("normalized nested value = %q, want %q", got, expected)
+	if _, err := Parse(input); err == nil {
+		t.Fatal("Parse accepted a non-canonical nested Value")
 	}
 }
 
-func TestParseValueConstantRejectsOutOfRangeMergedQuantity(t *testing.T) {
+func TestNewValueRejectsOutOfRangeMergedQuantity(t *testing.T) {
 	limit := new(big.Int).Lsh(big.NewInt(1), 127)
 	max := new(big.Int).Sub(new(big.Int).Set(limit), big.NewInt(1))
 	min := new(big.Int).Neg(limit)
-	tests := map[string]string{
-		"overflow":  `[(#aa, [(#bb, ` + max.String() + `), (#bb, 1)])]`,
-		"underflow": `[(#aa, [(#bb, ` + min.String() + `), (#bb, -1)])]`,
+	tests := map[string][]IConstant{
+		"overflow": {
+			valueEntryForTest([]byte{0xaa}, valueTokenForTest([]byte{0xbb}, max)),
+			valueEntryForTest([]byte{0xaa}, valueTokenForTest([]byte{0xbb}, big.NewInt(1))),
+		},
+		"underflow": {
+			valueEntryForTest([]byte{0xaa}, valueTokenForTest([]byte{0xbb}, min)),
+			valueEntryForTest([]byte{0xaa}, valueTokenForTest([]byte{0xbb}, big.NewInt(-1))),
+		},
 	}
-	for name, valueText := range tests {
+	for name, entries := range tests {
 		t.Run(name, func(t *testing.T) {
-			_, err := Parse(valuePrograms["con"](valueText))
+			_, err := NewValue(entries)
 			if err == nil || !strings.Contains(err.Error(), "quantity out of signed 128-bit range") {
-				t.Fatalf("Parse error = %v, want merged quantity range error", err)
+				t.Fatalf("NewValue error = %v, want merged quantity range error", err)
 			}
 		})
 	}
@@ -214,7 +182,9 @@ func TestDecodeValueConstantNormalizes(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			value, err := decode(newDecoder(encoded.buffer))
+			d := newDecoder(encoded.buffer)
+			d.strictValues = false
+			value, err := decode(d)
 			if err != nil {
 				t.Fatalf("decode Value constant: %v", err)
 			}

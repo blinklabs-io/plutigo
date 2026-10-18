@@ -69,10 +69,9 @@ func encodeRawValueProgram(t *testing.T, entries []IConstant) []byte {
 	return e.buffer
 }
 
-// TestContextPathsRejectNonCanonicalValue checks that the context-aware
-// parser and decoder reject a non-canonical Value constant that the
-// context-free paths silently normalize.
-func TestContextPathsRejectNonCanonicalValue(t *testing.T) {
+// TestPublicDecodePathsRejectNonCanonicalValue checks that every public
+// decoder rejects non-canonical Value constants.
+func TestPublicDecodePathsRejectNonCanonicalValue(t *testing.T) {
 	t.Parallel()
 	aa, bb := []byte{0xaa}, []byte{0xbb}
 	long := make([]byte, 33)
@@ -102,11 +101,36 @@ func TestContextPathsRejectNonCanonicalValue(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			encoded := encodeRawValueProgram(t, tc.entries)
-			if _, err := DecodeWithContext[DeBruijn](encoded, ctx); err == nil {
-				t.Error("DecodeWithContext[DeBruijn] accepted a non-canonical Value")
+			decode := map[string]func() error{
+				"context DeBruijn": func() error {
+					_, err := DecodeWithContext[DeBruijn](encoded, ctx)
+					return err
+				},
+				"context Name": func() error {
+					_, err := DecodeWithContext[Name](encoded, ctx)
+					return err
+				},
+				"DeBruijn": func() error {
+					_, err := Decode[DeBruijn](encoded)
+					return err
+				},
+				"Name": func() error {
+					_, err := Decode[Name](encoded)
+					return err
+				},
+				"DecodeDeBruijn": func() error {
+					_, err := DecodeDeBruijn(encoded)
+					return err
+				},
+				"borrowed": func() error {
+					_, err := NewDeBruijnDecoder().DecodeBorrowed(encoded)
+					return err
+				},
 			}
-			if _, err := DecodeWithContext[Name](encoded, ctx); err == nil {
-				t.Error("DecodeWithContext[Name] accepted a non-canonical Value")
+			for name, run := range decode {
+				if err := run(); err == nil {
+					t.Errorf("%s accepted a non-canonical Value", name)
+				}
 			}
 		})
 	}
@@ -137,34 +161,9 @@ func TestParseWithContextRejectsNonCanonicalValue(t *testing.T) {
 			if _, err := ParseWithContext(src, ctx); err == nil {
 				t.Error("ParseWithContext accepted a non-canonical Value")
 			}
-			// Quantity and key length violations also fail context-free; the
-			// others are normalized.
-			switch name {
-			case "policy key too long", "token key too long",
-				"quantity above range", "quantity below range":
-				return
-			}
-			if _, err := Parse(src); err != nil {
-				t.Errorf("Parse should normalize, got %v", err)
+			if _, err := Parse(src); err == nil {
+				t.Error("Parse accepted a non-canonical Value")
 			}
 		})
-	}
-}
-
-// TestContextFreeDecodeNormalizesValue checks that Decode still normalizes
-// the entries that DecodeWithContext rejects.
-func TestContextFreeDecodeNormalizesValue(t *testing.T) {
-	t.Parallel()
-	aa, bb := []byte{0xaa}, []byte{0xbb}
-	one := big.NewInt(1)
-	encoded := encodeRawValueProgram(t, rawValueEntries(
-		[2]any{aa, [][2]any{{bb, one}, {bb, one}}},
-	))
-	decoded, err := Decode[DeBruijn](encoded)
-	if err != nil {
-		t.Fatalf("Decode: %v", err)
-	}
-	if got := Pretty(decoded); !strings.Contains(got, "(#bb, 2)") {
-		t.Fatalf("Decode did not normalize: %s", got)
 	}
 }

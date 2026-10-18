@@ -211,25 +211,35 @@ func TestDecodeUnsupportedBLSConstantsFailsClosed(t *testing.T) {
 	}
 }
 
-func TestDecodeValueDropsZeroQuantity(t *testing.T) {
+func TestPublicDecodersRejectNonCanonicalValue(t *testing.T) {
 	input, err := hex.DecodeString("0101004ea10081000001")
 	if err != nil {
 		t.Fatalf("decode fixture: %v", err)
 	}
 
-	program, err := Decode[DeBruijn](input)
-	if err != nil {
-		t.Fatalf("Decode(): %v", err)
+	decode := map[string]func() error{
+		"generic DeBruijn": func() error {
+			_, err := Decode[DeBruijn](input)
+			return err
+		},
+		"generic NamedDeBruijn": func() error {
+			_, err := Decode[NamedDeBruijn](input)
+			return err
+		},
+		"DeBruijn": func() error {
+			_, err := DecodeDeBruijn(input)
+			return err
+		},
+		"borrowed": func() error {
+			_, err := NewDeBruijnDecoder().DecodeBorrowed(input)
+			return err
+		},
 	}
-	constant, ok := program.Term.(*Constant)
-	if !ok {
-		t.Fatalf("program term has type %T, want *Constant", program.Term)
-	}
-	value, ok := constant.Con.(*Value)
-	if !ok {
-		t.Fatalf("constant has type %T, want *Value", constant.Con)
-	}
-	if entries := value.Entries(); len(entries) != 0 {
-		t.Fatalf("decoded Value has %d entries, want zero", len(entries))
+	for name, run := range decode {
+		t.Run(name, func(t *testing.T) {
+			if err := run(); err == nil {
+				t.Fatal("decoder accepted a zero Value quantity")
+			}
+		})
 	}
 }

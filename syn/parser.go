@@ -80,6 +80,7 @@ func NewParser(input string) *Parser {
 		inputLen:      len(input),
 
 		maxConstrFields: maxCollectionWidth,
+		strictValues:    true,
 	}
 
 	if p.inputLen > maxInputBytes {
@@ -675,6 +676,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			return nil, err
 		}
 
+		var prevPolicy []byte
 		items := make([]IConstant, 0, 8)
 
 		for p.curToken.Type != lex.TokenRBracket {
@@ -698,7 +700,12 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				return nil, fmt.Errorf("invalid bytestring key %s at position %d", p.curToken.Literal, p.curToken.Position)
 			}
 
-			if err := checkValueKeyLength("policy", len(items), kb); err != nil {
+			if p.strictValues {
+				if err := data.CheckValueKey("policy", len(items), kb, prevPolicy); err != nil {
+					return nil, err
+				}
+				prevPolicy = kb
+			} else if err := checkValueKeyLength("policy", len(items), kb); err != nil {
 				return nil, err
 			}
 			p.nextToken()
@@ -712,6 +719,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				return nil, err
 			}
 
+			var prevToken []byte
 			innerItems := make([]IConstant, 0, 8)
 
 			for p.curToken.Type != lex.TokenRBracket {
@@ -734,7 +742,12 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 					return nil, fmt.Errorf("invalid bytestring value %s at position %d", p.curToken.Literal, p.curToken.Position)
 				}
 
-				if err := checkValueKeyLength("token", len(innerItems), ib); err != nil {
+				if p.strictValues {
+					if err := data.CheckValueKey("token", len(innerItems), ib, prevToken); err != nil {
+						return nil, err
+					}
+					prevToken = ib
+				} else if err := checkValueKeyLength("token", len(innerItems), ib); err != nil {
 					return nil, err
 				}
 				p.nextToken()
@@ -751,7 +764,11 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				if !ok {
 					return nil, fmt.Errorf("invalid integer value %s at position %d", p.curToken.Literal, p.curToken.Position)
 				}
-				if err := checkValueQuantityRange(len(items), len(innerItems), n); err != nil {
+				if p.strictValues {
+					if err := data.CheckValueQuantity(len(items), len(innerItems), n); err != nil {
+						return nil, err
+					}
+				} else if err := checkValueQuantityRange(len(items), len(innerItems), n); err != nil {
 					return nil, err
 				}
 				p.nextToken()
@@ -771,6 +788,11 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 
 			if err := p.expect(lex.TokenRBracket); err != nil {
 				return nil, err
+			}
+			if p.strictValues {
+				if err := data.CheckValueTokenCount(len(items), len(innerItems)); err != nil {
+					return nil, err
+				}
 			}
 
 			if err := p.expect(lex.TokenRParen); err != nil {

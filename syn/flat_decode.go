@@ -138,7 +138,7 @@ func decodeProgram[T Binder](bytes []byte, context *ProgramContext) (*Program[T]
 	var zero T
 	if _, ok := any(zero).(DeBruijn); ok {
 		d := newDecoder(bytes)
-		d.strictValues = context != nil
+		d.strictValues = true
 		arena := newTermArena[DeBruijn]()
 		consts := &constantArena{}
 		program, err := decodeDeBruijnProgram(d, arena, consts, context)
@@ -149,7 +149,7 @@ func decodeProgram[T Binder](bytes []byte, context *ProgramContext) (*Program[T]
 	}
 
 	d := newDecoder(bytes)
-	d.strictValues = context != nil
+	d.strictValues = true
 	arena := newTermArena[T]()
 	version, err := decodeProgramVersion(d, context)
 	if err != nil {
@@ -1738,7 +1738,7 @@ func newDecoder(bytes []byte) *decoder {
 }
 
 func (d *decoder) reset(bytes []byte) {
-	*d = decoder{buffer: bytes, maxConstrFields: maxCollectionWidth}
+	*d = decoder{buffer: bytes, maxConstrFields: maxCollectionWidth, strictValues: true}
 }
 
 // node charges one term or constant list item against the program's node
