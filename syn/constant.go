@@ -208,6 +208,22 @@ func normalizeValueEntries(entries []IConstant) ([]IConstant, error) {
 	return normalizeValueEntriesWithArena(entries, nil)
 }
 
+// Strict parser and decoder paths must validate before normalization hides
+// duplicate, ordering, empty-token, or zero-quantity violations.
+func prepareValueEntries(
+	entries []IConstant,
+	strict bool,
+	arena *constantArena,
+) ([]IConstant, error) {
+	if strict {
+		if err := validateValueEntries(entries); err != nil {
+			return nil, err
+		}
+		return entries, nil
+	}
+	return normalizeValueEntriesWithArena(entries, arena)
+}
+
 type valueTokenTotal struct {
 	id     []byte
 	amount *big.Int

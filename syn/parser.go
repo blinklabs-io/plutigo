@@ -46,6 +46,7 @@ type Parser struct {
 	nodes int
 	// maxConstrFields is the widest constr field list accepted.
 	maxConstrFields int
+	strictValues    bool
 }
 
 // node charges one term or collection item against the program's node budget.
@@ -800,12 +801,12 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			return nil, err
 		}
 
-		normalized, err := normalizeValueEntries(items)
+		prepared, err := prepareValueEntries(items, p.strictValues, nil)
 		if err != nil {
 			return nil, err
 		}
 
-		return &Constant{Con: newOwnedValue(normalized)}, nil
+		return &Constant{Con: newOwnedValue(prepared)}, nil
 	default:
 		return nil, fmt.Errorf("unexpected type spec %v at position %d", typeSpec, p.curToken.Position)
 	}
@@ -998,11 +999,11 @@ func (p *Parser) parseConstantValue(typ Typ) (IConstant, error) {
 		if err != nil {
 			return nil, err
 		}
-		normalized, err := normalizeValueEntries(items)
+		prepared, err := prepareValueEntries(items, p.strictValues, nil)
 		if err != nil {
 			return nil, err
 		}
-		return newOwnedValue(normalized), nil
+		return newOwnedValue(prepared), nil
 	case *TPair:
 		if err := p.expect(lex.TokenLParen); err != nil {
 			return nil, err
