@@ -49,14 +49,25 @@ type EvalContext struct {
 }
 
 // NewDefaultEvalContext builds an EvalContext using the default cost model
-// while still honoring the supplied protocol version for semantics and builtin
-// availability gating.
+// for the semantics variant that the language and protocol version select,
+// while still honoring the supplied protocol version for builtin availability
+// gating.
 func NewDefaultEvalContext(
 	version LanguageVersion,
 	protoVersion ProtoVersion,
 ) *EvalContext {
 	semantics := GetSemantics(version, protoVersion)
 	costModel := DefaultCostModel
+	if semantics == SemanticsVariantA {
+		if variantA, err := defaultVariantACostModel(version); err == nil {
+			return &EvalContext{
+				CostModel:        variantA,
+				SemanticsVariant: semantics,
+				Language:         version,
+				ProtoMajor:       protoVersion.Major,
+			}
+		}
+	}
 	if builtinCosts, err := buildBuiltinCosts(version, semantics); err == nil {
 		costModel = DefaultCostModel.Clone()
 		costModel.builtinCosts = builtinCosts
