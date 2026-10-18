@@ -57,18 +57,18 @@ func NewDefaultEvalContext(
 	protoVersion ProtoVersion,
 ) *EvalContext {
 	semantics := GetSemantics(version, protoVersion)
-	costModel := DefaultCostModel
+	var costModel CostModel
 	if semantics == SemanticsVariantA {
-		if variantA, err := defaultVariantACostModel(version); err == nil {
-			return &EvalContext{
-				CostModel:        variantA,
-				SemanticsVariant: semantics,
-				Language:         version,
-				ProtoMajor:       protoVersion.Major,
-			}
+		var err error
+		costModel, err = defaultVariantACostModel(version)
+		if err != nil {
+			panic(fmt.Sprintf("build default variant A cost model: %v", err))
 		}
-	}
-	if builtinCosts, err := buildBuiltinCosts(version, semantics); err == nil {
+	} else {
+		builtinCosts, err := buildBuiltinCosts(version, semantics)
+		if err != nil {
+			panic(fmt.Sprintf("build default builtin costs: %v", err))
+		}
 		costModel = DefaultCostModel.Clone()
 		costModel.builtinCosts = builtinCosts
 		costModel = costModel.withCostCaches()
