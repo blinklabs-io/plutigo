@@ -1198,12 +1198,12 @@ var DefaultBuiltinCosts = BuiltinCosts{
 	// Value/coin builtins
 	builtin.InsertCoin: &CostingFunc[Arguments]{
 		mem: &FourLinearInU{LinearCost{
-			intercept: 45,
-			slope:     21,
+			intercept: 47,
+			slope:     27,
 		}},
 		cpu: &FourLinearInU{LinearCost{
-			intercept: 356924,
-			slope:     18413,
+			intercept: 390841,
+			slope:     30257,
 		}},
 	},
 	builtin.LookupCoin: &CostingFunc[Arguments]{
@@ -1215,24 +1215,24 @@ var DefaultBuiltinCosts = BuiltinCosts{
 	},
 	builtin.ScaleValue: &CostingFunc[Arguments]{
 		mem: &LinearInY{LinearCost{
-			intercept: 12,
-			slope:     21,
+			intercept: 14,
+			slope:     29,
 		}},
 		cpu: &LinearInY{LinearCost{
 			intercept: 1000,
-			slope:     277577,
+			slope:     383231,
 		}},
 	},
 	builtin.UnionValue: &CostingFunc[Arguments]{
 		mem: &AddedSizesModel{AddedSizes{
-			intercept: 24,
-			slope:     21,
+			intercept: 26,
+			slope:     29,
 		}},
 		cpu: &WithInteractionInXAndY{
 			c00: 1000,
-			c01: 183150,
-			c10: 172116,
-			c11: 6,
+			c01: 143815,
+			c10: 284948,
+			c11: 4,
 		},
 	},
 	builtin.ValueContains: &CostingFunc[Arguments]{
@@ -1261,12 +1261,12 @@ var DefaultBuiltinCosts = BuiltinCosts{
 	},
 	builtin.UnValueData: &CostingFunc[Arguments]{
 		mem: &LinearCost{
-			intercept: 1,
-			slope:     11,
+			intercept: 14,
+			slope:     18,
 		},
 		cpu: &QuadraticInXModel{QuadraticFunction{
 			coeff0: 1000,
-			coeff1: 95933,
+			coeff1: 128595,
 			coeff2: 1,
 		}},
 	},

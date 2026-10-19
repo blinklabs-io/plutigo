@@ -49,18 +49,18 @@ func TestV4ValueCostModelsMatchPlutusSpec(t *testing.T) {
 	unValueData := DefaultBuiltinCosts[builtin.UnValueData]
 	unValueDataCPU := unValueData.cpu.(*QuadraticInXModel)
 	unValueDataMem := unValueData.mem.(*LinearCost)
-	if unValueDataCPU.coeff0 != 1000 || unValueDataCPU.coeff1 != 95933 ||
+	if unValueDataCPU.coeff0 != 1000 || unValueDataCPU.coeff1 != 128595 ||
 		unValueDataCPU.coeff2 != 1 {
 		t.Fatalf(
-			"unValueData CPU model = (%d, %d, %d), want (1000, 95933, 1)",
+			"unValueData CPU model = (%d, %d, %d), want (1000, 128595, 1)",
 			unValueDataCPU.coeff0,
 			unValueDataCPU.coeff1,
 			unValueDataCPU.coeff2,
 		)
 	}
-	if unValueDataMem.intercept != 1 || unValueDataMem.slope != 11 {
+	if unValueDataMem.intercept != 14 || unValueDataMem.slope != 18 {
 		t.Fatalf(
-			"unValueData memory model = (%d, %d), want (1, 11)",
+			"unValueData memory model = (%d, %d), want (14, 18)",
 			unValueDataMem.intercept,
 			unValueDataMem.slope,
 		)
@@ -137,7 +137,7 @@ func TestV4ValueBuiltinScriptBudgetMatchesCostModel(t *testing.T) {
 			builtin: builtin.UnValueData,
 			script: `(program 1.3.0
 				[(builtin unValueData) (con data (Map [(B #aa, Map [(B #bb, I 1)])]))])`,
-			wantBudget: ExBudget{Mem: 56, Cpu: 480690},
+			wantBudget: ExBudget{Mem: 104, Cpu: 644000},
 			zeroCost: func(cost *CostingFunc[Arguments]) {
 				cost.mem = &LinearCost{}
 				cost.cpu = &QuadraticInXModel{}

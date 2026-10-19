@@ -20,6 +20,7 @@ import (
 	"context"
 	"math"
 
+	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
@@ -1120,6 +1121,8 @@ func (m *Machine[T]) caseEvaluateStack(
 			tag = 0
 			firstArg = m.allocConstant(cval.First)
 			secondArg = m.allocConstant(cval.Second)
+		case *syn.Data:
+			return m.caseEvaluateDataStack(env, branches, cval.Inner)
 		default:
 			return nil, nil, nil, false, &TypeError{
 				Code:    ErrCodeNonConstrScrutinized,
@@ -1155,6 +1158,8 @@ func (m *Machine[T]) caseEvaluateStack(
 			m.pushApplyFrames2(firstArg, secondArg)
 		}
 		return branches[tag], env, nil, false, nil
+	case *dataValue[T]:
+		return m.caseEvaluateDataStack(env, branches, v.item)
 	case *dataListValue[T]:
 		if len(branches) < 1 || len(branches) > 2 {
 			return nil, nil, nil, false, &ScriptError{
@@ -1212,4 +1217,17 @@ func (m *Machine[T]) caseEvaluateStack(
 			Message: "NonConstrScrutinized",
 		}
 	}
+}
+
+func (m *Machine[T]) caseEvaluateDataStack(
+	env *Env[T],
+	branches []syn.Term[T],
+	item data.PlutusData,
+) (syn.Term[T], *Env[T], Value[T], bool, error) {
+	tag, fields, err := m.caseOnData(item, len(branches))
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+	m.pushApplyFrames([]Value[T]{m.allocDataListValue(fields)})
+	return branches[tag], env, nil, false, nil
 }

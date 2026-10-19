@@ -22,14 +22,14 @@ import (
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
-// referenceValueCostParams are the epoch-659 mainnet PlutusV3 cost-model
-// parameters for the value builtins under test (Koios /epoch_params?_epoch_no=659,
-// "PlutusV3" list, indices 313-331 in lang.CostModelParamNamesV3 order).
+// The default cost parameters of the value builtins under test are those of
+// the reference implementation's builtinCostModelB.json, whose values for
+// these builtins are the same in every semantics variant that has them.
 const (
-	insertCoinCPUIntercept int64 = 356924
-	insertCoinCPUSlope     int64 = 18413
-	insertCoinMemIntercept int64 = 45
-	insertCoinMemSlope     int64 = 21
+	insertCoinCPUIntercept int64 = 390841
+	insertCoinCPUSlope     int64 = 30257
+	insertCoinMemIntercept int64 = 47
+	insertCoinMemSlope     int64 = 27
 )
 
 // newValueCostTestInput builds a Value constant with policyCount policies,
@@ -209,10 +209,10 @@ func TestLookupCoinCostsMaxDepthNotSize(t *testing.T) {
 // Value and added the policy count, so it disagreed with the reference in both
 // directions.
 func TestScaleValueCostsTotalSizeNotOuterPlusInner(t *testing.T) {
-	// scaleValue-cpu-arguments-intercept and -slope, epoch 659 PlutusV3.
+	// scaleValue-cpu-arguments-intercept and -slope.
 	const (
 		cpuIntercept int64 = 1000
-		cpuSlope     int64 = 277577
+		cpuSlope     int64 = 383231
 	)
 
 	tests := []struct {
@@ -257,12 +257,12 @@ func TestScaleValueCostsTotalSizeNotOuterPlusInner(t *testing.T) {
 // additional token in a policy, so unionValue under-charged multi-token Values
 // by up to a factor of the token count.
 func TestUnionValueCostsTotalSizeNotOuterCount(t *testing.T) {
-	// unionValue-cpu-arguments-{c00,c01,c10,c11}, epoch 659 PlutusV3.
+	// unionValue-cpu-arguments-{c00,c01,c10,c11}.
 	const (
 		c00 int64 = 1000
-		c01 int64 = 183150
-		c10 int64 = 172116
-		c11 int64 = 6
+		c01 int64 = 143815
+		c10 int64 = 284948
+		c11 int64 = 4
 	)
 
 	tests := []struct {

@@ -25,8 +25,12 @@ import (
 )
 
 type termValidationItem[T syn.Eval] struct {
-	term  syn.Term[T]
-	depth int
+	term syn.Term[T]
+	// depth and scope are 32-bit to keep the item at 24 bytes: the depth
+	// is bounded by maxDischargeDepth and the scope by the depth. scope is
+	// the number of lambdas enclosing term.
+	depth int32
+	scope int32
 }
 
 type constantValidationItem struct {
@@ -147,35 +151,45 @@ func validateTermStructure[T syn.Eval](
 			if t == nil {
 				return malformedASTError("term contains a nil variable")
 			}
+			// A DeBruijn index must be bound by an enclosing lambda, wherever
+			// the variable sits: the reference rejects an open term before
+			// evaluating it, even when the free variable is never reached.
+			if index, ok := any(t.Name).(syn.DeBruijn); ok &&
+				(index < 1 || int(index) > int(item.scope)) {
+				return &TypeError{
+					Code:    ErrCodeOpenTerm,
+					Message: fmt.Sprintf("open term: DeBruijn index %d at scope %d", index, item.scope),
+				}
+			}
 		case *syn.Delay[T]:
 			if t == nil {
 				return malformedASTError("term contains a nil delay")
 			}
-			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Term, depth: nextDepth}); err != nil {
+			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Term, depth: nextDepth, scope: item.scope}); err != nil {
 				return err
 			}
 		case *syn.Force[T]:
 			if t == nil {
 				return malformedASTError("term contains a nil force")
 			}
-			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Term, depth: nextDepth}); err != nil {
+			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Term, depth: nextDepth, scope: item.scope}); err != nil {
 				return err
 			}
 		case *syn.Lambda[T]:
 			if t == nil {
 				return malformedASTError("term contains a nil lambda")
 			}
-			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Body, depth: nextDepth}); err != nil {
+			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Body, depth: nextDepth, scope: item.scope + 1}); err != nil {
 				return err
 			}
 		case *syn.Apply[T]:
 			if t == nil {
 				return malformedASTError("term contains a nil application")
 			}
-			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Function, depth: nextDepth}); err != nil {
+			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Function, depth: nextDepth, scope: item.scope}); err != nil {
 				return err
 			}
-			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Argument, depth: nextDepth}); err != nil {
+			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Argument, depth: nextDepth, scope: item.scope}); err != nil {
 				return err
 			}
 		case *syn.Builtin:
@@ -190,7 +204,7 @@ func validateTermStructure[T syn.Eval](
 				return malformedASTError("term contains a nil constructor")
 			}
 			for _, field := range t.Fields {
-				if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: field, depth: nextDepth}); err != nil {
+				if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: field, depth: nextDepth, scope: item.scope}); err != nil {
 					return err
 				}
 			}
@@ -198,11 +212,11 @@ func validateTermStructure[T syn.Eval](
 			if t == nil {
 				return malformedASTError("term contains a nil case")
 			}
-			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Constr, depth: nextDepth}); err != nil {
+			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Constr, depth: nextDepth, scope: item.scope}); err != nil {
 				return err
 			}
 			for _, branch := range t.Branches {
-				if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: branch, depth: nextDepth}); err != nil {
+				if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: branch, depth: nextDepth, scope: item.scope}); err != nil {
 					return err
 				}
 			}

@@ -1154,13 +1154,13 @@ builtin[ 90] listToArray                              mem=&LinearCost{slope:1, i
 builtin[ 91] indexArray                               mem=&ConstantCost{c:32} cpu=&ConstantCost{c:232010}
 builtin[ 92] bls12_381_G1_multiScalarMul              mem=&ConstantCost{c:18} cpu=&LinearInX{LinearCost:LinearCost{slope:25087669, intercept:321837444}}
 builtin[ 93] bls12_381_G2_multiScalarMul              mem=&ConstantCost{c:36} cpu=&LinearInX{LinearCost:LinearCost{slope:67302824, intercept:617887431}}
-builtin[ 94] insertCoin                               mem=&FourLinearInU{LinearCost:LinearCost{slope:21, intercept:45}} cpu=&FourLinearInU{LinearCost:LinearCost{slope:18413, intercept:356924}}
+builtin[ 94] insertCoin                               mem=&FourLinearInU{LinearCost:LinearCost{slope:27, intercept:47}} cpu=&FourLinearInU{LinearCost:LinearCost{slope:30257, intercept:390841}}
 builtin[ 95] lookupCoin                               mem=&ConstantCost{c:1} cpu=&ThreeLinearInZ{LinearCost:LinearCost{slope:9444, intercept:219951}}
-builtin[ 96] unionValue                               mem=&AddedSizesModel{AddedSizes:AddedSizes{intercept:24, slope:21}} cpu=&WithInteractionInXAndY{c00:1000, c01:183150, c10:172116, c11:6}
+builtin[ 96] unionValue                               mem=&AddedSizesModel{AddedSizes:AddedSizes{intercept:26, slope:29}} cpu=&WithInteractionInXAndY{c00:1000, c01:143815, c10:284948, c11:4}
 builtin[ 97] valueContains                            mem=&ConstantCost{c:1} cpu=&ConstAboveDiagonalModel{ConstantOrTwoArguments:ConstantOrTwoArguments{constant:213283, model:&LinearInXAndY{TwoVariableLinearSize:TwoVariableLinearSize{intercept:618401, slope1:1998, slope2:28258}}}}
 builtin[ 98] valueData                                mem=&LinearCost{slope:22, intercept:2} cpu=&LinearCost{slope:38159, intercept:1000}
-builtin[ 99] unValueData                              mem=&LinearCost{slope:11, intercept:1} cpu=&QuadraticInXModel{QuadraticFunction:QuadraticFunction{coeff0:1000, coeff1:95933, coeff2:1}}
-builtin[100] scaleValue                               mem=&LinearInY{LinearCost:LinearCost{slope:21, intercept:12}} cpu=&LinearInY{LinearCost:LinearCost{slope:277577, intercept:1000}}
+builtin[ 99] unValueData                              mem=&LinearCost{slope:18, intercept:14} cpu=&QuadraticInXModel{QuadraticFunction:QuadraticFunction{coeff0:1000, coeff1:128595, coeff2:1}}
+builtin[100] scaleValue                               mem=&LinearInY{LinearCost:LinearCost{slope:29, intercept:14}} cpu=&LinearInY{LinearCost:LinearCost{slope:383231, intercept:1000}}
 builtin[101] multiIndexArray                          mem=&LinearInY{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&QuadraticInYModel{QuadraticFunction:QuadraticFunction{coeff0:326163, coeff1:12304, coeff2:2}}
 builtin[102] policies                                 mem=&LinearInX{LinearCost:LinearCost{slope:3, intercept:4}} cpu=&LinearInX{LinearCost:LinearCost{slope:13220, intercept:930912}}
 builtin[103] assetCount                               mem=&ConstantCost{c:10} cpu=&ConstantCost{c:129043}
