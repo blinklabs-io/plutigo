@@ -15,11 +15,14 @@
 package cek
 
 import (
+	_ "embed"
+	"encoding/json"
 	"fmt"
 	"math"
 	"math/big"
 	"math/bits"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/blinklabs-io/plutigo/data"
@@ -673,4 +676,48 @@ func invalidPlutusDataNode(d data.PlutusData) *BuiltinError {
 		Builtin: "data sizing",
 		Message: fmt.Sprintf("invalid PlutusData node %T", d),
 	}
+}
+
+// variantACostModelParams holds the default cost model parameters of semantics
+// variant A, keyed by ledger parameter name. They are the values of the
+// reference implementation's cekMachineCostsA.json and builtinCostModelA.json,
+// whose machine step costs and builtin CPU costs both differ from the later
+// variants'.
+//
+//go:embed variant_a_cost_model.json
+var variantACostModelParams []byte
+
+var variantACostModels = map[lang.LanguageVersion]func() (CostModel, error){
+	lang.LanguageVersionV1: sync.OnceValues(func() (CostModel, error) {
+		return buildVariantACostModel(lang.LanguageVersionV1)
+	}),
+	lang.LanguageVersionV2: sync.OnceValues(func() (CostModel, error) {
+		return buildVariantACostModel(lang.LanguageVersionV2)
+	}),
+}
+
+// defaultVariantACostModel returns the variant A default cost model for a
+// language that has one. The result is shared and must not be modified.
+func defaultVariantACostModel(version lang.LanguageVersion) (CostModel, error) {
+	build, ok := variantACostModels[version]
+	if !ok {
+		return CostModel{}, fmt.Errorf("no variant A cost model for language %v", version)
+	}
+	return build()
+}
+
+func buildVariantACostModel(version lang.LanguageVersion) (CostModel, error) {
+	var all map[string]int64
+	if err := json.Unmarshal(variantACostModelParams, &all); err != nil {
+		return CostModel{}, fmt.Errorf("decode variant A cost model: %w", err)
+	}
+	params := make(map[string]int64)
+	for _, name := range lang.GetParamNamesForVersion(version) {
+		value, ok := all[name]
+		if !ok {
+			return CostModel{}, fmt.Errorf("variant A cost model lacks parameter %s", name)
+		}
+		params[name] = value
+	}
+	return costModelFromMap(version, SemanticsVariantA, params)
 }
