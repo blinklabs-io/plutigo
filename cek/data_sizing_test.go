@@ -94,7 +94,7 @@ func TestUnValueDataSizingStopsAtBudgetLowerBound(t *testing.T) {
 	if !errors.As(err, &budgetErr) {
 		t.Fatalf("unValueData error = %T %v, want BudgetError", err, err)
 	}
-	want := ExBudget{Mem: 12, Cpu: 96934}
+	want := ExBudget{Mem: 32, Cpu: 129596}
 	if budgetErr.Requested != want {
 		t.Fatalf(
 			"requested budget = %+v, want root lower bound %+v",
@@ -312,10 +312,10 @@ func TestDataSizingBudgetBoundary(t *testing.T) {
 	}{
 		{"serialiseData root", builtin.SerialiseData, &data.List{}, ExBudget{Mem: 8, Cpu: 1808754}, false},
 		{"equalsData root", builtin.EqualsData, &data.List{}, ExBudget{Mem: 1, Cpu: 1007264}, false},
-		{"unValueData root", builtin.UnValueData, &data.Map{}, ExBudget{Mem: 12, Cpu: 96934}, true},
+		{"unValueData root", builtin.UnValueData, &data.Map{}, ExBudget{Mem: 32, Cpu: 129596}, true},
 		{"serialiseData list", builtin.SerialiseData, oversizedDataList(128), ExBudget{Mem: 1288, Cpu: 138328434}, false},
 		{"equalsData list", builtin.EqualsData, oversizedDataList(128), ExBudget{Mem: 1, Cpu: 18465824}, false},
-		{"unValueData map", builtin.UnValueData, unValueDataInput(unValueDataPolicy(nil, unValueDataToken(nil, big.NewInt(1)))), ExBudget{Mem: 56, Cpu: 480690}, true},
+		{"unValueData map", builtin.UnValueData, unValueDataInput(unValueDataPolicy(nil, unValueDataToken(nil, big.NewInt(1)))), ExBudget{Mem: 104, Cpu: 644000}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, short := range []int64{0, 1} {

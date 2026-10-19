@@ -309,15 +309,23 @@ func decodeConformanceProgram(
 ) (*syn.Program[syn.DeBruijn], conformanceFailure, error) {
 	if format == conformanceFlat {
 		program, err := syn.Decode[syn.DeBruijn](contents)
-		return program, conformanceParseFailure, err
+		if err != nil {
+			return nil, conformanceParseFailure, err
+		}
+		// The reference reader scope-checks a program it decodes. Decoding
+		// alone must accept an open term, since a stored reference script can
+		// be one; only evaluating it is refused.
+		return program, conformanceParseFailure, conformanceCheckClosed(program.Term)
 	}
 
 	program, err := syn.Parse(string(contents))
 	if err != nil {
 		return nil, conformanceParseFailure, err
 	}
+	// The reference parser scope-checks the program, so a free variable is a
+	// parse error, not an evaluation failure.
 	dProgram, err := syn.NameToDeBruijn(program)
-	return dProgram, conformanceEvaluationFailure, err
+	return dProgram, conformanceParseFailure, err
 }
 
 func conformanceLanguageForPath(
@@ -375,6 +383,10 @@ func runConformanceCase(testCase conformanceCase) error {
 	plutusVersion, protocolVersion := conformanceLanguageForPath(
 		testCase.inputPath,
 	)
+	// Casing on Data is available only for UPLC 1.2.0 programs from Dijkstra.
+	if program.Version[0] > 1 || program.Version[0] == 1 && program.Version[1] >= 2 {
+		protocolVersion = max(protocolVersion, 12)
+	}
 	initialBudget := cek.ExBudget{
 		Mem: math.MaxInt64,
 		Cpu: math.MaxInt64,
@@ -484,4 +496,44 @@ func TestConformance(t *testing.T) {
 			}
 		})
 	}
+}
+
+// conformanceCheckClosed fails on a DeBruijn index that no enclosing lambda
+// binds.
+func conformanceCheckClosed(term syn.Term[syn.DeBruijn]) error {
+	type item struct {
+		term  syn.Term[syn.DeBruijn]
+		scope int
+	}
+	work := []item{{term, 0}}
+	for len(work) > 0 {
+		current := work[len(work)-1]
+		work = work[:len(work)-1]
+		switch t := current.term.(type) {
+		case *syn.Var[syn.DeBruijn]:
+			if t.Name < 1 || int(t.Name) > current.scope {
+				return fmt.Errorf("free variable: DeBruijn index %d", t.Name)
+			}
+		case *syn.Delay[syn.DeBruijn]:
+			work = append(work, item{t.Term, current.scope})
+		case *syn.Force[syn.DeBruijn]:
+			work = append(work, item{t.Term, current.scope})
+		case *syn.Lambda[syn.DeBruijn]:
+			work = append(work, item{t.Body, current.scope + 1})
+		case *syn.Apply[syn.DeBruijn]:
+			work = append(work,
+				item{t.Function, current.scope},
+				item{t.Argument, current.scope})
+		case *syn.Constr[syn.DeBruijn]:
+			for _, field := range t.Fields {
+				work = append(work, item{field, current.scope})
+			}
+		case *syn.Case[syn.DeBruijn]:
+			work = append(work, item{t.Constr, current.scope})
+			for _, branch := range t.Branches {
+				work = append(work, item{branch, current.scope})
+			}
+		}
+	}
+	return nil
 }

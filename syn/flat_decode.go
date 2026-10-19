@@ -231,6 +231,8 @@ func decodeProgramVersion(
 		return lang.LanguageVersion{}, errors.New("version numbers too large")
 	}
 	version := lang.LanguageVersion{uint32(major), uint32(minor), uint32(patch)}
+	d.version = version
+	d.versionKnown = true
 	if context != nil {
 		if err := validateLedgerLanguageAvailability(*context); err != nil {
 			return lang.LanguageVersion{}, err
@@ -316,6 +318,9 @@ func decodeTermDeBruijnWithArena(
 		}
 		return arena.allocBuiltin(fn), nil
 	case ConstrTag:
+		if err := d.checkConstrCaseVersion("constr"); err != nil {
+			return nil, err
+		}
 		constrTag, err := d.word64()
 		if err != nil {
 			return nil, err
@@ -328,6 +333,9 @@ func decodeTermDeBruijnWithArena(
 		}
 		return arena.allocConstr(constrTag, fields), nil
 	case CaseTag:
+		if err := d.checkConstrCaseVersion("case"); err != nil {
+			return nil, err
+		}
 		constr, err := decodeTermDeBruijnWithArena(d, arena, consts, depth+1)
 		if err != nil {
 			return nil, err
@@ -428,6 +436,9 @@ func decodeTermWithArena[T Binder](d *decoder, arena *termArena[T]) (Term[T], er
 
 		term = arena.allocBuiltin(fn)
 	case ConstrTag:
+		if err := d.checkConstrCaseVersion("constr"); err != nil {
+			return nil, err
+		}
 		constrTag, err := d.word64()
 		if err != nil {
 			return nil, err
@@ -440,6 +451,9 @@ func decodeTermWithArena[T Binder](d *decoder, arena *termArena[T]) (Term[T], er
 
 		term = arena.allocConstr(constrTag, fields)
 	case CaseTag:
+		if err := d.checkConstrCaseVersion("case"); err != nil {
+			return nil, err
+		}
 		constr, err := decodeTermWithArena[T](d, arena)
 		if err != nil {
 			return nil, err
@@ -1729,6 +1743,17 @@ type decoder struct {
 	// maxConstrFields is the widest constr field list accepted.
 	maxConstrFields int
 	strictValues    bool
+	// version is the program version once the header is decoded; constr and
+	// case terms are rejected before 1.1.0.
+	version      lang.LanguageVersion
+	versionKnown bool
+}
+
+func (d *decoder) checkConstrCaseVersion(term string) error {
+	if d.versionKnown && (d.version[0] < 1 || d.version[0] == 1 && d.version[1] < 1) {
+		return fmt.Errorf("%s is not available in UPLC version %s", term, formatVersion(d.version))
+	}
+	return nil
 }
 
 func newDecoder(bytes []byte) *decoder {

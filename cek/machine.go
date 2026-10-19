@@ -1542,6 +1542,37 @@ func (m *Machine[T]) checkCaseOnBuiltin(value Value[T]) error {
 	}
 }
 
+// caseOnData selects the branch for casing on Data. Only a Constr is
+// scrutinized: its tag picks the branch, which receives the fields as a single
+// list of Data. Casing on Data is available from Dijkstra; a zero protocol
+// major means no protocol version was selected and imposes no restriction.
+func (m *Machine[T]) caseOnData(
+	item data.PlutusData,
+	branches int,
+) (int, []data.PlutusData, error) {
+	if m.protoMajor != 0 && m.protoMajor < dijkstraProtoMajorVersion {
+		return 0, nil, &ScriptError{
+			Code:    ErrCodeCaseOnBuiltinUnavailable,
+			Message: "case on data is unavailable before protocol version 12",
+		}
+	}
+	constr, ok := item.(*data.Constr)
+	if !ok {
+		return 0, nil, &TypeError{
+			Code:    ErrCodeNonConstrScrutinized,
+			Message: "NonConstrScrutinized",
+		}
+	}
+	if constr.Tag.Sign() < 0 || !constr.Tag.IsInt64() ||
+		constr.Tag.Int64() >= int64(branches) {
+		return 0, nil, &ScriptError{
+			Code:    ErrCodeMissingCaseBranch,
+			Message: "MissingCaseBranch",
+		}
+	}
+	return int(constr.Tag.Int64()), constr.Fields, nil
+}
+
 func (m *Machine[T]) caseEvaluate(
 	env *Env[T],
 	branches []syn.Term[T],
@@ -1616,6 +1647,8 @@ func (m *Machine[T]) caseEvaluate(
 			args = m.allocValueElems(2)
 			args[0] = m.allocConstant(cval.First)
 			args[1] = m.allocConstant(cval.Second)
+		case *syn.Data:
+			return m.caseEvaluateData(env, branches, context, cval.Inner)
 		default:
 			return nil, &TypeError{Code: ErrCodeNonConstrScrutinized, Message: "NonConstrScrutinized"}
 		}
@@ -1643,6 +1676,8 @@ func (m *Machine[T]) caseEvaluate(
 			return comp, nil
 		}
 		return nil, &ScriptError{Code: ErrCodeMissingCaseBranch, Message: "MissingCaseBranch"}
+	case *dataValue[T]:
+		return m.caseEvaluateData(env, branches, context, v.item)
 	case *dataListValue[T]:
 		if len(v.items) == 0 {
 			if len(branches) != 2 && len(branches) != 1 {
@@ -1712,6 +1747,25 @@ func (m *Machine[T]) caseEvaluate(
 	default:
 		return nil, &TypeError{Code: ErrCodeNonConstrScrutinized, Message: "NonConstrScrutinized"}
 	}
+}
+
+func (m *Machine[T]) caseEvaluateData(
+	env *Env[T],
+	branches []syn.Term[T],
+	context MachineContext[T],
+	item data.PlutusData,
+) (MachineState[T], error) {
+	tag, fields, err := m.caseOnData(item, len(branches))
+	if err != nil {
+		return nil, err
+	}
+	args := m.allocValueElems(1)
+	args[0] = m.allocDataListValue(fields)
+	comp := m.getCompute()
+	comp.Ctx = m.transferArgStack(args, context)
+	comp.Env = env
+	comp.Term = branches[tag]
+	return comp, nil
 }
 
 // returnCompute handles the Return state of the CEK machine.

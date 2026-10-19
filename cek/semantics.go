@@ -31,6 +31,7 @@ const (
 const (
 	changProtoMajorVersion     = 9
 	vanRossemProtoMajorVersion = 11
+	dijkstraProtoMajorVersion  = 12
 )
 
 type ProtoVersion struct {
