@@ -424,7 +424,7 @@ func parseDeepPlutusDataJSONTree(data []byte, maxDepth int) (jsonValue, error) {
 	p := deepJSONParser{data: data, state: jsonParseState{maxDepth: maxDepth}}
 	root, err := p.parseValue()
 	if err != nil {
-		return jsonValue{}, err
+		return jsonValue{}, normalizeJSONStreamError(err)
 	}
 	p.skipSpace()
 	if p.pos != len(data) {
@@ -473,6 +473,9 @@ func (p *deepJSONParser) parseValue() (jsonValue, error) {
 				break
 			}
 			if !p.consume(',') {
+				if p.pos == len(p.data) {
+					return jsonValue{}, io.ErrUnexpectedEOF
+				}
 				return jsonValue{}, errors.New("invalid character after object value")
 			}
 			p.skipSpace()
@@ -496,6 +499,9 @@ func (p *deepJSONParser) parseValue() (jsonValue, error) {
 				break
 			}
 			if !p.consume(',') {
+				if p.pos == len(p.data) {
+					return jsonValue{}, io.ErrUnexpectedEOF
+				}
 				return jsonValue{}, errors.New("invalid character after array value")
 			}
 		}
