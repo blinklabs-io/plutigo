@@ -461,6 +461,9 @@ func (p *deepJSONParser) parseValue() (jsonValue, error) {
 			}
 			p.skipSpace()
 			if !p.consume(':') {
+				if p.pos == len(p.data) {
+					return jsonValue{}, io.ErrUnexpectedEOF
+				}
 				return jsonValue{}, errors.New("invalid character after object key")
 			}
 			value, err := p.parseValue()
@@ -528,7 +531,20 @@ func (p *deepJSONParser) parseValue() (jsonValue, error) {
 	}
 }
 
+// The deepJSONParser methods report io.ErrUnexpectedEOF only when the input
+// ends where a valid continuation could still follow, so the fallback
+// classifies truncated and malformed input the same way json.Decoder does.
+
 func (p *deepJSONParser) parseString() (string, error) {
+	if p.pos == len(p.data) {
+		return "", io.ErrUnexpectedEOF
+	}
+	if p.data[p.pos] != '"' {
+		return "", fmt.Errorf(
+			"invalid character %s looking for beginning of object key string",
+			jsonQuoteChar(p.data[p.pos]),
+		)
+	}
 	start := p.pos
 	p.pos++
 	for p.pos < len(p.data) {
@@ -542,16 +558,8 @@ func (p *deepJSONParser) parseString() (string, error) {
 			}
 			return value, nil
 		case c == '\\':
-			if p.pos == len(p.data) {
-				return "", io.ErrUnexpectedEOF
-			}
-			if p.data[p.pos] == 'u' {
-				if len(p.data)-p.pos < 5 {
-					return "", io.ErrUnexpectedEOF
-				}
-				p.pos += 5
-			} else {
-				p.pos++
+			if err := p.skipEscape(); err != nil {
+				return "", err
 			}
 		case c < 0x20:
 			return "", errors.New("invalid character in string")
@@ -560,47 +568,99 @@ func (p *deepJSONParser) parseString() (string, error) {
 	return "", io.ErrUnexpectedEOF
 }
 
-func (p *deepJSONParser) parseNumber() error {
-	start := p.pos
-	if p.consume('-') && p.pos == len(p.data) {
+// skipEscape advances past the escape sequence following a backslash.
+func (p *deepJSONParser) skipEscape() error {
+	if p.pos == len(p.data) {
 		return io.ErrUnexpectedEOF
 	}
-	if p.consume('0') {
-		if p.pos < len(p.data) && p.data[p.pos] >= '0' && p.data[p.pos] <= '9' {
+	c := p.data[p.pos]
+	p.pos++
+	switch c {
+	case '"', '\\', '/', 'b', 'f', 'n', 'r', 't':
+		return nil
+	case 'u':
+		for range 4 {
+			if p.pos == len(p.data) {
+				return io.ErrUnexpectedEOF
+			}
+			if !isJSONHexDigit(p.data[p.pos]) {
+				return fmt.Errorf(
+					"invalid character %s in \\u hexadecimal character escape",
+					jsonQuoteChar(p.data[p.pos]),
+				)
+			}
+			p.pos++
+		}
+		return nil
+	default:
+		return fmt.Errorf("invalid character %s in string escape code", jsonQuoteChar(c))
+	}
+}
+
+func isJSONHexDigit(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
+}
+
+func (p *deepJSONParser) parseNumber() error {
+	p.consume('-')
+	switch {
+	case p.consume('0'):
+		if p.pos < len(p.data) && isJSONDigit(p.data[p.pos]) {
 			return errors.New("invalid leading zero in number")
 		}
-	} else {
-		if !p.consumeDigits(true) {
-			return fmt.Errorf("invalid character in number at byte %d", start)
+	default:
+		if err := p.requireDigits("in numeric literal"); err != nil {
+			return err
 		}
 	}
-	if p.consume('.') && !p.consumeDigits(true) {
-		return errors.New("invalid fractional part in number")
+	if p.consume('.') {
+		if err := p.requireDigits("after decimal point in numeric literal"); err != nil {
+			return err
+		}
 	}
 	if p.consume('e') || p.consume('E') {
 		if !p.consume('+') {
 			p.consume('-')
 		}
-		if !p.consumeDigits(true) {
-			return errors.New("invalid exponent in number")
+		if err := p.requireDigits("in exponent of numeric literal"); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func (p *deepJSONParser) consumeDigits(required bool) bool {
-	start := p.pos
-	for p.pos < len(p.data) && p.data[p.pos] >= '0' && p.data[p.pos] <= '9' {
+// requireDigits consumes one or more digits, reporting end of input when
+// the data ends before the first one.
+func (p *deepJSONParser) requireDigits(context string) error {
+	if p.pos == len(p.data) {
+		return io.ErrUnexpectedEOF
+	}
+	if !isJSONDigit(p.data[p.pos]) {
+		return fmt.Errorf("invalid character %s %s", jsonQuoteChar(p.data[p.pos]), context)
+	}
+	for p.pos < len(p.data) && isJSONDigit(p.data[p.pos]) {
 		p.pos++
 	}
-	return !required || p.pos > start
+	return nil
 }
 
+func isJSONDigit(c byte) bool { return c >= '0' && c <= '9' }
+
 func (p *deepJSONParser) parseLiteral(literal string, kind jsonValueKind, start int) (jsonValue, error) {
-	if len(p.data)-p.pos < len(literal) || string(p.data[p.pos:p.pos+len(literal)]) != literal {
-		return jsonValue{}, errors.New("invalid JSON literal")
+	for i := range len(literal) {
+		if p.pos == len(p.data) {
+			return jsonValue{}, io.ErrUnexpectedEOF
+		}
+		if p.data[p.pos] != literal[i] {
+			return jsonValue{}, fmt.Errorf(
+				"invalid character %s in literal %s (expecting %s)",
+				jsonQuoteChar(p.data[p.pos]),
+				literal,
+				jsonQuoteChar(literal[i]),
+			)
+		}
+		p.pos++
 	}
-	p.pos += len(literal)
 	return jsonValue{kind: kind, start: start, end: p.pos}, nil
 }
 

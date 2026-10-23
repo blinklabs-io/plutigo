@@ -128,44 +128,55 @@ func TestParseDeepPlutusDataJSONTreePreservesJSONValues(t *testing.T) {
 		`"empty_array":[],"empty_object":{}}` +
 		strings.Repeat("]", depth))
 
-	root, err := parsePlutusDataJSONTree(input, MaxDecodeNestingDepth())
-	if err != nil {
-		t.Fatalf("parsePlutusDataJSONTree rejected deep JSON: %v", err)
+	// parsePlutusDataJSONTree reaches the fallback only on toolchains whose
+	// encoding/json caps nesting below this depth, so call the fallback
+	// directly as well.
+	parsers := map[string]func([]byte, int) (jsonValue, error){
+		"parsePlutusDataJSONTree":     parsePlutusDataJSONTree,
+		"parseDeepPlutusDataJSONTree": parseDeepPlutusDataJSONTree,
 	}
-	for range depth {
-		if root.kind != jsonKindArray || len(root.items) != 1 {
-			t.Fatalf("expected one-item array at each level, got kind %v", root.kind)
-		}
-		root = root.items[0]
-	}
-	if root.kind != jsonKindObject {
-		t.Fatalf("innermost value kind = %v, want object", root.kind)
-	}
-	wantKinds := map[string]jsonValueKind{
-		"key-name":     jsonKindString,
-		"true":         jsonKindBool,
-		"false":        jsonKindBool,
-		"null":         jsonKindNull,
-		"number":       jsonKindNumber,
-		"empty_array":  jsonKindArray,
-		"empty_object": jsonKindObject,
-	}
-	if len(root.entries) != len(wantKinds) {
-		t.Fatalf("innermost entry count = %d, want %d", len(root.entries), len(wantKinds))
-	}
-	for _, entry := range root.entries {
-		want, ok := wantKinds[entry.key]
-		if !ok {
-			t.Errorf("unexpected decoded key %q", entry.key)
-			continue
-		}
-		if entry.val.kind != want {
-			t.Errorf("%s value kind = %v, want %v", entry.key, entry.val.kind, want)
-		}
-		delete(wantKinds, entry.key)
-	}
-	if len(wantKinds) != 0 {
-		t.Errorf("missing decoded keys: %v", wantKinds)
+	for name, parse := range parsers {
+		t.Run(name, func(t *testing.T) {
+			root, err := parse(input, MaxDecodeNestingDepth())
+			if err != nil {
+				t.Fatalf("rejected deep JSON: %v", err)
+			}
+			for range depth {
+				if root.kind != jsonKindArray || len(root.items) != 1 {
+					t.Fatalf("expected one-item array at each level, got kind %v", root.kind)
+				}
+				root = root.items[0]
+			}
+			if root.kind != jsonKindObject {
+				t.Fatalf("innermost value kind = %v, want object", root.kind)
+			}
+			wantKinds := map[string]jsonValueKind{
+				"key-name":     jsonKindString,
+				"true":         jsonKindBool,
+				"false":        jsonKindBool,
+				"null":         jsonKindNull,
+				"number":       jsonKindNumber,
+				"empty_array":  jsonKindArray,
+				"empty_object": jsonKindObject,
+			}
+			if len(root.entries) != len(wantKinds) {
+				t.Fatalf("innermost entry count = %d, want %d", len(root.entries), len(wantKinds))
+			}
+			for _, entry := range root.entries {
+				want, ok := wantKinds[entry.key]
+				if !ok {
+					t.Errorf("unexpected decoded key %q", entry.key)
+					continue
+				}
+				if entry.val.kind != want {
+					t.Errorf("%s value kind = %v, want %v", entry.key, entry.val.kind, want)
+				}
+				delete(wantKinds, entry.key)
+			}
+			if len(wantKinds) != 0 {
+				t.Errorf("missing decoded keys: %v", wantKinds)
+			}
+		})
 	}
 }
 
