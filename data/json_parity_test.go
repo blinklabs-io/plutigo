@@ -412,6 +412,21 @@ func TestDecodeJSONParityErrorMessages(t *testing.T) {
 	}
 }
 
+func TestDecodeJSONDeepTruncatedInputError(t *testing.T) {
+	const depth = 5_100
+	input := nestedListJSON(depth)
+	input = input[:len(input)-1]
+
+	_, err := DecodeJSON([]byte(input))
+	if err == nil {
+		t.Fatal("expected truncated deep JSON to fail")
+	}
+	const want = "PlutusData JSON must be an object: unexpected end of JSON input"
+	if err.Error() != want {
+		t.Fatalf("DecodeJSON error = %q, want %q", err, want)
+	}
+}
+
 // TestDecodeJSONParityErrorsRejected covers inputs whose error text comes
 // from the Go runtime in version-dependent form; only rejection is pinned.
 func TestDecodeJSONParityErrorsRejected(t *testing.T) {

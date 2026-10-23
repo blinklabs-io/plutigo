@@ -110,6 +110,76 @@ func TestDecodeJSONDepthLimit(t *testing.T) {
 	}
 }
 
+func TestDecodeJSONAllowsNestingWithinPlutusDataLimit(t *testing.T) {
+	// Each detailed-schema list level adds two JSON container levels. This
+	// stays below the PlutusData nesting limit while exceeding the standard
+	// library token decoder's independent nesting cap.
+	const depth = 5_100
+	if _, err := DecodeJSON([]byte(nestedListJSON(depth))); err != nil {
+		t.Fatalf("DecodeJSON rejected valid nesting at depth %d: %v", depth, err)
+	}
+}
+
+func TestParseDeepPlutusDataJSONTreePreservesJSONValues(t *testing.T) {
+	const depth = 10_100
+	input := []byte(strings.Repeat("[", depth) +
+		`{"key\u002dname":"value\"escaped","true":true,` +
+		`"false":false,"null":null,"number":-10.25e+3,` +
+		`"empty_array":[],"empty_object":{}}` +
+		strings.Repeat("]", depth))
+
+	// parsePlutusDataJSONTree reaches the fallback only on toolchains whose
+	// encoding/json caps nesting below this depth, so call the fallback
+	// directly as well.
+	parsers := map[string]func([]byte, int) (jsonValue, error){
+		"parsePlutusDataJSONTree":     parsePlutusDataJSONTree,
+		"parseDeepPlutusDataJSONTree": parseDeepPlutusDataJSONTree,
+	}
+	for name, parse := range parsers {
+		t.Run(name, func(t *testing.T) {
+			root, err := parse(input, MaxDecodeNestingDepth())
+			if err != nil {
+				t.Fatalf("rejected deep JSON: %v", err)
+			}
+			for range depth {
+				if root.kind != jsonKindArray || len(root.items) != 1 {
+					t.Fatalf("expected one-item array at each level, got kind %v", root.kind)
+				}
+				root = root.items[0]
+			}
+			if root.kind != jsonKindObject {
+				t.Fatalf("innermost value kind = %v, want object", root.kind)
+			}
+			wantKinds := map[string]jsonValueKind{
+				"key-name":     jsonKindString,
+				"true":         jsonKindBool,
+				"false":        jsonKindBool,
+				"null":         jsonKindNull,
+				"number":       jsonKindNumber,
+				"empty_array":  jsonKindArray,
+				"empty_object": jsonKindObject,
+			}
+			if len(root.entries) != len(wantKinds) {
+				t.Fatalf("innermost entry count = %d, want %d", len(root.entries), len(wantKinds))
+			}
+			for _, entry := range root.entries {
+				want, ok := wantKinds[entry.key]
+				if !ok {
+					t.Errorf("unexpected decoded key %q", entry.key)
+					continue
+				}
+				if entry.val.kind != want {
+					t.Errorf("%s value kind = %v, want %v", entry.key, entry.val.kind, want)
+				}
+				delete(wantKinds, entry.key)
+			}
+			if len(wantKinds) != 0 {
+				t.Errorf("missing decoded keys: %v", wantKinds)
+			}
+		})
+	}
+}
+
 func TestDecodeJSONMapDepthBoundary(t *testing.T) {
 	t.Run("exactly at PlutusData limit decodes", func(t *testing.T) {
 		if _, err := DecodeJSON([]byte(nestedMapKeyJSON(MaxDecodeNestingDepth() - 1))); err != nil {

@@ -24,6 +24,7 @@ import (
 	"math/big"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 // JSON (de)serialization for PlutusData types.
@@ -399,12 +400,287 @@ func parsePlutusDataJSONTree(data []byte, maxDepth int) (jsonValue, error) {
 		&jsonParseState{maxDepth: maxDepth},
 	)
 	if err != nil {
+		// encoding/json limits its own token nesting independently of the
+		// PlutusData limit. Keep accepting structurally valid detailed-schema
+		// values up to our own bound when that implementation limit is reached.
+		if strings.Contains(err.Error(), "exceeded max depth") {
+			return parseDeepPlutusDataJSONTree(data, maxDepth)
+		}
 		return jsonValue{}, normalizeJSONStreamError(err)
 	}
 	if err := checkJSONTrailingData(data, dec.InputOffset()); err != nil {
 		return jsonValue{}, err
 	}
 	return root, nil
+}
+
+type deepJSONParser struct {
+	data  []byte
+	pos   int
+	state jsonParseState
+}
+
+func parseDeepPlutusDataJSONTree(data []byte, maxDepth int) (jsonValue, error) {
+	p := deepJSONParser{data: data, state: jsonParseState{maxDepth: maxDepth}}
+	root, err := p.parseValue()
+	if err != nil {
+		return jsonValue{}, normalizeJSONStreamError(err)
+	}
+	p.skipSpace()
+	if p.pos != len(data) {
+		return jsonValue{}, fmt.Errorf(
+			"invalid character %s after top-level value",
+			jsonQuoteChar(data[p.pos]),
+		)
+	}
+	return root, nil
+}
+
+func (p *deepJSONParser) parseValue() (jsonValue, error) {
+	if err := p.state.enterValue(); err != nil {
+		return jsonValue{}, err
+	}
+	defer p.state.leaveValue()
+	p.skipSpace()
+	start := p.pos
+	if start == len(p.data) {
+		return jsonValue{}, io.ErrUnexpectedEOF
+	}
+	switch p.data[p.pos] {
+	case '{':
+		p.pos++
+		p.skipSpace()
+		entries := make([]jsonEntry, 0)
+		if p.consume('}') {
+			return jsonValue{kind: jsonKindObject, start: start, end: p.pos, entries: entries}, nil
+		}
+		for {
+			key, err := p.parseString()
+			if err != nil {
+				return jsonValue{}, err
+			}
+			p.skipSpace()
+			if !p.consume(':') {
+				if p.pos == len(p.data) {
+					return jsonValue{}, io.ErrUnexpectedEOF
+				}
+				return jsonValue{}, errors.New("invalid character after object key")
+			}
+			value, err := p.parseValue()
+			if err != nil {
+				return jsonValue{}, err
+			}
+			entries = append(entries, jsonEntry{key: internJSONKey(key), val: value})
+			p.skipSpace()
+			if p.consume('}') {
+				break
+			}
+			if !p.consume(',') {
+				if p.pos == len(p.data) {
+					return jsonValue{}, io.ErrUnexpectedEOF
+				}
+				return jsonValue{}, errors.New("invalid character after object value")
+			}
+			p.skipSpace()
+		}
+		return jsonValue{kind: jsonKindObject, start: start, end: p.pos, entries: entries}, nil
+	case '[':
+		p.pos++
+		p.skipSpace()
+		items := make([]jsonValue, 0)
+		if p.consume(']') {
+			return jsonValue{kind: jsonKindArray, start: start, end: p.pos, items: items}, nil
+		}
+		for {
+			item, err := p.parseValue()
+			if err != nil {
+				return jsonValue{}, err
+			}
+			items = append(items, item)
+			p.skipSpace()
+			if p.consume(']') {
+				break
+			}
+			if !p.consume(',') {
+				if p.pos == len(p.data) {
+					return jsonValue{}, io.ErrUnexpectedEOF
+				}
+				return jsonValue{}, errors.New("invalid character after array value")
+			}
+		}
+		return jsonValue{kind: jsonKindArray, start: start, end: p.pos, items: items}, nil
+	case '"':
+		if _, err := p.parseString(); err != nil {
+			return jsonValue{}, err
+		}
+		return jsonValue{kind: jsonKindString, start: start, end: p.pos}, nil
+	case 't':
+		return p.parseLiteral("true", jsonKindBool, start)
+	case 'f':
+		return p.parseLiteral("false", jsonKindBool, start)
+	case 'n':
+		return p.parseLiteral("null", jsonKindNull, start)
+	default:
+		if p.data[p.pos] == '-' || p.data[p.pos] >= '0' && p.data[p.pos] <= '9' {
+			if err := p.parseNumber(); err != nil {
+				return jsonValue{}, err
+			}
+			return jsonValue{kind: jsonKindNumber, start: start, end: p.pos}, nil
+		}
+		return jsonValue{}, fmt.Errorf("invalid character %s looking for beginning of value", jsonQuoteChar(p.data[p.pos]))
+	}
+}
+
+// The deepJSONParser methods report io.ErrUnexpectedEOF only when the input
+// ends where a valid continuation could still follow, so the fallback
+// classifies truncated and malformed input the same way json.Decoder does.
+
+func (p *deepJSONParser) parseString() (string, error) {
+	if p.pos == len(p.data) {
+		return "", io.ErrUnexpectedEOF
+	}
+	if p.data[p.pos] != '"' {
+		return "", fmt.Errorf(
+			"invalid character %s looking for beginning of object key string",
+			jsonQuoteChar(p.data[p.pos]),
+		)
+	}
+	start := p.pos
+	p.pos++
+	for p.pos < len(p.data) {
+		c := p.data[p.pos]
+		p.pos++
+		switch {
+		case c == '"':
+			var value string
+			if err := json.Unmarshal(p.data[start:p.pos], &value); err != nil {
+				return "", err
+			}
+			return value, nil
+		case c == '\\':
+			if err := p.skipEscape(); err != nil {
+				return "", err
+			}
+		case c < 0x20:
+			return "", errors.New("invalid character in string")
+		}
+	}
+	return "", io.ErrUnexpectedEOF
+}
+
+// skipEscape advances past the escape sequence following a backslash.
+func (p *deepJSONParser) skipEscape() error {
+	if p.pos == len(p.data) {
+		return io.ErrUnexpectedEOF
+	}
+	c := p.data[p.pos]
+	p.pos++
+	switch c {
+	case '"', '\\', '/', 'b', 'f', 'n', 'r', 't':
+		return nil
+	case 'u':
+		for range 4 {
+			if p.pos == len(p.data) {
+				return io.ErrUnexpectedEOF
+			}
+			if !isJSONHexDigit(p.data[p.pos]) {
+				return fmt.Errorf(
+					"invalid character %s in \\u hexadecimal character escape",
+					jsonQuoteChar(p.data[p.pos]),
+				)
+			}
+			p.pos++
+		}
+		return nil
+	default:
+		return fmt.Errorf("invalid character %s in string escape code", jsonQuoteChar(c))
+	}
+}
+
+func isJSONHexDigit(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
+}
+
+func (p *deepJSONParser) parseNumber() error {
+	p.consume('-')
+	switch {
+	case p.consume('0'):
+		if p.pos < len(p.data) && isJSONDigit(p.data[p.pos]) {
+			return errors.New("invalid leading zero in number")
+		}
+	default:
+		if err := p.requireDigits("in numeric literal"); err != nil {
+			return err
+		}
+	}
+	if p.consume('.') {
+		if err := p.requireDigits("after decimal point in numeric literal"); err != nil {
+			return err
+		}
+	}
+	if p.consume('e') || p.consume('E') {
+		if !p.consume('+') {
+			p.consume('-')
+		}
+		if err := p.requireDigits("in exponent of numeric literal"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// requireDigits consumes one or more digits, reporting end of input when
+// the data ends before the first one.
+func (p *deepJSONParser) requireDigits(context string) error {
+	if p.pos == len(p.data) {
+		return io.ErrUnexpectedEOF
+	}
+	if !isJSONDigit(p.data[p.pos]) {
+		return fmt.Errorf("invalid character %s %s", jsonQuoteChar(p.data[p.pos]), context)
+	}
+	for p.pos < len(p.data) && isJSONDigit(p.data[p.pos]) {
+		p.pos++
+	}
+	return nil
+}
+
+func isJSONDigit(c byte) bool { return c >= '0' && c <= '9' }
+
+func (p *deepJSONParser) parseLiteral(literal string, kind jsonValueKind, start int) (jsonValue, error) {
+	for i := range len(literal) {
+		if p.pos == len(p.data) {
+			return jsonValue{}, io.ErrUnexpectedEOF
+		}
+		if p.data[p.pos] != literal[i] {
+			return jsonValue{}, fmt.Errorf(
+				"invalid character %s in literal %s (expecting %s)",
+				jsonQuoteChar(p.data[p.pos]),
+				literal,
+				jsonQuoteChar(literal[i]),
+			)
+		}
+		p.pos++
+	}
+	return jsonValue{kind: kind, start: start, end: p.pos}, nil
+}
+
+func (p *deepJSONParser) consume(expected byte) bool {
+	if p.pos < len(p.data) && p.data[p.pos] == expected {
+		p.pos++
+		return true
+	}
+	return false
+}
+
+func (p *deepJSONParser) skipSpace() {
+	for p.pos < len(p.data) {
+		switch p.data[p.pos] {
+		case ' ', '\t', '\r', '\n':
+			p.pos++
+		default:
+			return
+		}
+	}
 }
 
 func parsePlutusDataJSONValue(
@@ -611,16 +887,20 @@ func decodePlutusDataJSONValue(
 		// json.Unmarshal leaves the destination map nil for a JSON null,
 		// which then reads as an object with no keys.
 	default:
-		// Reproduce json.Unmarshal's type error for non-object values by
-		// running it on the raw value. This is reached at most once per
-		// decode, so it cannot re-introduce quadratic scanning.
-		var m map[string]json.RawMessage
-		err := json.Unmarshal(jsonRawSpan(data, v), &m)
-		if err == nil {
-			// Unreachable: every non-object, non-null kind fails above.
-			err = errors.New("value is not a JSON object")
+		// Keep the public error stable across encoding/json implementations.
+		kind := map[jsonValueKind]string{
+			jsonKindBool:   "bool",
+			jsonKindNumber: "number",
+			jsonKindString: "string",
+			jsonKindArray:  "array",
+		}[v.kind]
+		if kind == "" {
+			kind = "value"
 		}
-		return nil, fmt.Errorf("PlutusData JSON must be an object: %w", err)
+		return nil, fmt.Errorf(
+			"PlutusData JSON must be an object: json: cannot unmarshal %s into Go value of type map[string]json.RawMessage",
+			kind,
+		)
 	}
 
 	// Reject objects with multiple discriminator keys (e.g. both "int" and "bytes").
