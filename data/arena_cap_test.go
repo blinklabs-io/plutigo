@@ -75,7 +75,7 @@ func TestArenaDecodedSlicesCapEqualsLen(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			pd, err := NewDecoder().Decode(raw)
+			pd, err := NewDecoder().DecodeWithValue(raw)
 			if err != nil {
 				t.Fatalf("Decode: %v", err)
 			}
@@ -97,7 +97,7 @@ func TestArenaAppendDoesNotCorruptNeighbours(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pd, err := NewDecoder().Decode(raw)
+	pd, err := NewDecoder().DecodeWithValue(raw)
 	if err != nil {
 		t.Fatal(err)
 	}

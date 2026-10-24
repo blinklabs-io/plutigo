@@ -193,9 +193,9 @@ func TestRunBudgetBoundsDivergentEnvironmentGrowth(t *testing.T) {
 	}
 
 	minStepMem := int64(math.MaxInt64)
-	for _, cost := range machine.stepCostMem {
-		if cost > 0 && cost < minStepMem {
-			minStepMem = cost
+	for _, cost := range machine.stepCosts {
+		if cost.Mem > 0 && cost.Mem < minStepMem {
+			minStepMem = cost.Mem
 		}
 	}
 	if minStepMem == math.MaxInt64 {

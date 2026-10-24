@@ -186,15 +186,22 @@ func iconstantExMem(c syn.IConstant) func() ExMem {
 	}
 }
 
-// Return a function so we can have lazy
-// costing of params for the case of constant functions
-func sizeExMem(i int) func() ExMem {
+// numBytesAsWordsExMem is the reference's NumBytesCostedAsNumWords size of
+// a requested byte count n: ((|n| - 1) div 8) + 1 words, so 0 for n = 0,
+// saturated to the int64 range like the reference's SatInt.
+func numBytesAsWordsExMem(n *big.Int) func() ExMem {
 	return func() ExMem {
-		if i == 0 {
-			return ExMem(0)
+		if n.Sign() == 0 {
+			return 0
 		}
-
-		return ExMem(((i - 1) / 8) + 1)
+		words := new(big.Int).Abs(n)
+		words.Sub(words, big.NewInt(1))
+		words.Rsh(words, 3)
+		words.Add(words, big.NewInt(1))
+		if !words.IsInt64() || words.Int64() > math.MaxInt {
+			return ExMem(math.MaxInt)
+		}
+		return ExMem(words.Int64())
 	}
 }
 

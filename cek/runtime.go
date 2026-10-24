@@ -15,6 +15,7 @@
 package cek
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -263,6 +264,9 @@ func (m *Machine[T]) evalBuiltinApp(b *Builtin[T]) (Value[T], error) {
 				plutusVersionName(b.Func.IntroducedIn()),
 			),
 		}
+	}
+	if err := m.checkBoundedBuiltinArgs(b); err != nil {
+		return nil, err
 	}
 	if m.metrics != nil {
 		before := m.ExBudget
@@ -542,6 +546,13 @@ func oneArgumentNondecreasing(model OneArgument) bool {
 	}
 }
 
+// errBudgetPrecheck aborts a Data size traversal once the partial size alone
+// costs more than the remaining budget.
+var errBudgetPrecheck = &BudgetError{
+	Code:    ErrCodeBudgetExhausted,
+	Message: "out of budget",
+}
+
 func (m *Machine[T]) costDataOne(
 	b *builtin.DefaultFunction,
 	d data.PlutusData,
@@ -563,7 +574,7 @@ func (m *Machine[T]) costDataOne(
 		if canBound {
 			cost, _, _ := m.oneArgumentCost(b, size)
 			if cost.Mem > m.ExBudget.Mem || cost.Cpu > m.ExBudget.Cpu {
-				return m.budgetError(cost, "out of budget")
+				return errBudgetPrecheck
 			}
 		}
 		return nil
@@ -578,10 +589,154 @@ func (m *Machine[T]) costDataOne(
 	} else {
 		size, err = dataExMemChecked(d, check)
 	}
+	if err == nil {
+		err = m.costOneExMem(b, size)
+	}
 	if err != nil {
+		if before, ok := m.dataOverdrawnFrom(err); ok {
+			return m.overdrawDataOne(before, mem, cpu, d, nodeCount)
+		}
+	}
+	return err
+}
+
+// dataOverdrawnFrom is overdrawnFrom for the Data size traversals, whose
+// precheck fails before anything is charged: the stream then starts from the
+// current budget.
+func (m *Machine[T]) dataOverdrawnFrom(err error) (ExBudget, bool) {
+	if err == errBudgetPrecheck {
+		return m.ExBudget, true
+	}
+	return overdrawnFrom(err)
+}
+
+// overdrawDataOne reproduces the reference's failure of a one-argument Data
+// builtin whose cost overdraws the budget before: it spends the reference's
+// cost stream from before up to the element that overdraws.
+func (m *Machine[T]) overdrawDataOne(
+	before ExBudget,
+	mem, cpu OneArgument,
+	d data.PlutusData,
+	nodeCount bool,
+) error {
+	arg := func() costChunks { return newDataSizeChunks(d, nodeCount) }
+	cpuChunks, cpuOK := oneArgumentChunks(cpu, arg)
+	memChunks, memOK := oneArgumentChunks(mem, arg)
+	if !cpuOK || !memOK {
+		// The reference sums the whole size before costing: one charge.
+		size, err := dataSize(d, nodeCount)
+		if err != nil {
+			return err
+		}
+		cpuChunks = &singleChunk{value: cpu.Cost(size)}
+		memChunks = &singleChunk{value: mem.Cost(size)}
+	}
+	return m.overdraw(before, cpuChunks, memChunks)
+}
+
+func dataSize(d data.PlutusData, nodeCount bool) (ExMem, error) {
+	if nodeCount {
+		return dataNodeCountExMemChecked(d, nil)
+	}
+	return dataExMemChecked(d, nil)
+}
+
+// overdrawnFrom returns the budget a charge that failed with err started
+// from, if err is an out-of-budget failure: its Available.
+func overdrawnFrom(err error) (ExBudget, bool) {
+	if err == nil {
+		// Checked first: errors.As's target escapes, so declaring it
+		// would allocate on the success path.
+		return ExBudget{}, false
+	}
+	var budgetErr *BudgetError
+	if errors.As(err, &budgetErr) && budgetErr.Code == ErrCodeBudgetExhausted {
+		return budgetErr.Available, true
+	}
+	return ExBudget{}, false
+}
+
+// overdrawOne reproduces the reference's failure of a one-argument builtin
+// whose argument's size is streamed (x), after charging its total cost in one
+// amount failed with err. Other errors are returned unchanged.
+func (m *Machine[T]) overdrawOne(
+	b *builtin.DefaultFunction,
+	x func() costChunks,
+	err error,
+) error {
+	return m.overdrawModel(b, err, func(model Arguments) (costChunks, bool) {
+		one, ok := model.(OneArgument)
+		if !ok {
+			return nil, false
+		}
+		return oneArgumentChunks(one, x)
+	})
+}
+
+// overdrawTwo is overdrawOne for two-argument builtins.
+func (m *Machine[T]) overdrawTwo(
+	b *builtin.DefaultFunction,
+	x, y func() costChunks,
+	err error,
+) error {
+	return m.overdrawModel(b, err, func(model Arguments) (costChunks, bool) {
+		two, ok := model.(TwoArgument)
+		if !ok {
+			return nil, false
+		}
+		return twoArgumentChunks(two, x, y)
+	})
+}
+
+// overdrawThree is overdrawOne for three-argument builtins.
+func (m *Machine[T]) overdrawThree(
+	b *builtin.DefaultFunction,
+	x, y, z func() costChunks,
+	err error,
+) error {
+	return m.overdrawModel(b, err, func(model Arguments) (costChunks, bool) {
+		three, ok := model.(ThreeArgument)
+		if !ok {
+			return nil, false
+		}
+		return threeArgumentChunks(three, x, y, z)
+	})
+}
+
+// overdrawModel replays b's cost stream, built from its CPU and memory
+// models by chunks, when err is an out-of-budget failure of b's one-amount
+// charge. err is returned unchanged when it is another error or when either
+// model is not one the reference streams.
+func (m *Machine[T]) overdrawModel(
+	b *builtin.DefaultFunction,
+	err error,
+	chunks func(Arguments) (costChunks, bool),
+) error {
+	before, ok := overdrawnFrom(err)
+	if !ok {
 		return err
 	}
-	return m.costOneExMem(b, size)
+	model := m.costs.builtinCosts[*b]
+	cpu, cpuOK := chunks(model.cpu)
+	mem, memOK := chunks(model.mem)
+	if !cpuOK || !memOK {
+		return err
+	}
+	return m.overdraw(before, cpu, mem)
+}
+
+// listChunksOf returns the reference's size stream of a list of n elements.
+func listChunksOf(n int) func() costChunks {
+	return func() costChunks { return &listSizeChunks{left: int64(n)} }
+}
+
+// overdraw spends a builtin's cost stream from before; the stream must
+// overdraw the budget, as the one-amount charge already did.
+func (m *Machine[T]) overdraw(before ExBudget, cpu, mem costChunks) error {
+	if err := m.spendChunks(before, cpu, mem); err != nil {
+		return err
+	}
+	return internalError("builtin cost stream did not overdraw the budget its total overdrew")
 }
 
 func twoArgumentDiagonalNondecreasing(model TwoArgument) bool {
@@ -626,16 +781,46 @@ func (m *Machine[T]) costEqualsData(
 				Cpu: cpu.CostTwo(size, size),
 			}
 			if cost.Mem > m.ExBudget.Mem || cost.Cpu > m.ExBudget.Cpu {
-				return m.budgetError(cost, "out of budget")
+				return errBudgetPrecheck
 			}
 		}
 		return nil
 	}
 	size, err := equalsDataMinExMemChecked(x, y, check)
-	if err != nil {
-		return err
+	if err == nil {
+		err = m.CostTwoExMem(b, size, size)
 	}
-	return m.CostTwoExMem(b, size, size)
+	if err != nil {
+		if before, ok := m.dataOverdrawnFrom(err); ok {
+			return m.overdrawEqualsData(before, mem, cpu, x, y)
+		}
+	}
+	return err
+}
+
+// overdrawEqualsData is overdrawDataOne for equalsData.
+func (m *Machine[T]) overdrawEqualsData(
+	before ExBudget,
+	mem, cpu TwoArgument,
+	x, y data.PlutusData,
+) error {
+	argX := func() costChunks { return newDataSizeChunks(x, false) }
+	argY := func() costChunks { return newDataSizeChunks(y, false) }
+	cpuChunks, cpuOK := twoArgumentChunks(cpu, argX, argY)
+	memChunks, memOK := twoArgumentChunks(mem, argX, argY)
+	if !cpuOK || !memOK {
+		sizeX, err := dataExMemChecked(x, nil)
+		if err != nil {
+			return err
+		}
+		sizeY, err := dataExMemChecked(y, nil)
+		if err != nil {
+			return err
+		}
+		cpuChunks = &singleChunk{value: cpu.CostTwo(sizeX, sizeY)}
+		memChunks = &singleChunk{value: mem.CostTwo(sizeX, sizeY)}
+	}
+	return m.overdraw(before, cpuChunks, memChunks)
 }
 
 func (m *Machine[T]) CostTwo(
@@ -966,6 +1151,10 @@ func unwrapList[T syn.Eval](
 	value Value[T],
 ) (*syn.ProtoList, error) {
 	var i *syn.ProtoList
+
+	// Consumers that need the whole list as a slice see the contiguous form
+	// of a cons-cell list (memoised per cell).
+	value = flattenLazyList[T](value)
 
 	switch v := value.(type) {
 	case *Constant:

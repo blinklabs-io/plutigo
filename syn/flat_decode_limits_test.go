@@ -16,8 +16,9 @@ package syn
 
 import (
 	"bytes"
+	"encoding/hex"
+	"math"
 	"math/big"
-	"math/bits"
 	"strings"
 	"testing"
 
@@ -137,40 +138,60 @@ func TestDecodeRejectsTrailingBytes(t *testing.T) {
 	}
 }
 
-// TestDecodeVersionOverflowFailsFast verifies that an oversized version varint
-// is rejected immediately after the version words are read, before any attempt
-// to decode the term. The input deliberately has no term bytes: a decoder that
-// validates the version only after the term decode reports "end of buffer"
-// instead of the version error.
-func TestDecodeVersionOverflowFailsFast(t *testing.T) {
-	// major = 2^32 (exceeds MaxUint32), minor = 1, patch = 1, then nothing.
-	input := []byte{0x80, 0x80, 0x80, 0x80, 0x10, 0x01, 0x01}
-
-	wantErrText := "version numbers too large"
-	if bits.UintSize == 32 {
-		// On 32-bit targets the varint itself overflows the machine word, so
-		// word() rejects it even earlier.
-		wantErrText = "overflows machine word"
+// TestDecodeHugeVersionIsPhaseTwo pins the reference's treatment of program
+// version numbers: each is an unbounded Natural, so a version too large for
+// the supported versions still decodes (phase 1) and is rejected only when
+// the script is run (phase 2, ValidateTermVersionForExecution). The decoded
+// number saturates to MaxUint32.
+func TestDecodeHugeVersionIsPhaseTwo(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  lang.LanguageVersion
+	}{
+		// (program 2^64.0.0 (con integer 0)), version groups well past 64 bits.
+		{"major 2^64", "808080808080808080020000480081", lang.LanguageVersion{math.MaxUint32, 0, 0}},
+		// (program 1.2^32.0 (con integer 0))
+		{"minor 2^32", "01808080801000480081", lang.LanguageVersion{1, math.MaxUint32, 0}},
+		// Non-minimal encoding of 1.0.0 with a zero continuation group.
+		{"non-minimal major", "81000000480081", lang.LanguageVersion{1, 0, 0}},
 	}
-
-	_, fastErr := DecodeDeBruijn(input)
-	_, genericFastErr := Decode[DeBruijn](input)
-	_, genericErr := Decode[NamedDeBruijn](input)
-
-	for path, err := range map[string]error{
-		"DecodeDeBruijn":        fastErr,
-		"Decode[DeBruijn]":      genericFastErr,
-		"Decode[NamedDeBruijn]": genericErr,
-	} {
-		if err == nil {
-			t.Errorf("%s: expected error, got nil", path)
-			continue
+	for _, tt := range tests {
+		input, err := hex.DecodeString(tt.input)
+		if err != nil {
+			t.Fatal(err)
 		}
-		if !strings.Contains(err.Error(), wantErrText) {
-			t.Errorf(
-				"%s: expected error containing %q, got: %v",
-				path, wantErrText, err,
-			)
+		for name, decode := range map[string]func([]byte) (lang.LanguageVersion, error){
+			"DecodeDeBruijn": func(b []byte) (lang.LanguageVersion, error) {
+				p, err := DecodeDeBruijn(b)
+				if err != nil {
+					return lang.LanguageVersion{}, err
+				}
+				return p.Version, nil
+			},
+			"Decode[NamedDeBruijn]": func(b []byte) (lang.LanguageVersion, error) {
+				p, err := Decode[NamedDeBruijn](b)
+				if err != nil {
+					return lang.LanguageVersion{}, err
+				}
+				return p.Version, nil
+			},
+		} {
+			got, err := decode(input)
+			if err != nil {
+				t.Fatalf("%s %s: %v", tt.name, name, err)
+			}
+			if got != tt.want {
+				t.Fatalf("%s %s: version %v, want %v", tt.name, name, got, tt.want)
+			}
+		}
+		if tt.want != (lang.LanguageVersion{1, 0, 0}) {
+			if err := ValidateTermVersionForExecution(tt.want, ProgramContext{
+				LedgerLanguage: lang.LanguageVersionV3,
+				ProtocolMajor:  10,
+			}); err == nil {
+				t.Fatalf("%s: version %v accepted for execution", tt.name, tt.want)
+			}
 		}
 	}
 }

@@ -1922,7 +1922,12 @@ type checkedThreeArgument interface {
 
 func costThree(arg ThreeArgument, x, y, z ExMem) (int64, bool) {
 	if checked, ok := arg.(checkedThreeArgument); ok {
-		return checked.costThreeChecked(x, y, z)
+		cost, ok := checked.costThreeChecked(x, y, z)
+		if !ok {
+			// The reference's SatInt costing arithmetic saturates.
+			return math.MaxInt64, true
+		}
+		return cost, true
 	}
 
 	cost := arg.CostThree(x, y, z)

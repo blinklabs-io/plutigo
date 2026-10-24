@@ -21,10 +21,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"sort"
 	"strconv"
-	"strings"
+	"sync/atomic"
 )
 
 // JSON (de)serialization for PlutusData types.
@@ -37,6 +38,9 @@ import (
 
 // MarshalJSON implements json.Marshaler for Integer.
 func (i Integer) MarshalJSON() ([]byte, error) {
+	if i.Inner == nil {
+		return nil, ErrNilInteger
+	}
 	return json.Marshal(map[string]*big.Int{"int": i.Inner})
 }
 
@@ -67,16 +71,7 @@ func (b *ByteString) UnmarshalJSON(data []byte) error {
 
 // MarshalJSON implements json.Marshaler for List.
 func (l List) MarshalJSON() ([]byte, error) {
-	return marshalWith(l.appendJSON)
-}
-
-func (l List) appendJSON(buf *bytes.Buffer) error {
-	buf.WriteString(`{"list":`)
-	if err := appendJSONArray(buf, l.Items, "List item"); err != nil {
-		return err
-	}
-	buf.WriteByte('}')
-	return nil
+	return marshalPlutusDataJSON(l)
 }
 
 // UnmarshalJSON implements json.Unmarshaler for List.
@@ -91,27 +86,7 @@ func (l *List) UnmarshalJSON(data []byte) error {
 
 // MarshalJSON implements json.Marshaler for Map.
 func (m Map) MarshalJSON() ([]byte, error) {
-	return marshalWith(m.appendJSON)
-}
-
-func (m Map) appendJSON(buf *bytes.Buffer) error {
-	buf.WriteString(`{"map":[`)
-	for i, pair := range m.Pairs {
-		if i > 0 {
-			buf.WriteByte(',')
-		}
-		buf.WriteString(`{"k":`)
-		if err := appendPlutusDataJSON(buf, pair[0]); err != nil {
-			return fmt.Errorf("failed to marshal Map key %d: %w", i, err)
-		}
-		buf.WriteString(`,"v":`)
-		if err := appendPlutusDataJSON(buf, pair[1]); err != nil {
-			return fmt.Errorf("failed to marshal Map value %d: %w", i, err)
-		}
-		buf.WriteByte('}')
-	}
-	buf.WriteString(`]}`)
-	return nil
+	return marshalPlutusDataJSON(m)
 }
 
 // UnmarshalJSON implements json.Unmarshaler for Map.
@@ -126,18 +101,7 @@ func (m *Map) UnmarshalJSON(data []byte) error {
 
 // MarshalJSON implements json.Marshaler for Constr.
 func (c Constr) MarshalJSON() ([]byte, error) {
-	return marshalWith(c.appendJSON)
-}
-
-func (c Constr) appendJSON(buf *bytes.Buffer) error {
-	buf.WriteString(`{"constructor":`)
-	buf.WriteString(constrTagString(c.Tag))
-	buf.WriteString(`,"fields":`)
-	if err := appendJSONArray(buf, c.Fields, "Constr field"); err != nil {
-		return err
-	}
-	buf.WriteByte('}')
-	return nil
+	return marshalPlutusDataJSON(c)
 }
 
 // UnmarshalJSON implements json.Unmarshaler for Constr.
@@ -203,65 +167,238 @@ func marshalPlutusDataJSON(pd PlutusData) (json.RawMessage, error) {
 	return buf.Bytes(), nil
 }
 
+// jsonFrame writes the children of one container: array items separated by
+// commas, or map pairs as {"k":key,"v":value} objects, then "]}".
+type jsonFrame struct {
+	children childFrame
+	isMap    bool
+	label    string
+}
+
 // appendPlutusDataJSON writes pd to buf. Containers write their children
 // into the same buffer, so the work is linear in the size of the output;
 // returning each child as a json.RawMessage would make json.Marshal rescan
-// the whole encoded subtree at every nesting level.
+// the whole encoded subtree at every nesting level. The walk uses an explicit
+// stack, so any nesting depth is safe.
 func appendPlutusDataJSON(buf *bytes.Buffer, pd PlutusData) error {
+	var stackBuf [16]jsonFrame
+	stack := stackBuf[:0]
+	for {
+		frame, err := appendJSONShallow(buf, pd)
+		if err != nil {
+			if n := len(stack); n > 0 {
+				top := &stack[n-1]
+				index := top.children.next - 1
+				if top.isMap {
+					part := "key"
+					if index%2 == 1 {
+						part = "value"
+					}
+					return fmt.Errorf("failed to marshal Map %s %d: %w", part, index/2, err)
+				}
+				return fmt.Errorf("failed to marshal %s %d: %w", top.label, index, err)
+			}
+			return err
+		}
+		if frame != nil {
+			stack = append(stack, *frame)
+		}
+		for {
+			if len(stack) == 0 {
+				return nil
+			}
+			top := &stack[len(stack)-1]
+			index := top.children.next
+			var more bool
+			if pd, more = top.children.nextChild(); more {
+				switch {
+				case !top.isMap:
+					if index > 0 {
+						buf.WriteByte(',')
+					}
+				case index%2 == 0:
+					if index > 0 {
+						buf.WriteString(`},`)
+					}
+					buf.WriteString(`{"k":`)
+				default:
+					buf.WriteString(`,"v":`)
+				}
+				break
+			}
+			if top.isMap && index > 0 {
+				buf.WriteByte('}')
+			}
+			buf.WriteString(`]}`)
+			stack = stack[:len(stack)-1]
+		}
+	}
+}
+
+// appendJSONShallow writes pd, or for a container its opening text, and
+// returns the frame that writes the rest of the container.
+func appendJSONShallow(buf *bytes.Buffer, pd PlutusData) (*jsonFrame, error) {
 	switch v := pd.(type) {
 	case *List:
 		if v != nil {
-			return v.appendJSON(buf)
+			return openListJSON(buf, v), nil
 		}
 	case List:
-		return v.appendJSON(buf)
+		return openListJSON(buf, &v), nil
 	case *Map:
 		if v != nil {
-			return v.appendJSON(buf)
+			return openMapJSON(buf, v), nil
 		}
 	case Map:
-		return v.appendJSON(buf)
+		return openMapJSON(buf, &v), nil
 	case *Constr:
 		if v != nil {
-			return v.appendJSON(buf)
+			return openConstrJSON(buf, v), nil
 		}
 	case Constr:
-		return v.appendJSON(buf)
-	case *Integer, Integer, *ByteString, ByteString:
+		return openConstrJSON(buf, &v), nil
+	case *Integer:
+		if v != nil && v.Inner != nil {
+			appendIntegerJSON(buf, v.Inner)
+			return nil, nil
+		}
+	case Integer:
+		if v.Inner != nil {
+			appendIntegerJSON(buf, v.Inner)
+			return nil, nil
+		}
+	case *ByteString:
+		if v != nil {
+			appendByteStringJSON(buf, v.Inner)
+			return nil, nil
+		}
+	case ByteString:
+		appendByteStringJSON(buf, v.Inner)
+		return nil, nil
 	default:
-		return fmt.Errorf("unknown PlutusData type: %T", pd)
+		return nil, fmt.Errorf("unknown PlutusData type: %T", pd)
 	}
 	raw, err := json.Marshal(pd)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	buf.Write(raw)
-	return nil
+	return nil, nil
 }
 
-func appendJSONArray(buf *bytes.Buffer, items []PlutusData, label string) error {
-	buf.WriteByte('[')
-	for i, item := range items {
-		if i > 0 {
-			buf.WriteByte(',')
-		}
-		if err := appendPlutusDataJSON(buf, item); err != nil {
-			return fmt.Errorf("failed to marshal %s %d: %w", label, i, err)
-		}
+// appendIntegerJSON writes {"int":n}, as Integer.MarshalJSON does.
+func appendIntegerJSON(buf *bytes.Buffer, n *big.Int) {
+	buf.WriteString(`{"int":`)
+	buf.Write(n.Append(buf.AvailableBuffer(), 10))
+	buf.WriteByte('}')
+}
+
+// appendByteStringJSON writes {"bytes":"<hex>"}, as ByteString.MarshalJSON
+// does.
+func appendByteStringJSON(buf *bytes.Buffer, b []byte) {
+	buf.WriteString(`{"bytes":"`)
+	buf.Write(hex.AppendEncode(buf.AvailableBuffer(), b))
+	buf.WriteString(`"}`)
+}
+
+func openListJSON(buf *bytes.Buffer, l *List) *jsonFrame {
+	buf.WriteString(`{"list":[`)
+	return &jsonFrame{children: childFrame{items: l.Items}, label: "List item"}
+}
+
+func openMapJSON(buf *bytes.Buffer, m *Map) *jsonFrame {
+	buf.WriteString(`{"map":[`)
+	return &jsonFrame{children: childFrame{pairs: m.Pairs}, isMap: true}
+}
+
+func openConstrJSON(buf *bytes.Buffer, c *Constr) *jsonFrame {
+	buf.WriteString(`{"constructor":`)
+	buf.WriteString(constrTagString(c.Tag))
+	buf.WriteString(`,"fields":[`)
+	return &jsonFrame{children: childFrame{items: c.Fields}, label: "Constr field"}
+}
+
+const (
+	// DefaultMaxJSONInputSize is the default maximum size in bytes of a JSON
+	// document accepted by DecodeJSON and the JSON unmarshalers. The node
+	// count limit alone does not bound memory: a document within the node
+	// limit can still be arbitrarily large (long hex strings, whitespace). A
+	// MaxDecodeNodes-node document in canonical form is at most ~40 MB (for
+	// example one million `{"constructor":0,"fields":[]}` values), so 64 MiB
+	// accepts every unpadded document within the node limit, while keeping
+	// the parse tree (about 64 bytes per node) bounded.
+	DefaultMaxJSONInputSize = 64 << 20
+
+	// maxJSONInputSizeLimit is the largest value SetMaxJSONInputSize accepts;
+	// the parse tree stores 32-bit offsets into the input.
+	maxJSONInputSizeLimit = math.MaxInt32
+
+	// MaxJSONIntegerDigits is the maximum number of decimal digits (excluding
+	// a leading minus sign) accepted for a single "int" or "constructor"
+	// value. big.Int decimal parsing is quadratic: 400k digits takes about a
+	// second. 100,000 digits is about 41 KB of magnitude, more than twice the
+	// 16 KiB Cardano maximum transaction size (about 39,500 digits) that any
+	// on-chain PlutusData integer must fit in, and parses in well under
+	// 100 ms.
+	MaxJSONIntegerDigits = 100_000
+
+	// MaxJSONTotalIntegerDigits bounds the sum of digits over all integers
+	// in one document, so many large integers cannot multiply the
+	// per-integer cost.
+	MaxJSONTotalIntegerDigits = 1_000_000
+)
+
+var maxJSONInputSize atomic.Int64
+
+func init() {
+	maxJSONInputSize.Store(DefaultMaxJSONInputSize)
+}
+
+// MaxJSONInputSize returns the maximum JSON document size in bytes accepted
+// by the JSON decoders.
+func MaxJSONInputSize() int {
+	return int(maxJSONInputSize.Load())
+}
+
+// SetMaxJSONInputSize changes the maximum JSON document size in bytes
+// accepted by the JSON decoders. size must be between 1 and math.MaxInt32.
+func SetMaxJSONInputSize(size int) error {
+	if size < 1 || size > maxJSONInputSizeLimit {
+		return fmt.Errorf(
+			"JSON input size limit must be between 1 and %d: %d",
+			maxJSONInputSizeLimit,
+			size,
+		)
 	}
-	buf.WriteByte(']')
+	maxJSONInputSize.Store(int64(size))
 	return nil
 }
 
-// discriminatorKeys are the top-level JSON keys that identify each PlutusData variant.
-var discriminatorKeys = []string{"int", "bytes", "list", "map", "constructor"}
+// JSONLimitError reports that a PlutusData JSON document exceeded a size
+// limit: its input size or the digit count of an integer.
+type JSONLimitError struct {
+	Limit  string
+	Max    int
+	Actual int
+}
+
+func (e *JSONLimitError) Error() string {
+	return fmt.Sprintf(
+		"PlutusData JSON %s limit exceeded: %d > %d",
+		e.Limit,
+		e.Actual,
+		e.Max,
+	)
+}
 
 // jsonDecodeState bounds recursion depth and total node count while decoding
-// untrusted PlutusData JSON, mirroring the CBOR decoder's limits.
+// untrusted PlutusData JSON.
 type jsonDecodeState struct {
 	depth    int
 	nodes    int
 	maxDepth int
+	digits   int
+	slab     jsonSlab
 }
 
 type jsonDepthLimitError struct {
@@ -348,26 +485,151 @@ const (
 	jsonKindObject
 )
 
-// jsonEntry is a single key/value member of a JSON object. Object members
-// are kept in order of appearance, including duplicate keys, so the decoder
-// can reproduce encoding/json's last-occurrence-wins map semantics as well
-// as the Map pair node accounting for repeated "k"/"v" keys.
-type jsonEntry struct {
-	key string
-	val jsonValue
+const (
+	jsonChunkShift = 12
+	jsonChunkSize  = 1 << jsonChunkShift
+)
+
+// jsonTree is a JSON syntax tree stored in a single flat arena. Every value,
+// including each object member, is one fixed-size pointer-free jsonValue
+// that links to its first child and next sibling by arena index, so a
+// document costs about 28 bytes per value with no per-value slice headers or
+// key strings, and the garbage collector never scans it.
+type jsonTree struct {
+	chunks [][]jsonValue // node arena; node 0 is an unused sentinel meaning "none"
+	size   int           // number of nodes in use, including the sentinel
+	keys   []string      // key table; ids 0..jsonKeyV are well-known
+	keyIDs map[string]uint32
+	root   uint32
 }
 
-// jsonValue is a JSON value parsed in a single pass over the input. start
-// and end are byte offsets of the raw value within the original input, so
-// scalar leaves can be handed to encoding/json verbatim without rescanning
-// any enclosing structure.
-type jsonValue struct {
-	kind    jsonValueKind
-	start   int
-	end     int
-	items   []jsonValue // kind == jsonKindArray
-	entries []jsonEntry // kind == jsonKindObject
+// Well-known object key ids. jsonKeyNone is the key of array items and the
+// root value; real keys always have a non-zero id.
+const (
+	jsonKeyNone uint32 = iota
+	jsonKeyInt
+	jsonKeyBytes
+	jsonKeyList
+	jsonKeyMap
+	jsonKeyConstructor
+	jsonKeyFields
+	jsonKeyK
+	jsonKeyV
+	jsonKeyFirstDynamic
+)
+
+var jsonWellKnownKeys = [...]string{
+	jsonKeyNone:        "",
+	jsonKeyInt:         "int",
+	jsonKeyBytes:       "bytes",
+	jsonKeyList:        "list",
+	jsonKeyMap:         "map",
+	jsonKeyConstructor: "constructor",
+	jsonKeyFields:      "fields",
+	jsonKeyK:           "k",
+	jsonKeyV:           "v",
 }
+
+// jsonValue is a node of a jsonTree. start and end are byte offsets of the
+// raw value within the original input, so scalar leaves can be handed to
+// encoding/json verbatim without rescanning any enclosing structure. Object
+// members are the children of an object node, in order of appearance
+// including duplicate keys, so the decoder can reproduce encoding/json's
+// last-occurrence-wins map semantics as well as the Map pair node accounting
+// for repeated "k"/"v" keys. A member's key is the key table id in key.
+type jsonValue struct {
+	start uint32
+	end   uint32
+	key   uint32 // key table id of this value as an object member
+	first uint32 // first child index (arrays and objects)
+	next  uint32 // next sibling index
+	count uint32 // number of children
+	kind  jsonValueKind
+}
+
+func newJSONTree() *jsonTree {
+	t := &jsonTree{
+		keys: make([]string, len(jsonWellKnownKeys), 16),
+	}
+	t.add(jsonValue{}) // sentinel
+	copy(t.keys, jsonWellKnownKeys[:])
+	return t
+}
+
+// add appends a node and returns its index.
+func (t *jsonTree) add(v jsonValue) uint32 {
+	if t.size>>jsonChunkShift == len(t.chunks) {
+		// Chunks are fixed-size and never reallocated, so growing the tree
+		// neither copies nodes nor leaves garbage behind, and pointers
+		// returned by node stay valid.
+		t.chunks = append(t.chunks, make([]jsonValue, jsonChunkSize))
+	}
+	idx := t.size
+	t.size++
+	t.chunks[idx>>jsonChunkShift][idx&(jsonChunkSize-1)] = v
+	return uint32(idx)
+}
+
+// node returns a pointer to node i.
+func (t *jsonTree) node(i uint32) *jsonValue {
+	return &t.chunks[i>>jsonChunkShift][i&(jsonChunkSize-1)]
+}
+
+// appendChild links child to the end of parent's child list; last is the
+// index of parent's current last child, or 0 when it has none.
+func (t *jsonTree) appendChild(parent, last, child uint32) {
+	if last == 0 {
+		t.node(parent).first = child
+	} else {
+		t.node(last).next = child
+	}
+	t.node(parent).count++
+}
+
+// keyIDBytes returns the key table id for key without allocating when the
+// key is well known or has been seen before.
+func (t *jsonTree) keyIDBytes(key []byte) uint32 {
+	switch string(key) {
+	case "int":
+		return jsonKeyInt
+	case "bytes":
+		return jsonKeyBytes
+	case "list":
+		return jsonKeyList
+	case "map":
+		return jsonKeyMap
+	case "constructor":
+		return jsonKeyConstructor
+	case "fields":
+		return jsonKeyFields
+	case "k":
+		return jsonKeyK
+	case "v":
+		return jsonKeyV
+	}
+	if id, ok := t.keyIDs[string(key)]; ok {
+		return id
+	}
+	return t.addKey(string(key))
+}
+
+// keyIDString is keyIDBytes for a string.
+func (t *jsonTree) keyIDString(key string) uint32 {
+	return t.keyIDBytes([]byte(key))
+}
+
+func (t *jsonTree) addKey(key string) uint32 {
+	if t.keyIDs == nil {
+		t.keyIDs = make(map[string]uint32)
+	}
+	id := uint32(len(t.keys))
+	t.keys = append(t.keys, key)
+	t.keyIDs[key] = id
+	return id
+}
+
+// keyName returns the key string of the member v.
+func (t *jsonTree) keyName(v jsonValue) string { return t.keys[v.key] }
 
 // unmarshalPlutusDataJSON unmarshals JSON into the appropriate PlutusData
 // type by inspecting which key is present in the JSON object. The input is
@@ -375,159 +637,161 @@ type jsonValue struct {
 // are built from that tree, so decoding does O(size) work instead of
 // re-parsing the remaining subtree at every nesting level.
 func unmarshalPlutusDataJSON(data json.RawMessage) (PlutusData, error) {
+	if limit := MaxJSONInputSize(); len(data) > limit {
+		return nil, &JSONLimitError{
+			Limit:  "input size",
+			Max:    limit,
+			Actual: len(data),
+		}
+	}
 	maxDepth := MaxDecodeNestingDepth()
-	root, err := parsePlutusDataJSONTree(data, maxDepth)
+	// The hand-written parser is used for every input: it allocates no
+	// per-token strings or numbers, unlike encoding/json's token stream, and
+	// its errors are kept identical to the stream parser's (see
+	// json_deep_parser_test.go).
+	tree, err := parseDeepPlutusDataJSONTree(data, maxDepth)
 	if err != nil {
 		return nil, fmt.Errorf("PlutusData JSON must be an object: %w", err)
 	}
 	return decodePlutusDataJSONValue(
 		data,
-		root,
+		tree,
+		*tree.node(tree.root),
 		&jsonDecodeState{maxDepth: maxDepth},
 		false,
 	)
-}
-
-// parsePlutusDataJSONTree parses data into a jsonValue tree in a single
-// pass, rejecting malformed JSON and trailing non-whitespace data exactly
-// like json.Unmarshal does.
-func parsePlutusDataJSONTree(data []byte, maxDepth int) (jsonValue, error) {
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.UseNumber()
-	root, err := parsePlutusDataJSONValue(
-		dec,
-		data,
-		&jsonParseState{maxDepth: maxDepth},
-	)
-	if err != nil {
-		// encoding/json limits its own token nesting independently of the
-		// PlutusData limit. Keep accepting structurally valid detailed-schema
-		// values up to our own bound when that implementation limit is reached.
-		if strings.Contains(err.Error(), "exceeded max depth") {
-			return parseDeepPlutusDataJSONTree(data, maxDepth)
-		}
-		return jsonValue{}, normalizeJSONStreamError(err)
-	}
-	if err := checkJSONTrailingData(data, dec.InputOffset()); err != nil {
-		return jsonValue{}, err
-	}
-	return root, nil
 }
 
 type deepJSONParser struct {
 	data  []byte
 	pos   int
 	state jsonParseState
+	tree  *jsonTree
 }
 
-func parseDeepPlutusDataJSONTree(data []byte, maxDepth int) (jsonValue, error) {
-	p := deepJSONParser{data: data, state: jsonParseState{maxDepth: maxDepth}}
-	root, err := p.parseValue()
+func parseDeepPlutusDataJSONTree(data []byte, maxDepth int) (*jsonTree, error) {
+	p := deepJSONParser{
+		data:  data,
+		state: jsonParseState{maxDepth: maxDepth},
+		tree:  newJSONTree(),
+	}
+	root, err := p.parseValue(jsonKeyNone)
 	if err != nil {
-		return jsonValue{}, normalizeJSONStreamError(err)
+		return nil, normalizeJSONStreamError(err)
 	}
 	p.skipSpace()
 	if p.pos != len(data) {
-		return jsonValue{}, fmt.Errorf(
+		return nil, fmt.Errorf(
 			"invalid character %s after top-level value",
 			jsonQuoteChar(data[p.pos]),
 		)
 	}
-	return root, nil
+	p.tree.root = root
+	return p.tree, nil
 }
 
-func (p *deepJSONParser) parseValue() (jsonValue, error) {
+// parseValue parses one value whose object-member key id is key and returns
+// its arena index.
+func (p *deepJSONParser) parseValue(key uint32) (uint32, error) {
 	if err := p.state.enterValue(); err != nil {
-		return jsonValue{}, err
+		return 0, err
 	}
 	defer p.state.leaveValue()
 	p.skipSpace()
-	start := p.pos
-	if start == len(p.data) {
-		return jsonValue{}, io.ErrUnexpectedEOF
+	start := uint32(p.pos)
+	if int(start) == len(p.data) {
+		return 0, io.ErrUnexpectedEOF
 	}
 	switch p.data[p.pos] {
 	case '{':
 		p.pos++
 		p.skipSpace()
-		entries := make([]jsonEntry, 0)
+		idx := p.tree.add(jsonValue{kind: jsonKindObject, start: start, key: key})
 		if p.consume('}') {
-			return jsonValue{kind: jsonKindObject, start: start, end: p.pos, entries: entries}, nil
+			p.tree.node(idx).end = uint32(p.pos)
+			return idx, nil
 		}
+		var last uint32
 		for {
-			key, err := p.parseString()
+			memberKey, err := p.parseKey()
 			if err != nil {
-				return jsonValue{}, err
+				return 0, err
 			}
 			p.skipSpace()
 			if !p.consume(':') {
 				if p.pos == len(p.data) {
-					return jsonValue{}, io.ErrUnexpectedEOF
+					return 0, io.ErrUnexpectedEOF
 				}
-				return jsonValue{}, errors.New("invalid character after object key")
+				return 0, errors.New("invalid character after object key")
 			}
-			value, err := p.parseValue()
+			child, err := p.parseValue(memberKey)
 			if err != nil {
-				return jsonValue{}, err
+				return 0, err
 			}
-			entries = append(entries, jsonEntry{key: internJSONKey(key), val: value})
+			p.tree.appendChild(idx, last, child)
+			last = child
 			p.skipSpace()
 			if p.consume('}') {
 				break
 			}
 			if !p.consume(',') {
 				if p.pos == len(p.data) {
-					return jsonValue{}, io.ErrUnexpectedEOF
+					return 0, io.ErrUnexpectedEOF
 				}
-				return jsonValue{}, errors.New("invalid character after object value")
+				return 0, errors.New("invalid character after object value")
 			}
 			p.skipSpace()
 		}
-		return jsonValue{kind: jsonKindObject, start: start, end: p.pos, entries: entries}, nil
+		p.tree.node(idx).end = uint32(p.pos)
+		return idx, nil
 	case '[':
 		p.pos++
 		p.skipSpace()
-		items := make([]jsonValue, 0)
+		idx := p.tree.add(jsonValue{kind: jsonKindArray, start: start, key: key})
 		if p.consume(']') {
-			return jsonValue{kind: jsonKindArray, start: start, end: p.pos, items: items}, nil
+			p.tree.node(idx).end = uint32(p.pos)
+			return idx, nil
 		}
+		var last uint32
 		for {
-			item, err := p.parseValue()
+			child, err := p.parseValue(jsonKeyNone)
 			if err != nil {
-				return jsonValue{}, err
+				return 0, err
 			}
-			items = append(items, item)
+			p.tree.appendChild(idx, last, child)
+			last = child
 			p.skipSpace()
 			if p.consume(']') {
 				break
 			}
 			if !p.consume(',') {
 				if p.pos == len(p.data) {
-					return jsonValue{}, io.ErrUnexpectedEOF
+					return 0, io.ErrUnexpectedEOF
 				}
-				return jsonValue{}, errors.New("invalid character after array value")
+				return 0, errors.New("invalid character after array value")
 			}
 		}
-		return jsonValue{kind: jsonKindArray, start: start, end: p.pos, items: items}, nil
+		p.tree.node(idx).end = uint32(p.pos)
+		return idx, nil
 	case '"':
-		if _, err := p.parseString(); err != nil {
-			return jsonValue{}, err
+		if _, _, err := p.scanString(); err != nil {
+			return 0, err
 		}
-		return jsonValue{kind: jsonKindString, start: start, end: p.pos}, nil
+		return p.tree.add(jsonValue{kind: jsonKindString, start: start, end: uint32(p.pos), key: key}), nil
 	case 't':
-		return p.parseLiteral("true", jsonKindBool, start)
+		return p.parseLiteral("true", jsonKindBool, start, key)
 	case 'f':
-		return p.parseLiteral("false", jsonKindBool, start)
+		return p.parseLiteral("false", jsonKindBool, start, key)
 	case 'n':
-		return p.parseLiteral("null", jsonKindNull, start)
+		return p.parseLiteral("null", jsonKindNull, start, key)
 	default:
 		if p.data[p.pos] == '-' || p.data[p.pos] >= '0' && p.data[p.pos] <= '9' {
 			if err := p.parseNumber(); err != nil {
-				return jsonValue{}, err
+				return 0, err
 			}
-			return jsonValue{kind: jsonKindNumber, start: start, end: p.pos}, nil
+			return p.tree.add(jsonValue{kind: jsonKindNumber, start: start, end: uint32(p.pos), key: key}), nil
 		}
-		return jsonValue{}, fmt.Errorf("invalid character %s looking for beginning of value", jsonQuoteChar(p.data[p.pos]))
+		return 0, fmt.Errorf("invalid character %s looking for beginning of value", jsonQuoteChar(p.data[p.pos]))
 	}
 }
 
@@ -535,37 +799,66 @@ func (p *deepJSONParser) parseValue() (jsonValue, error) {
 // ends where a valid continuation could still follow, so the fallback
 // classifies truncated and malformed input the same way json.Decoder does.
 
-func (p *deepJSONParser) parseString() (string, error) {
-	if p.pos == len(p.data) {
-		return "", io.ErrUnexpectedEOF
-	}
-	if p.data[p.pos] != '"' {
-		return "", fmt.Errorf(
-			"invalid character %s looking for beginning of object key string",
-			jsonQuoteChar(p.data[p.pos]),
-		)
-	}
+// parseKey scans an object key string and returns its key table id.
+func (p *deepJSONParser) parseKey() (uint32, error) {
 	start := p.pos
+	if p.pos < len(p.data) && p.data[p.pos] == '"' {
+		rawStart, plain, err := p.scanString()
+		if err != nil {
+			return 0, err
+		}
+		if plain {
+			return p.tree.keyIDBytes(p.data[rawStart : p.pos-1]), nil
+		}
+		var value string
+		if err := json.Unmarshal(p.data[start:p.pos], &value); err != nil {
+			return 0, err
+		}
+		return p.tree.keyIDString(value), nil
+	}
+	if p.pos == len(p.data) {
+		return 0, io.ErrUnexpectedEOF
+	}
+	return 0, fmt.Errorf(
+		"invalid character %s looking for beginning of object key string",
+		jsonQuoteChar(p.data[p.pos]),
+	)
+}
+
+// scanString validates the string literal at the current position, which
+// must be a '"', and advances past it. rawStart is the offset of the first
+// byte after the opening quote and plain reports whether the string is
+// plain ASCII without escapes, in which case its value is exactly
+// data[rawStart:p.pos-1].
+func (p *deepJSONParser) scanString() (rawStart int, plain bool, err error) {
 	p.pos++
+	rawStart = p.pos
+	// Fast path: a plain ASCII string without escapes needs no unquoting.
+	for i := p.pos; i < len(p.data); i++ {
+		c := p.data[i]
+		if c == '"' {
+			p.pos = i + 1
+			return rawStart, true, nil
+		}
+		if c == '\\' || c < 0x20 || c >= 0x80 {
+			break
+		}
+	}
 	for p.pos < len(p.data) {
 		c := p.data[p.pos]
 		p.pos++
 		switch {
 		case c == '"':
-			var value string
-			if err := json.Unmarshal(p.data[start:p.pos], &value); err != nil {
-				return "", err
-			}
-			return value, nil
+			return rawStart, false, nil
 		case c == '\\':
 			if err := p.skipEscape(); err != nil {
-				return "", err
+				return 0, false, err
 			}
 		case c < 0x20:
-			return "", errors.New("invalid character in string")
+			return 0, false, errors.New("invalid character in string")
 		}
 	}
-	return "", io.ErrUnexpectedEOF
+	return 0, false, io.ErrUnexpectedEOF
 }
 
 // skipEscape advances past the escape sequence following a backslash.
@@ -646,13 +939,13 @@ func (p *deepJSONParser) requireDigits(context string) error {
 
 func isJSONDigit(c byte) bool { return c >= '0' && c <= '9' }
 
-func (p *deepJSONParser) parseLiteral(literal string, kind jsonValueKind, start int) (jsonValue, error) {
+func (p *deepJSONParser) parseLiteral(literal string, kind jsonValueKind, start, key uint32) (uint32, error) {
 	for i := range len(literal) {
 		if p.pos == len(p.data) {
-			return jsonValue{}, io.ErrUnexpectedEOF
+			return 0, io.ErrUnexpectedEOF
 		}
 		if p.data[p.pos] != literal[i] {
-			return jsonValue{}, fmt.Errorf(
+			return 0, fmt.Errorf(
 				"invalid character %s in literal %s (expecting %s)",
 				jsonQuoteChar(p.data[p.pos]),
 				literal,
@@ -661,7 +954,7 @@ func (p *deepJSONParser) parseLiteral(literal string, kind jsonValueKind, start 
 		}
 		p.pos++
 	}
-	return jsonValue{kind: kind, start: start, end: p.pos}, nil
+	return p.tree.add(jsonValue{kind: kind, start: start, end: uint32(p.pos), key: key}), nil
 }
 
 func (p *deepJSONParser) consume(expected byte) bool {
@@ -683,136 +976,6 @@ func (p *deepJSONParser) skipSpace() {
 	}
 }
 
-func parsePlutusDataJSONValue(
-	dec *json.Decoder,
-	data []byte,
-	st *jsonParseState,
-) (jsonValue, error) {
-	if err := st.enterValue(); err != nil {
-		return jsonValue{}, err
-	}
-	defer st.leaveValue()
-
-	start := jsonValueStart(data, dec.InputOffset())
-	tok, err := dec.Token()
-	if err != nil {
-		return jsonValue{}, err
-	}
-	switch t := tok.(type) {
-	case json.Delim:
-		switch t {
-		case '[':
-			var items []jsonValue
-			for dec.More() {
-				item, err := parsePlutusDataJSONValue(dec, data, st)
-				if err != nil {
-					return jsonValue{}, err
-				}
-				items = append(items, item)
-			}
-			// Consume the closing ']'.
-			if _, err := dec.Token(); err != nil {
-				return jsonValue{}, err
-			}
-			return jsonValue{
-				kind:  jsonKindArray,
-				start: start,
-				end:   int(dec.InputOffset()),
-				items: items,
-			}, nil
-		case '{':
-			var entries []jsonEntry
-			for dec.More() {
-				keyTok, err := dec.Token()
-				if err != nil {
-					return jsonValue{}, err
-				}
-				key, ok := keyTok.(string)
-				if !ok {
-					// Object keys are always strings in well-formed JSON.
-					return jsonValue{}, fmt.Errorf(
-						"unexpected JSON object key token %v",
-						keyTok,
-					)
-				}
-				val, err := parsePlutusDataJSONValue(dec, data, st)
-				if err != nil {
-					return jsonValue{}, err
-				}
-				entries = append(entries, jsonEntry{
-					key: internJSONKey(key),
-					val: val,
-				})
-			}
-			// Consume the closing '}'.
-			if _, err := dec.Token(); err != nil {
-				return jsonValue{}, err
-			}
-			return jsonValue{
-				kind:    jsonKindObject,
-				start:   start,
-				end:     int(dec.InputOffset()),
-				entries: entries,
-			}, nil
-		default:
-			// Unreachable: closing delimiters are consumed above.
-			return jsonValue{}, fmt.Errorf("unexpected JSON delimiter %v", t)
-		}
-	case nil:
-		return jsonValue{kind: jsonKindNull, start: start, end: int(dec.InputOffset())}, nil
-	case bool:
-		return jsonValue{kind: jsonKindBool, start: start, end: int(dec.InputOffset())}, nil
-	case json.Number:
-		return jsonValue{kind: jsonKindNumber, start: start, end: int(dec.InputOffset())}, nil
-	case string:
-		return jsonValue{kind: jsonKindString, start: start, end: int(dec.InputOffset())}, nil
-	default:
-		// Unreachable: the cases above cover every token type.
-		return jsonValue{}, fmt.Errorf("unexpected JSON token %v", tok)
-	}
-}
-
-// jsonValueStart returns the offset of the first byte of the next JSON
-// value at or after from, skipping insignificant whitespace and the ':' or
-// ',' separators that json.Decoder consumes silently between tokens.
-func jsonValueStart(data []byte, from int64) int {
-	i := int(from)
-	for i < len(data) {
-		switch data[i] {
-		case ' ', '\t', '\r', '\n', ',', ':':
-			i++
-		default:
-			return i
-		}
-	}
-	return i
-}
-
-// internJSONKey returns a static copy of well-known object keys so large
-// documents do not retain one allocation per repeated key.
-func internJSONKey(key string) string {
-	switch key {
-	case "int":
-		return "int"
-	case "bytes":
-		return "bytes"
-	case "list":
-		return "list"
-	case "map":
-		return "map"
-	case "constructor":
-		return "constructor"
-	case "fields":
-		return "fields"
-	case "k":
-		return "k"
-	case "v":
-		return "v"
-	default:
-		return key
-	}
-}
-
 // normalizeJSONStreamError maps json.Decoder end-of-input errors to the
 // message json.Unmarshal reports for truncated documents.
 func normalizeJSONStreamError(err error) error {
@@ -820,22 +983,6 @@ func normalizeJSONStreamError(err error) error {
 		return errors.New("unexpected end of JSON input")
 	}
 	return err
-}
-
-// checkJSONTrailingData rejects non-whitespace bytes after the top-level
-// value, matching json.Unmarshal's behavior and error message.
-func checkJSONTrailingData(data []byte, from int64) error {
-	for i := int(from); i < len(data); i++ {
-		switch data[i] {
-		case ' ', '\t', '\r', '\n':
-		default:
-			return fmt.Errorf(
-				"invalid character %s after top-level value",
-				jsonQuoteChar(data[i]),
-			)
-		}
-	}
-	return nil
 }
 
 // jsonQuoteChar formats c as a quoted character literal the same way
@@ -856,8 +1003,139 @@ func jsonRawSpan(data []byte, v jsonValue) json.RawMessage {
 	return json.RawMessage(data[v.start:v.end])
 }
 
+// jsonSlabSize is the number of values allocated at once by jsonSlab.
+const jsonSlabSize = 256
+
+// jsonSlab hands out Integer, big.Int, big.Word and ByteString values from
+// chunks, replacing several tiny allocations per decoded integer with one
+// per jsonSlabSize values. Chunks are retained as long as any value from
+// them is, which is bounded by the size of the decoded document.
+type jsonSlab struct {
+	integers []Integer
+	bigs     []big.Int
+	words    []big.Word
+	bytes    []ByteString
+}
+
+// slabNext returns the next free element of *chunk, starting a new chunk
+// when it is used up.
+func slabNext[T any](chunk *[]T) *T {
+	if len(*chunk) == 0 {
+		*chunk = make([]T, jsonSlabSize)
+	}
+	v := &(*chunk)[0]
+	*chunk = (*chunk)[1:]
+	return v
+}
+
+func (s *jsonSlab) newInteger(n *big.Int) *Integer {
+	i := slabNext(&s.integers)
+	i.Inner = n
+	return i
+}
+
+func (s *jsonSlab) newByteString(b []byte) *ByteString {
+	bs := slabNext(&s.bytes)
+	bs.Inner = b
+	return bs
+}
+
+// newBigFromWord returns a big.Int holding w, negated if neg, backed by slab
+// memory. The magnitude slice is capacity-limited, so any later growth of
+// the integer reallocates instead of writing into a neighbour.
+func (s *jsonSlab) newBigFromWord(w big.Word, neg bool) *big.Int {
+	n := slabNext(&s.bigs)
+	if w != 0 {
+		if len(s.words) == 0 {
+			s.words = make([]big.Word, jsonSlabSize)
+		}
+		mag := s.words[0:1:1]
+		s.words = s.words[1:]
+		mag[0] = w
+		n.SetBits(mag)
+		if neg {
+			n.Neg(n)
+		}
+	}
+	return n
+}
+
+// jsonObjectMembers summarizes an object node: the last member for each
+// discriminator key (jsonKeyInt through jsonKeyConstructor).
+type jsonObjectMembers struct {
+	last  [jsonKeyConstructor - jsonKeyInt + 1]uint32 // node index of the last occurrence, 0 if absent
+	count int                                         // number of discriminator keys present
+	key   uint32                                      // key id of the last one found
+}
+
+func (m *jsonObjectMembers) scan(t *jsonTree, v jsonValue) {
+	for c := v.first; c != 0; c = t.node(c).next {
+		if key := t.node(c).key; key >= jsonKeyInt && key <= jsonKeyConstructor {
+			m.last[key-jsonKeyInt] = c
+		}
+	}
+	for i, c := range m.last {
+		if c != 0 {
+			m.count++
+			m.key = jsonKeyInt + uint32(i)
+		}
+	}
+}
+
+// names returns the discriminator keys present, in key id order.
+func (m *jsonObjectMembers) names() []string {
+	var found []string
+	for i, c := range m.last {
+		if c != 0 {
+			found = append(found, jsonWellKnownKeys[int(jsonKeyInt)+i])
+		}
+	}
+	return found
+}
+
+// lastMember returns the value of the last member of v with key id key.
+func (t *jsonTree) lastMember(v jsonValue, key uint32) (jsonValue, bool) {
+	var found uint32
+	for c := v.first; c != 0; c = t.node(c).next {
+		if t.node(c).key == key {
+			found = c
+		}
+	}
+	if found == 0 {
+		return jsonValue{}, false
+	}
+	return *t.node(found), true
+}
+
+// wrapJSONError adds context to an error from a nested value. A depth-limit
+// error is returned as is.
+func wrapJSONError(err error, context string) error {
+	if isJSONDepthLimitError(err) {
+		return err
+	}
+	return fmt.Errorf("%s: %w", context, err)
+}
+
+// jsonKindName names a non-object JSON kind the way encoding/json's
+// UnmarshalTypeError does.
+func jsonKindName(kind jsonValueKind) string {
+	switch kind {
+	case jsonKindBool:
+		return "bool"
+	case jsonKindNumber:
+		return "number"
+	case jsonKindString:
+		return "string"
+	case jsonKindArray:
+		return "array"
+	default:
+		return "value"
+	}
+}
+
 func decodePlutusDataJSONValue(
 	data []byte,
+	t *jsonTree,
 	v jsonValue,
 	st *jsonDecodeState,
 	counted bool,
@@ -874,135 +1152,148 @@ func decodePlutusDataJSONValue(
 		}
 	}
 
-	var keys map[string]jsonValue
-	switch v.kind {
-	case jsonKindObject:
-		keys = make(map[string]jsonValue, len(v.entries))
-		for _, e := range v.entries {
-			// Duplicate keys: the last occurrence wins, matching
-			// encoding/json's map unmarshaling behavior.
-			keys[e.key] = e.val
-		}
-	case jsonKindNull:
-		// json.Unmarshal leaves the destination map nil for a JSON null,
-		// which then reads as an object with no keys.
-	default:
+	// json.Unmarshal leaves the destination map nil for a JSON null, which
+	// then reads as an object with no keys.
+	if v.kind != jsonKindObject && v.kind != jsonKindNull {
 		// Keep the public error stable across encoding/json implementations.
-		kind := map[jsonValueKind]string{
-			jsonKindBool:   "bool",
-			jsonKindNumber: "number",
-			jsonKindString: "string",
-			jsonKindArray:  "array",
-		}[v.kind]
-		if kind == "" {
-			kind = "value"
-		}
 		return nil, fmt.Errorf(
 			"PlutusData JSON must be an object: json: cannot unmarshal %s into Go value of type map[string]json.RawMessage",
-			kind,
+			jsonKindName(v.kind),
 		)
 	}
 
-	// Reject objects with multiple discriminator keys (e.g. both "int" and "bytes").
-	var found []string
-	for _, dk := range discriminatorKeys {
-		if _, ok := keys[dk]; ok {
-			found = append(found, dk)
-		}
+	// Members are looked up by scanning the children (last occurrence wins,
+	// matching encoding/json's map unmarshaling) instead of building a map
+	// per object, which dominated allocation for large documents.
+	var members jsonObjectMembers
+	if v.kind == jsonKindObject {
+		members.scan(t, v)
 	}
-	if len(found) > 1 {
+	switch members.count {
+	case 0:
+		return nil, fmt.Errorf(
+			"unrecognized PlutusData JSON keys: %v",
+			t.keysOf(v),
+		)
+	case 1:
+	default:
 		return nil, fmt.Errorf(
 			"ambiguous PlutusData JSON: multiple discriminator keys %v",
-			found,
+			members.names(),
 		)
 	}
-	switch {
-	case hasKey(keys, "int"):
-		var n *big.Int
-		if err := json.Unmarshal(jsonRawSpan(data, keys["int"]), &n); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal Integer value: %w", err)
+	member := *t.node(members.last[members.key-jsonKeyInt])
+	switch members.key {
+	case jsonKeyInt:
+		n, err := parseJSONBigInt(data, member, st, "failed to unmarshal Integer value")
+		if err != nil {
+			return nil, err
 		}
 		if n == nil {
 			return nil, errors.New("null \"int\" value in Integer JSON")
 		}
-		return &Integer{Inner: n}, nil
-	case hasKey(keys, "bytes"):
-		var s string
-		if err := json.Unmarshal(jsonRawSpan(data, keys["bytes"]), &s); err != nil {
-			return nil, fmt.Errorf(
-				"failed to unmarshal ByteString value: %w",
-				err,
-			)
-		}
-		decoded, err := hex.DecodeString(s)
+		return st.slab.newInteger(n), nil
+	case jsonKeyBytes:
+		decoded, err := decodeJSONHexString(data, member)
 		if err != nil {
-			return nil, fmt.Errorf("invalid hex in ByteString JSON: %w", err)
+			return nil, err
 		}
-		return &ByteString{Inner: decoded}, nil
-	case hasKey(keys, "list"):
-		itemsVal := keys["list"]
-		if itemsVal.kind == jsonKindNull {
+		return st.slab.newByteString(decoded), nil
+	case jsonKeyList:
+		if member.kind == jsonKindNull {
 			return nil, errors.New("null \"list\" value in List JSON")
 		}
-		items, err := decodePlutusDataJSONArray(data, itemsVal, st, "List item")
+		items, err := decodePlutusDataJSONArray(data, t, member, st, "List item")
 		if err != nil {
-			if isJSONDepthLimitError(err) {
-				return nil, err
-			}
-			return nil, fmt.Errorf("failed to unmarshal List value: %w", err)
+			return nil, wrapJSONError(err, "failed to unmarshal List value")
 		}
 		return &List{Items: items}, nil
-	case hasKey(keys, "map"):
-		pairsVal := keys["map"]
-		if pairsVal.kind == jsonKindNull {
+	case jsonKeyMap:
+		if member.kind == jsonKindNull {
 			return nil, errors.New("null \"map\" value in Map JSON")
 		}
-		pairs, err := decodePlutusDataJSONMap(data, pairsVal, st)
+		pairs, err := decodePlutusDataJSONMap(data, t, member, st)
 		if err != nil {
-			if isJSONDepthLimitError(err) {
-				return nil, err
-			}
-			return nil, fmt.Errorf("failed to unmarshal Map value: %w", err)
+			return nil, wrapJSONError(err, "failed to unmarshal Map value")
 		}
 		return &Map{Pairs: pairs}, nil
-	case hasKey(keys, "constructor"):
-		var tag big.Int
-		if err := json.Unmarshal(jsonRawSpan(data, keys["constructor"]), &tag); err != nil {
-			return nil, fmt.Errorf(
-				"failed to unmarshal Constr constructor tag: %w",
-				err,
-			)
-		}
-		fieldsVal, ok := keys["fields"]
-		if !ok {
-			return nil, errors.New("missing \"fields\" key in Constr JSON")
-		}
-		if fieldsVal.kind == jsonKindNull {
-			return nil, errors.New("null \"fields\" value in Constr JSON")
-		}
-		fields, err := decodePlutusDataJSONArray(
-			data,
-			fieldsVal,
-			st,
-			"Constr field",
-		)
-		if err != nil {
-			if isJSONDepthLimitError(err) {
-				return nil, err
+	default: // jsonKeyConstructor
+		return decodePlutusDataJSONConstr(data, t, v, member, st)
+	}
+}
+
+// decodePlutusDataJSONConstr decodes the constructor object v whose
+// "constructor" member is tagValue.
+func decodePlutusDataJSONConstr(
+	data []byte,
+	t *jsonTree,
+	v, tagValue jsonValue,
+	st *jsonDecodeState,
+) (PlutusData, error) {
+	tag, err := parseJSONBigInt(data, tagValue, st, "failed to unmarshal Constr constructor tag")
+	if err != nil {
+		return nil, err
+	}
+	if tag == nil {
+		// json.Unmarshal of null into a big.Int leaves it zero.
+		tag = new(big.Int)
+	}
+	fieldsVal, ok := t.lastMember(v, jsonKeyFields)
+	if !ok {
+		return nil, errors.New("missing \"fields\" key in Constr JSON")
+	}
+	if fieldsVal.kind == jsonKindNull {
+		return nil, errors.New("null \"fields\" value in Constr JSON")
+	}
+	fields, err := decodePlutusDataJSONArray(data, t, fieldsVal, st, "Constr field")
+	if err != nil {
+		return nil, wrapJSONError(err, "failed to unmarshal Constr fields")
+	}
+	return &Constr{Tag: tag, Fields: fields}, nil
+}
+
+// decodeJSONHexString decodes the JSON value v, which must be a string of
+// hex digits, into bytes. The common case of a plain ASCII string without
+// escapes is decoded straight from the input without building a string.
+func decodeJSONHexString(data []byte, v jsonValue) ([]byte, error) {
+	raw := jsonRawSpan(data, v)
+	if v.kind == jsonKindString && len(raw) >= 2 {
+		body := raw[1 : len(raw)-1]
+		plain := true
+		for _, c := range body {
+			// The parser already rejected control characters and
+			// malformed escapes.
+			if c == '\\' || c >= 0x80 {
+				plain = false
+				break
 			}
-			return nil, fmt.Errorf("failed to unmarshal Constr fields: %w", err)
 		}
-		return &Constr{Tag: &tag, Fields: fields}, nil
-	default:
+		if plain {
+			dst := make([]byte, hex.DecodedLen(len(body)))
+			n, err := hex.Decode(dst, body)
+			if err != nil {
+				return nil, fmt.Errorf("invalid hex in ByteString JSON: %w", err)
+			}
+			return dst[:n], nil
+		}
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
 		return nil, fmt.Errorf(
-			"unrecognized PlutusData JSON keys: %v",
-			keysOf(keys),
+			"failed to unmarshal ByteString value: %w",
+			err,
 		)
 	}
+	decoded, err := hex.DecodeString(s)
+	if err != nil {
+		return nil, fmt.Errorf("invalid hex in ByteString JSON: %w", err)
+	}
+	return decoded, nil
 }
 
 func decodePlutusDataJSONArray(
 	data []byte,
+	t *jsonTree,
 	v jsonValue,
 	st *jsonDecodeState,
 	itemLabel string,
@@ -1011,30 +1302,25 @@ func decodePlutusDataJSONArray(
 		return nil, errors.New("value must be an array")
 	}
 
-	items := make([]PlutusData, 0, len(v.items))
-	for i, item := range v.items {
+	items := make([]PlutusData, 0, v.count)
+	i := 0
+	for c := v.first; c != 0; c = t.node(c).next {
 		if err := st.enterNode(); err != nil {
 			return nil, err
 		}
-		pd, err := decodePlutusDataJSONValue(data, item, st, true)
+		pd, err := decodePlutusDataJSONValue(data, t, *t.node(c), st, true)
 		if err != nil {
-			if isJSONDepthLimitError(err) {
-				return nil, err
-			}
-			return nil, fmt.Errorf(
-				"failed to unmarshal %s %d: %w",
-				itemLabel,
-				i,
-				err,
-			)
+			return nil, wrapJSONError(err, fmt.Sprintf("failed to unmarshal %s %d", itemLabel, i))
 		}
 		items = append(items, pd)
+		i++
 	}
 	return items, nil
 }
 
 func decodePlutusDataJSONMap(
 	data []byte,
+	t *jsonTree,
 	v jsonValue,
 	st *jsonDecodeState,
 ) ([][2]PlutusData, error) {
@@ -1042,19 +1328,22 @@ func decodePlutusDataJSONMap(
 		return nil, errors.New("value must be an array")
 	}
 
-	pairs := make([][2]PlutusData, 0, len(v.items))
-	for i, pairVal := range v.items {
-		pair, err := decodePlutusDataJSONMapPair(data, pairVal, st, i)
+	pairs := make([][2]PlutusData, 0, v.count)
+	i := 0
+	for c := v.first; c != 0; c = t.node(c).next {
+		pair, err := decodePlutusDataJSONMapPair(data, t, *t.node(c), st, i)
 		if err != nil {
 			return nil, err
 		}
 		pairs = append(pairs, pair)
+		i++
 	}
 	return pairs, nil
 }
 
 func decodePlutusDataJSONMapPair(
 	data []byte,
+	t *jsonTree,
 	v jsonValue,
 	st *jsonDecodeState,
 	index int,
@@ -1066,25 +1355,26 @@ func decodePlutusDataJSONMapPair(
 
 	var kVal, vVal jsonValue
 	var kSeen, vSeen bool
-	for _, e := range v.entries {
+	for c := v.first; c != 0; c = t.node(c).next {
+		e := *t.node(c)
 		switch e.key {
-		case "k":
+		case jsonKeyK:
 			// Each occurrence counts as a node, and the last one wins,
 			// mirroring the previous streaming decoder.
 			if err := st.enterNode(); err != nil {
 				return pair, err
 			}
-			kVal, kSeen = e.val, true
-		case "v":
+			kVal, kSeen = e, true
+		case jsonKeyV:
 			if err := st.enterNode(); err != nil {
 				return pair, err
 			}
-			vVal, vSeen = e.val, true
+			vVal, vSeen = e, true
 		default:
 			return pair, fmt.Errorf(
 				"unexpected Map pair %d field %q",
 				index,
-				e.key,
+				t.keyName(e),
 			)
 		}
 	}
@@ -1095,43 +1385,99 @@ func decodePlutusDataJSONMapPair(
 		return pair, fmt.Errorf("missing \"v\" key in Map pair %d", index)
 	}
 
-	k, err := decodePlutusDataJSONValue(data, kVal, st, true)
+	k, err := decodePlutusDataJSONValue(data, t, kVal, st, true)
 	if err != nil {
-		if isJSONDepthLimitError(err) {
-			return pair, err
-		}
-		return pair, fmt.Errorf(
-			"failed to unmarshal Map key %d: %w",
-			index,
-			err,
-		)
+		return pair, wrapJSONError(err, fmt.Sprintf("failed to unmarshal Map key %d", index))
 	}
-	val, err := decodePlutusDataJSONValue(data, vVal, st, true)
+	val, err := decodePlutusDataJSONValue(data, t, vVal, st, true)
 	if err != nil {
-		if isJSONDepthLimitError(err) {
-			return pair, err
-		}
-		return pair, fmt.Errorf(
-			"failed to unmarshal Map value %d: %w",
-			index,
-			err,
-		)
+		return pair, wrapJSONError(err, fmt.Sprintf("failed to unmarshal Map value %d", index))
 	}
-	pair[0] = k
-	pair[1] = val
-	return pair, nil
+	return [2]PlutusData{k, val}, nil
 }
 
-func hasKey(m map[string]jsonValue, key string) bool {
-	_, ok := m[key]
-	return ok
-}
-
-func keysOf(m map[string]jsonValue) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+// keysOf returns the sorted distinct member names of an object.
+func (t *jsonTree) keysOf(v jsonValue) []string {
+	seen := make(map[uint32]struct{}, v.count)
+	keys := make([]string, 0, v.count)
+	for c := v.first; c != 0; c = t.node(c).next {
+		id := t.node(c).key
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		keys = append(keys, t.keys[id])
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// parseJSONBigInt parses the JSON number v as a big.Int, enforcing the digit
+// limits before the quadratic conversion runs. It returns a nil integer for
+// JSON null, as json.Unmarshal does for a *big.Int. A conversion error is
+// wrapped with context; a *JSONLimitError is returned as is.
+func parseJSONBigInt(
+	data []byte,
+	v jsonValue,
+	st *jsonDecodeState,
+	context string,
+) (*big.Int, error) {
+	raw := jsonRawSpan(data, v)
+	if v.kind == jsonKindNumber {
+		digits := len(raw)
+		if digits > 0 && raw[0] == '-' {
+			digits--
+		}
+		if digits > MaxJSONIntegerDigits {
+			return nil, &JSONLimitError{
+				Limit:  "integer digits",
+				Max:    MaxJSONIntegerDigits,
+				Actual: digits,
+			}
+		}
+		st.digits += digits
+		if st.digits > MaxJSONTotalIntegerDigits {
+			return nil, &JSONLimitError{
+				Limit:  "total integer digits",
+				Max:    MaxJSONTotalIntegerDigits,
+				Actual: st.digits,
+			}
+		}
+		if n := st.slab.parsePlainInteger(raw); n != nil {
+			return n, nil
+		}
+	}
+	var n *big.Int
+	if err := json.Unmarshal(raw, &n); err != nil {
+		return nil, fmt.Errorf("%s: %w", context, err)
+	}
+	return n, nil
+}
+
+// parsePlainInteger converts a JSON number consisting only of an optional
+// minus sign and digits that fits in one machine word. It returns nil for
+// anything else (fraction, exponent, larger values), which the caller then
+// converts with encoding/json so those cases behave exactly as before.
+func (s *jsonSlab) parsePlainInteger(raw []byte) *big.Int {
+	body := raw
+	neg := false
+	if len(body) > 0 && body[0] == '-' {
+		neg = true
+		body = body[1:]
+	}
+	// 18 digits always fit in a uint64; a 32-bit word is checked below.
+	if len(body) == 0 || len(body) > 18 {
+		return nil
+	}
+	var u uint64
+	for _, c := range body {
+		if c < '0' || c > '9' {
+			return nil
+		}
+		u = u*10 + uint64(c-'0')
+	}
+	if uint64(big.Word(u)) != u {
+		return nil
+	}
+	return s.newBigFromWord(big.Word(u), neg)
 }

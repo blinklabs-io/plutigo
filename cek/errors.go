@@ -41,6 +41,10 @@ const (
 	ErrCodeBudgetExhausted ErrorCode = 100
 	ErrCodeMemoryExhausted ErrorCode = 101
 	ErrCodeCPUExhausted    ErrorCode = 102
+	// ErrCodeResultTooLarge reports that evaluation succeeded within budget
+	// but its result exceeds the bounds on discharging it into a term (see
+	// Machine.RunScriptContext, which never discharges).
+	ErrCodeResultTooLarge ErrorCode = 103
 
 	// Script errors (contract logic failures)
 	ErrCodeExplicitError            ErrorCode = 200
@@ -78,6 +82,13 @@ const (
 
 // BudgetError indicates resource exhaustion during evaluation.
 // This is the only recoverable error type - retrying with more budget may succeed.
+//
+// For an out-of-budget failure (ErrCodeBudgetExhausted), Requested is the
+// charge that overdrew the budget (a startup, step-batch or builtin charge,
+// or one element of a builtin's streamed cost) and Available is the remaining
+// budget just before it. The machine deducts the charge before it fails, as
+// the reference does, so the machine's ExBudget afterwards is
+// Available - Requested: the remaining budget the ledger reports.
 type BudgetError struct {
 	Code      ErrorCode
 	Requested ExBudget

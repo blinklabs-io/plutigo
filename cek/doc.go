@@ -45,8 +45,9 @@
 //	}
 //
 // To run a decoded program directly, build the machine with an explicit
-// [EvalContext]; [NewMachine] panics on nil. slippage is the step-interval
-// threshold for batch budget checking.
+// [EvalContext]; [NewMachine] panics on nil. slippage is the reference
+// machine's step-batching threshold; 0 selects [DefaultSlippage], the
+// ledger's, and reports failures exactly as the ledger does.
 //
 //	machine := cek.NewMachine[syn.DeBruijn](language, slippage, evalCtx)
 //	result, err := machine.Run(program.Term)

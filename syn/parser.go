@@ -47,6 +47,9 @@ type Parser struct {
 	// maxConstrFields is the widest constr field list accepted.
 	maxConstrFields int
 	strictValues    bool
+	// lexErr is the first typed lexer error (such as lex.ErrIntegerTooLong)
+	// seen, reported in preference to the generic unexpected-token error.
+	lexErr error
 }
 
 // node charges one term or collection item against the program's node budget.
@@ -87,8 +90,8 @@ func NewParser(input string) *Parser {
 		return p
 	}
 	p.lexer = lex.NewLexer(input)
-	p.curToken = p.lexer.NextToken()
-	p.peekToken = p.lexer.NextToken()
+	p.curToken = p.scan()
+	p.peekToken = p.scan()
 
 	return p
 }
@@ -96,7 +99,19 @@ func NewParser(input string) *Parser {
 func (p *Parser) nextToken() {
 	p.curToken = p.peekToken
 
-	p.peekToken = p.lexer.NextToken()
+	p.peekToken = p.scan()
+}
+
+// scan reads the next token, remembering the first typed lexer error.
+func (p *Parser) scan() lex.Token {
+	tok := p.lexer.NextToken()
+	if tok.Type == lex.TokenError && p.lexErr == nil {
+		if err, ok := tok.Value.(error); ok {
+			p.lexErr = err
+		}
+	}
+
+	return tok
 }
 
 func (p *Parser) expect(typ lex.TokenType) error {
@@ -135,6 +150,15 @@ func Parse(input string) (*Program[Name], error) {
 }
 
 func (p *Parser) ParseProgram() (*Program[Name], error) {
+	prog, err := p.parseProgram()
+	if err != nil && p.lexErr != nil {
+		return nil, p.lexErr
+	}
+
+	return prog, err
+}
+
+func (p *Parser) parseProgram() (*Program[Name], error) {
 	if p.inputLen > maxInputBytes {
 		return nil, errors.New("input too large")
 	}
@@ -585,10 +609,6 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 			return nil, err
 		}
 
-		if !EqualType(first.Typ(), ts.First) {
-			return nil, fmt.Errorf("pair first element of type %T does not match expected type %T at position %d", first.Typ(), ts.First, p.curToken.Position)
-		}
-
 		if err := p.expect(lex.TokenComma); err != nil {
 			return nil, err
 		}
@@ -596,10 +616,6 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 		second, err := p.parseConstantValue(ts.Second)
 		if err != nil {
 			return nil, err
-		}
-
-		if !EqualType(second.Typ(), ts.Second) {
-			return nil, fmt.Errorf("pair second element of type %T does not match expected type %T at position %d", second.Typ(), ts.Second, p.curToken.Position)
 		}
 
 		if err := p.expect(lex.TokenRParen); err != nil {
@@ -854,15 +870,6 @@ func (p *Parser) parseConstantCollection(
 		if err != nil {
 			return nil, err
 		}
-		if !EqualType(item.Typ(), elementType) {
-			return nil, fmt.Errorf(
-				"%s element of type %T does not match expected type %T at position %d",
-				collectionName,
-				item.Typ(),
-				elementType,
-				p.curToken.Position,
-			)
-		}
 		items = append(items, item)
 		if p.curToken.Type != lex.TokenRBracket {
 			if err := p.expect(lex.TokenComma); err != nil {
@@ -1036,10 +1043,6 @@ func (p *Parser) parseConstantValue(typ Typ) (IConstant, error) {
 			return nil, err
 		}
 
-		if !EqualType(first.Typ(), t.First) {
-			return nil, fmt.Errorf("pair first element of type %T does not match expected type %T at position %d", first.Typ(), t.First, p.curToken.Position)
-		}
-
 		if err := p.expect(lex.TokenComma); err != nil {
 			return nil, err
 		}
@@ -1047,10 +1050,6 @@ func (p *Parser) parseConstantValue(typ Typ) (IConstant, error) {
 		second, err := p.parseConstantValue(t.Second)
 		if err != nil {
 			return nil, err
-		}
-
-		if !EqualType(second.Typ(), t.Second) {
-			return nil, fmt.Errorf("pair second element of type %T does not match expected type %T at position %d", second.Typ(), t.Second, p.curToken.Position)
 		}
 
 		if err := p.expect(lex.TokenRParen); err != nil {
@@ -1216,7 +1215,7 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 			)
 		}
 
-		tag, ok := new(big.Int).SetString(p.curToken.Literal, 10)
+		tag, ok := p.curToken.Value.(*big.Int)
 		if !ok {
 			return nil, fmt.Errorf(
 				"invalid constr tag %s at position %d",

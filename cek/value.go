@@ -306,17 +306,37 @@ func materializeConstantValueDepth[T syn.Eval](
 	// Builtins also materialize values while evaluating, so this path must be
 	// bounded just like final result discharge.
 	budget := dischargeWorkBudget{remaining: maxDischargeWork}
-	return materializeConstantValueDepthWithBudget[T](value, depth, maxDepth, &budget)
+	return materializeConstantValueShared[T](value, depth, maxDepth, &budget, nil)
 }
 
-func materializeConstantValueDepthWithBudget[T syn.Eval](
+// materializeConstantValueShared materializes a constant under a work budget,
+// with an optional machine conversion cache: when share is non-nil, data
+// lists are converted through it so repeated conversions of the same (or a
+// suffix or front extension of the same) list are not repeated. The result
+// and the work-budget accounting are identical either way.
+func materializeConstantValueShared[T syn.Eval](
 	value Value[T],
 	depth int,
 	maxDepth int,
 	budget *dischargeWorkBudget,
+	share *listShare,
 ) (syn.IConstant, bool, error) {
 	if depth > maxDepth {
 		return nil, false, dischargeDepthLimitError()
+	}
+	// Flatten a list built by mkCons, keeping the buffer that owns a data
+	// list's storage so share can memoise the conversion on it.
+	var dataOwner *frontBuf[data.PlutusData]
+	var mapOwner *frontBuf[[2]data.PlutusData]
+	switch v := value.(type) {
+	case *consDataList[T]:
+		flat, buf := v.cell.flatten()
+		value, dataOwner = &dataListValue[T]{items: flat}, buf
+	case *consDataMap[T]:
+		flat, buf := v.cell.flatten()
+		value, mapOwner = &dataMapValue[T]{items: flat}, buf
+	case *consConstList[T]:
+		value = v.flatten()
 	}
 	if err := budget.consume(1); err != nil {
 		return nil, false, err
@@ -331,18 +351,25 @@ func materializeConstantValueDepthWithBudget[T syn.Eval](
 		if err := budget.consume(len(v.items)); err != nil {
 			return nil, false, err
 		}
+		if share != nil {
+			return share.dataListConstant(dataOwner, v.items), true, nil
+		}
 		return materializeDataListConstant(v.items), true, nil
 	case *dataMapValue[T]:
 		if err := budget.consume(len(v.items)); err != nil {
 			return nil, false, err
 		}
+		if share != nil {
+			return share.dataMapConstant(mapOwner, v.items), true, nil
+		}
 		return materializeDataMapConstant(v.items), true, nil
 	case *pairValue[T]:
-		first, ok, err := materializeConstantValueDepthWithBudget[T](
+		first, ok, err := materializeConstantValueShared[T](
 			v.first,
 			depth+1,
 			maxDepth,
 			budget,
+			share,
 		)
 		if err != nil {
 			return nil, false, err
@@ -350,11 +377,12 @@ func materializeConstantValueDepthWithBudget[T syn.Eval](
 		if !ok || first == nil {
 			return nil, false, nil
 		}
-		second, ok, err := materializeConstantValueDepthWithBudget[T](
+		second, ok, err := materializeConstantValueShared[T](
 			v.second,
 			depth+1,
 			maxDepth,
 			budget,
+			share,
 		)
 		if err != nil {
 			return nil, false, err
@@ -390,6 +418,49 @@ func cloneConstant(constant syn.IConstant) (syn.IConstant, error) {
 }
 
 func cloneConstantContext(
+	ctx context.Context,
+	checkCancellation bool,
+	constant syn.IConstant,
+	depth int,
+) (syn.IConstant, error) {
+	var memo constantCloneMemo
+	return memo.clone(ctx, checkCancellation, constant, depth)
+}
+
+// constantCloneMemo maps each list, array and pair constant already cloned
+// to its clone, so a constant that reaches one node through several
+// references (as decoded zero-width pair lists do) is cloned in time and
+// space linear in its physical size, and the clone keeps the same sharing.
+// Constants are immutable, so sharing a cloned node is unobservable.
+type constantCloneMemo struct {
+	seen map[syn.IConstant]syn.IConstant
+}
+
+func (m *constantCloneMemo) clone(
+	ctx context.Context,
+	checkCancellation bool,
+	constant syn.IConstant,
+	depth int,
+) (syn.IConstant, error) {
+	switch constant.(type) {
+	case *syn.ProtoList, *syn.ProtoArray, *syn.ProtoPair:
+		if cloned, ok := m.seen[constant]; ok {
+			return cloned, nil
+		}
+		cloned, err := m.cloneUncached(ctx, checkCancellation, constant, depth)
+		if err != nil {
+			return nil, err
+		}
+		if m.seen == nil {
+			m.seen = make(map[syn.IConstant]syn.IConstant)
+		}
+		m.seen[constant] = cloned
+		return cloned, nil
+	}
+	return m.cloneUncached(ctx, checkCancellation, constant, depth)
+}
+
+func (m *constantCloneMemo) cloneUncached(
 	ctx context.Context,
 	checkCancellation bool,
 	constant syn.IConstant,
@@ -447,7 +518,7 @@ func cloneConstantContext(
 		items := make([]syn.IConstant, len(c.List))
 		for i := range c.List {
 			var err error
-			items[i], err = cloneConstantContext(
+			items[i], err = m.clone(
 				ctx,
 				checkCancellation,
 				c.List[i],
@@ -468,7 +539,7 @@ func cloneConstantContext(
 		items := make([]syn.IConstant, len(c.Array))
 		for i := range c.Array {
 			var err error
-			items[i], err = cloneConstantContext(
+			items[i], err = m.clone(
 				ctx,
 				checkCancellation,
 				c.Array[i],
@@ -495,7 +566,7 @@ func cloneConstantContext(
 		if c == nil {
 			return nil, malformedASTError("cannot clone a nil ProtoPair constant")
 		}
-		first, err := cloneConstantContext(
+		first, err := m.clone(
 			ctx,
 			checkCancellation,
 			c.First,
@@ -504,7 +575,7 @@ func cloneConstantContext(
 		if err != nil {
 			return nil, err
 		}
-		second, err := cloneConstantContext(
+		second, err := m.clone(
 			ctx,
 			checkCancellation,
 			c.Second,

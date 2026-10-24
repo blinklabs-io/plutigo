@@ -96,8 +96,6 @@ func getFilteredBuiltins[T syn.Eval](
 type Machine[T syn.Eval] struct {
 	costs              CostModel
 	stepCosts          [9]ExBudget
-	stepCostCpu        [9]int64
-	stepCostMem        [9]int64
 	builtins           *Builtins[T]
 	builtinNoArgValues *[builtin.TotalBuiltinCount][3]*Builtin[T]
 	costCaches         *builtinCostCaches
@@ -124,6 +122,10 @@ type Machine[T syn.Eval] struct {
 	metrics          *Metrics
 	unbudgetedSteps  [9]uint32
 	unbudgetedTotal  uint32
+	// stepBatchFits reports that slippage steps of the costliest kind cost
+	// at most math.MaxInt64, so a batch of pending steps can be totalled
+	// without overflow (see spendUnbudgetedSteps).
+	stepBatchFits bool
 
 	freeCompute            []*Compute[T]
 	freeReturn             []*Return[T]
@@ -161,8 +163,7 @@ type Machine[T syn.Eval] struct {
 	dataMapValueChunkPos   int
 	pairValueChunks        [][]pairValue[T]
 	pairValueChunkPos      int
-	constantElemChunks     [][]syn.IConstant
-	constantElemChunkPos   int
+	listShare              listShare
 	valueElemChunks        [][]Value[T]
 	valueElemChunkPos      int
 	builtinChunks          [][]Builtin[T]
@@ -179,6 +180,10 @@ type Machine[T syn.Eval] struct {
 	budgetTemplate         ExBudget
 	lastRunRemaining       ExBudget
 	hasRun                 bool
+	// skipDischarge is set by RunScriptContext: the final value is only
+	// classified (resultIsUnit), never discharged into a term.
+	skipDischarge bool
+	resultIsUnit  bool
 
 	lastRunEnvHighWatermark int
 }
@@ -192,7 +197,6 @@ const (
 	valueMaxChunkSize     = 262144
 	valueElemChunkSize    = 1024
 	valueRetainChunkCap   = 8
-	constantElemChunkSize = 4096
 	int64ConstantCacheCap = 4096
 )
 
@@ -614,15 +618,6 @@ func (m *Machine[T]) allocPairValue(
 	return pair
 }
 
-func (m *Machine[T]) allocConstantElems(n int) []syn.IConstant {
-	return allocArenaSlice(
-		&m.constantElemChunks,
-		&m.constantElemChunkPos,
-		n,
-		constantElemChunkSize,
-	)
-}
-
 func (m *Machine[T]) allocValueElems(n int) []Value[T] {
 	return allocArenaSlice(
 		&m.valueElemChunks,
@@ -681,10 +676,25 @@ func (m *Machine[T]) putFrameCases(f *FrameCases[T]) {
 	m.freeFrameCases = append(m.freeFrameCases, f)
 }
 
+// DefaultSlippage is the slippage the Cardano ledger runs the reference CEK
+// machine with (UntypedPlutusCore defaultSlippage): machine steps are counted
+// and charged in batches of this many steps.
+const DefaultSlippage uint32 = 200
+
 // NewMachine creates a CEK machine for a De Bruijn-indexed program.
-// The second argument is slippage, which controls batched budget checking.
 // Protocol-version-dependent semantics and builtin availability come from
 // evalContext.ProtoMajor, not from slippage.
+//
+// The second argument is slippage, the reference machine's step-batching
+// threshold: machine steps are counted per step kind and charged together
+// once slippage of them are pending, while builtin calls are charged as they
+// happen. Slippage never changes whether a script succeeds or the budget a
+// successful script consumes; it only decides where an out-of-budget failure
+// is detected, and so the error reported and the remaining budget after it.
+// Any value n >= 2 reproduces the reference machine run with slippage n, so
+// [DefaultSlippage] reproduces the ledger exactly, failures included. 0 and 1
+// select DefaultSlippage. The slippage does not affect evaluation speed, and
+// a failed run is never evaluated twice.
 //
 // NewMachine panics if evalContext is nil or carries machine costs that would
 // not deplete the budget. Build the context with [NewEvalContext], or with
@@ -720,22 +730,18 @@ func NewMachine[T syn.Eval](
 		evalContext.CostModel.machineCosts.get(ExConstr),
 		evalContext.CostModel.machineCosts.get(ExCase),
 	}
-	var stepCostCpu [9]int64
-	var stepCostMem [9]int64
-	for i, s := range stepCosts {
-		stepCostCpu[i] = s.Cpu
-		stepCostMem[i] = s.Mem
+	if slippage <= 1 {
+		slippage = DefaultSlippage
 	}
 	return &Machine[T]{
 		costs:              evalContext.CostModel,
 		stepCosts:          stepCosts,
-		stepCostCpu:        stepCostCpu,
-		stepCostMem:        stepCostMem,
 		builtins:           chooseBuiltins[T](version, evalContext.ProtoMajor),
 		builtinNoArgValues: getSharedBuiltinNoArgValues[T](version),
 		costCaches:         evalContext.CostModel.builtinCostCaches(),
 		available:          chooseAvailableBuiltins(version, evalContext.ProtoMajor),
 		slippage:           slippage,
+		stepBatchFits:      stepBatchFits(stepCosts, slippage),
 		version:            version,
 		semantics:          evalContext.SemanticsVariant,
 		protoMajor:         evalContext.ProtoMajor,
@@ -774,8 +780,6 @@ func NewMachine[T syn.Eval](
 		dataMapValueChunkPos:  0,
 		pairValueChunks:       make([][]pairValue[T], 0, 8),
 		pairValueChunkPos:     0,
-		constantElemChunks:    make([][]syn.IConstant, 0, 8),
-		constantElemChunkPos:  0,
 		valueElemChunks:       make([][]Value[T], 0, 8),
 		valueElemChunkPos:     0,
 		builtinChunks:         make([][]Builtin[T], 0, 8),
@@ -941,7 +945,6 @@ func (m *Machine[T]) resetValueArenas() {
 	resetArenaChunks(&m.dataListValueChunks, &m.dataListValueChunkPos, valueRetainChunkCap)
 	resetArenaChunks(&m.dataMapValueChunks, &m.dataMapValueChunkPos, valueRetainChunkCap)
 	resetArenaChunks(&m.pairValueChunks, &m.pairValueChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.constantElemChunks, &m.constantElemChunkPos, valueRetainChunkCap)
 	resetArenaChunks(&m.valueElemChunks, &m.valueElemChunkPos, valueRetainChunkCap)
 	resetArenaChunks(&m.builtinChunks, &m.builtinChunkPos, valueRetainChunkCap)
 	resetArenaChunks(&m.builtinArgChunks, &m.builtinArgChunkPos, valueRetainChunkCap)
@@ -961,7 +964,6 @@ func (m *Machine[T]) lazyPrepareValueArenas() {
 	lazyPrepareArenaChunks(&m.dataListValueChunks, &m.dataListValueChunkPos, valueRetainChunkCap)
 	lazyPrepareArenaChunks(&m.dataMapValueChunks, &m.dataMapValueChunkPos, valueRetainChunkCap)
 	lazyPrepareArenaChunks(&m.pairValueChunks, &m.pairValueChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.constantElemChunks, &m.constantElemChunkPos, valueRetainChunkCap)
 	lazyPrepareArenaChunks(&m.valueElemChunks, &m.valueElemChunkPos, valueRetainChunkCap)
 	lazyPrepareArenaChunks(&m.builtinChunks, &m.builtinChunkPos, valueRetainChunkCap)
 	lazyPrepareArenaChunks(&m.builtinArgChunks, &m.builtinArgChunkPos, valueRetainChunkCap)
@@ -994,8 +996,6 @@ func (m *Machine[T]) dropValueArenas() {
 	m.dataMapValueChunkPos = 0
 	m.pairValueChunks = nil
 	m.pairValueChunkPos = 0
-	m.constantElemChunks = nil
-	m.constantElemChunkPos = 0
 	m.valueElemChunks = nil
 	m.valueElemChunkPos = 0
 	m.builtinChunks = nil
@@ -1024,7 +1024,25 @@ func (m *Machine[T]) finishValueContext(
 			return nil, err
 		}
 	}
+	if m.skipDischarge {
+		m.resultIsUnit = isUnitValue[T](value)
+		return nil, nil
+	}
 	return dischargeValueContext[T](ctx, checkCancellation, value)
+}
+
+// isUnitValue reports whether value is the unit constant.
+func isUnitValue[T syn.Eval](value Value[T]) bool {
+	c, ok := value.(*Constant)
+	if !ok || c == nil {
+		return false
+	}
+	switch c.Constant.(type) {
+	case *syn.Unit, syn.Unit:
+		return true
+	default:
+		return false
+	}
 }
 
 // Run executes a Plutus term using the CEK (Control, Environment, Kontinuation) abstract machine.
@@ -1037,6 +1055,30 @@ func (m *Machine[T]) finishValueContext(
 // Value/Env/syn.Term graph after Run returns. The entry path only handles
 // budget restoration and frame-stack reset (the latter also defends against
 // tests or other callers that tamper with the frame stack between runs).
+//
+// # Budget
+//
+// Run charges m.ExBudget, which holds the remaining budget: the budget
+// consumed is the initial budget minus m.ExBudget, both after a success and
+// after a failure. Charges follow the reference machine with the machine's
+// slippage (see [NewMachine]): the startup cost; machine steps, counted and
+// charged in batches of slippage steps (one charge of count*cost per step
+// kind, in StepKind order) and once more when evaluation ends; and each
+// builtin call when it is saturated, before the builtin runs, without
+// charging the steps still pending. A builtin whose argument the reference
+// sizes lazily (Data, and lists in batches of 100 elements) is charged the
+// way the reference streams that cost when the call overdraws the budget:
+// its intercept, then one charge per element of the size stream.
+//
+// Every charge is deducted before it is checked, like the reference's
+// restricting budget mode, and evaluation fails with a [BudgetError]
+// (ErrCodeBudgetExhausted) at the first charge that leaves the CPU or memory
+// budget negative. After that failure m.ExBudget is the remaining budget the
+// ledger reports ("the budget when the machine terminated"; negative values
+// are the overspend), and the error's Requested is the charge that overdrew
+// the budget and its Available the remaining budget before that charge, so
+// m.ExBudget == Available - Requested. These are the ledger's numbers for any
+// slippage that selects DefaultSlippage (0, 1 and 200).
 func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 	return m.runContext(context.Background(), false, term, nil)
 }
@@ -1089,6 +1131,43 @@ func (m *Machine[T]) RunContextWithTrustedDataArguments(
 	return m.runContext(ctx, true, term, trustedData)
 }
 
+// RunScriptContext evaluates a ledger script as the reference ledger does
+// (plutus-ledger-api PlutusLedgerApi.Common.Eval): it applies the trusted
+// data arguments like RunContextWithTrustedDataArguments, evaluates, and
+// reports whether the final value is the unit constant, without discharging
+// that value into a term.
+//
+// The reference never materializes a script's result: its CEK machine
+// discharges the final value lazily, and the ledger only matches the result
+// against the unit constant (which Plutus V3 and later must return, failing
+// with InvalidReturnValue otherwise) and ignores the result of a Plutus V1
+// or V2 script altogether. A result can be far larger once discharged than
+// the budget that built it (a closure capturing a shared value graph
+// discharges to a tree exponentially larger than the graph), so Run and its
+// variants bound discharge and fail when the bound is exceeded. Ledger
+// validation must not depend on that bound, so it must use this method:
+// err is nil exactly when evaluation succeeded within budget, whatever the
+// result, and resultIsUnit then tells whether a V3+ script returned unit.
+// The budget is read from ExBudget as for the other Run methods (see Run):
+// after an out-of-budget failure it is the remaining budget the ledger
+// reports.
+func (m *Machine[T]) RunScriptContext(
+	ctx context.Context,
+	term syn.Term[T],
+	arguments ...data.PlutusData,
+) (resultIsUnit bool, err error) {
+	m.skipDischarge = true
+	m.resultIsUnit = false
+	defer func() {
+		m.skipDischarge = false
+		m.resultIsUnit = false
+	}()
+	if _, err := m.RunContextWithTrustedDataArguments(ctx, term, arguments...); err != nil {
+		return false, err
+	}
+	return m.resultIsUnit, nil
+}
+
 func isNilPlutusData(value data.PlutusData) bool {
 	switch value := value.(type) {
 	case nil:
@@ -1115,14 +1194,31 @@ func (m *Machine[T]) runContext(
 	checkCancellation bool,
 	term syn.Term[T],
 	trustedData map[*syn.Data]struct{},
-) (syn.Term[T], error) {
+) (result syn.Term[T], err error) {
+	// Embedding hosts must never crash on an evaluator bug: convert any
+	// panic into a typed InternalError. Declared first so it runs last,
+	// after the state-reset defers below have executed.
+	defer func() {
+		if r := recover(); r != nil {
+			result = nil
+			err = internalError(fmt.Sprintf("panic during evaluation: %v", r))
+		}
+	}()
 	if checkCancellation {
 		m.activeContext = ctx
 	} else {
 		m.activeContext = nil
 	}
 	defer func() { m.activeContext = nil }()
-	if err := validateTermStructure[T](ctx, checkCancellation, term, trustedData); err != nil {
+	if err := validateTermStructure[T](
+		ctx,
+		checkCancellation,
+		term,
+		trustedData,
+		// A zero protocol major selects no protocol version and so the
+		// current (Full) mode.
+		m.protoMajor == 0 || m.protoMajor >= dijkstraProtoMajorVersion,
+	); err != nil {
 		return nil, err
 	}
 	firstRun := !m.hasRun
@@ -1155,6 +1251,7 @@ func (m *Machine[T]) runContext(
 		m.lastRunEnvHighWatermark = m.envChunkPos
 		m.lastRunRemaining = m.ExBudget
 		m.hasRun = true
+		m.listShare.reset()
 		m.resetFrameStack()
 		m.valueArenaChunkSize = nextChunkSize
 		if firstRun {
@@ -1176,22 +1273,11 @@ func (m *Machine[T]) runContext(
 	if err := m.spendBudget(startupBudget); err != nil {
 		return nil, err
 	}
-	// The DeBruijn fast path charges steps without counting them, so a metered
-	// machine runs the generic loop, which charges each step in order exactly
-	// as the unbatched path does.
-	if m.slippage <= 1 && m.metrics == nil {
+	// The De Bruijn loop charges steps exactly as runStack does; it only
+	// skips the metrics counters, so a metered machine runs runStack.
+	if dbTerm, ok := any(term).(syn.Term[syn.DeBruijn]); ok && m.metrics == nil {
 		dbMachine := (*Machine[syn.DeBruijn])(unsafe.Pointer(m))
-		dbTerm, ok := any(term).(syn.Term[syn.DeBruijn])
-		if !ok {
-			return nil, &InternalError{
-				Code: ErrCodeInternalError,
-				Message: fmt.Sprintf(
-					"DeBruijn evaluator expected syn.Term[syn.DeBruijn], got %T",
-					term,
-				),
-			}
-		}
-		dbResult, err := runStackNoSlippageDeBruijn(
+		dbResult, err := runStackDeBruijn(
 			ctx,
 			checkCancellation,
 			dbMachine,
@@ -1199,6 +1285,10 @@ func (m *Machine[T]) runContext(
 		)
 		if err != nil {
 			return nil, normalizeEvalError(err)
+		}
+		if dbResult == nil && m.skipDischarge {
+			// RunScriptContext: the result was classified, not discharged.
+			return nil, nil
 		}
 		result, ok := any(dbResult).(syn.Term[T])
 		if !ok {
@@ -1212,7 +1302,7 @@ func (m *Machine[T]) runContext(
 		}
 		return result, nil
 	}
-	result, err := m.runStack(ctx, checkCancellation, term)
+	result, err = m.runStack(ctx, checkCancellation, term)
 	return result, normalizeEvalError(err)
 }
 
@@ -1532,7 +1622,8 @@ func (m *Machine[T]) checkCaseOnBuiltin(value Value[T]) error {
 		if _, isByteString := v.Constant.(*syn.ByteString); isByteString {
 			return nil
 		}
-	case *dataValue[T], *dataListValue[T], *dataMapValue[T], *pairValue[T]:
+	case *dataValue[T], *dataListValue[T], *dataMapValue[T], *pairValue[T],
+		*consConstList[T], *consDataList[T], *consDataMap[T]:
 	default:
 		return nil
 	}
@@ -1727,6 +1818,19 @@ func (m *Machine[T]) caseEvaluate(
 		args := m.allocValueElems(2)
 		args[0] = m.allocDataPairValue(v.items[0][0], v.items[0][1])
 		args[1] = m.allocDataMapValue(v.items[1:])
+		comp := m.getCompute()
+		comp.Ctx = m.transferArgStack(args, context)
+		comp.Env = env
+		comp.Term = branches[0]
+		return comp, nil
+	case lazyListValue[T]:
+		// Always non-empty: the cons branch of the contiguous list cases.
+		if len(branches) < 1 || len(branches) > 2 {
+			return nil, &ScriptError{Code: ErrCodeInvalidBranchCount, Message: "InvalidCaseBranchCount"}
+		}
+		args := m.allocValueElems(2)
+		args[0] = v.lazyCaseHead(m)
+		args[1] = v.lazyTail(m)
 		comp := m.getCompute()
 		comp.Ctx = m.transferArgStack(args, context)
 		comp.Env = env
@@ -2102,14 +2206,14 @@ func (b *dischargeWorkBudget) consumeScalarBytes(size int64) error {
 
 func dischargeWorkLimitError() *BudgetError {
 	return &BudgetError{
-		Code:    ErrCodeBudgetExhausted,
+		Code:    ErrCodeResultTooLarge,
 		Message: "result term too large to discharge",
 	}
 }
 
 func dischargeDepthLimitError() *BudgetError {
 	return &BudgetError{
-		Code:    ErrCodeBudgetExhausted,
+		Code:    ErrCodeResultTooLarge,
 		Message: "result term nesting too deep to discharge",
 	}
 }
@@ -2142,6 +2246,7 @@ func dischargeValueDepth[T syn.Eval](
 	if depth > maxDischargeDepth {
 		return nil, dischargeDepthLimitError()
 	}
+	value = flattenLazyList[T](value)
 	// Pair constants are charged by their recursive materializer below.
 	if _, isPair := value.(*pairValue[T]); !isPair {
 		if err := budget.consume(1); err != nil {
@@ -2187,11 +2292,12 @@ func dischargeValueDepth[T syn.Eval](
 		)
 	case *pairValue[T]:
 		remainingBeforeMaterialize := budget.remaining
-		constant, ok, err := materializeConstantValueDepthWithBudget[T](
+		constant, ok, err := materializeConstantValueShared[T](
 			v,
 			depth,
 			maxDischargeDepth,
 			budget,
+			nil,
 		)
 		if err != nil {
 			return nil, err
@@ -2526,30 +2632,24 @@ func withEnv[T syn.Eval](
 	}
 }
 
+// stepBatchFits reports whether slippage steps of the costliest kind cost at
+// most math.MaxInt64 in both CPU and memory.
+func stepBatchFits(stepCosts [9]ExBudget, slippage uint32) bool {
+	limit := math.MaxInt64 / int64(slippage)
+	for _, c := range stepCosts {
+		if c.Cpu < 0 || c.Mem < 0 || c.Cpu > limit || c.Mem > limit {
+			return false
+		}
+	}
+	return true
+}
+
+// stepAndMaybeSpend counts one machine step and, once slippage steps are
+// pending, charges them (the reference's stepAndMaybeSpend). Only the batched
+// loop (runStack) uses it.
 func (m *Machine[T]) stepAndMaybeSpend(step StepKind) error {
 	if m.metrics != nil {
 		m.metrics.Steps[step]++
-	}
-	if m.slippage <= 1 {
-		memCost := m.stepCostMem[step]
-		cpuCost := m.stepCostCpu[step]
-		m.ExBudget.Mem -= memCost
-		m.ExBudget.Cpu -= cpuCost
-		if m.ExBudget.Mem < 0 || m.ExBudget.Cpu < 0 {
-			return &BudgetError{
-				Code: ErrCodeBudgetExhausted,
-				Requested: ExBudget{
-					Cpu: cpuCost,
-					Mem: memCost,
-				},
-				Available: ExBudget{
-					Cpu: m.ExBudget.Cpu + cpuCost,
-					Mem: m.ExBudget.Mem + memCost,
-				},
-				Message: "out of budget",
-			}
-		}
-		return nil
 	}
 
 	m.unbudgetedSteps[step] += 1
@@ -2564,7 +2664,38 @@ func (m *Machine[T]) stepAndMaybeSpend(step StepKind) error {
 	return nil
 }
 
+// countStep is stepAndMaybeSpend for the De Bruijn loops, which never run
+// with metrics: it counts one machine step and reports whether fewer than
+// slippage steps are pending. When it returns false the caller must charge
+// the pending steps with spendUnbudgetedSteps.
+func (m *Machine[T]) countStep(step StepKind) bool {
+	m.unbudgetedSteps[step]++
+	m.unbudgetedTotal++
+	return m.unbudgetedTotal < m.slippage
+}
+
+// spendUnbudgetedSteps charges the pending steps the way the reference's
+// spendAccumulatedBudget does: one charge of count*cost per step kind, in
+// StepKind order, failing at the first charge that overdraws the budget.
 func (m *Machine[T]) spendUnbudgetedSteps() error {
+	if m.stepBatchFits && !DebugBudget {
+		// Step costs are positive, so when the whole batch fits the budget
+		// every charge in the ordered loop below fits too, and the loop
+		// would only subtract the same total. stepBatchFits guarantees the
+		// total cannot overflow, so it is summed without saturation.
+		var total ExBudget
+		for i, n := range m.unbudgetedSteps {
+			total.Cpu += int64(n) * m.stepCosts[i].Cpu
+			total.Mem += int64(n) * m.stepCosts[i].Mem
+		}
+		if total.Cpu <= m.ExBudget.Cpu && total.Mem <= m.ExBudget.Mem {
+			m.ExBudget.Cpu -= total.Cpu
+			m.ExBudget.Mem -= total.Mem
+			m.unbudgetedSteps = [len(m.unbudgetedSteps)]uint32{}
+			m.unbudgetedTotal = 0
+			return nil
+		}
+	}
 	for i := range uint8(len(m.unbudgetedSteps)) {
 		unspentStepBudget := m.stepCosts[StepKind(i)]
 
@@ -2598,13 +2729,33 @@ func (m *Machine[T]) spendBudget(exBudget ExBudget) error {
 	}
 
 	if exBudget.Mem > m.ExBudget.Mem || exBudget.Cpu > m.ExBudget.Cpu {
-		return m.budgetError(exBudget, "out of budget")
+		return m.overdrawBudget(exBudget)
 	}
 
 	m.ExBudget.Mem -= exBudget.Mem
 	m.ExBudget.Cpu -= exBudget.Cpu
 
 	return nil
+}
+
+// overdrawBudget fails a charge that leaves the CPU or memory budget
+// negative. Like the reference's restricting budget mode it deducts the
+// charge before failing (in saturating arithmetic, like the reference's
+// SatInt): the remaining budget after an out-of-budget failure includes the
+// charge that overdrew it, which is what the ledger reports. It is kept out
+// of line so that spendBudget's success path stays small.
+//
+//go:noinline
+func (m *Machine[T]) overdrawBudget(exBudget ExBudget) error {
+	before := m.ExBudget
+	m.ExBudget.Mem = satSub(before.Mem, exBudget.Mem)
+	m.ExBudget.Cpu = satSub(before.Cpu, exBudget.Cpu)
+	return &BudgetError{
+		Code:      ErrCodeBudgetExhausted,
+		Requested: exBudget,
+		Available: before,
+		Message:   "out of budget",
+	}
 }
 
 func (m *Machine[T]) budgetCostOverflowError(exBudget ExBudget) error {

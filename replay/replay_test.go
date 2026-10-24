@@ -149,7 +149,9 @@ func TestRunMachineRecoversUnexpectedPanic(t *testing.T) {
 		nil,
 		&syn.Constant{Con: &syn.Integer{Inner: big.NewInt(1)}},
 	)
-	if err == nil || !strings.Contains(err.Error(), "panic during script evaluation") {
+	// The machine's own recover reports "panic during evaluation"; the runner's
+	// fallback reports "panic during script evaluation". Either is a recovered panic.
+	if err == nil || !strings.Contains(err.Error(), "panic during") {
 		t.Fatalf("runMachine() error = %v, want recovered panic", err)
 	}
 }

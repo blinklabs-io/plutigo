@@ -17,7 +17,6 @@ package data
 import (
 	"bytes"
 	"encoding/hex"
-	"errors"
 	"math/big"
 	"reflect"
 	"strings"
@@ -549,6 +548,18 @@ func TestPlutusDataDecode(t *testing.T) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 		var tmpData PlutusDataWrapper
+		if _, isValue := testDef.Data.(*Value); isValue {
+			// The reference Data type has no Value constructor: only the
+			// explicit opt-in decodes tag 1401.
+			if err := tmpData.UnmarshalCBOR(tmpCbor); err == nil {
+				t.Fatalf("tag 1401 decoded without the Value opt-in")
+			}
+			got, err := DecodeWithValue(tmpCbor)
+			if err != nil || !reflect.DeepEqual(got, testDef.Data) {
+				t.Fatalf("DecodeWithValue = %v, %v", got, err)
+			}
+			continue
+		}
 		if err := tmpData.UnmarshalCBOR(tmpCbor); err != nil {
 			t.Fatalf("unexpected error: %s", err)
 		}
@@ -578,7 +589,7 @@ func TestDecoderReuseMatchesDecode(t *testing.T) {
 					)
 				}
 
-				got, err := decoder.Decode(tmpData)
+				got, err := decoder.DecodeWithValue(tmpData)
 				if err != nil {
 					t.Fatalf(
 						"decoder.Decode() failed for %s: %v",
@@ -622,7 +633,7 @@ func TestDecoderReuseMatchesDecode(t *testing.T) {
 						err,
 					)
 				}
-				got, err := decoder.Decode(tmpData)
+				got, err := decoder.DecodeWithValue(tmpData)
 				if err != nil {
 					t.Fatalf(
 						"decoder.Decode() after reset failed for %s: %v",
@@ -674,20 +685,23 @@ func TestDecoderIndefiniteSmallMapUsesSinglePairArenaAllocation(t *testing.T) {
 	}
 }
 
-func TestDecodeRejectsExcessiveNesting(t *testing.T) {
-	maxDepth := MaxDecodeNestingDepth()
-	encoded := nestedListCBOR(maxDepth + 1)
+// TestDecodeAcceptsNestingBeyondFormerLimit checks that nesting deeper than
+// the former 16384-level limit decodes: a Cardano node accepts Data nested as
+// deep as a transaction allows.
+func TestDecodeAcceptsNestingBeyondFormerLimit(t *testing.T) {
+	encoded := nestedListCBOR(defaultDecodeNestingDepth + 1)
 
-	_, err := Decode(encoded)
-	assertDecodeLimitError(t, err, "nesting depth")
-
+	if _, err := Decode(encoded); err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
 	decoder := NewDecoder()
-	_, err = decoder.Decode(encoded)
-	assertDecodeLimitError(t, err, "nesting depth")
-
+	if _, err := decoder.Decode(encoded); err != nil {
+		t.Fatalf("decoder.Decode: %v", err)
+	}
 	var list List
-	err = list.UnmarshalCBOR(encoded)
-	assertDecodeLimitError(t, err, "nesting depth")
+	if err := list.UnmarshalCBOR(encoded); err != nil {
+		t.Fatalf("List.UnmarshalCBOR: %v", err)
+	}
 }
 
 func TestMaxDecodeNestingDepthConfiguration(t *testing.T) {
@@ -706,45 +720,23 @@ func TestMaxDecodeNestingDepthConfiguration(t *testing.T) {
 	if got := MaxDecodeNestingDepth(); got != 4 {
 		t.Fatalf("MaxDecodeNestingDepth() = %d, want 4", got)
 	}
-}
-
-func TestDirectUnmarshalUsesConfiguredNestingDepth(t *testing.T) {
-	original := MaxDecodeNestingDepth()
-	defer func() { _ = SetMaxDecodeNestingDepth(original) }()
-
-	if err := SetMaxDecodeNestingDepth(original + 2); err != nil {
-		t.Fatal(err)
-	}
-	encoded := nestedListCBOR(original + 1)
-	var decoded any
-	if err := cborUnmarshal(encoded, &decoded); err != nil {
-		t.Fatalf("cborUnmarshal did not use configured nesting depth: %v", err)
+	// The setting no longer limits CBOR decoding.
+	if _, err := Decode(nestedListCBOR(100)); err != nil {
+		t.Fatalf("Decode with depth setting 4: %v", err)
 	}
 }
 
-func TestDirectUnmarshalRejectsExcessiveNesting(t *testing.T) {
-	maxDepth := MaxDecodeNestingDepth()
-	encoded := nestedListCBOR(maxDepth + 1)
+func TestDirectUnmarshalRejectsWrongKind(t *testing.T) {
+	encoded := nestedListCBOR(10)
 
 	var byteString ByteString
-	err := byteString.UnmarshalCBOR(encoded)
-	assertDefaultNestingDepthLimit(t, err)
-
+	if err := byteString.UnmarshalCBOR(encoded); err == nil {
+		t.Fatal("ByteString.UnmarshalCBOR accepted a list")
+	}
 	var integer Integer
-	err = integer.UnmarshalCBOR(encoded)
-	assertDefaultNestingDepthLimit(t, err)
-}
-
-func TestDecodeRejectsExcessiveNodeCount(t *testing.T) {
-	encoded := []byte{0x84, 0x00, 0x00, 0x00, 0x00}
-	limits := decodeLimits{maxDepth: MaxDecodeNestingDepth(), maxNodes: 4}
-
-	_, err := decodeWithState(encoded, newDecodeStateWithLimits(limits))
-	assertDecodeLimitError(t, err, "node count")
-
-	decoder := NewDecoder()
-	_, err = decoder.decode(encoded, newDecodeStateWithLimits(limits))
-	assertDecodeLimitError(t, err, "node count")
+	if err := integer.UnmarshalCBOR(encoded); err == nil {
+		t.Fatal("Integer.UnmarshalCBOR accepted a list")
+	}
 }
 
 func nestedListCBOR(depth int) []byte {
@@ -754,44 +746,6 @@ func nestedListCBOR(depth int) []byte {
 	}
 	encoded[depth] = 0x00
 	return encoded
-}
-
-func assertDecodeLimitError(t *testing.T, err error, limit string) {
-	t.Helper()
-	if err == nil {
-		t.Fatalf("expected %s limit error, got nil", limit)
-	}
-	var limitErr *DecodeLimitError
-	if !errors.As(err, &limitErr) {
-		t.Fatalf("expected DecodeLimitError, got %T: %v", err, err)
-	}
-	if limitErr.Limit != limit {
-		t.Fatalf("DecodeLimitError limit = %q, want %q", limitErr.Limit, limit)
-	}
-}
-
-func assertDefaultNestingDepthLimit(t *testing.T, err error) {
-	t.Helper()
-	assertDecodeLimitError(t, err, "nesting depth")
-
-	var limitErr *DecodeLimitError
-	if !errors.As(err, &limitErr) {
-		t.Fatalf("expected DecodeLimitError, got %T: %v", err, err)
-	}
-	if limitErr.Max != MaxDecodeNestingDepth() {
-		t.Fatalf(
-			"DecodeLimitError max = %d, want %d",
-			limitErr.Max,
-			MaxDecodeNestingDepth(),
-		)
-	}
-	if limitErr.Actual != MaxDecodeNestingDepth()+1 {
-		t.Fatalf(
-			"DecodeLimitError actual = %d, want %d",
-			limitErr.Actual,
-			MaxDecodeNestingDepth()+1,
-		)
-	}
 }
 
 func TestDecoderResetOverwritesRetainedBigInts(t *testing.T) {
@@ -968,7 +922,7 @@ func TestDecodeCBORArray(t *testing.T) {
 	}
 }
 
-func TestSplitCBORItem(t *testing.T) {
+func TestDecodeItemRest(t *testing.T) {
 	tests := []struct {
 		name     string
 		hexInput string
@@ -1002,20 +956,21 @@ func TestSplitCBORItem(t *testing.T) {
 				t.Fatalf("decode hex: %v", err)
 			}
 
-			gotItem, gotRest, err := splitCBORItem(input)
+			_, gotRest, err := decodeItem(nil, input, false)
 			if err != nil {
-				t.Fatalf("splitCBORItem() error = %v", err)
+				t.Fatalf("decodeItem() error = %v", err)
 			}
+			gotItem := input[:len(input)-len(gotRest)]
 			if hex.EncodeToString(gotItem) != tt.wantItem {
 				t.Fatalf(
-					"splitCBORItem() item = %x, want %s",
+					"decodeItem() item = %x, want %s",
 					gotItem,
 					tt.wantItem,
 				)
 			}
 			if hex.EncodeToString(gotRest) != tt.wantRest {
 				t.Fatalf(
-					"splitCBORItem() rest = %x, want %s",
+					"decodeItem() rest = %x, want %s",
 					gotRest,
 					tt.wantRest,
 				)
@@ -1149,6 +1104,13 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 		}
 
 		// Decode
+		if _, isValue := testDef.Data.(*Value); isValue {
+			got, err := DecodeWithValue(cborData)
+			if err != nil || !reflect.DeepEqual(got, testDef.Data) {
+				t.Errorf("round-trip failed for %v: %v", testDef.Data, err)
+			}
+			continue
+		}
 		var decodedWrapper PlutusDataWrapper
 		err = decodedWrapper.UnmarshalCBOR(cborData)
 		if err != nil {

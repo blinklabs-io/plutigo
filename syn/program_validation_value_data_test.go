@@ -15,6 +15,7 @@
 package syn
 
 import (
+	"errors"
 	"math/big"
 	"strings"
 	"testing"
@@ -133,10 +134,11 @@ func TestValidateProgramAcceptsDataWithoutValueBeforeV4(t *testing.T) {
 	}
 }
 
-// TestValidateProgramBoundsValueDataTraversal checks that the data traversal
-// for pre-V4 programs stops at the shared program node limit instead of
-// walking an arbitrarily large caller-constructed constant.
-func TestValidateProgramBoundsValueDataTraversal(t *testing.T) {
+// TestValidateProgramDataTraversalUnbounded checks that the data traversal
+// for pre-V4 programs has no node limit for a tree, as the reference has
+// none, but rejects a caller-constructed constant whose containers are
+// shared, which a tree walk could take exponential time over.
+func TestValidateProgramDataTraversalUnbounded(t *testing.T) {
 	item := data.NewInteger(big.NewInt(0))
 	items := make([]data.PlutusData, maxProgramNodes+1)
 	for i := range items {
@@ -146,9 +148,18 @@ func TestValidateProgramBoundsValueDataTraversal(t *testing.T) {
 		Version: lang.LanguageVersion{1, 1, 0},
 		Term:    &Constant{Con: &Data{Inner: data.NewList(items...)}},
 	}
+	if err := ValidateProgram(program, valueDataContext(lang.LanguageVersionV3)); err != nil {
+		t.Fatalf("wide data constant rejected: %v", err)
+	}
+
+	shared := item
+	for range 40 {
+		shared = data.NewList(shared, shared)
+	}
+	program.Term = &Constant{Con: &Data{Inner: shared}}
 	err := ValidateProgram(program, valueDataContext(lang.LanguageVersionV3))
-	if err == nil || !strings.Contains(err.Error(), "too many nodes") {
-		t.Fatalf("expected node limit error, got %v", err)
+	if !errors.Is(err, data.ErrSharedNodes) {
+		t.Fatalf("shared data constant: got %v, want ErrSharedNodes", err)
 	}
 }
 
@@ -171,7 +182,29 @@ func newValueData() *data.Value {
 // rather than pointer form. The Value must be found in each.
 func TestValidateProgramRejectsValueDataInCallerConstants(t *testing.T) {
 	integer := &Integer{Inner: big.NewInt(1)}
+	// sharedPair claims a zero-width type but hides a Value; the walk visits
+	// such a pair once per pointer, and that one visit must find it.
+	sharedPair := &ProtoPair{
+		FstType: &TUnit{},
+		SndType: &TUnit{},
+		First:   &Unit{},
+		Second:  &Data{Inner: newValueData()},
+	}
+	unitPairType := &TPair{First: &TUnit{}, Second: &TUnit{}}
 	cases := map[string]IConstant{
+		"shared pair under a declared unit pair list": &ProtoList{
+			LTyp: unitPairType,
+			List: []IConstant{sharedPair, sharedPair, sharedPair},
+		},
+		"shared pair nested twice in a pair": &ProtoList{
+			LTyp: &TPair{First: unitPairType, Second: unitPairType},
+			List: []IConstant{&ProtoPair{
+				FstType: unitPairType,
+				SndType: unitPairType,
+				First:   sharedPair,
+				Second:  sharedPair,
+			}},
+		},
 		"pair child under a declared integer pair": &ProtoList{
 			LTyp: &TPair{First: &TInteger{}, Second: &TInteger{}},
 			List: []IConstant{&ProtoPair{

@@ -16,6 +16,8 @@ package data
 
 import (
 	"fmt"
+	"math"
+	"math/big"
 	"strings"
 	"testing"
 )
@@ -131,21 +133,22 @@ func TestParseDeepPlutusDataJSONTreePreservesJSONValues(t *testing.T) {
 	// parsePlutusDataJSONTree reaches the fallback only on toolchains whose
 	// encoding/json caps nesting below this depth, so call the fallback
 	// directly as well.
-	parsers := map[string]func([]byte, int) (jsonValue, error){
+	parsers := map[string]func([]byte, int) (*jsonTree, error){
 		"parsePlutusDataJSONTree":     parsePlutusDataJSONTree,
 		"parseDeepPlutusDataJSONTree": parseDeepPlutusDataJSONTree,
 	}
 	for name, parse := range parsers {
 		t.Run(name, func(t *testing.T) {
-			root, err := parse(input, MaxDecodeNestingDepth())
+			tree, err := parse(input, MaxDecodeNestingDepth())
 			if err != nil {
 				t.Fatalf("rejected deep JSON: %v", err)
 			}
+			root := *tree.node(tree.root)
 			for range depth {
-				if root.kind != jsonKindArray || len(root.items) != 1 {
+				if root.kind != jsonKindArray || root.count != 1 {
 					t.Fatalf("expected one-item array at each level, got kind %v", root.kind)
 				}
-				root = root.items[0]
+				root = tree.children(root)[0]
 			}
 			if root.kind != jsonKindObject {
 				t.Fatalf("innermost value kind = %v, want object", root.kind)
@@ -159,19 +162,20 @@ func TestParseDeepPlutusDataJSONTreePreservesJSONValues(t *testing.T) {
 				"empty_array":  jsonKindArray,
 				"empty_object": jsonKindObject,
 			}
-			if len(root.entries) != len(wantKinds) {
-				t.Fatalf("innermost entry count = %d, want %d", len(root.entries), len(wantKinds))
+			if int(root.count) != len(wantKinds) {
+				t.Fatalf("innermost entry count = %d, want %d", root.count, len(wantKinds))
 			}
-			for _, entry := range root.entries {
-				want, ok := wantKinds[entry.key]
+			for _, entry := range tree.children(root) {
+				name := tree.keyName(entry)
+				want, ok := wantKinds[name]
 				if !ok {
-					t.Errorf("unexpected decoded key %q", entry.key)
+					t.Errorf("unexpected decoded key %q", name)
 					continue
 				}
-				if entry.val.kind != want {
-					t.Errorf("%s value kind = %v, want %v", entry.key, entry.val.kind, want)
+				if entry.kind != want {
+					t.Errorf("%s value kind = %v, want %v", name, entry.kind, want)
 				}
-				delete(wantKinds, entry.key)
+				delete(wantKinds, name)
 			}
 			if len(wantKinds) != 0 {
 				t.Errorf("missing decoded keys: %v", wantKinds)
@@ -418,6 +422,43 @@ func TestConcreteJSONDecodersRejectOtherVariants(t *testing.T) {
 			err := tt.dst.UnmarshalJSON([]byte(tt.doc))
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+// TestIntegerStringMatchesBigInt pins Integer.String and MarshalJSON to
+// math/big's decimal rendering for boundary values.
+func TestIntegerStringMatchesBigInt(t *testing.T) {
+	pow := func(bits uint) *big.Int { return new(big.Int).Lsh(big.NewInt(1), bits) }
+	tests := []struct {
+		name string
+		n    *big.Int
+	}{
+		{"zero", big.NewInt(0)},
+		{"one", big.NewInt(1)},
+		{"minus one", big.NewInt(-1)},
+		{"max int64", big.NewInt(math.MaxInt64)},
+		{"min int64", big.NewInt(math.MinInt64)},
+		{"2^64", pow(64)},
+		{"-2^64", new(big.Int).Neg(pow(64))},
+		{"2^64-1", new(big.Int).Sub(pow(64), big.NewInt(1))},
+		{"2^1000+7", new(big.Int).Add(pow(1000), big.NewInt(7))},
+		{"-2^70000", new(big.Int).Neg(pow(70000))},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			i := Integer{Inner: tt.n}
+			dec := tt.n.String()
+			if got, want := i.String(), "Integer("+dec+")"; got != want {
+				t.Fatalf("String() = %.40s..., want %.40s...", got, want)
+			}
+			out, err := i.MarshalJSON()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, want := string(out), `{"int":`+dec+`}`; got != want {
+				t.Fatalf("MarshalJSON() = %.40s..., want %.40s...", got, want)
 			}
 		})
 	}

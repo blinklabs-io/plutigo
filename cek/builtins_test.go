@@ -1821,7 +1821,11 @@ func TestMkConsBuiltin(t *testing.T) {
 		t.Fatalf("evalBuiltinApp returned error: %v", err)
 	}
 
-	constVal, ok := val.(*Constant)
+	// mkCons returns a cons cell; its contiguous form is the ProtoList.
+	if _, ok := val.(*consConstList[syn.DeBruijn]); !ok {
+		t.Fatalf("expected cons cell result, got %T", val)
+	}
+	constVal, ok := flattenLazyList[syn.DeBruijn](val).(*Constant)
 	if !ok {
 		t.Fatalf("expected Constant result, got %T", val)
 	}
@@ -4273,24 +4277,54 @@ func TestIntegerToByteStringBuiltin(t *testing.T) {
 // required for 32-bit targets, where narrowing first would turn a large size
 // into a small value and could incorrectly produce an output.
 func TestIntegerToByteStringRejectsUnrepresentableSize(t *testing.T) {
-	m := newTestMachine()
-	b := newTestBuiltin(builtin.IntegerToByteString)
-	b = b.ApplyArg(&Constant{&syn.Bool{Inner: true}})
-	b = b.ApplyArg(&Constant{&syn.Integer{
-		Inner: new(big.Int).Lsh(big.NewInt(1), 63),
-	}})
-	b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(1)}})
+	// The reference charges before it checks the size: the width is costed
+	// as (|w|-1)/8+1 words (here 2^60), so with a ledger-sized budget the
+	// call runs out of budget (as cardano-node 11.1.3 does for w = 2^62),
+	// and only a budget that covers the charge reaches the size check.
+	tests := []struct {
+		name       string
+		budget     ExBudget
+		wantBudget bool
+	}{
+		{"ledger budget", DefaultExBudget, true},
+		{"budget covers the charge", ExBudget{Mem: math.MaxInt64, Cpu: math.MaxInt64}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestMachine()
+			m.ExBudget = tt.budget
+			b := newTestBuiltin(builtin.IntegerToByteString)
+			b = b.ApplyArg(&Constant{&syn.Bool{Inner: true}})
+			b = b.ApplyArg(&Constant{&syn.Integer{
+				Inner: new(big.Int).Lsh(big.NewInt(1), 63),
+			}})
+			b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(1)}})
 
-	value, err := evalBuiltinWithError(t, m, b)
-	if value != nil {
-		t.Fatalf("expected no value, got %v", value)
-	}
-	var builtinErr *BuiltinError
-	if !errors.As(err, &builtinErr) {
-		t.Fatalf("expected BuiltinError, got %T: %v", err, err)
-	}
-	if builtinErr.Code != ErrCodeOverflow {
-		t.Fatalf("error code = %v, want %v", builtinErr.Code, ErrCodeOverflow)
+			value, err := evalBuiltinWithError(t, m, b)
+			if value != nil {
+				t.Fatalf("expected no value, got %v", value)
+			}
+			if tt.wantBudget {
+				var budgetErr *BudgetError
+				if !errors.As(err, &budgetErr) {
+					t.Fatalf("expected BudgetError, got %T: %v", err, err)
+				}
+				if budgetErr.Requested.Mem != 1<<60 {
+					t.Fatalf("requested mem = %d, want 2^60", budgetErr.Requested.Mem)
+				}
+				if got := budgetErr.Available.Sub(&budgetErr.Requested); m.ExBudget != got {
+					t.Fatalf("remaining = %+v, want %+v", m.ExBudget, got)
+				}
+				return
+			}
+			var builtinErr *BuiltinError
+			if !errors.As(err, &builtinErr) {
+				t.Fatalf("expected BuiltinError, got %T: %v", err, err)
+			}
+			if builtinErr.Code != ErrCodeOverflow {
+				t.Fatalf("error code = %v, want %v", builtinErr.Code, ErrCodeOverflow)
+			}
+		})
 	}
 }
 
@@ -5315,10 +5349,11 @@ func TestConsByteStringVariantABDBigInt(t *testing.T) {
 }
 
 // TestSliceByteStringClamping verifies sliceByteString clamps out-of-range
-// skip/take values exactly like the Plutus reference (which slices a shared
-// ByteString buffer and never fails), instead of overflowing skip+take into a
+// skip/take values within the Int64 range exactly like the Plutus reference
+// (BS.take n (BS.drop k xs)), instead of overflowing skip+take into a
 // negative slice bound and panicking. The huge-take case below previously
-// produced "slice bounds out of range [:-9223372036854775808]".
+// produced "slice bounds out of range [:-9223372036854775808]". Arguments
+// outside the Int64 range fail: the reference unlifts both as Int.
 func TestSliceByteStringClamping(t *testing.T) {
 	maxInt64 := new(big.Int).SetInt64(math.MaxInt64)
 	aboveMaxInt64 := new(big.Int).Add(maxInt64, big.NewInt(1))
@@ -5374,11 +5409,22 @@ func TestSliceByteStringClamping(t *testing.T) {
 			expected: []byte{0x03, 0x04},
 		},
 		{
-			name:     "skip past end with non-int64 take yields empty",
-			skip:     big.NewInt(10),
-			take:     aboveMaxInt64,
-			input:    []byte{0x01, 0x02, 0x03},
-			expected: []byte{},
+			name:  "non-int64 take fails",
+			skip:  big.NewInt(10),
+			take:  aboveMaxInt64,
+			input: []byte{0x01, 0x02, 0x03},
+		},
+		{
+			name:  "non-int64 skip fails",
+			skip:  aboveMaxInt64,
+			take:  big.NewInt(1),
+			input: []byte{0x01, 0x02, 0x03},
+		},
+		{
+			name:  "skip below int64 fails",
+			skip:  new(big.Int).Sub(new(big.Int).SetInt64(math.MinInt64), big.NewInt(1)),
+			take:  big.NewInt(1),
+			input: []byte{0x01, 0x02, 0x03},
 		},
 	}
 
@@ -5391,6 +5437,12 @@ func TestSliceByteStringClamping(t *testing.T) {
 			b = b.ApplyArg(&Constant{&syn.ByteString{Inner: tt.input}})
 
 			val, err := evalBuiltinWithError(t, m, b)
+			if tt.expected == nil {
+				if err == nil {
+					t.Fatalf("expected an error, got %v", val)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -5616,23 +5668,24 @@ func TestDropListDataListBudgetCharacterization(t *testing.T) {
 			false,
 		},
 		{
-			// |n| >= 2^40 charges just enough CPU so that base + extra
-			// approximates MaxInt64; with a MaxInt64 starting budget the
-			// spend still succeeds and everything is dropped.
+			// The reference charges intercept + slope*|n| in SatInt
+			// arithmetic, which saturates at MaxInt64; with a MaxInt64
+			// starting budget the spend still succeeds and everything is
+			// dropped.
 			"huge non-int64",
 			dropListTestBudget,
 			new(big.Int).Lsh(big.NewInt(1), 70),
-			ExBudget{Mem: 4, Cpu: 9223372036854679707},
+			ExBudget{Mem: 4, Cpu: math.MaxInt64},
 			false,
 		},
 		{
-			// With a small starting budget the huge-n CPU spend fails after
-			// the base cost was charged: a BudgetError with only the base
-			// cost consumed.
+			// With a small starting budget the saturated charge overdraws.
+			// It is one charge, and the remaining budget includes it, as
+			// cardano-node 11.1.3 reports for n = ±2^62.
 			"huge non-int64 out of budget",
 			ExBudget{Mem: 1_000_000, Cpu: 1_000_000},
 			new(big.Int).Lsh(big.NewInt(1), 70),
-			ExBudget{Mem: 4, Cpu: 116711},
+			ExBudget{Mem: 4, Cpu: math.MaxInt64},
 			true,
 		},
 	}
@@ -5698,17 +5751,18 @@ func TestDropListDataMapBudgetCharacterization(t *testing.T) {
 			false,
 		},
 		{
+			// Saturated reference charge; see the list variant above.
 			"huge non-int64",
 			dropListTestBudget,
 			new(big.Int).Lsh(big.NewInt(1), 70),
-			ExBudget{Mem: 4, Cpu: 9223372036854679707},
+			ExBudget{Mem: 4, Cpu: math.MaxInt64},
 			false,
 		},
 		{
 			"huge non-int64 out of budget",
 			ExBudget{Mem: 1_000_000, Cpu: 1_000_000},
 			new(big.Int).Lsh(big.NewInt(1), 70),
-			ExBudget{Mem: 4, Cpu: 116711},
+			ExBudget{Mem: 4, Cpu: math.MaxInt64},
 			true,
 		},
 	}

@@ -10,7 +10,7 @@ import (
 
 // This loop mirrors the checked variant so Machine.Run does not carry
 // cancellation state through every CEK step.
-func runStackNoSlippageDeBruijnUnchecked(
+func runStackDeBruijnUnchecked(
 	m *Machine[syn.DeBruijn],
 	term syn.Term[syn.DeBruijn],
 ) (syn.Term[syn.DeBruijn], error) {
@@ -28,8 +28,10 @@ func runStackNoSlippageDeBruijnUnchecked(
 			switch termIface.tab {
 			case varTermTabDeBruijn:
 				t := (*syn.Var[syn.DeBruijn])(termIface.data)
-				if !m.spendStepNoSlippage(ExVar) {
-					return nil, m.budgetErrorForStep(ExVar)
+				if !m.countStep(ExVar) {
+					if err := m.spendUnbudgetedSteps(); err != nil {
+						return nil, err
+					}
 				}
 
 				value, ok := lookupEnvDeBruijn(currentEnv, int(t.Name))
@@ -44,34 +46,42 @@ func runStackNoSlippageDeBruijnUnchecked(
 				returning = true
 			case delayTermTabDeBruijn:
 				t := (*syn.Delay[syn.DeBruijn])(termIface.data)
-				if !m.spendStepNoSlippage(ExDelay) {
-					return nil, m.budgetErrorForStep(ExDelay)
+				if !m.countStep(ExDelay) {
+					if err := m.spendUnbudgetedSteps(); err != nil {
+						return nil, err
+					}
 				}
 
 				currentValue = m.allocDelay(t, currentEnv)
 				returning = true
 			case lambdaTermTabDeBruijn:
 				t := (*syn.Lambda[syn.DeBruijn])(termIface.data)
-				if !m.spendStepNoSlippage(ExLambda) {
-					return nil, m.budgetErrorForStep(ExLambda)
+				if !m.countStep(ExLambda) {
+					if err := m.spendUnbudgetedSteps(); err != nil {
+						return nil, err
+					}
 				}
 
 				currentValue = m.allocLambda(t, currentEnv)
 				returning = true
 			case applyTermTabDeBruijn:
 				t := (*syn.Apply[syn.DeBruijn])(termIface.data)
-				if !m.spendStepNoSlippage(ExApply) {
-					return nil, m.budgetErrorForStep(ExApply)
+				if !m.countStep(ExApply) {
+					if err := m.spendUnbudgetedSteps(); err != nil {
+						return nil, err
+					}
 				}
 
 				funcIface := (*termInterfaceDeBruijn)(unsafe.Pointer(&t.Function))
 				if funcIface.tab == lambdaTermTabDeBruijn {
 					lambda := (*syn.Lambda[syn.DeBruijn])(funcIface.data)
-					if !m.spendStepNoSlippage(ExLambda) {
-						return nil, m.budgetErrorForStep(ExLambda)
+					if !m.countStep(ExLambda) {
+						if err := m.spendUnbudgetedSteps(); err != nil {
+							return nil, err
+						}
 					}
 					if isImmediateTermDeBruijn(t.Argument) {
-						argValue, err := computeKnownImmediateValueNoSlippageDeBruijn(
+						argValue, err := computeKnownImmediateValueDeBruijn(
 							m,
 							currentEnv,
 							t.Argument,
@@ -94,7 +104,7 @@ func runStackNoSlippageDeBruijnUnchecked(
 				}
 
 				if isImmediateTermDeBruijn(t.Function) {
-					funValue, err := computeKnownImmediateValueNoSlippageDeBruijn(
+					funValue, err := computeKnownImmediateValueDeBruijn(
 						m,
 						currentEnv,
 						t.Function,
@@ -104,7 +114,7 @@ func runStackNoSlippageDeBruijnUnchecked(
 					}
 
 					if isImmediateTermDeBruijn(t.Argument) {
-						argValue, err := computeKnownImmediateValueNoSlippageDeBruijn(
+						argValue, err := computeKnownImmediateValueDeBruijn(
 							m,
 							currentEnv,
 							t.Argument,
@@ -145,23 +155,29 @@ func runStackNoSlippageDeBruijnUnchecked(
 				currentTerm = t.Function
 			case constantTermTab:
 				t := (*syn.Constant)(termIface.data)
-				if !m.spendStepNoSlippage(ExConstant) {
-					return nil, m.budgetErrorForStep(ExConstant)
+				if !m.countStep(ExConstant) {
+					if err := m.spendUnbudgetedSteps(); err != nil {
+						return nil, err
+					}
 				}
 
 				currentValue = machineConstantValue(m, t.Con)
 				returning = true
 			case forceTermTabDeBruijn:
 				t := (*syn.Force[syn.DeBruijn])(termIface.data)
-				if !m.spendStepNoSlippage(ExForce) {
-					return nil, m.budgetErrorForStep(ExForce)
+				if !m.countStep(ExForce) {
+					if err := m.spendUnbudgetedSteps(); err != nil {
+						return nil, err
+					}
 				}
 
 				termIface := (*termInterfaceDeBruijn)(unsafe.Pointer(&t.Term))
 				if termIface.tab == builtinTermTabDeBruijn {
 					builtinTerm := (*syn.Builtin)(termIface.data)
-					if !m.spendStepNoSlippage(ExBuiltin) {
-						return nil, m.budgetErrorForStep(ExBuiltin)
+					if !m.countStep(ExBuiltin) {
+						if err := m.spendUnbudgetedSteps(); err != nil {
+							return nil, err
+						}
 					}
 					var err error
 					currentTerm, currentEnv, currentValue, returning, err = m.forceEvaluateStack(
@@ -174,7 +190,7 @@ func runStackNoSlippageDeBruijnUnchecked(
 				}
 
 				if isImmediateTermDeBruijn(t.Term) {
-					forcedValue, err := computeKnownImmediateValueNoSlippageDeBruijn(
+					forcedValue, err := computeKnownImmediateValueDeBruijn(
 						m,
 						currentEnv,
 						t.Term,
@@ -198,16 +214,20 @@ func runStackNoSlippageDeBruijnUnchecked(
 				return nil, &ScriptError{Code: ErrCodeExplicitError, Message: "error explicitly called"}
 			case builtinTermTabDeBruijn:
 				t := (*syn.Builtin)(termIface.data)
-				if !m.spendStepNoSlippage(ExBuiltin) {
-					return nil, m.budgetErrorForStep(ExBuiltin)
+				if !m.countStep(ExBuiltin) {
+					if err := m.spendUnbudgetedSteps(); err != nil {
+						return nil, err
+					}
 				}
 
 				currentValue = m.builtinNoArgValues[t.DefaultFunction][0]
 				returning = true
 			case constrTermTabDeBruijn:
 				t := (*syn.Constr[syn.DeBruijn])(termIface.data)
-				if !m.spendStepNoSlippage(ExConstr) {
-					return nil, m.budgetErrorForStep(ExConstr)
+				if !m.countStep(ExConstr) {
+					if err := m.spendUnbudgetedSteps(); err != nil {
+						return nil, err
+					}
 				}
 
 				if len(t.Fields) == 0 {
@@ -225,12 +245,14 @@ func runStackNoSlippageDeBruijnUnchecked(
 				currentTerm = t.Fields[0]
 			case caseTermTabDeBruijn:
 				t := (*syn.Case[syn.DeBruijn])(termIface.data)
-				if !m.spendStepNoSlippage(ExCase) {
-					return nil, m.budgetErrorForStep(ExCase)
+				if !m.countStep(ExCase) {
+					if err := m.spendUnbudgetedSteps(); err != nil {
+						return nil, err
+					}
 				}
 
 				if isImmediateTermDeBruijn(t.Constr) {
-					scrutinee, err := computeKnownImmediateValueNoSlippageDeBruijn(
+					scrutinee, err := computeKnownImmediateValueDeBruijn(
 						m,
 						currentEnv,
 						t.Constr,
@@ -313,7 +335,7 @@ func runStackNoSlippageDeBruijnUnchecked(
 			m.frameStack = m.frameStack[:frameIdx]
 
 			if isImmediateTermDeBruijn(term) {
-				argValue, err := computeKnownImmediateValueNoSlippageDeBruijn(m, env, term)
+				argValue, err := computeKnownImmediateValueDeBruijn(m, env, term)
 				if err != nil {
 					return nil, err
 				}

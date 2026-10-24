@@ -14,6 +14,8 @@
 
 package cek
 
+import "math"
+
 type ExBudget struct {
 	Mem int64
 	Cpu int64
@@ -30,9 +32,24 @@ func (ex *ExBudget) occurrences(n uint32) {
 	ex.Cpu = satMul(ex.Cpu, int64(n))
 }
 
+// Sub returns ex - other, saturated at the int64 bounds so that the consumed
+// budget of a run that failed on a saturated charge does not wrap.
 func (ex *ExBudget) Sub(other *ExBudget) ExBudget {
 	return ExBudget{
-		Mem: ex.Mem - other.Mem,
-		Cpu: ex.Cpu - other.Cpu,
+		Mem: satSub(ex.Mem, other.Mem),
+		Cpu: satSub(ex.Cpu, other.Cpu),
 	}
+}
+
+// satSub returns x - y saturated at the int64 bounds, like the reference's
+// SatInt budget arithmetic.
+func satSub(x, y int64) int64 {
+	d := x - y
+	if (x^y) < 0 && (x^d) < 0 {
+		if x < 0 {
+			return math.MinInt64
+		}
+		return math.MaxInt64
+	}
+	return d
 }

@@ -87,7 +87,7 @@ func TestUnionValueStopsOnCancellation(t *testing.T) {
 		limit int
 	}{
 		{name: "value conversion", limit: 1},
-		{name: "merge", limit: 145},
+		{name: "merge", limit: 10},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			m := newTestMachineV4()
@@ -157,7 +157,7 @@ func TestUnionValueStopsDuringMerge(t *testing.T) {
 	)
 
 	m := newTestMachineV4()
-	ctx := &cancelAfterChecksContext{limit: 6, done: make(chan struct{})}
+	ctx := &cancelAfterChecksContext{limit: 3, done: make(chan struct{})}
 	m.activeContext = ctx
 	t.Cleanup(func() { m.activeContext = nil })
 	b := newTestBuiltin(builtin.UnionValue).

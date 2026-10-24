@@ -25,7 +25,6 @@ import (
 	"math"
 	"math/big"
 	"math/bits"
-	"sort"
 	"sync"
 	"unicode/utf8"
 
@@ -66,6 +65,21 @@ func validBLSMSMScalar(scalar *big.Int) bool {
 		return scalar.Cmp(new(big.Int).Neg(blsMSMScalarLimit)) >= 0
 	}
 	return scalar.Cmp(blsMSMScalarLimit) < 0
+}
+
+// checkBLSScalarMulBound fails a G1 or G2 scalarMul whose scalar is outside
+// the signed 4096-bit range: from van Rossem the reference bounds it like
+// multiScalarMul (BLS12_381.G1/G2.scalarMulE), failing after costing.
+func (m *Machine[T]) checkBLSScalarMulBound(fn builtin.DefaultFunction, scalar *big.Int) error {
+	if (m.semantics == SemanticsVariantD || m.semantics == SemanticsVariantE) &&
+		!validBLSMSMScalar(scalar) {
+		return &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: fn.String(),
+			Message: "scalar is outside the signed 4096-bit range",
+		}
+	}
+	return nil
 }
 
 func validateBLSMSMScalars[T syn.Eval](
@@ -470,6 +484,9 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 	if arg == nil {
 		return nil, true, internalError("unary builtin evaluated nil argument")
 	}
+	if err := m.checkBoundedArgs1(fn, arg); err != nil {
+		return nil, true, err
+	}
 
 	switch fn {
 	case builtin.FstPair:
@@ -529,6 +546,12 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 			}
 			return m.allocDataPairValue(dataMap.items[0][0], dataMap.items[0][1]), true, nil
 		}
+		if lazy, ok := arg.(lazyListValue[T]); ok {
+			if err := m.CostOne(&fn, valueExMem[T](arg)); err != nil {
+				return nil, true, err
+			}
+			return lazy.lazyHead(m), true, nil
+		}
 		list, err := unwrapList[T](nil, arg)
 		if err != nil {
 			return nil, true, err
@@ -577,6 +600,12 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 			}
 			return m.allocDataMapValue(dataMap.items[1:]), true, nil
 		}
+		if lazy, ok := arg.(lazyListValue[T]); ok {
+			if err := m.CostOne(&fn, valueExMem[T](arg)); err != nil {
+				return nil, true, err
+			}
+			return lazy.lazyTail(m), true, nil
+		}
 		list, err := unwrapList[T](nil, arg)
 		if err != nil {
 			return nil, true, err
@@ -604,6 +633,12 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 				return nil, true, err
 			}
 			return boolConstant(len(w.items) == 0), true, nil
+		}
+		if lazy, ok := arg.(lazyListValue[T]); ok {
+			if err := m.CostOne(&fn, valueExMem[T](arg)); err != nil {
+				return nil, true, err
+			}
+			return boolConstant(lazy.lazyLen() == 0), true, nil
 		}
 		list, err := unwrapList[T](nil, arg)
 		if err != nil {
@@ -718,6 +753,9 @@ func (m *Machine[T]) evalBinaryBuiltinFast(
 	leftVal Value[T],
 	rightVal Value[T],
 ) (Value[T], bool, error) {
+	if err := m.checkBoundedArgs2(fn, leftVal, rightVal); err != nil {
+		return nil, true, err
+	}
 	if resolved, handled, err := m.evalBinaryIntegerBuiltin(fn, leftVal, rightVal); handled {
 		return resolved, true, err
 	}
@@ -782,59 +820,123 @@ func (m *Machine[T]) evalBinaryBuiltinFast(
 		m.Logs = append(m.Logs, msg)
 		return rightVal, true, nil
 	case builtin.MkCons:
-		if dataMap, ok := rightVal.(*dataMapValue[T]); ok {
-			if err := m.CostTwo(&fn, valueExMem[T](leftVal), valueExMem[T](rightVal)); err != nil {
-				return nil, true, err
-			}
-			first, second, err := splitPairValue(m, leftVal)
-			if err != nil {
-				return nil, true, err
-			}
-			dataFirst, err := unwrapData[T](first)
-			if err != nil {
-				return nil, true, err
-			}
-			dataSecond, err := unwrapData[T](second)
-			if err != nil {
-				return nil, true, err
-			}
-			consList := make([][2]data.PlutusData, len(dataMap.items)+1)
-			consList[0] = [2]data.PlutusData{dataFirst, dataSecond}
-			copy(consList[1:], dataMap.items)
-			return m.allocDataMapValue(consList), true, nil
-		}
-		if dataList, ok := rightVal.(*dataListValue[T]); ok {
-			if err := m.CostTwo(&fn, valueExMem[T](leftVal), valueExMem[T](rightVal)); err != nil {
-				return nil, true, err
-			}
-			dataHead, err := unwrapData[T](leftVal)
-			if err != nil {
-				return nil, true, err
-			}
-			consList := make([]data.PlutusData, len(dataList.items)+1)
-			consList[0] = dataHead
-			copy(consList[1:], dataList.items)
-			return m.allocDataListValue(consList), true, nil
-		}
-		head, err := unwrapConstant[T](leftVal)
-		if err != nil {
-			return nil, true, err
-		}
-		typ := head.Constant.Typ()
-		tail, err := unwrapList[T](typ, rightVal)
-		if err != nil {
-			return nil, true, err
-		}
-		if err := m.CostTwo(&fn, valueExMem[T](head), listExMem(tail.List)); err != nil {
-			return nil, true, err
-		}
-		consList := m.allocConstantElems(len(tail.List) + 1)
-		consList[0] = head.Constant
-		copy(consList[1:], tail.List)
-		return m.allocConstant(m.allocProtoListConstant(typ, consList)), true, nil
+		return m.mkConsFast(fn, leftVal, rightVal)
 	default:
 		return nil, false, nil
 	}
+}
+
+// mkConsFast prepends leftVal to the list rightVal in O(1) amortised: the
+// result is always a cons cell sharing the tail (see list_share.go and
+// list_lazy.go). The charged budget and every error are those of the
+// contiguous implementation: a cell-backed tail takes the same path as the
+// contiguous value it stands for.
+func (m *Machine[T]) mkConsFast(
+	fn builtin.DefaultFunction,
+	leftVal Value[T],
+	rightVal Value[T],
+) (Value[T], bool, error) {
+	var mapTail [][2]data.PlutusData
+	var mapCell *consCell[[2]data.PlutusData]
+	var dataTail []data.PlutusData
+	var dataCell *consCell[data.PlutusData]
+	isMap, isData := false, false
+	switch tail := rightVal.(type) {
+	case *dataMapValue[T]:
+		isMap, mapTail = true, tail.items
+	case *consDataMap[T]:
+		isMap, mapCell = true, tail.cell
+	case *dataListValue[T]:
+		isData, dataTail = true, tail.items
+	case *consDataList[T]:
+		isData, dataCell = true, tail.cell
+	}
+	if isMap {
+		if err := m.CostTwo(&fn, valueExMem[T](leftVal), valueExMem[T](rightVal)); err != nil {
+			return nil, true, err
+		}
+		first, second, err := splitPairValue(m, leftVal)
+		if err != nil {
+			return nil, true, err
+		}
+		dataFirst, err := unwrapData[T](first)
+		if err != nil {
+			return nil, true, err
+		}
+		dataSecond, err := unwrapData[T](second)
+		if err != nil {
+			return nil, true, err
+		}
+		head := [2]data.PlutusData{dataFirst, dataSecond}
+		a := newDataMapAlloc[T]()
+		if mapCell != nil {
+			consOntoCell(&a.c, head, mapCell)
+		} else {
+			consOntoSlice(&a.c, head, mapTail)
+		}
+		return &a.v, true, nil
+	}
+	if isData {
+		if err := m.CostTwo(&fn, valueExMem[T](leftVal), valueExMem[T](rightVal)); err != nil {
+			return nil, true, err
+		}
+		dataHead, err := unwrapData[T](leftVal)
+		if err != nil {
+			return nil, true, err
+		}
+		a := newDataListAlloc[T]()
+		if dataCell != nil {
+			consOntoCell(&a.c, dataHead, dataCell)
+		} else {
+			consOntoSlice(&a.c, dataHead, dataTail)
+		}
+		return &a.v, true, nil
+	}
+	head, err := m.unwrapConsHead(leftVal)
+	if err != nil {
+		return nil, true, err
+	}
+	typ := head.Constant.Typ()
+	if lazy, ok := rightVal.(*consConstList[T]); ok {
+		// Same check and error as unwrapList on the flattened list.
+		if typ != nil && !syn.EqualType(typ, lazy.typ) {
+			return nil, true, fmt.Errorf("Value not a List of type %T", typ)
+		}
+		if err := m.CostTwo(&fn, valueExMem[T](head), valueExMem[T](rightVal)); err != nil {
+			return nil, true, err
+		}
+		a := newConstListAlloc[T](typ)
+		consOntoCell(&a.c, head.Constant, lazy.cell)
+		return &a.v, true, nil
+	}
+	tail, err := unwrapList[T](typ, rightVal)
+	if err != nil {
+		return nil, true, err
+	}
+	if err := m.CostTwo(&fn, valueExMem[T](head), listExMem(tail.List)); err != nil {
+		return nil, true, err
+	}
+	a := newConstListAlloc[T](typ)
+	consOntoSlice(&a.c, head.Constant, tail.List)
+	return &a.v, true, nil
+}
+
+// unwrapConsHead is unwrapConstant for the mkCons head, converting data
+// lists through the machine's conversion cache so that consing the same
+// (or an extended) data list repeatedly does not re-convert it.
+func (m *Machine[T]) unwrapConsHead(value Value[T]) (*Constant, error) {
+	if v, ok := value.(*Constant); ok {
+		return v, nil
+	}
+	budget := dischargeWorkBudget{remaining: maxDischargeWork}
+	c, ok, err := materializeConstantValueShared[T](value, 0, maxDischargeDepth, &budget, &m.listShare)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return &Constant{Constant: c}, nil
+	}
+	return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
 }
 
 func (m *Machine[T]) evalTernaryBuiltinFast(
@@ -843,6 +945,9 @@ func (m *Machine[T]) evalTernaryBuiltinFast(
 	secondVal Value[T],
 	thirdVal Value[T],
 ) (Value[T], bool, error) {
+	if err := m.checkBoundedArgs3(fn, firstVal, secondVal, thirdVal); err != nil {
+		return nil, true, err
+	}
 	switch fn {
 	case builtin.IfThenElse:
 		cond, err := unwrapBool[T](firstVal)
@@ -871,6 +976,15 @@ func (m *Machine[T]) evalTernaryBuiltinFast(
 				return nil, true, err
 			}
 			if len(dataMap.items) == 0 {
+				return secondVal, true, nil
+			}
+			return thirdVal, true, nil
+		}
+		if lazy, ok := firstVal.(lazyListValue[T]); ok {
+			if err := m.CostThree(&fn, valueExMem[T](firstVal), valueExMem[T](secondVal), valueExMem[T](thirdVal)); err != nil {
+				return nil, true, err
+			}
+			if lazy.lazyLen() == 0 {
 				return secondVal, true, nil
 			}
 			return thirdVal, true, nil
@@ -1089,6 +1203,17 @@ func sliceByteString[T syn.Eval](
 		return nil, err
 	}
 
+	// The reference unlifts skip and take as Int in every semantics variant
+	// (PlutusCore.Default.Universe readKnownAsInteger): an Integer outside
+	// the Int64 range fails the application before it is costed.
+	if !arg1.IsInt64() || !arg2.IsInt64() {
+		return nil, &BuiltinError{
+			Code:    ErrCodeOverflow,
+			Builtin: "sliceByteString",
+			Message: "argument is not within the bounds of Int",
+		}
+	}
+
 	err = m.CostThree(
 		&b.Func,
 		bigIntExMem(arg1),
@@ -1104,14 +1229,10 @@ func sliceByteString[T syn.Eval](
 	// bytes after skip, so using an unclamped skip can produce a negative take.
 	skip := 0
 	if arg1.Sign() > 0 {
-		if skip64, ok := arg1.Int64(), arg1.IsInt64(); ok {
-			if skip64 > int64(len(arg3)) {
-				skip = len(arg3)
-			} else {
-				skip = int(skip64)
-			}
+		if skip64 := arg1.Int64(); skip64 > int64(len(arg3)) {
+			skip = len(arg3)
 		} else {
-			skip = len(arg3) // Clamp to max if too large
+			skip = int(skip64)
 		}
 	}
 	remaining := len(arg3) - skip
@@ -1120,14 +1241,10 @@ func sliceByteString[T syn.Eval](
 	// final slice bounds in range and avoids skip+take overflowing.
 	take := 0
 	if arg2.Sign() > 0 {
-		if take64, ok := arg2.Int64(), arg2.IsInt64(); ok {
-			if take64 > int64(remaining) {
-				take = remaining
-			} else {
-				take = int(take64)
-			}
+		if take64 := arg2.Int64(); take64 > int64(remaining) {
+			take = remaining
 		} else {
-			take = remaining // Take as much as possible
+			take = int(take64)
 		}
 	}
 
@@ -1377,11 +1494,11 @@ func verifyEd25519Signature[T syn.Eval](
 		if ok {
 			res = cached
 		} else {
-			res = ed25519.Verify(publicKey, message, signature)
+			res = ed25519VerifyStrict(publicKey, message, signature)
 			ed25519VerifyCache.store(&key, res)
 		}
 	} else {
-		res = ed25519.Verify(publicKey, message, signature)
+		res = ed25519VerifyStrict(publicKey, message, signature)
 	}
 
 	con := &syn.Bool{
@@ -2070,6 +2187,69 @@ func validateConstrTag(
 	return new(big.Int).Set(arg), nil
 }
 
+// flattenListArg returns the contiguous equivalent of a list argument and,
+// for a list built by mkCons with constant elements, the buffer holding its
+// elements, on which conversions are memoised.
+func flattenListArg[T syn.Eval](value Value[T]) (Value[T], *frontBuf[syn.IConstant]) {
+	if list, ok := value.(*consConstList[T]); ok {
+		flat, buf := list.cell.flatten()
+		return &Constant{Constant: &syn.ProtoList{LTyp: list.typ, List: flat}}, buf
+	}
+	return flattenLazyList[T](value), nil
+}
+
+func dataElem(item syn.IConstant, builtinName string) (data.PlutusData, error) {
+	itemData, ok := item.(*syn.Data)
+	if !ok {
+		return nil, &TypeError{
+			Code:     ErrCodeTypeMismatch,
+			Expected: "Data",
+			Got:      fmt.Sprintf("%T", item),
+			Message:  builtinName + ": list element is not Data",
+		}
+	}
+	return itemData.Inner, nil
+}
+
+func listDataElem(item syn.IConstant) (data.PlutusData, error) {
+	return dataElem(item, "listData")
+}
+
+func constrDataElem(item syn.IConstant) (data.PlutusData, error) {
+	return dataElem(item, "constrData")
+}
+
+func mapDataElem(item syn.IConstant) ([2]data.PlutusData, error) {
+	pair, ok := item.(*syn.ProtoPair)
+	if !ok {
+		return [2]data.PlutusData{}, &TypeError{
+			Code:     ErrCodeTypeMismatch,
+			Expected: "Pair",
+			Got:      fmt.Sprintf("%T", item),
+			Message:  "mapData: list element is not a pair",
+		}
+	}
+	fst, ok := pair.First.(*syn.Data)
+	if !ok {
+		return [2]data.PlutusData{}, &TypeError{
+			Code:     ErrCodeTypeMismatch,
+			Expected: "Data",
+			Got:      fmt.Sprintf("%T", pair.First),
+			Message:  "mapData: pair key is not Data",
+		}
+	}
+	snd, ok := pair.Second.(*syn.Data)
+	if !ok {
+		return [2]data.PlutusData{}, &TypeError{
+			Code:     ErrCodeTypeMismatch,
+			Expected: "Data",
+			Got:      fmt.Sprintf("%T", pair.Second),
+			Message:  "mapData: pair value is not Data",
+		}
+	}
+	return [2]data.PlutusData{fst.Inner, snd.Inner}, nil
+}
+
 func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
@@ -2078,7 +2258,10 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	if arg2, ok := m.argHolder[1].(*dataListValue[T]); ok {
+	// A cons-cell list must become one contiguous slice; flattening is
+	// memoised per cell and O(1) amortised for lists built by chained mkCons.
+	listArg, owner := flattenListArg[T](m.argHolder[1])
+	if arg2, ok := listArg.(*dataListValue[T]); ok {
 		err = m.CostTwo(&b.Func, bigIntExMem(arg1), valueExMem[T](arg2))
 		if err != nil {
 			return nil, err
@@ -2095,7 +2278,7 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}), nil
 	}
 
-	arg2, err := unwrapList[T](&syn.TData{}, m.argHolder[1])
+	arg2, err := unwrapList[T](&syn.TData{}, listArg)
 	if err != nil {
 		return nil, err
 	}
@@ -2105,18 +2288,9 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	dataList := make([]data.PlutusData, len(arg2.List))
-	for i, item := range arg2.List {
-		itemData, ok := item.(*syn.Data)
-		if !ok {
-			return nil, &TypeError{
-				Code:     ErrCodeTypeMismatch,
-				Expected: "Data",
-				Got:      fmt.Sprintf("%T", item),
-				Message:  "constrData: list element is not Data",
-			}
-		}
-		dataList[i] = itemData.Inner
+	dataList, err := convertList(&m.listShare.toData, owner, arg2.List, constrDataElem)
+	if err != nil {
+		return nil, err
 	}
 
 	tag, tagErr := validateConstrTag(m.semantics, arg1)
@@ -2133,7 +2307,8 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	if arg1, ok := m.argHolder[0].(*dataMapValue[T]); ok {
+	listArg, owner := flattenListArg[T](m.argHolder[0])
+	if arg1, ok := listArg.(*dataMapValue[T]); ok {
 		err := m.CostOne(&b.Func, valueExMem[T](arg1))
 		if err != nil {
 			return nil, err
@@ -2148,7 +2323,7 @@ func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		Second: &syn.TData{},
 	}
 
-	arg1, err := unwrapList[T](pairType, m.argHolder[0])
+	arg1, err := unwrapList[T](pairType, listArg)
 	if err != nil {
 		return nil, err
 	}
@@ -2158,36 +2333,9 @@ func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	dataList := make([][2]data.PlutusData, len(arg1.List))
-	for i, item := range arg1.List {
-		pair, ok := item.(*syn.ProtoPair)
-		if !ok {
-			return nil, &TypeError{
-				Code:     ErrCodeTypeMismatch,
-				Expected: "Pair",
-				Got:      fmt.Sprintf("%T", item),
-				Message:  "mapData: list element is not a pair",
-			}
-		}
-		fst, ok := pair.First.(*syn.Data)
-		if !ok {
-			return nil, &TypeError{
-				Code:     ErrCodeTypeMismatch,
-				Expected: "Data",
-				Got:      fmt.Sprintf("%T", pair.First),
-				Message:  "mapData: pair key is not Data",
-			}
-		}
-		snd, ok := pair.Second.(*syn.Data)
-		if !ok {
-			return nil, &TypeError{
-				Code:     ErrCodeTypeMismatch,
-				Expected: "Data",
-				Got:      fmt.Sprintf("%T", pair.Second),
-				Message:  "mapData: pair value is not Data",
-			}
-		}
-		dataList[i] = [2]data.PlutusData{fst.Inner, snd.Inner}
+	dataList, err := convertList(&m.listShare.toPairs, owner, arg1.List, mapDataElem)
+	if err != nil {
+		return nil, err
 	}
 
 	return m.allocDataValue(&data.Map{
@@ -2198,7 +2346,8 @@ func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	if arg1, ok := m.argHolder[0].(*dataListValue[T]); ok {
+	listArg, owner := flattenListArg[T](m.argHolder[0])
+	if arg1, ok := listArg.(*dataListValue[T]); ok {
 		err := m.CostOne(&b.Func, valueExMem[T](arg1))
 		if err != nil {
 			return nil, err
@@ -2208,7 +2357,7 @@ func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}), nil
 	}
 
-	arg1, err := unwrapList[T](&syn.TData{}, m.argHolder[0])
+	arg1, err := unwrapList[T](&syn.TData{}, listArg)
 	if err != nil {
 		return nil, err
 	}
@@ -2218,18 +2367,9 @@ func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	dataList := make([]data.PlutusData, len(arg1.List))
-	for i, item := range arg1.List {
-		itemData, ok := item.(*syn.Data)
-		if !ok {
-			return nil, &TypeError{
-				Code:     ErrCodeTypeMismatch,
-				Expected: "Data",
-				Got:      fmt.Sprintf("%T", item),
-				Message:  "listData: list element is not Data",
-			}
-		}
-		dataList[i] = itemData.Inner
+	dataList, err := convertList(&m.listShare.toData, owner, arg1.List, listDataElem)
+	if err != nil {
+		return nil, err
 	}
 
 	return m.allocDataValue(&data.List{
@@ -2333,7 +2473,13 @@ func serialiseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	encoded, err := data.Encode(arg1)
+	// The reference (PlutusCore.Data.encodeData) always writes the
+	// canonical encoding: definite maps, and lists and constructor fields
+	// definite when empty and indefinite otherwise. Data decoded from a
+	// script constant or a ledger argument remembers its original
+	// definite/indefinite choices for re-encoding fidelity, so serialise
+	// the normalized form.
+	encoded, err := data.Encode(data.Normalize(arg1))
 	if err != nil {
 		return nil, err
 	}
@@ -2482,6 +2628,10 @@ func bls12381G1ScalarMul[T syn.Eval](
 
 	err = m.CostTwo(&b.Func, bigIntExMem(arg1), blsG1ExMem())
 	if err != nil {
+		return nil, err
+	}
+
+	if err := m.checkBLSScalarMulBound(b.Func, arg1); err != nil {
 		return nil, err
 	}
 
@@ -2706,6 +2856,10 @@ func bls12381G2ScalarMul[T syn.Eval](
 		return nil, err
 	}
 
+	if err := m.checkBLSScalarMulBound(b.Func, arg1); err != nil {
+		return nil, err
+	}
+
 	newG2 := new(bls.G2Jac).ScalarMultiplication(
 		arg2,
 		normalizeBLSScalar(arg1),
@@ -2741,7 +2895,12 @@ func bls12381G1MultiScalarMul[T syn.Eval](
 		listLengthExMem(elems.List),
 	)
 	if err != nil {
-		return nil, err
+		return nil, m.overdrawTwo(
+			&b.Func,
+			listChunksOf(len(ints.List)),
+			listChunksOf(len(elems.List)),
+			err,
+		)
 	}
 	if err := validateBLSMSMScalars(
 		m,
@@ -2813,7 +2972,12 @@ func bls12381G2MultiScalarMul[T syn.Eval](
 		listLengthExMem(elems.List),
 	)
 	if err != nil {
-		return nil, err
+		return nil, m.overdrawTwo(
+			&b.Func,
+			listChunksOf(len(ints.List)),
+			listChunksOf(len(elems.List)),
+			err,
+		)
 	}
 	if err := validateBLSMSMScalars(
 		m,
@@ -3169,6 +3333,19 @@ func integerToByteString[T syn.Eval](
 		return nil, err
 	}
 
+	// The reference charges before it checks the size (the size is costed
+	// as NumBytesCostedAsNumWords), so an oversized request fails for lack
+	// of budget when its cost overdraws.
+	err = m.CostThree(
+		&b.Func,
+		boolExMem(endianness),
+		numBytesAsWordsExMem(size),
+		bigIntExMem(input),
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	// Convert size to int64
 	if !size.IsInt64() {
 		return nil, &BuiltinError{
@@ -3196,17 +3373,6 @@ func integerToByteString[T syn.Eval](
 			Builtin: "integerToByteString",
 			Message: "size too large",
 		}
-	}
-
-	// Apply cost
-	err = m.CostThree(
-		&b.Func,
-		boolExMem(endianness),
-		sizeExMem(sizeUnwrapped),
-		bigIntExMem(input),
-	)
-	if err != nil {
-		return nil, err
 	}
 
 	if input.Sign() < 0 {
@@ -3687,7 +3853,14 @@ func writeBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		boolExMem(setBit),
 	)
 	if err != nil {
-		return nil, err
+		// The reference streams the index list's size.
+		return nil, m.overdrawThree(
+			&b.Func,
+			singleChunkOf(byteArrayExMem(bytes)()),
+			listChunksOf(len(indices.List)),
+			singleChunkOf(boolExMem(setBit)()),
+			err,
+		)
 	}
 
 	if (m.semantics == SemanticsVariantD || m.semantics == SemanticsVariantE) &&
@@ -3780,6 +3953,14 @@ func replicateByte[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
+	// The reference charges before it checks the size (costed as
+	// NumBytesCostedAsNumWords), so an oversized request fails for lack of
+	// budget when its cost overdraws.
+	err = m.CostTwo(&b.Func, numBytesAsWordsExMem(size), bigIntExMem(byteVal))
+	if err != nil {
+		return nil, err
+	}
+
 	// Validate size
 	if size.Sign() < 0 {
 		return nil, &BuiltinError{
@@ -3811,11 +3992,6 @@ func replicateByte[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			Builtin: "replicateByte",
 			Message: "size too large",
 		}
-	}
-
-	err = m.CostTwo(&b.Func, sizeExMem(sizeInt), bigIntExMem(byteVal))
-	if err != nil {
-		return nil, err
 	}
 
 	if !byteVal.IsInt64() || byteVal.Int64() < 0 || byteVal.Int64() > 255 {
@@ -3907,44 +4083,41 @@ func shiftByteString[T syn.Eval](
 		return m.argHolder[0], nil
 	}
 
-	// Convert bytes to bit array (MSB0)
-	totalBits := len(bytes) * 8
-	bits := make([]bool, totalBits)
-
-	// Read bits from bytes (MSB0 order)
-	for i := range totalBits {
-		byteIdx := i / 8
-		bitIdx := 7 - (i % 8) // MSB0: leftmost bit first
-		bits[i] = (bytes[byteIdx] & (1 << bitIdx)) != 0
-	}
-
-	// Create result bit array
-	resultBits := make([]bool, totalBits)
-
-	if shiftVal > 0 {
-		// Positive = left shift
-		for i := range totalBits - shiftVal {
-			resultBits[i] = bits[i+shiftVal]
-		}
-	} else {
-		// Negative = right shift
-		shiftAmount := -shiftVal
-		for i := shiftAmount; i < totalBits; i++ {
-			resultBits[i] = bits[i-shiftAmount]
-		}
-	}
-
-	// Convert bit array back to bytes
-	result := make([]byte, len(bytes))
-	for i := range totalBits {
-		if resultBits[i] {
-			byteIdx := i / 8
-			bitIdx := 7 - (i % 8) // MSB0: leftmost bit first
-			result[byteIdx] |= (1 << bitIdx)
-		}
-	}
+	result := shiftBytes(bytes, shiftVal)
 
 	return &Constant{&syn.ByteString{Inner: result}}, nil
+}
+
+// shiftBytes shifts bytes by shift bits (MSB0 order), positive = left,
+// negative = right, filling with zeros. |shift| must be < 8*len(bytes).
+func shiftBytes(in []byte, shift int) []byte {
+	out := make([]byte, len(in))
+	n := len(in)
+	if shift > 0 {
+		byteShift := shift / 8
+		bitShift := uint(shift % 8)
+		for i := 0; i < n-byteShift; i++ {
+			v := in[i+byteShift] << bitShift
+			if bitShift != 0 && i+byteShift+1 < n {
+				v |= in[i+byteShift+1] >> (8 - bitShift)
+			}
+			out[i] = v
+		}
+	} else if shift < 0 {
+		s := -shift
+		byteShift := s / 8
+		bitShift := uint(s % 8)
+		for i := byteShift; i < n; i++ {
+			v := in[i-byteShift] >> bitShift
+			if bitShift != 0 && i-byteShift-1 >= 0 {
+				v |= in[i-byteShift-1] << (8 - bitShift)
+			}
+			out[i] = v
+		}
+	} else {
+		copy(out, in)
+	}
+	return out
 }
 
 func rotateByteString[T syn.Eval](
@@ -4145,6 +4318,10 @@ func ripemd160[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return value, nil
 }
 
+// expModBoundBits bounds the expModInteger arguments: the modulus must be
+// at most 2^8191-1 and base and exponent within [-(2^8191), 2^8191-1].
+const expModBoundBits = 8191
+
 func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
@@ -4168,18 +4345,38 @@ func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	// Validate modulus
-	if mm.Sign() <= 0 {
+	// The checks follow PlutusCore.Crypto.ExpMod.expMod in order: the
+	// modulus must lie in [1, 2^8191-1], a modulus of 1 gives 0 whatever the
+	// other arguments, zero to a negative power fails, and only then must
+	// base and exponent lie in [-(2^8191), 2^8191-1].
+	if mm.Sign() <= 0 || mm.BitLen() > expModBoundBits {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
 			Builtin: "expModInteger",
-			Message: "invalid modulus m <= 0",
+			Message: "invalid modulus",
 		}
 	}
 
 	// Special case: modulus is 1
 	if mm.Cmp(big.NewInt(1)) == 0 {
 		return &Constant{&syn.Integer{Inner: big.NewInt(0)}}, nil
+	}
+
+	if bb.Sign() == 0 && e.Sign() < 0 {
+		// 0^negative is undefined
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "expModInteger",
+			Message: fmt.Sprintf("0^negative exponent (%s) is undefined", integerMetadata(e)),
+		}
+	}
+
+	if !inSignedBitRange(bb, expModBoundBits) || !inSignedBitRange(e, expModBoundBits) {
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "expModInteger",
+			Message: "base or exponent out of bounds",
+		}
 	}
 
 	// Handle different exponent cases
@@ -4193,14 +4390,6 @@ func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		z := new(big.Int)
 		z.Exp(bb, e, mm)
 		return &Constant{&syn.Integer{Inner: z}}, nil
-
-	case bb.Sign() == 0:
-		// 0^negative is undefined
-		return nil, &BuiltinError{
-			Code:    ErrCodeInvalidArgument,
-			Builtin: "expModInteger",
-			Message: fmt.Sprintf("0^negative exponent (%s) is undefined", integerMetadata(e)),
-		}
 
 	default:
 		// Negative exponent: need to compute modular inverse
@@ -4251,6 +4440,42 @@ func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 // Functions: dropList
 // ============================================================================
 
+// costDropList charges dropList in one amount, as the reference does: its
+// CPU cost is linear in |n| (IntegerCostedLiterally, saturated to the int64
+// range like the reference's SatInt costing arithmetic), its memory cost is
+// the memory model applied to the arguments.
+func (m *Machine[T]) costDropList(
+	b *Builtin[T],
+	nVal *big.Int,
+	listMem func() ExMem,
+) error {
+	model := m.costs.builtinCosts[b.Func]
+	cpuModel, ok := model.cpu.(*DropListCost)
+	if !ok {
+		return m.CostTwo(&b.Func, listMem, bigIntExMem(nVal))
+	}
+	memModel, ok := model.mem.(TwoArgument)
+	if !ok {
+		return internalError("dropList memory costing is not a two-argument model")
+	}
+	absN := int64(math.MaxInt64)
+	if nVal.IsInt64() && nVal.Int64() != math.MinInt64 {
+		absN = nVal.Int64()
+		if absN < 0 {
+			absN = -absN
+		}
+	}
+	nMem := bigIntExMem(nVal)()
+	listSize := ExMem(0)
+	if !memModel.HasConstants()[0] {
+		listSize = listMem()
+	}
+	return m.spendBudget(ExBudget{
+		Cpu: cpuModel.Cost(ExMem(absN)),
+		Mem: memModel.CostTwo(listSize, nMem),
+	})
+}
+
 // dropListStart charges the dropList budget for a list with the given
 // length and ExMem size, then computes the start index after dropping n
 // elements. The costing is shared by the materialized (ProtoList) path and
@@ -4263,51 +4488,13 @@ func dropListStart[T syn.Eval](
 	listLen int,
 	listMem func() ExMem,
 ) (int, error) {
-	// Spend budget (base)
-	if err := m.CostTwo(
-		&b.Func,
-		listMem,
-		bigIntExMem(nVal),
-	); err != nil {
+	if err := m.costDropList(b, nVal, listMem); err != nil {
 		return 0, err
 	}
-
-	// Capture original magnitude for costing before clamping negatives to zero
-	origAbsN := new(big.Int).Abs(nVal)
 
 	// Negative counts are treated as zero (return list unchanged)
 	if nVal.Sign() < 0 {
 		nVal = big.NewInt(0)
-	}
-
-	// Additional CPU spending proportional to |n| to align with conformance budgets
-	// Empirically derived cost model parameters for dropList operation.
-	const (
-		dropListBaseCpuApprox    int64 = 212811 // Base CPU cost approximation
-		dropListHugeBitLenThresh int   = 40     // ~1e12 threshold for "huge" requests
-	)
-	if origAbsN.Sign() != 0 {
-		perElementCpu := int64(1957)
-		if dropListCost, ok := m.costs.builtinCosts[builtin.DropList].cpu.(*DropListCost); ok {
-			perElementCpu = dropListCost.slope
-		}
-		per := big.NewInt(perElementCpu)
-		extra := new(big.Int).Mul(per, origAbsN)
-		// For extremely large requests, spend just enough so base+extra ~= MaxInt64
-		if origAbsN.BitLen() > dropListHugeBitLenThresh {
-			budgetCpu := math.MaxInt64 - dropListBaseCpuApprox
-			if err := m.spendBudget(ExBudget{Cpu: budgetCpu, Mem: 0}); err != nil {
-				return 0, err
-			}
-		} else if extra.BitLen() > 63 {
-			if err := m.spendBudget(ExBudget{Cpu: math.MaxInt64 / 2, Mem: 0}); err != nil {
-				return 0, err
-			}
-		} else {
-			if err := m.spendBudget(ExBudget{Cpu: extra.Int64(), Mem: 0}); err != nil {
-				return 0, err
-			}
-		}
 	}
 
 	// Convert n to int if possible, otherwise drop everything
@@ -4354,6 +4541,14 @@ func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			return nil, err
 		}
 		return m.allocDataMapValue(v.items[start:]), nil
+	case lazyListValue[T]:
+		// Walks at most start <= |n| cells, which the per-element charge
+		// covers.
+		start, err := dropListStart(m, b, nVal, v.lazyLen(), valueExMem[T](v))
+		if err != nil {
+			return nil, err
+		}
+		return v.lazyDrop(m, start), nil
 	}
 
 	lst, err := unwrapList[T](nil, m.argHolder[1])
@@ -4373,10 +4568,8 @@ func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	// Build resulting list
-	newList := make([]syn.IConstant, 0, len(lst.List)-start)
-	for i := start; i < len(lst.List); i++ {
-		newList = append(newList, lst.List[i])
-	}
+	// Lists are immutable, so share the retained tail instead of copying it.
+	newList := lst.List[start:len(lst.List):len(lst.List)]
 
 	return &Constant{&syn.ProtoList{LTyp: lst.LTyp, List: newList}}, nil
 }
@@ -4430,7 +4623,7 @@ func listToArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 	// Charge based on list length rather than full constant ExMem to match cost model intent
 	if err := m.CostOne(&b.Func, func() ExMem { return listLengthExMem(lst.List)() }); err != nil {
-		return nil, err
+		return nil, m.overdrawOne(&b.Func, listChunksOf(len(lst.List)), err)
 	}
 	return &Constant{&syn.ProtoArray{ATyp: lst.LTyp, Array: lst.List}}, nil
 }
@@ -4567,7 +4760,7 @@ func multiIndexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error)
 // ============================================================================
 // VALUE OPERATIONS (V4)
 // Functions: insertCoin, lookupCoin, scaleValue, unionValue, valueContains
-// Helpers: valueToMap, mapToValue
+// Helpers: valueShape, valueConstructionError
 // ============================================================================
 
 func valueShape(
@@ -4645,62 +4838,6 @@ func assetCount[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return &Constant{&syn.Integer{Inner: big.NewInt(int64(count))}}, nil
 }
 
-// valueToMap converts a Value payload to map[string]map[string]*big.Int.
-func valueToMap[T syn.Eval](
-	m *Machine[T],
-	entries []syn.IConstant,
-) (map[string]map[string]*big.Int, error) {
-	out := make(map[string]map[string]*big.Int)
-	for _, entry := range entries {
-		if err := m.checkBuiltinCancellation(); err != nil {
-			return nil, err
-		}
-		pair, ok := entry.(*syn.ProtoPair)
-		if !ok {
-			continue
-		}
-		// pair.First: policy (bytestring)
-		// pair.Second: list of pairs (token, amount)
-		policyBs, ok := pair.First.(*syn.ByteString)
-		policy := ""
-		if ok {
-			policy = string(policyBs.Inner)
-		}
-		// Reuse any existing token map for this policy so duplicate policies are merged
-		tokenMap := out[policy]
-		if tokenMap == nil {
-			tokenMap = make(map[string]*big.Int)
-		}
-		if lst, ok := pair.Second.(*syn.ProtoList); ok {
-			for _, tk := range lst.List {
-				if err := m.checkBuiltinCancellation(); err != nil {
-					return nil, err
-				}
-				tkp, ok := tk.(*syn.ProtoPair)
-				if !ok {
-					continue
-				}
-				tbs, ok1 := tkp.First.(*syn.ByteString)
-				amt, ok2 := tkp.Second.(*syn.Integer)
-				if ok1 && ok2 {
-					key := string(tbs.Inner)
-					// copy amount to avoid aliasing
-					val := new(big.Int).Set(amt.Inner)
-					if existing, exists := tokenMap[key]; exists {
-						// sum duplicate token amounts
-						sum := new(big.Int).Add(existing, val)
-						tokenMap[key] = sum
-					} else {
-						tokenMap[key] = val
-					}
-				}
-			}
-		}
-		out[policy] = tokenMap
-	}
-	return out, nil
-}
-
 // valueConstructionError reports a failure to build a Value as an internal
 // error, but passes a cancellation through so callers can still match it with
 // errors.Is.
@@ -4713,94 +4850,6 @@ func valueConstructionError(what string, err error) error {
 		Code:    ErrCodeInternalError,
 		Message: what + ": " + err.Error(),
 	}
-}
-
-// mapToValue converts a map back to canonical Value order: empty policy
-// entries are removed and policy/token keys are sorted.
-func mapToValue[T syn.Eval](
-	m *Machine[T],
-	mapp map[string]map[string]*big.Int,
-) (*syn.Value, error) {
-	res := make([]syn.IConstant, 0)
-	// deterministically sort policies
-	policies := make([]string, 0, len(mapp))
-	for p := range mapp {
-		if err := m.checkBuiltinCancellation(); err != nil {
-			return nil, err
-		}
-		policies = append(policies, p)
-	}
-	if err := m.checkBuiltinCancellation(); err != nil {
-		return nil, err
-	}
-	sort.Strings(policies)
-	if err := m.checkBuiltinCancellation(); err != nil {
-		return nil, err
-	}
-	for _, policy := range policies {
-		if err := m.checkBuiltinCancellation(); err != nil {
-			return nil, err
-		}
-		tokens := mapp[policy]
-		if len(tokens) == 0 {
-			continue
-		}
-		// sort tokens
-		tks := make([]string, 0, len(tokens))
-		for t := range tokens {
-			if err := m.checkBuiltinCancellation(); err != nil {
-				return nil, err
-			}
-			tks = append(tks, t)
-		}
-		if err := m.checkBuiltinCancellation(); err != nil {
-			return nil, err
-		}
-		sort.Strings(tks)
-		if err := m.checkBuiltinCancellation(); err != nil {
-			return nil, err
-		}
-		toks := make([]syn.IConstant, 0, len(tks))
-		for _, t := range tks {
-			if err := m.checkBuiltinCancellation(); err != nil {
-				return nil, err
-			}
-			amt := tokens[t]
-			if amt == nil || amt.Sign() == 0 {
-				continue
-			}
-			// Copy the amount to avoid aliasing
-			amtCopy := new(big.Int).Set(amt)
-			toks = append(toks, &syn.ProtoPair{
-				FstType: &syn.TByteString{},
-				SndType: &syn.TInteger{},
-				First:   &syn.ByteString{Inner: []byte(t)},
-				Second:  &syn.Integer{Inner: amtCopy},
-			})
-		}
-		if len(toks) == 0 {
-			continue
-		}
-		res = append(res, &syn.ProtoPair{
-			FstType: &syn.TByteString{},
-			SndType: &syn.TList{
-				Typ: &syn.TPair{
-					First:  &syn.TByteString{},
-					Second: &syn.TInteger{},
-				},
-			},
-			First: &syn.ByteString{Inner: []byte(policy)},
-			Second: &syn.ProtoList{
-				LTyp: &syn.TPair{
-					First:  &syn.TByteString{},
-					Second: &syn.TInteger{},
-				},
-				List: toks,
-			},
-		})
-	}
-
-	return syn.NewValue(res)
 }
 
 func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -4849,8 +4898,6 @@ func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	); err != nil {
 		return nil, err
 	}
-	entries := valueConstant.Entries()
-
 	// Enforce key length constraints (<= 32 bytes) per builtin semantics, except
 	// allow oversize keys when inserting zero (effectively removing)
 	if len(policyBs) > 32 || len(tokenBs) > 32 {
@@ -4881,26 +4928,12 @@ func insertCoin[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 
-	vm, err := valueToMap(m, entries)
-	if err != nil {
+	if err := m.checkBuiltinCancellation(); err != nil {
 		return nil, err
 	}
-	pol := string(policyBs)
-	if _, ok := vm[pol]; !ok {
-		vm[pol] = make(map[string]*big.Int)
-	}
-	// Set amount rather than sum; zero removes the entry
-	if amt.Sign() == 0 {
-		delete(vm[pol], string(tokenBs))
-		// remove policy if empty
-		if len(vm[pol]) == 0 {
-			delete(vm, pol)
-		}
-	} else {
-		vm[pol][string(tokenBs)] = new(big.Int).Set(amt)
-	}
-
-	result, err := mapToValue(m, vm)
+	// Binary search plus copy-on-write of the touched policy only; the input
+	// Value (possibly a shared constant) is never modified.
+	result, err := valueConstant.Insert(policyBs, tokenBs, amt)
 	if err != nil {
 		return nil, valueConstructionError("construct inserted value", err)
 	}
@@ -4985,49 +5018,18 @@ func scaleValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	); err != nil {
 		return nil, err
 	}
-	entries := valueConstant.Entries()
-	vm, err := valueToMap(m, entries)
-	if err != nil {
+	if err := m.checkBuiltinCancellation(); err != nil {
 		return nil, err
 	}
-	if vm == nil {
-		vm = make(map[string]map[string]*big.Int)
-	}
-	limit := new(big.Int).Lsh(big.NewInt(1), 127)
-	limitMinusOne := new(big.Int).Sub(limit, big.NewInt(1))
-	negLimit := new(big.Int).Neg(limit)
-	for pol, toks := range vm {
-		if err := m.checkBuiltinCancellation(); err != nil {
-			return nil, err
-		}
-		if toks == nil {
-			toks = make(map[string]*big.Int)
-			vm[pol] = toks
-		}
-		for t, amt := range toks {
-			if err := m.checkBuiltinCancellation(); err != nil {
-				return nil, err
-			}
-			prod := new(big.Int).Mul(amt, factor)
-			// Check bounds: [-(2^127), 2^127-1]
-			if prod.Sign() >= 0 {
-				if prod.Cmp(limitMinusOne) > 0 {
-					return nil, &BuiltinError{
-						Code:    ErrCodeOverflow,
-						Builtin: "scaleValue",
-						Message: "amount out of range",
-					}
-				}
-			} else {
-				if prod.Cmp(negLimit) < 0 {
-					return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "scaleValue", Message: "amount out of range"}
-				}
-			}
-			toks[t] = prod
-		}
-	}
-	result, err := mapToValue(m, vm)
+	result, err := valueConstant.Scale(factor, m.checkBuiltinCancellation)
 	if err != nil {
+		if errors.Is(err, syn.ErrValueOverflow) {
+			return nil, &BuiltinError{
+				Code:    ErrCodeOverflow,
+				Builtin: "scaleValue",
+				Message: "amount out of range",
+			}
+		}
 		return nil, valueConstructionError("construct scaled value", err)
 	}
 	return &Constant{result}, nil
@@ -5076,55 +5078,18 @@ func unionValue[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	); err != nil {
 		return nil, err
 	}
-	aEntries := aValue.Entries()
-	bEntries := bValue.Entries()
-	am, err := valueToMap(m, aEntries)
-	if err != nil {
+	if err := m.checkBuiltinCancellation(); err != nil {
 		return nil, err
 	}
-	bm, err := valueToMap(m, bEntries)
+	result, err := syn.UnionValue(aValue, bValue, m.checkBuiltinCancellation)
 	if err != nil {
-		return nil, err
-	}
-	// sum
-	limit := new(big.Int).Lsh(big.NewInt(1), 127)
-	limitMinusOne := new(big.Int).Sub(limit, big.NewInt(1))
-	negLimit := new(big.Int).Neg(limit)
-	for pol, tokens := range bm {
-		if err := m.checkBuiltinCancellation(); err != nil {
-			return nil, err
-		}
-		if _, ok := am[pol]; !ok {
-			am[pol] = make(map[string]*big.Int)
-		}
-		for t, amt := range tokens {
-			if err := m.checkBuiltinCancellation(); err != nil {
-				return nil, err
+		if errors.Is(err, syn.ErrValueOverflow) {
+			return nil, &BuiltinError{
+				Code:    ErrCodeOverflow,
+				Builtin: "unionValue",
+				Message: "amount out of range",
 			}
-			cur := am[pol][t]
-			if cur == nil {
-				cur = big.NewInt(0)
-			}
-			cur.Add(cur, amt)
-			// bounds check
-			if cur.Sign() >= 0 {
-				if cur.Cmp(limitMinusOne) > 0 {
-					return nil, &BuiltinError{
-						Code:    ErrCodeOverflow,
-						Builtin: "unionValue",
-						Message: "amount out of range",
-					}
-				}
-			} else {
-				if cur.Cmp(negLimit) < 0 {
-					return nil, &BuiltinError{Code: ErrCodeOverflow, Builtin: "unionValue", Message: "amount out of range"}
-				}
-			}
-			am[pol][t] = cur
 		}
-	}
-	result, err := mapToValue(m, am)
-	if err != nil {
 		return nil, valueConstructionError("construct union value", err)
 	}
 	return &Constant{result}, nil
@@ -5173,75 +5138,26 @@ func valueContains[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	); err != nil {
 		return nil, err
 	}
-	valEntries := valValue.Entries()
-	reqEntries := reqValue.Entries()
-
-	vm, err := valueToMap(m, valEntries)
-	if err != nil {
+	if err := m.checkBuiltinCancellation(); err != nil {
 		return nil, err
 	}
-	rm, err := valueToMap(m, reqEntries)
-	if err != nil {
-		return nil, err
-	}
-	// Neither value nor required value may contain negative amounts
-	for _, tokens := range rm {
-		if err := m.checkBuiltinCancellation(); err != nil {
-			return nil, err
-		}
-		for _, amt := range tokens {
-			if err := m.checkBuiltinCancellation(); err != nil {
-				return nil, err
-			}
-			if amt.Sign() < 0 {
-				return nil, &BuiltinError{
-					Code:    ErrCodeInvalidArgument,
-					Builtin: "valueContains",
-					Message: "required value contains negative amount",
-				}
-			}
+	// Neither value nor required value may contain negative amounts. The
+	// check is answered from cached metadata.
+	if reqValue.HasNegative() {
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "valueContains",
+			Message: "required value contains negative amount",
 		}
 	}
-	for _, tokens := range vm {
-		if err := m.checkBuiltinCancellation(); err != nil {
-			return nil, err
-		}
-		for _, amt := range tokens {
-			if err := m.checkBuiltinCancellation(); err != nil {
-				return nil, err
-			}
-			if amt.Sign() < 0 {
-				return nil, &BuiltinError{
-					Code:    ErrCodeInvalidArgument,
-					Builtin: "valueContains",
-					Message: "value contains negative amount",
-				}
-			}
+	if valValue.HasNegative() {
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: "valueContains",
+			Message: "value contains negative amount",
 		}
 	}
-	// Check
-	for pol, tokens := range rm {
-		if err := m.checkBuiltinCancellation(); err != nil {
-			return nil, err
-		}
-		for t, amt := range tokens {
-			if err := m.checkBuiltinCancellation(); err != nil {
-				return nil, err
-			}
-			if vmPol, ok := vm[pol]; ok {
-				if cur, ok2 := vmPol[t]; ok2 {
-					if cur.Cmp(amt) < 0 {
-						return &Constant{&syn.Bool{Inner: false}}, nil
-					}
-				} else {
-					return &Constant{&syn.Bool{Inner: false}}, nil
-				}
-			} else {
-				return &Constant{&syn.Bool{Inner: false}}, nil
-			}
-		}
-	}
-	return &Constant{&syn.Bool{Inner: true}}, nil
+	return &Constant{&syn.Bool{Inner: valValue.Contains(reqValue)}}, nil
 }
 
 // valueData converts a Value to a Data Map.
@@ -5259,7 +5175,7 @@ func valueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 
-	valueConstant, total, outer, maxInner, ok := valueShape(valConst.Constant)
+	valueConstant, total, _, _, ok := valueShape(valConst.Constant)
 	if !ok {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
@@ -5268,10 +5184,10 @@ func valueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 	}
 
-	// Spend budget for valueData (1 arg: value)
-	// Cost model uses linear_in_x with max(outer, inner) size
+	// Spend budget for valueData (1 arg: value). The reference measures the
+	// argument as ValueTotalSize (Value.totalSize) for its linear_in_x model.
 	if err := m.CostOne(&b.Func, func() ExMem {
-		return ExMem(max(outer, maxInner))
+		return ExMem(total)
 	}); err != nil {
 		return nil, err
 	}
