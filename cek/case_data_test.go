@@ -161,7 +161,8 @@ func TestRunRejectsOpenTermsEvenWhenUnreached(t *testing.T) {
 				wantOpen, wantFail = tc.openAt11, tc.failsAt11
 			}
 			var typeErr *TypeError
-			isOpen := errors.As(err, &typeErr) && typeErr.Code == ErrCodeOpenTerm
+			isOpen := errors.As(err, &typeErr) && typeErr != nil &&
+				typeErr.Code == ErrCodeOpenTerm
 			switch {
 			case wantFail && !isOpen:
 				t.Fatalf("%s at protocol %d: error = %v, want an open term error", tc.name, proto, err)

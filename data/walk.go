@@ -362,8 +362,7 @@ type encodeFrame struct {
 // write their children into the same buffer, so the work is linear in the
 // size of the encoding.
 func appendPlutusDataCBOR(buf *bytes.Buffer, pd PlutusData) error {
-	var stackBuf [16]encodeFrame
-	stack := stackBuf[:0]
+	stack := make([]encodeFrame, 0, 16)
 	for {
 		frame, err := appendCBORShallow(buf, pd)
 		if err != nil {

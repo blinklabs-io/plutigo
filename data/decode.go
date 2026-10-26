@@ -228,10 +228,8 @@ func decodeItem(
 	data []byte,
 	allowValue bool,
 ) (PlutusData, []byte, error) {
-	var frameBuf [16]decodeFrame
-	var valueBuf [32]PlutusData
-	frames := frameBuf[:0]
-	values := valueBuf[:0]
+	frames := make([]decodeFrame, 0, 16)
+	values := make([]PlutusData, 0, 32)
 	rest := data
 	for {
 		var (

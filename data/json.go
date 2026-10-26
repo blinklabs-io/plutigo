@@ -181,8 +181,7 @@ type jsonFrame struct {
 // the whole encoded subtree at every nesting level. The walk uses an explicit
 // stack, so any nesting depth is safe.
 func appendPlutusDataJSON(buf *bytes.Buffer, pd PlutusData) error {
-	var stackBuf [16]jsonFrame
-	stack := stackBuf[:0]
+	stack := make([]jsonFrame, 0, 16)
 	for {
 		frame, err := appendJSONShallow(buf, pd)
 		if err != nil {
