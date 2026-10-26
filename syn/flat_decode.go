@@ -214,23 +214,24 @@ func decodeProgramVersion(
 	if len(d.buffer) > maxInputBytes {
 		return lang.LanguageVersion{}, errors.New("input too large")
 	}
-	major, err := d.word()
+	// The reference decodes each version number as an unbounded Natural and
+	// rejects an unsupported version only when the script is run (phase 2,
+	// mkTermToEvaluate), so a huge number must not fail decoding. It is
+	// saturated to MaxUint32: that keeps it unequal to every supported
+	// version and preserves its order against them.
+	major, err := d.naturalSaturatingUint32()
 	if err != nil {
 		return lang.LanguageVersion{}, err
 	}
-	minor, err := d.word()
+	minor, err := d.naturalSaturatingUint32()
 	if err != nil {
 		return lang.LanguageVersion{}, err
 	}
-	patch, err := d.word()
+	patch, err := d.naturalSaturatingUint32()
 	if err != nil {
 		return lang.LanguageVersion{}, err
 	}
-	if major > math.MaxUint32 || minor > math.MaxUint32 ||
-		patch > math.MaxUint32 {
-		return lang.LanguageVersion{}, errors.New("version numbers too large")
-	}
-	version := lang.LanguageVersion{uint32(major), uint32(minor), uint32(patch)}
+	version := lang.LanguageVersion{major, minor, patch}
 	d.version = version
 	d.versionKnown = true
 	if context != nil {
@@ -926,7 +927,7 @@ func (a *constantArena) listType(elem Typ) Typ {
 }
 
 // pairType returns a new pair type, from the arena when there is one.
-func (a *constantArena) pairType(first, second Typ) Typ {
+func (a *constantArena) pairType(first, second Typ) *TPair {
 	if a == nil {
 		return &TPair{First: first, Second: second}
 	}
@@ -1006,6 +1007,7 @@ func (a *constantArena) allocValue(entries []IConstant) *Value {
 	value.entries = entries
 	value.cachedTotalSize = valueTotalSize(entries) + 1
 	value.cachedMaxInner = valueMaxInnerSize(entries)
+	value.cachedNegatives = valueNegativeCount(entries)
 	return value
 }
 
@@ -1042,10 +1044,19 @@ func decodeDeBruijnBinder(d *decoder) (DeBruijn, error) {
 	if err != nil {
 		return 0, err
 	}
+	return saturatingDeBruijn(i), nil
+}
+
+// saturatingDeBruijn converts a decoded variable index to a DeBruijn. The
+// reference decodes indices as any Word64; an index above MaxInt exceeds
+// every possible scope, so it is free either way, and saturating it keeps
+// that (the scope check, or the machine if the variable is evaluated,
+// rejects it exactly as it would the true index).
+func saturatingDeBruijn(i uint) DeBruijn {
 	if i > math.MaxInt {
-		return 0, fmt.Errorf("DeBruijn index too large: %d", i)
+		return DeBruijn(math.MaxInt)
 	}
-	return DeBruijn(i), nil
+	return DeBruijn(i)
 }
 
 func decodeVarBinder[T Binder](d *decoder) (T, error) {
@@ -1053,14 +1064,8 @@ func decodeVarBinder[T Binder](d *decoder) (T, error) {
 
 	switch any(zero).(type) {
 	case DeBruijn:
-		i, err := d.word()
-		if err != nil {
-			return zero, err
-		}
-		if i > math.MaxInt {
-			return zero, fmt.Errorf("DeBruijn index too large: %d", i)
-		}
-		return any(DeBruijn(i)).(T), nil
+		i, err := decodeDeBruijnBinder(d)
+		return any(i).(T), err
 	case NamedDeBruijn:
 		text, err := d.utf8()
 		if err != nil {
@@ -1165,7 +1170,7 @@ func DecodeConstant(d *decoder) (IConstant, error) {
 	if err != nil {
 		return nil, err
 	}
-	typ, err := decodeConstantType(&tags, nil)
+	typ, err := decodeConstantType(&tags, nil, d)
 	if err != nil {
 		return nil, err
 	}
@@ -1178,7 +1183,7 @@ func decodeConstantWithArena(d *decoder, arena *constantArena) (IConstant, error
 	if err != nil {
 		return nil, err
 	}
-	typ, err := decodeConstantType(&tags, arena)
+	typ, err := decodeConstantType(&tags, arena, d)
 	if err != nil {
 		return nil, err
 	}
@@ -1226,6 +1231,9 @@ func decodeConstantValueWithArena(
 		}
 		return arena.allocProtoArray(t.Typ, items), nil
 	case *TPair:
+		if shared, ok := d.zeroWidthValue(t); ok {
+			return shared, nil
+		}
 		first, err := decodeConstantValueWithArena(d, t.First, arena)
 		if err != nil {
 			return nil, err
@@ -1234,13 +1242,17 @@ func decodeConstantValueWithArena(
 		if err != nil {
 			return nil, err
 		}
-		return arena.allocProtoPair(t.First, t.Second, first, second), nil
+		pair := arena.allocProtoPair(t.First, t.Second, first, second)
+		d.memoizeZeroWidth(t, pair)
+		return pair, nil
 	case *TData:
 		cborBytes, err := d.bytesWithArena(arena)
 		if err != nil {
 			return nil, err
 		}
-		pd, err := arena.dataDecoder.Decode(cborBytes)
+		// Bytes after the first CBOR item are ignored, as the reference
+		// does (data.DecodePrefix).
+		pd, err := arena.dataDecoder.DecodePrefix(cborBytes)
 		if err != nil {
 			return nil, err
 		}
@@ -1424,6 +1436,9 @@ func decodeConstantValue(d *decoder, typ Typ) (IConstant, error) {
 
 	// ProtoPair
 	case *TPair:
+		if shared, ok := d.zeroWidthValue(t); ok {
+			return shared, nil
+		}
 		first, err := decodeConstantValue(d, t.First)
 		if err != nil {
 			return nil, err
@@ -1432,12 +1447,14 @@ func decodeConstantValue(d *decoder, typ Typ) (IConstant, error) {
 		if err != nil {
 			return nil, err
 		}
-		constant = &ProtoPair{
+		pair := &ProtoPair{
 			FstType: t.First,
 			SndType: t.Second,
 			First:   first,
 			Second:  second,
 		}
+		d.memoizeZeroWidth(t, pair)
+		constant = pair
 
 	// Data
 	case *TData:
@@ -1446,7 +1463,9 @@ func decodeConstantValue(d *decoder, typ Typ) (IConstant, error) {
 			return nil, err
 		}
 
-		pd, err := data.Decode(cborBytes)
+		// Bytes after the first CBOR item are ignored, as the reference
+		// does (data.DecodePrefix).
+		pd, err := data.DecodePrefix(cborBytes)
 		if err != nil {
 			return nil, err
 		}
@@ -1577,8 +1596,16 @@ func (s *constantTagSeq) len() int {
 	return s.n
 }
 
-func decodeConstantType(tags *constantTagSeq, arena *constantArena) (Typ, error) {
-	typ, next, err := decodeConstantTypeAt(tags, 0, arena)
+// decodeConstantType builds the constant type described by tags and resets
+// d's zero-width memo to the zero-width pair types of this constant (see
+// [decoder.zeroWidth]).
+func decodeConstantType(
+	tags *constantTagSeq,
+	arena *constantArena,
+	d *decoder,
+) (Typ, error) {
+	d.zeroWidth = nil
+	typ, next, _, err := decodeConstantTypeAt(tags, 0, arena, d)
 	if err != nil {
 		return nil, err
 	}
@@ -1588,13 +1615,19 @@ func decodeConstantType(tags *constantTagSeq, arena *constantArena) (Typ, error)
 	return typ, nil
 }
 
+// decodeConstantTypeAt decodes the type starting at tags[idx]. It also
+// reports whether the type is zero-width: built solely from unit and pair, so
+// that its FLAT value encoding occupies no bits and its value is fully
+// determined by the type. Every zero-width pair type is registered with d's
+// zero-width memo so its value is materialized once per constant.
 func decodeConstantTypeAt(
 	tags *constantTagSeq,
 	idx int,
 	arena *constantArena,
-) (Typ, int, error) {
+	d *decoder,
+) (Typ, int, bool, error) {
 	if idx >= tags.len() {
-		return nil, idx, errors.New("unknown type tag")
+		return nil, idx, false, errors.New("unknown type tag")
 	}
 
 	next := tags.at(idx)
@@ -1602,62 +1635,69 @@ func decodeConstantTypeAt(
 
 	switch next {
 	case IntegerTag:
-		return cachedTInteger, idx, nil
+		return cachedTInteger, idx, false, nil
 	case ByteStringTag:
-		return cachedTByteString, idx, nil
+		return cachedTByteString, idx, false, nil
 	case StringTag:
-		return cachedTString, idx, nil
+		return cachedTString, idx, false, nil
 	case UnitTag:
-		return cachedTUnit, idx, nil
+		return cachedTUnit, idx, true, nil
 	case BoolTag:
-		return cachedTBool, idx, nil
+		return cachedTBool, idx, false, nil
 	case DataTag:
-		return cachedTData, idx, nil
+		return cachedTData, idx, false, nil
 	case Bls12_381G1Tag:
-		return cachedTBlsG1, idx, nil
+		return cachedTBlsG1, idx, false, nil
 	case Bls12_381G2Tag:
-		return cachedTBlsG2, idx, nil
+		return cachedTBlsG2, idx, false, nil
 	case Bls12_381MlTag:
-		return cachedTBlsMl, idx, nil
+		return cachedTBlsMl, idx, false, nil
 	case ValueTag:
-		return cachedTValue, idx, nil
+		return cachedTValue, idx, false, nil
 	// NOTE: this also covers ProtoPairOneTag, but it's the same value as ProtoListOneTag.
 	case ProtoListOneTag:
 		if idx >= tags.len() {
-			return nil, idx, errors.New("unknown type tag")
+			return nil, idx, false, errors.New("unknown type tag")
 		}
 		switch tags.at(idx) {
 		case ProtoListTwoTag:
-			subType, next, err := decodeConstantTypeAt(tags, idx+1, arena)
+			// A list or array encodes its length in bits, so it is never
+			// zero-width even when its elements are.
+			subType, next, _, err := decodeConstantTypeAt(tags, idx+1, arena, d)
 			if err != nil {
-				return nil, next, err
+				return nil, next, false, err
 			}
-			return arena.listType(subType), next, nil
+			return arena.listType(subType), next, false, nil
 		case ProtoArrayTag:
-			subType, next, err := decodeConstantTypeAt(tags, idx+1, arena)
+			subType, next, _, err := decodeConstantTypeAt(tags, idx+1, arena, d)
 			if err != nil {
-				return nil, next, err
+				return nil, next, false, err
 			}
-			return &TArray{Typ: subType}, next, nil
+			return &TArray{Typ: subType}, next, false, nil
 		case ProtoPairTwoTag:
 			idx++
 			if idx >= tags.len() || tags.at(idx) != ProtoPairThreeTag {
-				return nil, idx, errors.New("unknown type tag")
+				return nil, idx, false, errors.New("unknown type tag")
 			}
-			first, next, err := decodeConstantTypeAt(tags, idx+1, arena)
+			first, next, firstZero, err := decodeConstantTypeAt(tags, idx+1, arena, d)
 			if err != nil {
-				return nil, next, err
+				return nil, next, false, err
 			}
-			second, next, err := decodeConstantTypeAt(tags, next, arena)
+			second, next, secondZero, err := decodeConstantTypeAt(tags, next, arena, d)
 			if err != nil {
-				return nil, next, err
+				return nil, next, false, err
 			}
-			return arena.pairType(first, second), next, nil
+			pair := arena.pairType(first, second)
+			zeroWidth := firstZero && secondZero
+			if zeroWidth {
+				d.registerZeroWidth(pair)
+			}
+			return pair, next, zeroWidth, nil
 		default:
-			return nil, idx, errors.New("unknown type tag")
+			return nil, idx, false, errors.New("unknown type tag")
 		}
 	default:
-		return nil, idx, errors.New("unknown type tag")
+		return nil, idx, false, errors.New("unknown type tag")
 	}
 }
 
@@ -1740,6 +1780,16 @@ type decoder struct {
 	depth    int
 	// nodes counts the terms and constant list items decoded so far.
 	nodes int
+	// zeroWidth memoizes the value of every zero-width pair type (one built
+	// solely from unit and pair) of the constant being decoded. Such a value
+	// occupies no bits, so without the memo a list of them would rebuild the
+	// whole value tree for each one-bit item, allocating quadratically in the
+	// input size. The value is fully determined by its type and constants are
+	// immutable, so every occurrence shares one instance. Keys are the pair
+	// types of the current constant only; the map is dropped when the next
+	// constant's type is decoded, so recycled arena types never alias. It is
+	// nil for constants without zero-width pairs.
+	zeroWidth map[*TPair]IConstant
 	// maxConstrFields is the widest constr field list accepted.
 	maxConstrFields int
 	strictValues    bool
@@ -1774,6 +1824,36 @@ func (d *decoder) node() error {
 		return errors.New("program has too many nodes")
 	}
 	return nil
+}
+
+// registerZeroWidth marks t as a zero-width pair type of the current
+// constant.
+func (d *decoder) registerZeroWidth(t *TPair) {
+	if d.zeroWidth == nil {
+		d.zeroWidth = make(map[*TPair]IConstant)
+	}
+	d.zeroWidth[t] = nil
+}
+
+// zeroWidthValue returns the memoized value of the zero-width pair type t once
+// it has been decoded.
+func (d *decoder) zeroWidthValue(t *TPair) (IConstant, bool) {
+	if d.zeroWidth == nil {
+		return nil, false
+	}
+	value := d.zeroWidth[t]
+	return value, value != nil
+}
+
+// memoizeZeroWidth records value as the shared value of t when t is a
+// zero-width pair type of the current constant.
+func (d *decoder) memoizeZeroWidth(t *TPair, value IConstant) {
+	if d.zeroWidth == nil {
+		return
+	}
+	if _, ok := d.zeroWidth[t]; ok {
+		d.zeroWidth[t] = value
+	}
 }
 
 // enter records descent into a nested term and fails if the nesting limit is
@@ -1902,7 +1982,7 @@ func (d *decoder) word64() (uint64, error) {
 			d.pos++
 
 			word7 := uint64(word8 & 127)
-			if err := checkWord64Shift(word7, shl); err != nil {
+			if err := checkWord64Group(word8, shl); err != nil {
 				return 0, err
 			}
 			finalWord |= word7 << shl
@@ -1937,7 +2017,7 @@ func (d *decoder) word64() (uint64, error) {
 		}
 
 		word7 := uint64(word8 & 127)
-		if err := checkWord64Shift(word7, shl); err != nil {
+		if err := checkWord64Group(word8, shl); err != nil {
 			return 0, err
 		}
 		finalWord |= word7 << shl
@@ -1954,18 +2034,43 @@ func (d *decoder) word64() (uint64, error) {
 	return finalWord, nil
 }
 
-// checkWord64Shift reports an overflow error if placing the 7-bit group word7
-// at bit offset shl would discard any set bit beyond 64 bits. Go defines shifts
-// of >= the integer width as yielding 0, so without this guard a varint with too
-// many continuation bytes would be silently truncated rather than rejected.
-func checkWord64Shift(word7 uint64, shl int) error {
-	if word7 == 0 {
-		return nil
-	}
-	if shl >= 64 || word7>>(64-shl) != 0 {
+// checkWord64Group checks the varint byte word8 placed at bit offset shl as
+// the reference's dWord64 does (PlutusCore.Flat.Decoder.Strict): a Word64
+// takes at most ten 7-bit groups, and the tenth (shl 63) must end the varint
+// and hold 0 or 1, i.e. be the byte 0 or 1. Longer encodings, even with zero
+// groups, are rejected, so no group is ever shifted past bit 63.
+func checkWord64Group(word8 byte, shl int) error {
+	if shl >= 63 && word8 > 1 {
 		return errors.New("varint overflows uint64")
 	}
 	return nil
+}
+
+// naturalSaturatingUint32 decodes an unbounded unsigned varint (the
+// reference's dNatural) and returns it saturated to MaxUint32.
+func (d *decoder) naturalSaturatingUint32() (uint32, error) {
+	var value uint64
+	saturated := false
+	for shl := 0; ; shl += 7 {
+		word8, err := d.bits8(8)
+		if err != nil {
+			return 0, err
+		}
+		if word7 := uint64(word8 & 127); word7 != 0 {
+			if shl >= 32 || word7<<shl > math.MaxUint32 {
+				saturated = true
+			} else {
+				value |= word7 << shl
+			}
+		}
+		if word8&128 == 0 {
+			break
+		}
+	}
+	if saturated {
+		return math.MaxUint32, nil
+	}
+	return uint32(value), nil
 }
 
 // Decode up to 8 bits.

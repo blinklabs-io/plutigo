@@ -85,10 +85,10 @@ func TestValueCanonicalFormAcrossPaths(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Encode: %v", err)
 			}
-			if _, err := Decode(encoded); err != nil {
+			if _, err := DecodeWithValue(encoded); err != nil {
 				t.Fatalf("Decode: %v", err)
 			}
-			if _, err := NewDecoder().Decode(encoded); err != nil {
+			if _, err := NewDecoder().DecodeWithValue(encoded); err != nil {
 				t.Fatalf("arena Decode: %v", err)
 			}
 		})
@@ -107,14 +107,14 @@ func TestValueCanonicalFormAcrossPaths(t *testing.T) {
 			if err != nil {
 				t.Fatalf("marshal fixture: %v", err)
 			}
-			if _, err := Decode(encoded); err == nil {
+			if _, err := DecodeWithValue(encoded); err == nil {
 				t.Error("Decode accepted a non-canonical Value")
 			}
 			var value Value
 			if err := value.UnmarshalCBOR(encoded); err == nil {
 				t.Error("UnmarshalCBOR accepted a non-canonical Value")
 			}
-			if _, err := NewDecoder().Decode(encoded); err == nil {
+			if _, err := NewDecoder().DecodeWithValue(encoded); err == nil {
 				t.Error("arena Decode accepted a non-canonical Value")
 			}
 		})

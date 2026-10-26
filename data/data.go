@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"strings"
 
 	"github.com/fxamacker/cbor/v2"
 )
@@ -76,30 +77,37 @@ type Constr struct {
 func (Constr) isPlutusData() {}
 
 func (c *Constr) UnmarshalCBOR(data []byte) error {
-	tmpConstr, rest, err := decodeConstrFromData(data)
+	tagNumber, _, err := decodeCBORTag(data)
 	if err != nil {
 		return err
 	}
-	if len(rest) > 0 {
-		return fmt.Errorf("unexpected %d trailing bytes", len(rest))
+	if !isConstrTag(tagNumber) {
+		return fmt.Errorf(
+			"unknown CBOR tag for PlutusData constructor: %d",
+			tagNumber,
+		)
 	}
-	c.Tag = tmpConstr.Tag
-	c.Fields = tmpConstr.Fields
-	c.useIndef = tmpConstr.useIndef
+	tmpConstr, err := decodeAs[*Constr](data, false)
+	if err != nil {
+		return err
+	}
+	*c = *tmpConstr
 	return nil
 }
 
 func (c Constr) MarshalCBOR() ([]byte, error) {
-	return marshalWith(c.appendCBOR)
+	return marshalPlutusDataCBOR(c)
 }
 
-func (c Constr) appendCBOR(buf *bytes.Buffer) error {
+// appendCBORHead writes the constructor's tag and the head of its fields
+// array, and returns the frame that writes the fields.
+func (c Constr) appendCBORHead(buf *bytes.Buffer) (*encodeFrame, error) {
 	constrTag := c.Tag
 	if constrTag == nil {
 		constrTag = new(big.Int)
 	}
 	if !constrTag.IsUint64() {
-		return fmt.Errorf(
+		return nil, fmt.Errorf(
 			"constructor tag %s is outside the Word64 CBOR range",
 			constrTag,
 		)
@@ -126,47 +134,25 @@ func (c Constr) appendCBOR(buf *bytes.Buffer) error {
 		appendCBORHead(buf, CborTypeArray, 2)
 		encodedTag, err := cborMarshal(constrTag)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		buf.Write(encodedTag)
 	}
-	return appendCBORArray(buf, c.Fields, useIndef, "Constr field")
+	return arrayFrame(buf, c.Fields, useIndef, "Constr field"), nil
 }
 
 func (c Constr) Clone() PlutusData {
-	tmpFields := make([]PlutusData, len(c.Fields))
-	for i, field := range c.Fields {
-		tmpFields[i] = field.Clone()
-	}
-	tmpIndef := cloneUseIndef(c.useIndef)
-	tmpTag := new(big.Int)
-	if c.Tag != nil {
-		tmpTag.Set(c.Tag)
-	}
-	return &Constr{Tag: tmpTag, Fields: tmpFields, useIndef: tmpIndef}
+	return copyData(c, false)
 }
 
 func (c Constr) Equal(pd PlutusData) bool {
-	pdConstr, ok := pd.(*Constr)
-	if !ok {
-		return false
-	}
-	if constrTagCmp(c.Tag, pdConstr.Tag) != 0 {
-		return false
-	}
-	if len(c.Fields) != len(pdConstr.Fields) {
-		return false
-	}
-	for i := range c.Fields {
-		if !c.Fields[i].Equal(pdConstr.Fields[i]) {
-			return false
-		}
-	}
-	return true
+	return equalData(c, pd)
 }
 
 func (c Constr) String() string {
-	return fmt.Sprintf("Constr{tag: %s, fields: %v}", constrTagString(c.Tag), c.Fields)
+	var sb strings.Builder
+	writePlutusDataString(&sb, &c)
+	return sb.String()
 }
 
 // NewConstr creates a new Constr variant.
@@ -226,66 +212,6 @@ func constrTagString(tag *big.Int) string {
 	return tag.String()
 }
 
-// appendCBORArray writes items as a CBOR array. When useIndef is true and the
-// slice is non-empty, indefinite-length encoding is used. Empty slices always
-// use definite-length encoding regardless of useIndef, matching Haskell's
-// cborg behavior.
-func appendCBORArray(
-	buf *bytes.Buffer,
-	items []PlutusData,
-	useIndef bool,
-	desc string,
-) error {
-	useIndef = useIndef && len(items) > 0
-	if useIndef {
-		buf.WriteByte(CborTypeArray | CborIndefFlag)
-	} else {
-		appendCBORHead(buf, CborTypeArray, uint64(len(items)))
-	}
-	for i, item := range items {
-		if err := appendPlutusDataCBOR(buf, item); err != nil {
-			return fmt.Errorf("failed to encode %s %d: %w", desc, i, err)
-		}
-	}
-	if useIndef {
-		buf.WriteByte(0xff) // End indefinite-length array
-	}
-	return nil
-}
-
-// appendPlutusDataCBOR writes pd to buf. Containers write their children
-// into the same buffer, so the work is linear in the size of the encoding;
-// marshaling each child separately would copy the whole encoded subtree again
-// at every nesting level.
-func appendPlutusDataCBOR(buf *bytes.Buffer, pd PlutusData) error {
-	switch v := pd.(type) {
-	case *List:
-		if v != nil {
-			return v.appendCBOR(buf)
-		}
-	case List:
-		return v.appendCBOR(buf)
-	case *Map:
-		if v != nil {
-			return v.appendCBOR(buf)
-		}
-	case Map:
-		return v.appendCBOR(buf)
-	case *Constr:
-		if v != nil {
-			return v.appendCBOR(buf)
-		}
-	case Constr:
-		return v.appendCBOR(buf)
-	}
-	encoded, err := cborMarshal(pd)
-	if err != nil {
-		return err
-	}
-	buf.Write(encoded)
-	return nil
-}
-
 // appendCBORHead writes a CBOR initial byte and argument for the given major
 // type using the shortest form.
 func appendCBORHead(buf *bytes.Buffer, majorType uint8, n uint64) {
@@ -307,13 +233,29 @@ func appendCBORHead(buf *bytes.Buffer, majorType uint8, n uint64) {
 	}
 }
 
-// marshalWith runs appendTo against a fresh buffer and returns its contents.
-func marshalWith(appendTo func(*bytes.Buffer) error) ([]byte, error) {
+// marshalPlutusDataCBOR returns the CBOR encoding of pd.
+func marshalPlutusDataCBOR(pd PlutusData) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := appendTo(&buf); err != nil {
+	if err := appendPlutusDataCBOR(&buf, pd); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// decodeAs decodes data, which must hold exactly one item, and requires the
+// result to be a P. Callers check the item's head first, so a mismatch is
+// not expected.
+func decodeAs[P PlutusData](data []byte, allowValue bool) (P, error) {
+	var zero P
+	decoded, err := decodeAll(nil, data, allowValue)
+	if err != nil {
+		return zero, err
+	}
+	typed, ok := decoded.(P)
+	if !ok {
+		return zero, fmt.Errorf("unexpected PlutusData type %T", decoded)
+	}
+	return typed, nil
 }
 
 // Map
@@ -326,23 +268,24 @@ type Map struct {
 func (Map) isPlutusData() {}
 
 func (m *Map) UnmarshalCBOR(data []byte) error {
-	tmpMap, rest, err := decodeMapNext(data)
+	if _, _, _, err := decodeCBORMap(data); err != nil {
+		return err
+	}
+	tmpMap, err := decodeAs[*Map](data, false)
 	if err != nil {
 		return err
 	}
-	if len(rest) > 0 {
-		return fmt.Errorf("unexpected %d trailing bytes", len(rest))
-	}
-	m.Pairs = tmpMap.Pairs
-	m.useIndef = tmpMap.useIndef
+	*m = *tmpMap
 	return nil
 }
 
 func (m Map) MarshalCBOR() ([]byte, error) {
-	return marshalWith(m.appendCBOR)
+	return marshalPlutusDataCBOR(m)
 }
 
-func (m Map) appendCBOR(buf *bytes.Buffer) error {
+// appendCBORHead writes the map's head and returns the frame that writes
+// its pairs.
+func (m Map) appendCBORHead(buf *bytes.Buffer) *encodeFrame {
 	// Default to definite-length encoding to match Haskell's canonical CBOR.
 	// If useIndef is explicitly set, honor it.
 	useIndef := m.useIndef != nil && *m.useIndef
@@ -351,53 +294,25 @@ func (m Map) appendCBOR(buf *bytes.Buffer) error {
 	} else {
 		appendCBORHead(buf, CborTypeMap, uint64(len(m.Pairs)))
 	}
-	for _, pair := range m.Pairs {
-		if err := appendPlutusDataCBOR(buf, pair[0]); err != nil {
-			return fmt.Errorf("encode map key: %w", err)
-		}
-		if err := appendPlutusDataCBOR(buf, pair[1]); err != nil {
-			return fmt.Errorf("encode map value: %w", err)
-		}
+	return &encodeFrame{
+		children: childFrame{pairs: m.Pairs},
+		indef:    useIndef,
+		desc:     "map",
 	}
-	if useIndef {
-		buf.WriteByte(0xff) // Indef-length "break" byte
-	}
-	return nil
 }
 
 func (m Map) Clone() PlutusData {
-	tmpPairs := make([][2]PlutusData, len(m.Pairs))
-	for i, pair := range m.Pairs {
-		tmpPairs[i] = [2]PlutusData{
-			pair[0].Clone(),
-			pair[1].Clone(),
-		}
-	}
-	tmpIndef := cloneUseIndef(m.useIndef)
-	return &Map{Pairs: tmpPairs, useIndef: tmpIndef}
+	return copyData(m, false)
 }
 
 func (m Map) Equal(pd PlutusData) bool {
-	pdMap, ok := pd.(*Map)
-	if !ok {
-		return false
-	}
-	if len(m.Pairs) != len(pdMap.Pairs) {
-		return false
-	}
-	for i, pair := range m.Pairs {
-		if !pair[0].Equal(pdMap.Pairs[i][0]) {
-			return false
-		}
-		if !pair[1].Equal(pdMap.Pairs[i][1]) {
-			return false
-		}
-	}
-	return true
+	return equalData(m, pd)
 }
 
 func (m Map) String() string {
-	return fmt.Sprintf("Map%v", m.Pairs)
+	var sb strings.Builder
+	writePlutusDataString(&sb, &m)
+	return sb.String()
 }
 
 // NewMap creates a new Map variant.
@@ -425,46 +340,19 @@ func (Value) isPlutusData() {}
 const valueCBORTag uint64 = 1401
 
 func (v *Value) UnmarshalCBOR(encoded []byte) error {
-	state := newDecodeState()
-	if err := state.enterValue(); err != nil {
-		return err
-	}
-	defer state.leaveValue()
-	tag, content, err := decodeCBORTag(encoded)
+	tag, _, err := decodeCBORTag(encoded)
 	if err != nil {
 		return err
 	}
 	if tag != valueCBORTag {
 		return fmt.Errorf("unexpected CBOR tag for PlutusData Value: %d", tag)
 	}
-	value, rest, err := decodeValueNextEntered(content, state)
+	value, err := decodeAs[*Value](encoded, true)
 	if err != nil {
 		return err
 	}
-	if len(rest) > 0 {
-		return fmt.Errorf("unexpected %d trailing bytes", len(rest))
-	}
-	v.Inner = value.Inner
+	*v = *value
 	return nil
-}
-
-// decodeValueNextEntered decodes the content of a tag 1401 item. The tag has
-// already been counted by the caller; the inner map is counted here, so each
-// node of the tagged subtree is charged exactly once.
-func decodeValueNextEntered(data []byte, state *decodeState) (*Value, []byte, error) {
-	if err := state.enterValue(); err != nil {
-		return nil, nil, err
-	}
-	defer state.leaveValue()
-	inner, rest, err := decodeMapNextEntered(data, state)
-	if err != nil {
-		return nil, nil, err
-	}
-	value := &Value{Inner: inner}
-	if err := value.Validate(); err != nil {
-		return nil, nil, err
-	}
-	return value, rest, nil
 }
 
 func (v Value) MarshalCBOR() ([]byte, error) {
@@ -478,22 +366,17 @@ func (v Value) MarshalCBOR() ([]byte, error) {
 }
 
 func (v Value) Clone() PlutusData {
-	if v.Inner == nil {
-		return &Value{}
-	}
-	return &Value{Inner: v.Inner.Clone().(*Map)}
+	return copyData(v, false)
 }
 
 func (v Value) Equal(pd PlutusData) bool {
-	other, ok := pd.(*Value)
-	if !ok || (v.Inner == nil) != (other.Inner == nil) {
-		return false
-	}
-	return v.Inner == nil || v.Inner.Equal(other.Inner)
+	return equalData(v, pd)
 }
 
 func (v Value) String() string {
-	return fmt.Sprintf("Value{%v}", v.Inner)
+	var sb strings.Builder
+	writePlutusDataString(&sb, &v)
+	return sb.String()
 }
 
 // MaxValueKeyLength is the longest policy or token key a Value may carry.
@@ -608,7 +491,29 @@ type Integer struct {
 func (Integer) isPlutusData() {}
 
 func (i *Integer) UnmarshalCBOR(data []byte) error {
-	return cborUnmarshal(data, &i.Inner)
+	var (
+		decoded *Integer
+		rest    []byte
+		err     error
+	)
+	switch {
+	case len(data) == 0:
+		return errors.New("empty data")
+	case isBignumHead(data[0]):
+		decoded, rest, err = (*Decoder)(nil).decodeBignum(uint64(data[0]-CborTypeTag), data[1:])
+	case data[0]&CborTypeMask == CborTypeUnsignedInt, data[0]&CborTypeMask == CborTypeNegativeInt:
+		decoded, rest, err = (*Decoder)(nil).decodeSmallInteger(data)
+	default:
+		return fmt.Errorf("unsupported CBOR head 0x%02x for PlutusData Integer", data[0])
+	}
+	if err != nil {
+		return err
+	}
+	if len(rest) > 0 {
+		return fmt.Errorf("unexpected %d trailing bytes", len(rest))
+	}
+	i.Inner = decoded.Inner
+	return nil
 }
 
 func (i Integer) MarshalCBOR() ([]byte, error) {
@@ -617,49 +522,87 @@ func (i Integer) MarshalCBOR() ([]byte, error) {
 	// whose magnitude byte string obeys the same MaxByteStringLeafSize
 	// chunking rule as a Plutus byte string. See PlutusCore.Data.encodeInteger.
 	if i.Inner == nil {
-		return cborMarshal(i.Inner)
+		return nil, ErrNilInteger
+	}
+	var buf bytes.Buffer
+	appendIntegerCBOR(&buf, i.Inner)
+	return buf.Bytes(), nil
+}
+
+// appendIntegerCBOR writes n as Plutus encodes an integer (see
+// Integer.MarshalCBOR).
+func appendIntegerCBOR(buf *bytes.Buffer, n *big.Int) {
+	if n.IsUint64() {
+		appendCBORHead(buf, CborTypeUnsignedInt, n.Uint64())
+		return
 	}
 	tag := byte(cborTagPositiveBignum)
-	magnitude := i.Inner
-	if i.Inner.Sign() < 0 {
-		// A negative bignum encodes -1 - i, which is big.Int.Not for a
+	major := CborTypeUnsignedInt
+	magnitude := n
+	if n.Sign() < 0 {
+		// A negative integer encodes -1 - n, which is big.Int.Not for a
 		// negative operand.
 		tag = byte(cborTagNegativeBignum)
-		magnitude = new(big.Int).Not(i.Inner)
+		major = CborTypeNegativeInt
+		magnitude = new(big.Int).Not(n)
 	}
-	if magnitude.BitLen() <= 64 {
-		return cborMarshal(i.Inner)
+	if magnitude.IsUint64() {
+		appendCBORHead(buf, major, magnitude.Uint64())
+		return
 	}
-	body, err := marshalDataByteString(magnitude.Bytes())
-	if err != nil {
-		return nil, err
+	buf.WriteByte(tag)
+	appendDataByteString(buf, magnitude.Bytes())
+}
+
+// ErrNilInteger is returned when encoding an Integer whose Inner is nil.
+var ErrNilInteger = errors.New("PlutusData Integer has nil value")
+
+// value returns Inner, treating a nil Inner as zero so that the non-encoding
+// methods (Clone, Equal, String) never panic on a zero-value Integer.
+func (i Integer) value() *big.Int {
+	if i.Inner == nil {
+		return new(big.Int)
 	}
-	return append([]byte{tag}, body...), nil
+	return i.Inner
 }
 
 func (i Integer) Clone() PlutusData {
-	tmpVal := new(big.Int).Set(i.Inner)
+	tmpVal := new(big.Int).Set(i.value())
 	return &Integer{tmpVal}
 }
 
 func (i Integer) Equal(pd PlutusData) bool {
-	pdInt, ok := pd.(*Integer)
-	if !ok {
-		return false
-	}
-	if i.Inner.Cmp(pdInt.Inner) != 0 {
-		return false
-	}
-	return true
+	return i.equalLeaf(pd)
 }
 
+// String renders the integer in decimal. A nil Inner renders as zero.
+//
+// The cost of decimal conversion is inherent to math/big and is not
+// improved on here: Go's big.Int.String is already a divide-and-conquer
+// conversion (precomputed powers of the radix, recursive division), so a
+// hand-rolled version using Quo/DivMod would be no faster; its cost is
+// dominated by Karatsuba multiplication/division, roughly O(n^1.6) in the
+// size of the magnitude. Measured on arm64 with Go 1.26: 128 KiB takes about
+// 0.13s, 512 KiB about 1s, 2 MiB about 9s, and a 4 MiB bignum (the size of a
+// CBOR bignum in a 16 MiB document) tens of seconds. Nothing inside this
+// module renders attacker-sized integers: evaluator errors report only sign
+// and bit length (cek integerMetadata), the parser reports the (digit
+// capped) source literal, and the JSON decoder caps decimal digit counts
+// (see MaxJSONIntegerDigits). Callers that print or JSON-encode untrusted,
+// unbounded integers must bound the size first, for example by checking
+// Inner.BitLen().
 func (i Integer) String() string {
-	return fmt.Sprintf("Integer(%s)", i.Inner.String())
+	var sb strings.Builder
+	writeIntegerString(&sb, &i)
+	return sb.String()
 }
 
 // NewInteger creates a new Integer variant.
 func NewInteger(value *big.Int) PlutusData {
-	tmpVal := new(big.Int).Set(value)
+	tmpVal := new(big.Int)
+	if value != nil {
+		tmpVal.Set(value)
+	}
 	return &Integer{tmpVal}
 }
 
@@ -672,41 +615,42 @@ type ByteString struct {
 func (ByteString) isPlutusData() {}
 
 func (b *ByteString) UnmarshalCBOR(data []byte) error {
-	if err := cborUnmarshal(data, &b.Inner); err != nil {
+	inner, rest, err := (*Decoder)(nil).decodeByteStringContent(data)
+	if err != nil {
 		return err
 	}
+	if len(rest) > 0 {
+		return fmt.Errorf("unexpected %d trailing bytes", len(rest))
+	}
+	b.Inner = inner
 	return nil
 }
 
 func (b ByteString) MarshalCBOR() ([]byte, error) {
-	return marshalDataByteString(b.Inner)
+	var buf bytes.Buffer
+	appendDataByteString(&buf, b.Inner)
+	return buf.Bytes(), nil
 }
 
-// marshalDataByteString encodes a byte string the way Plutus' Data encoding
-// does: definite-length up to MaxByteStringLeafSize bytes, and otherwise an
+// appendDataByteString writes b the way Plutus' Data encoding does:
+// definite-length up to MaxByteStringLeafSize bytes, and otherwise an
 // indefinite-length byte string split into chunks of that size. This applies
 // both to a ByteString and to the magnitude of a bignum-encoded Integer. See
 // PlutusCore.Data.encodeBs.
-func marshalDataByteString(b []byte) ([]byte, error) {
+func appendDataByteString(buf *bytes.Buffer, b []byte) {
 	if len(b) <= MaxByteStringLeafSize {
-		if b == nil {
-			return cborMarshal([]byte{})
-		}
-		return cborMarshal(b)
+		appendCBORHead(buf, CborTypeByteString, uint64(len(b)))
+		buf.Write(b)
+		return
 	}
 	// Indefinite-length byte string with MaxByteStringLeafSize chunks
-	var buf bytes.Buffer
 	buf.WriteByte(0x5f) // Start indefinite-length byte string
 	for i := 0; i < len(b); i += MaxByteStringLeafSize {
 		end := min(i+MaxByteStringLeafSize, len(b))
-		chunk, err := cborMarshal(b[i:end])
-		if err != nil {
-			return nil, fmt.Errorf("failed to encode byte string chunk: %w", err)
-		}
-		buf.Write(chunk)
+		appendCBORHead(buf, CborTypeByteString, uint64(end-i))
+		buf.Write(b[i:end])
 	}
 	buf.WriteByte(0xff) // End indefinite-length byte string
-	return buf.Bytes(), nil
 }
 
 func (b ByteString) Clone() PlutusData {
@@ -716,18 +660,13 @@ func (b ByteString) Clone() PlutusData {
 }
 
 func (b ByteString) Equal(pd PlutusData) bool {
-	pdByteString, ok := pd.(*ByteString)
-	if !ok {
-		return false
-	}
-	if !bytes.Equal(b.Inner, pdByteString.Inner) {
-		return false
-	}
-	return true
+	return b.equalLeaf(pd)
 }
 
 func (b ByteString) String() string {
-	return fmt.Sprintf("ByteString(%x)", b.Inner)
+	var sb strings.Builder
+	writeByteStringString(&sb, &b)
+	return sb.String()
 }
 
 // NewByteString creates a new ByteString variant.
@@ -747,299 +686,24 @@ type List struct {
 func (List) isPlutusData() {}
 
 func (l *List) UnmarshalCBOR(data []byte) error {
-	tmpList, rest, err := decodeListNext(data)
+	if _, _, _, err := decodeCBORArray(data); err != nil {
+		return err
+	}
+	tmpList, err := decodeAs[*List](data, false)
 	if err != nil {
 		return err
 	}
-	if len(rest) > 0 {
-		return fmt.Errorf("unexpected %d trailing bytes", len(rest))
-	}
-	l.Items = tmpList.Items
-	l.useIndef = tmpList.useIndef
+	*l = *tmpList
 	return nil
 }
 
-func decodeConstrFromData(data []byte) (*Constr, []byte, error) {
-	state := newDecodeState()
-	if err := state.enterValue(); err != nil {
-		return nil, nil, err
-	}
-	defer state.leaveValue()
-	return decodeConstrFromDataEntered(data, state)
-}
-
-func decodeConstrFromDataEntered(
-	data []byte,
-	state *decodeState,
-) (*Constr, []byte, error) {
-	tagNumber, tagContent, err := decodeCBORTag(data)
-	if err != nil {
-		return nil, nil, err
-	}
-	return decodeConstrNextEntered(tagNumber, tagContent, state)
-}
-
-func decodeConstrNextEntered(
-	tagNumber uint64,
-	data []byte,
-	state *decodeState,
-) (*Constr, []byte, error) {
-	switch {
-	case tagNumber >= 121 && tagNumber <= 127:
-		tmpFields, tmpUseIndef, rest, err := decodeListItemsNextEntered(
-			data,
-			state,
-		)
-		if err != nil {
-			return nil, nil, err
-		}
-		return &Constr{
-			Tag:      new(big.Int).SetUint64(tagNumber - 121),
-			Fields:   tmpFields,
-			useIndef: tmpUseIndef,
-		}, rest, nil
-	case tagNumber >= 1280 && tagNumber <= 1400:
-		tmpFields, tmpUseIndef, rest, err := decodeListItemsNextEntered(
-			data,
-			state,
-		)
-		if err != nil {
-			return nil, nil, err
-		}
-		return &Constr{
-			Tag:      new(big.Int).SetUint64(tagNumber - 1280 + 7),
-			Fields:   tmpFields,
-			useIndef: tmpUseIndef,
-		}, rest, nil
-	case tagNumber == 102:
-		fieldCount, rest, useIndef, err := decodeCBORArray(data)
-		if err != nil {
-			return nil, nil, err
-		}
-		if !useIndef && fieldCount != 2 {
-			return nil, nil, fmt.Errorf("constructor 102 outer array has %d items, want 2", fieldCount)
-		}
-
-		alternative, next, err := decodeCBORUint(rest)
-		if err != nil {
-			return nil, nil, err
-		}
-		rest = next
-
-		tmpFields, tmpUseIndef, next, err := decodeListItemsNextEntered(
-			rest,
-			state,
-		)
-		if err != nil {
-			return nil, nil, err
-		}
-		rest = next
-
-		if useIndef {
-			if len(rest) == 0 || rest[0] != 0xff {
-				return nil, nil, errors.New("unterminated indefinite-length CBOR array")
-			}
-			rest = rest[1:]
-		}
-
-		return &Constr{
-			Tag:      new(big.Int).SetUint64(alternative),
-			Fields:   tmpFields,
-			useIndef: tmpUseIndef,
-		}, rest, nil
-	default:
-		return nil, nil, fmt.Errorf(
-			"unknown CBOR tag for PlutusData constructor: %d",
-			tagNumber,
-		)
-	}
-}
-
-func decodeMapNext(data []byte) (*Map, []byte, error) {
-	state := newDecodeState()
-	if err := state.enterValue(); err != nil {
-		return nil, nil, err
-	}
-	defer state.leaveValue()
-	return decodeMapNextEntered(data, state)
-}
-
-func decodeMapNextEntered(data []byte, state *decodeState) (*Map, []byte, error) {
-	pairCount, rest, useIndef, err := decodeCBORMap(data)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var pairs [][2]PlutusData
-	if useIndef {
-		pairs = make([][2]PlutusData, 0, 4)
-	} else {
-		// Each pair needs at least 2 bytes (one per key/value CBOR head).
-		if pairCount > len(rest)/2 {
-			return nil, nil, fmt.Errorf("CBOR map claims %d pairs but only %d bytes remain", pairCount, len(rest))
-		}
-		if err := state.checkAdditionalNodes(pairCount * 2); err != nil {
-			return nil, nil, err
-		}
-		pairs = make([][2]PlutusData, pairCount)
-	}
-
-	for i := 0; useIndef || i < pairCount; i++ {
-		if useIndef {
-			if len(rest) == 0 {
-				return nil, nil, errors.New("unterminated indefinite-length CBOR map")
-			}
-			if rest[0] == 0xff {
-				rest = rest[1:]
-				break
-			}
-		}
-
-		tmpKey, next, err := decodeNextPlutusDataWithState(rest, state)
-		if err != nil {
-			return nil, nil, err
-		}
-		rest = next
-
-		tmpVal, next, err := decodeNextPlutusDataWithState(rest, state)
-		if err != nil {
-			return nil, nil, err
-		}
-		rest = next
-
-		if useIndef {
-			pairs = append(pairs, [2]PlutusData{tmpKey, tmpVal})
-		} else {
-			pairs[i] = [2]PlutusData{tmpKey, tmpVal}
-		}
-	}
-
-	return &Map{Pairs: pairs, useIndef: useIndefPtr(useIndef)}, rest, nil
-}
-
-func decodeListNext(data []byte) (*List, []byte, error) {
-	state := newDecodeState()
-	if err := state.enterValue(); err != nil {
-		return nil, nil, err
-	}
-	defer state.leaveValue()
-	return decodeListNextEntered(data, state)
-}
-
-func decodeListNextEntered(data []byte, state *decodeState) (*List, []byte, error) {
-	tmpItems, tmpUseIndef, rest, err := decodeListItemsNextEntered(data, state)
-	if err != nil {
-		return nil, nil, err
-	}
-	return &List{Items: tmpItems, useIndef: tmpUseIndef}, rest, nil
-}
-
-func decodeListItemsNext(data []byte) ([]PlutusData, *bool, []byte, error) {
-	return decodeListItemsNextEntered(data, newDecodeState())
-}
-
-func decodeListItemsNextEntered(
-	data []byte,
-	state *decodeState,
-) ([]PlutusData, *bool, []byte, error) {
-	itemCount, rest, useIndef, err := decodeCBORArray(data)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	if !useIndef {
-		tmpItems, rest, err := decodeListItemsDefiniteEntered(
-			itemCount,
-			rest,
-			state,
-		)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		return tmpItems, useIndefPtr(false), rest, nil
-	}
-
-	var smallItems [4]PlutusData
-	var tmpItems []PlutusData
-	tmpLen := 0
-	for {
-		if len(rest) == 0 {
-			return nil, nil, nil, errors.New("unterminated indefinite-length CBOR array")
-		}
-		if rest[0] == 0xff {
-			rest = rest[1:]
-			break
-		}
-
-		tmp, next, err := decodeNextPlutusDataWithState(rest, state)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		rest = next
-
-		if tmpItems != nil {
-			if tmpLen == len(tmpItems) {
-				tmpItems = append(tmpItems, tmp)
-				tmpLen++
-				continue
-			}
-			tmpItems[tmpLen] = tmp
-			tmpLen++
-			continue
-		}
-		if tmpLen < len(smallItems) {
-			smallItems[tmpLen] = tmp
-			tmpLen++
-			continue
-		}
-		tmpItems = make([]PlutusData, tmpLen+1, tmpLen*2)
-		copy(tmpItems, smallItems[:tmpLen])
-		tmpItems[tmpLen] = tmp
-		tmpLen++
-	}
-
-	if tmpItems == nil {
-		tmpItems = make([]PlutusData, tmpLen)
-		copy(tmpItems, smallItems[:tmpLen])
-	} else {
-		tmpItems = tmpItems[:tmpLen]
-	}
-	return tmpItems, useIndefPtr(true), rest, nil
-}
-
-func decodeListItemsDefinite(itemCount int, rest []byte) ([]PlutusData, []byte, error) {
-	return decodeListItemsDefiniteEntered(itemCount, rest, newDecodeState())
-}
-
-func decodeListItemsDefiniteEntered(
-	itemCount int,
-	rest []byte,
-	state *decodeState,
-) ([]PlutusData, []byte, error) {
-	// Each item needs at least 1 byte for a CBOR head.
-	if itemCount > len(rest) {
-		return nil, nil, fmt.Errorf("CBOR array claims %d items but only %d bytes remain", itemCount, len(rest))
-	}
-	if err := state.checkAdditionalNodes(itemCount); err != nil {
-		return nil, nil, err
-	}
-	tmpItems := make([]PlutusData, itemCount)
-	for i := range itemCount {
-		tmp, next, err := decodeNextPlutusDataWithState(rest, state)
-		if err != nil {
-			return nil, nil, err
-		}
-		rest = next
-		tmpItems[i] = tmp
-	}
-	return tmpItems, rest, nil
-}
-
 func (l List) MarshalCBOR() ([]byte, error) {
-	return marshalWith(l.appendCBOR)
+	return marshalPlutusDataCBOR(l)
 }
 
-func (l List) appendCBOR(buf *bytes.Buffer) error {
+// appendCBORHead writes the list's head and returns the frame that writes
+// its items.
+func (l List) appendCBORHead(buf *bytes.Buffer) *encodeFrame {
 	// Determine whether to use indefinite-length encoding.
 	// If useIndef is explicitly set, honor it; otherwise default to
 	// Haskell's cborg behavior: indefinite for non-empty, definite for empty.
@@ -1047,36 +711,21 @@ func (l List) appendCBOR(buf *bytes.Buffer) error {
 	if l.useIndef != nil {
 		useIndef = *l.useIndef
 	}
-	return appendCBORArray(buf, l.Items, useIndef, "list item")
+	return arrayFrame(buf, l.Items, useIndef, "list item")
 }
 
 func (l List) Clone() PlutusData {
-	tmpItems := make([]PlutusData, len(l.Items))
-	for i, item := range l.Items {
-		tmpItems[i] = item.Clone()
-	}
-	tmpIndef := cloneUseIndef(l.useIndef)
-	return &List{Items: tmpItems, useIndef: tmpIndef}
+	return copyData(l, false)
 }
 
 func (l List) Equal(pd PlutusData) bool {
-	pdList, ok := pd.(*List)
-	if !ok {
-		return false
-	}
-	if len(l.Items) != len(pdList.Items) {
-		return false
-	}
-	for i := range l.Items {
-		if !l.Items[i].Equal(pdList.Items[i]) {
-			return false
-		}
-	}
-	return true
+	return equalData(l, pd)
 }
 
 func (l List) String() string {
-	return fmt.Sprintf("List%v", l.Items)
+	var sb strings.Builder
+	writePlutusDataString(&sb, &l)
+	return sb.String()
 }
 
 // NewList creates a new List variant.

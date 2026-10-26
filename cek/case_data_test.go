@@ -30,6 +30,16 @@ func runTextProgram(
 	protoMajor uint,
 ) (string, error) {
 	t.Helper()
+	return runTextProgramIn(t, lang.LanguageVersionV3, src, protoMajor)
+}
+
+func runTextProgramIn(
+	t *testing.T,
+	language lang.LanguageVersion,
+	src string,
+	protoMajor uint,
+) (string, error) {
+	t.Helper()
 	named, err := syn.Parse(src)
 	if err != nil {
 		t.Fatalf("parse program: %v", err)
@@ -39,9 +49,9 @@ func runTextProgram(
 		t.Fatalf("convert program: %v", err)
 	}
 	machine := NewMachine[syn.DeBruijn](
-		lang.LanguageVersionV3,
+		language,
 		200,
-		NewDefaultEvalContext(lang.LanguageVersionV3, ProtoVersion{Major: protoMajor}),
+		NewDefaultEvalContext(language, ProtoVersion{Major: protoMajor}),
 	)
 	machine.ExBudget = ExBudget{Cpu: math.MaxInt64, Mem: math.MaxInt64}
 	result, err := machine.Run(program.Term)
@@ -100,9 +110,69 @@ func TestCaseOnDataIsUnavailableBeforeDijkstra(t *testing.T) {
 }
 
 // The reference rejects an open term before evaluating it, so a free variable
-// fails the script even when evaluation would never reach it.
+// fails the script even when evaluation would never reach it. Before protocol
+// version 12 its scope check (NoCaseConstr mode) does not look inside case
+// and constr terms: a free variable there fails only when evaluated.
 func TestRunRejectsOpenTermsEvenWhenUnreached(t *testing.T) {
 	t.Parallel()
+
+	untakenBranch := &syn.Case[syn.DeBruijn]{
+		Constr: &syn.Constant{Con: &syn.Bool{Inner: false}},
+		Branches: []syn.Term[syn.DeBruijn]{
+			&syn.Constant{Con: &syn.Integer{Inner: big.NewInt(1)}},
+			&syn.Var[syn.DeBruijn]{Name: 1},
+		},
+	}
+	unevaluatedField := &syn.Delay[syn.DeBruijn]{Term: &syn.Constr[syn.DeBruijn]{
+		Fields: []syn.Term[syn.DeBruijn]{&syn.Var[syn.DeBruijn]{Name: 7}},
+	}}
+	takenBranch := &syn.Case[syn.DeBruijn]{
+		Constr: &syn.Constant{Con: &syn.Bool{Inner: true}},
+		Branches: []syn.Term[syn.DeBruijn]{
+			&syn.Constant{Con: &syn.Integer{Inner: big.NewInt(1)}},
+			&syn.Var[syn.DeBruijn]{Name: 1},
+		},
+	}
+	tests := []struct {
+		name     string
+		term     syn.Term[syn.DeBruijn]
+		openAt11 bool
+		openAt12 bool
+		// failsAt11 is true when the free variable is evaluated.
+		failsAt11 bool
+	}{
+		{"unused free variable", &syn.Lambda[syn.DeBruijn]{Body: &syn.Var[syn.DeBruijn]{Name: 2}}, true, true, true},
+		{"index zero", &syn.Lambda[syn.DeBruijn]{Body: &syn.Var[syn.DeBruijn]{Name: 0}}, true, true, true},
+		{"free variable in an untaken branch", untakenBranch, false, true, false},
+		{"free variable in an unevaluated constr field", unevaluatedField, false, true, false},
+		{"free variable in a taken branch", takenBranch, false, true, true},
+	}
+	for _, tc := range tests {
+		for _, proto := range []uint{11, 12} {
+			machine := NewMachine[syn.DeBruijn](
+				lang.LanguageVersionV3,
+				200,
+				NewDefaultEvalContext(lang.LanguageVersionV3, ProtoVersion{Major: proto}),
+			)
+			machine.ExBudget = ExBudget{Cpu: math.MaxInt64, Mem: math.MaxInt64}
+			_, err := machine.Run(tc.term)
+			wantOpen, wantFail := tc.openAt12, tc.openAt12
+			if proto == 11 {
+				wantOpen, wantFail = tc.openAt11, tc.failsAt11
+			}
+			var typeErr *TypeError
+			isOpen := errors.As(err, &typeErr) && typeErr != nil &&
+				typeErr.Code == ErrCodeOpenTerm
+			switch {
+			case wantFail && !isOpen:
+				t.Fatalf("%s at protocol %d: error = %v, want an open term error", tc.name, proto, err)
+			case !wantFail && err != nil:
+				t.Fatalf("%s at protocol %d: error = %v, want success", tc.name, proto, err)
+			case wantOpen && err == nil:
+				t.Fatalf("%s at protocol %d: succeeded, want rejection", tc.name, proto)
+			}
+		}
+	}
 
 	machine := NewMachine[syn.DeBruijn](
 		lang.LanguageVersionV3,
@@ -110,24 +180,6 @@ func TestRunRejectsOpenTermsEvenWhenUnreached(t *testing.T) {
 		NewDefaultEvalContext(lang.LanguageVersionV3, ProtoVersion{Major: 11}),
 	)
 	machine.ExBudget = ExBudget{Cpu: math.MaxInt64, Mem: math.MaxInt64}
-	for name, term := range map[string]syn.Term[syn.DeBruijn]{
-		"unused free variable": &syn.Lambda[syn.DeBruijn]{Body: &syn.Var[syn.DeBruijn]{Name: 2}},
-		"free variable in an untaken branch": &syn.Case[syn.DeBruijn]{
-			Constr: &syn.Constant{Con: &syn.Bool{Inner: false}},
-			Branches: []syn.Term[syn.DeBruijn]{
-				&syn.Constant{Con: &syn.Integer{Inner: big.NewInt(1)}},
-				&syn.Var[syn.DeBruijn]{Name: 1},
-			},
-		},
-		"index zero": &syn.Lambda[syn.DeBruijn]{Body: &syn.Var[syn.DeBruijn]{Name: 0}},
-	} {
-		_, err := machine.Run(term)
-		var typeErr *TypeError
-		if !errors.As(err, &typeErr) || typeErr.Code != ErrCodeOpenTerm {
-			t.Fatalf("%s: error = %v, want an open term error", name, err)
-		}
-	}
-
 	closed := &syn.Lambda[syn.DeBruijn]{Body: &syn.Var[syn.DeBruijn]{Name: 1}}
 	if _, err := machine.Run(closed); err != nil {
 		t.Fatalf("closed term: %v", err)

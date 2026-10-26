@@ -223,8 +223,8 @@ func TestDischargeValueBoundsCapturedExpansion(t *testing.T) {
 	if !errors.As(err, &budgetErr) {
 		t.Fatalf("expected BudgetError, got %T: %v", err, err)
 	}
-	if budgetErr.Code != ErrCodeBudgetExhausted {
-		t.Fatalf("expected budget exhausted code, got %v", budgetErr.Code)
+	if budgetErr.Code != ErrCodeResultTooLarge {
+		t.Fatalf("expected result too large code, got %v", budgetErr.Code)
 	}
 }
 
@@ -244,7 +244,7 @@ func TestUnwrapConstantBoundsCapturedExpansion(t *testing.T) {
 	if !errors.As(err, &budgetErr) {
 		t.Fatalf("expected BudgetError, got %T: %v", err, err)
 	}
-	if budgetErr.Code != ErrCodeBudgetExhausted {
-		t.Fatalf("expected budget exhausted code, got %v", budgetErr.Code)
+	if budgetErr.Code != ErrCodeResultTooLarge {
+		t.Fatalf("expected result too large code, got %v", budgetErr.Code)
 	}
 }

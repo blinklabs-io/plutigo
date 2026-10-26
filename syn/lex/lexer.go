@@ -15,33 +15,58 @@
 package lex
 
 import (
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/big"
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
+// Lexer scans the original input string in place. It never materializes a
+// []rune copy of the input. pos and readPos are rune indices (token positions
+// are reported in runes); bytePos and byteNext are the matching byte offsets
+// into input. Invalid UTF-8 decodes one U+FFFD per bad byte, exactly like a
+// []rune(string) conversion would.
 type Lexer struct {
-	input   []rune
-	pos     int
-	readPos int
-	ch      rune
+	input    string
+	pos      int // rune index of ch (may run past the end after EOF)
+	readPos  int // rune index of the next rune
+	bytePos  int // byte offset of ch (clamped to len(input))
+	byteNext int // byte offset of the next rune
+	ch       rune
+	// runeLen is the total number of runes in input.
+	runeLen int
 }
 
 func NewLexer(input string) *Lexer {
-	l := &Lexer{input: []rune(input)}
+	l := &Lexer{input: input, runeLen: utf8.RuneCountInString(input)}
 
 	l.readChar()
 
 	return l
 }
 
+// decodeAt decodes the rune at byte offset i, which must be < len(l.input).
+func (l *Lexer) decodeAt(i int) (rune, int) {
+	if c := l.input[i]; c < utf8.RuneSelf {
+		return rune(c), 1
+	}
+
+	return utf8.DecodeRuneInString(l.input[i:])
+}
+
 func (l *Lexer) readChar() {
-	if l.readPos >= len(l.input) {
+	if l.byteNext >= len(l.input) {
 		l.ch = 0
+		l.bytePos = len(l.input)
 	} else {
-		l.ch = l.input[l.readPos]
+		r, w := l.decodeAt(l.byteNext)
+		l.ch = r
+		l.bytePos = l.byteNext
+		l.byteNext += w
 	}
 
 	l.pos = l.readPos
@@ -52,15 +77,17 @@ func (l *Lexer) readChar() {
 // atEOF reports whether the lexer has consumed all input. EOF is tracked by
 // position rather than by l.ch, so an embedded U+0000 is not mistaken for it.
 func (l *Lexer) atEOF() bool {
-	return l.pos >= len(l.input)
+	return l.pos >= l.runeLen
 }
 
 func (l *Lexer) peekChar() rune {
-	if l.readPos >= len(l.input) {
+	if l.byteNext >= len(l.input) {
 		return 0
 	}
 
-	return rune(l.input[l.readPos])
+	r, _ := l.decodeAt(l.byteNext)
+
+	return r
 }
 
 func (l *Lexer) skipWhitespace() {
@@ -100,16 +127,28 @@ func (l *Lexer) skipWhitespace() {
 }
 
 func (l *Lexer) readIdentifier() string {
-	start := l.pos
+	start := l.bytePos
 	for unicode.IsLetter(l.ch) || unicode.IsDigit(l.ch) || l.ch == '_' || l.ch == '\'' || l.ch == '-' {
 		l.readChar()
 	}
 
-	return string(l.input[start:l.pos])
+	return l.input[start:l.bytePos]
 }
+
+// MaxIntegerDigits is the largest number of decimal digits accepted in a
+// textual integer literal. Decimal to big integer conversion is quadratic in
+// the digit count, so unbounded literals are a DoS vector. 100,000 digits is
+// roughly a 332,000 bit integer, far beyond anything real tooling emits;
+// on-chain scripts are FLAT encoded and are not affected by this limit.
+const MaxIntegerDigits = 100_000
+
+// ErrIntegerTooLong is reported when an integer literal exceeds
+// MaxIntegerDigits. It is carried in Token.Value of the resulting TokenError.
+var ErrIntegerTooLong = errors.New("integer literal too long")
 
 func (l *Lexer) readNumber() (string, error) {
 	start := l.pos
+	byteStart := l.bytePos
 
 	if l.ch == '-' || l.ch == '+' {
 		l.readChar() // Consume the minus sign
@@ -119,11 +158,22 @@ func (l *Lexer) readNumber() (string, error) {
 		return "", fmt.Errorf("expected digit after sign at position %d", l.pos)
 	}
 
+	digitsStart := l.pos
 	for unicode.IsDigit(l.ch) {
 		l.readChar()
+		// Bound the scan so decimal conversion (quadratic in the digit
+		// count) cannot be abused with a huge literal.
+		if l.pos-digitsStart > MaxIntegerDigits {
+			return "", fmt.Errorf(
+				"%w: more than %d digits at position %d",
+				ErrIntegerTooLong,
+				MaxIntegerDigits,
+				start,
+			)
+		}
 	}
 
-	return string(l.input[start:l.pos]), nil
+	return l.input[byteStart:l.bytePos], nil
 }
 
 func isHexDigit(ch rune) bool {
@@ -319,7 +369,8 @@ func (l *Lexer) readString() (string, error) {
 }
 
 func (l *Lexer) readByteString() (string, error) {
-	start := l.pos + 1 // Skip prefix (# or x)
+	start := l.pos + 1         // Skip prefix (# or x), rune index
+	byteStart := l.bytePos + 1 // prefix is a single ASCII byte
 
 	for {
 		l.readChar()
@@ -330,7 +381,7 @@ func (l *Lexer) readByteString() (string, error) {
 			l.ch == ')',
 			l.ch == ']',
 			l.ch == ',':
-			literal := string(l.input[start:l.pos])
+			literal := l.input[byteStart:l.bytePos]
 
 			if len(literal)%2 != 0 {
 				return "", fmt.Errorf(
@@ -354,6 +405,60 @@ func (l *Lexer) readByteString() (string, error) {
 			)
 		}
 	}
+}
+
+// readHexToken reads a byte string literal (after # or 0x) into tok as a
+// token of type typ.
+func (l *Lexer) readHexToken(tok Token, typ TokenType) Token {
+	literal, err := l.readByteString()
+	if err != nil {
+		tok.Type = TokenError
+		tok.Literal = err.Error()
+
+		return tok
+	}
+
+	bytes, err := hex.DecodeString(literal)
+	if err != nil {
+		tok.Type = TokenError
+		tok.Literal = err.Error()
+
+		return tok
+	}
+
+	tok.Type = typ
+	tok.Literal = literal
+	tok.Value = bytes
+
+	return tok
+}
+
+// readNumberToken reads a decimal integer literal into tok. A readNumber
+// error is also carried in tok.Value so the parser can report typed errors
+// such as ErrIntegerTooLong.
+func (l *Lexer) readNumberToken(tok Token) Token {
+	literal, err := l.readNumber()
+	if err != nil {
+		tok.Type = TokenError
+		tok.Literal = err.Error()
+		tok.Value = err
+
+		return tok
+	}
+
+	n, ok := new(big.Int).SetString(literal, 10)
+	if !ok {
+		tok.Type = TokenError
+		tok.Literal = fmt.Sprintf("invalid number %s at position %d", literal, l.pos)
+
+		return tok
+	}
+
+	tok.Type = TokenNumber
+	tok.Literal = literal
+	tok.Value = n
+
+	return tok
 }
 
 func (l *Lexer) NextToken() Token {
@@ -416,88 +521,15 @@ func (l *Lexer) NextToken() Token {
 
 		l.readChar()
 	case '#':
-		literal, err := l.readByteString()
-		if err != nil {
-			tok.Type = TokenError
-			tok.Literal = err.Error()
-
-			return tok
-		}
-
-		tok.Type = TokenByteString
-
-		tok.Literal = literal
-
-		// Convert hex to bytes
-		bytes := make([]byte, len(literal)/2)
-
-		for i := 0; i < len(literal); i += 2 {
-			var val uint8
-			_, err = fmt.Sscanf(literal[i:i+2], "%x", &val)
-			if err != nil {
-				tok.Type = TokenError
-				tok.Literal = err.Error()
-
-				return tok
-			}
-			bytes[i/2] = val
-		}
-
-		tok.Value = bytes
+		return l.readHexToken(tok, TokenByteString)
 	case '0':
 		if l.peekChar() == 'x' {
 			l.readChar() // Consume '0'
 
-			literal, err := l.readByteString() // 0x prefix
-			if err != nil {
-				tok.Type = TokenError
-				tok.Literal = err.Error()
-				return tok
-			}
-
-			tok.Type = TokenPoint
-			tok.Literal = literal
-
-			// Convert hex to bytes
-			bytes := make([]byte, len(literal)/2)
-
-			for i := 0; i < len(literal); i += 2 {
-				var val uint8
-				_, err = fmt.Sscanf(literal[i:i+2], "%x", &val)
-				if err != nil {
-					tok.Type = TokenError
-					tok.Literal = err.Error()
-					return tok
-				}
-				bytes[i/2] = val
-			}
-
-			tok.Value = bytes
-		} else {
-			literal, err := l.readNumber()
-			if err != nil {
-				tok.Type = TokenError
-
-				tok.Literal = err.Error()
-
-				return tok
-			}
-
-			tok.Type = TokenNumber
-			tok.Literal = literal
-
-			n := new(big.Int)
-
-			if _, ok := n.SetString(literal, 10); !ok {
-				tok.Type = TokenError
-
-				tok.Literal = fmt.Sprintf("invalid number %s at position %d", literal, l.pos)
-
-				return tok
-			}
-
-			tok.Value = n
+			return l.readHexToken(tok, TokenPoint)
 		}
+
+		return l.readNumberToken(tok)
 	case '"':
 		literal, err := l.readString()
 		if err != nil {
@@ -568,31 +600,7 @@ func (l *Lexer) NextToken() Token {
 
 			return tok
 		} else if unicode.IsDigit(l.ch) || l.ch == '-' || l.ch == '+' {
-			literal, err := l.readNumber()
-			if err != nil {
-				tok.Type = TokenError
-				tok.Literal = err.Error()
-
-				return tok
-			}
-
-			tok.Type = TokenNumber
-
-			tok.Literal = literal
-
-			n := new(big.Int)
-
-			if _, ok := n.SetString(literal, 10); !ok {
-				tok.Type = TokenError
-
-				tok.Literal = fmt.Sprintf("invalid number %s at position %d", literal, l.pos)
-
-				return tok
-			}
-
-			tok.Value = n
-
-			return tok
+			return l.readNumberToken(tok)
 		} else {
 			tok.Type = TokenError
 

@@ -28,14 +28,22 @@ type termValidationItem[T syn.Eval] struct {
 	term syn.Term[T]
 	// depth and scope are 32-bit to keep the item at 24 bytes: the depth
 	// is bounded by maxDischargeDepth and the scope by the depth. scope is
-	// the number of lambdas enclosing term.
+	// the number of lambdas enclosing term, or noScopeCheck when term sits
+	// in a part of the program the scope check does not cover.
 	depth int32
 	scope int32
 }
 
+// noScopeCheck marks terms whose variables the pre-evaluation scope check
+// does not inspect (see validateTermStructure).
+const noScopeCheck int32 = -1
+
 type constantValidationItem struct {
 	constant syn.IConstant
 	depth    int
+	// exit marks the point where every descendant of constant has been
+	// walked (see structureValidationBudget.seenComposites).
+	exit bool
 }
 
 type dataValidationItem struct {
@@ -58,6 +66,75 @@ type structureValidationBudget struct {
 	// Machine-created materializations derive their types from values that
 	// were validated before evaluation.
 	skipConstantTypes bool
+	// seenComposites records each list, array and pair constant already
+	// walked, with the shallowest depth it was walked at, and seenTypes each
+	// composite constant type already walked. Constants and types are
+	// immutable, so a node reached again through another reference has
+	// already been validated: the FLAT decoders share one value among all
+	// occurrences of a zero-width pair type, and a list of N such items is N
+	// references to one tree. Walking each shared node once keeps the walk
+	// linear in the physical (decoded) size, which is what the node cap
+	// bounds, rather than charging the logical size of every reference: the
+	// reference evaluates such constants, so they must not be rejected.
+	seenComposites map[syn.IConstant]compositeVisit
+	seenTypes      map[syn.Typ]struct{}
+}
+
+type compositeVisit struct {
+	depth int
+	done  bool
+}
+
+// enterConstant reports whether the composite constant c must be walked at
+// depth: false when a completed walk already covered it at the same or a
+// shallower depth (its subtree then fits within the depth bound from here
+// too). Reaching c again while its own walk is in progress means the
+// constant graph is cyclic, which no decoder produces. When c must be
+// walked, enterConstant schedules the exit item that completes the walk
+// once all of c's children, pushed after it, have been popped.
+func (b *structureValidationBudget) enterConstant(
+	work *[]constantValidationItem,
+	c syn.IConstant,
+	depth int,
+) (bool, error) {
+	if prev, ok := b.seenComposites[c]; ok {
+		if !prev.done {
+			return false, malformedASTError("constant structure is cyclic")
+		}
+		if prev.depth <= depth {
+			return false, nil
+		}
+	}
+	if b.seenComposites == nil {
+		b.seenComposites = make(map[syn.IConstant]compositeVisit)
+	}
+	b.seenComposites[c] = compositeVisit{depth: depth}
+	*work = append(*work, constantValidationItem{constant: c, depth: depth, exit: true})
+	return true, nil
+}
+
+// leaveConstant records that the walk of c, entered at depth, is complete.
+func (b *structureValidationBudget) leaveConstant(c syn.IConstant, depth int) {
+	b.seenComposites[c] = compositeVisit{depth: depth, done: true}
+}
+
+// firstVisitType reports whether the constant type t must be walked. The
+// type walk restarts its depth count at every root, so a type walked once is
+// valid wherever it occurs. Only composite types are recorded.
+func (b *structureValidationBudget) firstVisitType(t syn.Typ) bool {
+	switch t.(type) {
+	case *syn.TList, *syn.TArray, *syn.TPair:
+	default:
+		return true
+	}
+	if _, ok := b.seenTypes[t]; ok {
+		return false
+	}
+	if b.seenTypes == nil {
+		b.seenTypes = make(map[syn.Typ]struct{})
+	}
+	b.seenTypes[t] = struct{}{}
+	return true
 }
 
 func (b *structureValidationBudget) consume(kind string) error {
@@ -116,11 +193,20 @@ func malformedASTError(format string, args ...any) *TypeError {
 	}
 }
 
+// validateTermStructure checks that term is a well-formed, acyclic AST and
+// applies the reference's pre-evaluation scope check (plutus-ledger-api
+// mkTermToEvaluate, UntypedPlutusCore.Check.Scope.checkScope): every
+// variable must be bound by an enclosing lambda. Before protocol version 12
+// the reference checks in NoCaseConstr mode, which does not look inside
+// constr fields or case scrutinees and branches; a free variable there fails
+// only if the machine evaluates it. fullScopeCheck selects the Full mode of
+// protocol version 12 on.
 func validateTermStructure[T syn.Eval](
 	ctx context.Context,
 	checkCancellation bool,
 	term syn.Term[T],
 	trustedData map[*syn.Data]struct{},
+	fullScopeCheck bool,
 ) error {
 	budget := structureValidationBudget{
 		ctx:               ctx,
@@ -155,6 +241,7 @@ func validateTermStructure[T syn.Eval](
 			// the variable sits: the reference rejects an open term before
 			// evaluating it, even when the free variable is never reached.
 			if index, ok := any(t.Name).(syn.DeBruijn); ok &&
+				item.scope != noScopeCheck &&
 				(index < 1 || int(index) > int(item.scope)) {
 				return &TypeError{
 					Code:    ErrCodeOpenTerm,
@@ -179,7 +266,7 @@ func validateTermStructure[T syn.Eval](
 			if t == nil {
 				return malformedASTError("term contains a nil lambda")
 			}
-			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Body, depth: nextDepth, scope: item.scope + 1}); err != nil {
+			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Body, depth: nextDepth, scope: lambdaScope(item.scope)}); err != nil {
 				return err
 			}
 		case *syn.Apply[T]:
@@ -203,8 +290,9 @@ func validateTermStructure[T syn.Eval](
 			if t == nil {
 				return malformedASTError("term contains a nil constructor")
 			}
+			scope := caseConstrScope(item.scope, fullScopeCheck)
 			for _, field := range t.Fields {
-				if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: field, depth: nextDepth, scope: item.scope}); err != nil {
+				if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: field, depth: nextDepth, scope: scope}); err != nil {
 					return err
 				}
 			}
@@ -212,11 +300,12 @@ func validateTermStructure[T syn.Eval](
 			if t == nil {
 				return malformedASTError("term contains a nil case")
 			}
-			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Constr, depth: nextDepth, scope: item.scope}); err != nil {
+			scope := caseConstrScope(item.scope, fullScopeCheck)
+			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Constr, depth: nextDepth, scope: scope}); err != nil {
 				return err
 			}
 			for _, branch := range t.Branches {
-				if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: branch, depth: nextDepth, scope: item.scope}); err != nil {
+				if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: branch, depth: nextDepth, scope: scope}); err != nil {
 					return err
 				}
 			}
@@ -238,6 +327,23 @@ func validateTermStructure[T syn.Eval](
 	return nil
 }
 
+// lambdaScope is the scope of a lambda body whose lambda has scope.
+func lambdaScope(scope int32) int32 {
+	if scope == noScopeCheck {
+		return noScopeCheck
+	}
+	return scope + 1
+}
+
+// caseConstrScope is the scope of the subterms of a constr or case term
+// with scope: unchecked unless the Full scope-check mode applies.
+func caseConstrScope(scope int32, fullScopeCheck bool) int32 {
+	if fullScopeCheck {
+		return scope
+	}
+	return noScopeCheck
+}
+
 func validateConstantStructureWithBudget(
 	constant syn.IConstant,
 	budget *structureValidationBudget,
@@ -255,6 +361,10 @@ func validateConstantStructureWithBudget(
 		last := len(work) - 1
 		item := work[last]
 		work = work[:last]
+		if item.exit {
+			budget.leaveConstant(item.constant, item.depth)
+			continue
+		}
 		if item.depth > maxDischargeDepth {
 			return malformedASTError("constant structure exceeds depth %d", maxDischargeDepth)
 		}
@@ -294,6 +404,12 @@ func validateConstantStructureWithBudget(
 			if c == nil {
 				return malformedASTError("constant contains a nil ProtoList")
 			}
+			if walk, err := budget.enterConstant(&work, c, item.depth); !walk {
+				if err != nil {
+					return err
+				}
+				continue
+			}
 			if !budget.skipConstantTypes {
 				if err := validateTypeStructureWithBudget(c.LTyp, budget); err != nil {
 					return err
@@ -307,6 +423,12 @@ func validateConstantStructureWithBudget(
 		case *syn.ProtoArray:
 			if c == nil {
 				return malformedASTError("constant contains a nil ProtoArray")
+			}
+			if walk, err := budget.enterConstant(&work, c, item.depth); !walk {
+				if err != nil {
+					return err
+				}
+				continue
 			}
 			if !budget.skipConstantTypes {
 				if err := validateTypeStructureWithBudget(c.ATyp, budget); err != nil {
@@ -328,6 +450,12 @@ func validateConstantStructureWithBudget(
 		case *syn.ProtoPair:
 			if c == nil {
 				return malformedASTError("constant contains a nil ProtoPair")
+			}
+			if walk, err := budget.enterConstant(&work, c, item.depth); !walk {
+				if err != nil {
+					return err
+				}
+				continue
 			}
 			if !budget.skipConstantTypes {
 				if err := validateTypeStructureWithBudget(c.FstType, budget); err != nil {
@@ -376,6 +504,9 @@ func validateTypeStructureWithBudget(
 	value syn.Typ,
 	budget *structureValidationBudget,
 ) error {
+	if !budget.firstVisitType(value) {
+		return nil
+	}
 	work := make([]typeValidationItem, 0, 1)
 	if err := scheduleValidationItem(
 		budget,
@@ -470,6 +601,9 @@ func validateDataStructureWithBudget(
 	value data.PlutusData,
 	budget *structureValidationBudget,
 ) error {
+	if budget.discharge == nil {
+		return validateDataConstant(value, budget)
+	}
 	work := make([]dataValidationItem, 0, 1)
 	if err := scheduleValidationItem(
 		budget,
@@ -598,4 +732,98 @@ func validateDataStructureWithBudget(
 		}
 	}
 	return nil
+}
+
+// validateDataConstant checks a PlutusData constant of a program before
+// evaluation: every node must be non-nil and of a known type. Unlike the
+// term walk it has no depth or node limit, because the reference has none:
+// a Cardano node evaluates Data constants, datums and redeemers nested and
+// sized as far as the transaction allows. The walk is iterative, so depth
+// is safe, and visits each node once, so it is linear in the decoded input.
+// Only a value built by hand can make a walk longer than its memory: once a
+// constant exceeds maxDischargeWork nodes, data.CheckTree confirms it is a
+// tree (no shared or cyclic children), which every decoded value is.
+func validateDataConstant(value data.PlutusData, budget *structureValidationBudget) error {
+	var stackBuf [16]data.PlutusData
+	work := append(stackBuf[:0], value)
+	nodes := 0
+	treeChecked := false
+	for len(work) > 0 {
+		last := len(work) - 1
+		item := work[last]
+		work[last] = nil
+		work = work[:last]
+		nodes++
+		if nodes%4096 == 0 && budget.checkCancellation {
+			if err := budget.ctx.Err(); err != nil {
+				return err
+			}
+		}
+		switch d := item.(type) {
+		case *data.Constr:
+			if d == nil {
+				return malformedASTError("constant contains a nil PlutusData constructor")
+			}
+			work = append(work, d.Fields...)
+		case data.Constr:
+			work = append(work, d.Fields...)
+		case *data.Map:
+			if d == nil {
+				return malformedASTError("constant contains a nil PlutusData map")
+			}
+			work = appendDataPairs(work, d.Pairs)
+		case data.Map:
+			work = appendDataPairs(work, d.Pairs)
+		case *data.Value:
+			if d == nil {
+				return malformedASTError("constant contains a nil PlutusData Value")
+			}
+			if d.Inner != nil {
+				work = append(work, d.Inner)
+			}
+		case data.Value:
+			if d.Inner != nil {
+				work = append(work, d.Inner)
+			}
+		case *data.Integer:
+			if d == nil || d.Inner == nil {
+				return malformedASTError("constant contains a nil PlutusData Integer")
+			}
+		case data.Integer:
+			if d.Inner == nil {
+				return malformedASTError("constant contains a nil PlutusData Integer")
+			}
+		case *data.ByteString:
+			if d == nil {
+				return malformedASTError("constant contains a nil PlutusData ByteString")
+			}
+		case data.ByteString:
+		case *data.List:
+			if d == nil {
+				return malformedASTError("constant contains a nil PlutusData list")
+			}
+			work = append(work, d.Items...)
+		case data.List:
+			work = append(work, d.Items...)
+		default:
+			return malformedASTError("unsupported PlutusData type %T", item)
+		}
+		// Visited plus pending nodes bound the walk of a tree; checked before
+		// they can exceed the work limit, so shared children cannot grow the
+		// pending stack beyond it either.
+		if !treeChecked && nodes+len(work) > maxDischargeWork {
+			if err := data.CheckTree(value); err != nil {
+				return malformedASTError("PlutusData structure is not a tree: %v", err)
+			}
+			treeChecked = true
+		}
+	}
+	return nil
+}
+
+func appendDataPairs(work []data.PlutusData, pairs [][2]data.PlutusData) []data.PlutusData {
+	for _, pair := range pairs {
+		work = append(work, pair[0], pair[1])
+	}
+	return work
 }

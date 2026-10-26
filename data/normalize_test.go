@@ -26,7 +26,7 @@ func mustDecodeHex(t *testing.T, s string) PlutusData {
 	if err != nil {
 		t.Fatalf("bad fixture hex %q: %v", s, err)
 	}
-	pd, err := Decode(b)
+	pd, err := DecodeWithValue(b)
 	if err != nil {
 		t.Fatalf("Decode(%s): %v", s, err)
 	}

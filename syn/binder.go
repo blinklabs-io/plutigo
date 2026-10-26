@@ -175,11 +175,7 @@ func (n DeBruijn) VarDecode(d *decoder) (Binder, error) {
 		return nil, err
 	}
 
-	if i > math.MaxInt {
-		return nil, fmt.Errorf("DeBruijn index too large: %d", i)
-	}
-
-	return DeBruijn(i), nil
+	return saturatingDeBruijn(i), nil
 }
 
 func (n DeBruijn) ParameterEncode(e *encoder) error {

@@ -36,7 +36,13 @@ func oversizedDataList(size int) *data.List {
 	return &data.List{Items: items}
 }
 
-func TestSerialiseDataSizingStopsAtBudgetLowerBound(t *testing.T) {
+// The reference streams a Data builtin's cost: the costing function's
+// intercept first, then one charge per Data node, and it stops at the first
+// charge that overdraws (see budget_stream.go). With an empty budget the
+// intercept already overdraws, so neither the reference nor plutigo visits
+// more than a bounded prefix of the oversized argument.
+
+func TestSerialiseDataSizingStopsAtFirstCostChunk(t *testing.T) {
 	m := newTestMachine()
 	m.ExBudget = ExBudget{}
 	b := newTestBuiltin(builtin.SerialiseData).ApplyArg(
@@ -48,19 +54,33 @@ func TestSerialiseDataSizingStopsAtBudgetLowerBound(t *testing.T) {
 	if !errors.As(err, &budgetErr) {
 		t.Fatalf("serialiseData error = %T %v, want BudgetError", err, err)
 	}
-	// The root list alone contributes DataCost. Its charge already exceeds an
-	// empty budget, so none of its children need to be visited.
-	want := ExBudget{Mem: 2 * DataCost, Cpu: 955506 + 213312*DataCost}
-	if budgetErr.Requested != want {
+	assertFirstChunkOverdraw(t, m, budgetErr, ExBudget{Mem: 0, Cpu: 955506})
+}
+
+// assertFirstChunkOverdraw checks that a builtin failed on its first cost
+// chunk, want, from an empty budget, and left the remaining budget the
+// reference reports: the empty budget minus that chunk.
+func assertFirstChunkOverdraw(
+	t *testing.T,
+	m *Machine[syn.DeBruijn],
+	budgetErr *BudgetError,
+	want ExBudget,
+) {
+	t.Helper()
+	if budgetErr.Requested != want || budgetErr.Available != (ExBudget{}) {
 		t.Fatalf(
-			"requested budget = %+v, want root lower bound %+v",
+			"budget error requested %+v available %+v, want first chunk %+v from an empty budget",
 			budgetErr.Requested,
+			budgetErr.Available,
 			want,
 		)
 	}
+	if remaining := (ExBudget{Mem: -want.Mem, Cpu: -want.Cpu}); m.ExBudget != remaining {
+		t.Fatalf("remaining budget = %+v, want %+v", m.ExBudget, remaining)
+	}
 }
 
-func TestEqualsDataSizingStopsAtBudgetLowerBound(t *testing.T) {
+func TestEqualsDataSizingStopsAtFirstCostChunk(t *testing.T) {
 	m := newTestMachine()
 	m.ExBudget = ExBudget{}
 	left := &Constant{Constant: &syn.Data{Inner: oversizedDataList(100_000)}}
@@ -72,17 +92,10 @@ func TestEqualsDataSizingStopsAtBudgetLowerBound(t *testing.T) {
 	if !errors.As(err, &budgetErr) {
 		t.Fatalf("equalsData error = %T %v, want BudgetError", err, err)
 	}
-	want := ExBudget{Mem: 1, Cpu: 898148 + 27279*DataCost}
-	if budgetErr.Requested != want {
-		t.Fatalf(
-			"requested budget = %+v, want root lower bound %+v",
-			budgetErr.Requested,
-			want,
-		)
-	}
+	assertFirstChunkOverdraw(t, m, budgetErr, ExBudget{Mem: 1, Cpu: 898148})
 }
 
-func TestUnValueDataSizingStopsAtBudgetLowerBound(t *testing.T) {
+func TestUnValueDataSizingStopsAtFirstCostChunk(t *testing.T) {
 	m := newTestMachineV4()
 	m.ExBudget = ExBudget{}
 	b := newTestBuiltin(builtin.UnValueData).ApplyArg(
@@ -94,14 +107,7 @@ func TestUnValueDataSizingStopsAtBudgetLowerBound(t *testing.T) {
 	if !errors.As(err, &budgetErr) {
 		t.Fatalf("unValueData error = %T %v, want BudgetError", err, err)
 	}
-	want := ExBudget{Mem: 32, Cpu: 129596}
-	if budgetErr.Requested != want {
-		t.Fatalf(
-			"requested budget = %+v, want root lower bound %+v",
-			budgetErr.Requested,
-			want,
-		)
-	}
+	assertFirstChunkOverdraw(t, m, budgetErr, ExBudget{Mem: 14, Cpu: 1000})
 }
 
 func TestDataSizingObservesRunContextCancellation(t *testing.T) {

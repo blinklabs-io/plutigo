@@ -189,7 +189,7 @@ func TestRunMethodsPreserveValidASTSemantics(t *testing.T) {
 	}
 }
 
-func TestRunContextWithTrustedDataArgumentsExcludesDataFromAggregateLimit(t *testing.T) {
+func TestRunContextDataConstantsHaveNoAggregateLimit(t *testing.T) {
 	leaf := &data.Integer{Inner: big.NewInt(0)}
 	fields := make([]data.PlutusData, maxDischargeWork/2)
 	for i := range fields {
@@ -212,13 +212,26 @@ func TestRunContextWithTrustedDataArgumentsExcludesDataFromAggregateLimit(t *tes
 		Argument: &syn.Constant{Con: &syn.Data{Inner: secondData}},
 	}
 
-	_, err := newTestMachineFlow().RunContext(context.Background(), callerAppliedTerm)
-	var typeErr *TypeError
-	if !errors.As(err, &typeErr) {
-		t.Fatalf("RunContext() error = %T %v, want TypeError", err, err)
+	// Data constants have no node limit, as in the reference (a node
+	// evaluates Data constants as large as a transaction holds): a tree past
+	// the former aggregate limit is accepted. Leaves may be shared.
+	if _, err := newTestMachineFlow().RunContext(context.Background(), callerAppliedTerm); err != nil {
+		t.Fatalf("RunContext() error = %v, want success", err)
 	}
-	if !strings.HasPrefix(typeErr.Message, "PlutusData structure exceeds ") {
-		t.Fatalf("RunContext() error = %q, want aggregate PlutusData node limit", typeErr.Message)
+
+	// Shared containers make a graph no decoder produces; past the work
+	// limit the walk must prove a tree and rejects this one.
+	shared := data.PlutusData(leaf)
+	for range 40 {
+		shared = data.NewList(shared, shared)
+	}
+	_, err := newTestMachineFlow().RunContext(context.Background(), &syn.Apply[syn.DeBruijn]{
+		Function: &syn.Lambda[syn.DeBruijn]{Body: &syn.Constant{Con: &syn.Unit{}}},
+		Argument: &syn.Constant{Con: &syn.Data{Inner: shared}},
+	})
+	var typeErr *TypeError
+	if !errors.As(err, &typeErr) || !strings.Contains(typeErr.Message, "not a tree") {
+		t.Fatalf("RunContext() on shared data error = %T %v, want not-a-tree TypeError", err, err)
 	}
 
 	result, err := newTestMachineFlow().RunContextWithTrustedDataArguments(

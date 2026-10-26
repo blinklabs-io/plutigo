@@ -15,6 +15,7 @@
 package cek
 
 import (
+	"errors"
 	"math"
 	"math/big"
 	"testing"
@@ -717,7 +718,7 @@ func TestVariantBIntegerCosts(t *testing.T) {
 	}
 }
 
-func TestExpModIntegerCostOverflowReturnsBudgetError(t *testing.T) {
+func TestExpModIntegerCostOverflowSaturates(t *testing.T) {
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 	originalBudget := m.ExBudget
 
@@ -728,20 +729,17 @@ func TestExpModIntegerCostOverflowReturnsBudgetError(t *testing.T) {
 		func() ExMem { return ExMem(55_779) },
 		func() ExMem { return ExMem(55_779) },
 	)
-	if err == nil {
-		t.Fatal(
-			"expected budget error for overflowing expModInteger cost, got nil",
-		)
-	}
-	if !IsBudgetError(err) {
+	var budgetErr *BudgetError
+	if !errors.As(err, &budgetErr) {
 		t.Fatalf("expected budget error, got %T: %v", err, err)
 	}
-	if m.ExBudget != originalBudget {
-		t.Fatalf(
-			"budget mutated after cost overflow: got %+v, want %+v",
-			m.ExBudget,
-			originalBudget,
-		)
+	// Like the reference's SatInt arithmetic, the overflowing CPU cost
+	// saturates, and like the reference the overdrawing charge is deducted.
+	if budgetErr.Requested.Cpu != math.MaxInt64 || budgetErr.Available != originalBudget {
+		t.Fatalf("budget error = %+v, want a saturated CPU charge from %+v", budgetErr, originalBudget)
+	}
+	if want := originalBudget.Sub(&budgetErr.Requested); m.ExBudget != want {
+		t.Fatalf("remaining budget = %+v, want %+v", m.ExBudget, want)
 	}
 }
 

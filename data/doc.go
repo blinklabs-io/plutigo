@@ -33,6 +33,16 @@
 //	// Encode PlutusData to CBOR bytes
 //	cborBytes, err := data.Encode(plutusData)
 //
+// # Size and Depth
+//
+// Like the reference decoder (and a Cardano node, which accepts datums,
+// redeemers and Data constants as deep and as wide as a transaction can
+// hold), the CBOR decoders have no nesting or node limit. They run in time
+// and memory linear in the input. Decoding and every walker in this package
+// (Equal, Clone, Normalize, Encode, String, EncodeJSON) use an explicit stack
+// rather than recursion, so no nesting depth can overflow the goroutine
+// stack. DecodeJSON keeps a nesting limit (see SetMaxDecodeNestingDepth).
+//
 // # Constructor Tags
 //
 // Constr uses special CBOR tags for efficient encoding:

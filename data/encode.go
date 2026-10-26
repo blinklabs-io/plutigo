@@ -35,8 +35,14 @@ func init() {
 }
 
 // Encode encodes a PlutusData value into CBOR bytes.
+//
+// It writes containers itself rather than through the cbor library, whose
+// encoder re-validates every MarshalCBOR result with a nesting limit of
+// 65535 levels: PlutusData may be nested far deeper (a decoded transaction
+// datum up to its size in bytes, a value built by a script up to its
+// budget).
 func Encode(pd PlutusData) ([]byte, error) {
-	return cborMarshal(pd)
+	return marshalPlutusDataCBOR(pd)
 }
 
 // cborMarshal acts like cbor.Marshal but allows us to set our own encoder options

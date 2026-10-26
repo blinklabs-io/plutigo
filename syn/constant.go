@@ -15,7 +15,6 @@
 package syn
 
 import (
-	"bytes"
 	"fmt"
 	"math/big"
 	"sort"
@@ -166,6 +165,9 @@ type Value struct {
 	entries         []IConstant
 	cachedTotalSize int
 	cachedMaxInner  int
+	// cachedNegatives counts the negative quantities held by the Value so
+	// valueContains can reject negative inputs without a traversal.
+	cachedNegatives int
 }
 
 // NewValue normalizes and snapshots entries into an immutable Value. Value
@@ -184,6 +186,7 @@ func newOwnedValue(entries []IConstant) *Value {
 		entries:         entries,
 		cachedTotalSize: valueTotalSize(entries) + 1,
 		cachedMaxInner:  valueMaxInnerSize(entries),
+		cachedNegatives: valueNegativeCount(entries),
 	}
 }
 
@@ -437,30 +440,16 @@ func (v *Value) LookupCoin(policyID, tokenID []byte) (*big.Int, bool) {
 	if _, ok := v.TotalSize(); !ok {
 		return nil, false
 	}
-	policyIndex := sort.Search(len(v.entries), func(i int) bool {
-		policy := v.entries[i].(*ProtoPair).First.(*ByteString)
-		return bytes.Compare(policy.Inner, policyID) >= 0
-	})
-	if policyIndex == len(v.entries) {
+	policyIndex, found := searchValueKey(v.entries, policyID)
+	if !found {
 		return nil, false
 	}
-	policy := v.entries[policyIndex].(*ProtoPair)
-	if !bytes.Equal(policy.First.(*ByteString).Inner, policyID) {
+	tokens := valuePolicyTokens(v.entries[policyIndex])
+	tokenIndex, found := searchValueKey(tokens, tokenID)
+	if !found {
 		return nil, false
 	}
-	tokens := policy.Second.(*ProtoList).List
-	tokenIndex := sort.Search(len(tokens), func(i int) bool {
-		token := tokens[i].(*ProtoPair).First.(*ByteString)
-		return bytes.Compare(token.Inner, tokenID) >= 0
-	})
-	if tokenIndex == len(tokens) {
-		return nil, false
-	}
-	token := tokens[tokenIndex].(*ProtoPair)
-	if !bytes.Equal(token.First.(*ByteString).Inner, tokenID) {
-		return nil, false
-	}
-	return new(big.Int).Set(token.Second.(*Integer).Inner), true
+	return new(big.Int).Set(valueTokenQuantity(tokens[tokenIndex])), true
 }
 
 func cloneValueEntries(entries []IConstant) []IConstant {

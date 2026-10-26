@@ -239,16 +239,27 @@ func isCompositeConstant(con IConstant) bool {
 //
 // Work is charged as the decoders charge it, so every program they accept
 // still validates: each constant list or array item is counted in *items
-// against maxProgramNodes across the program (pair fields are not counted),
-// and each PlutusData value is counted against maxProgramNodes per data
-// constant, which covers the per-blob data decode limit. Collections are
-// stepped through in place, so the frame stack grows with nesting depth
-// rather than width, and it starts on the stack like ValidateProgram's term
-// worklist.
+// against maxProgramNodes across the program (pair fields and units are not
+// counted, as they occupy no FLAT bits of their own). PlutusData is not
+// limited, as the reference does not limit it: a data constant larger than
+// maxProgramNodes nodes need only be a tree (data.CheckTree), which every
+// decoded one is. Collections are stepped through in place,
+// so the frame stack grows with nesting depth rather than width, and it
+// starts on the stack like ValidateProgram's term worklist.
+//
+// The FLAT decoders share one value instance among all occurrences of a
+// zero-width pair type (see [decoder.zeroWidth]), so a list of N such items
+// is N references to one tree. To keep this walk linear in the decoded
+// input rather than N times the tree size, a pair whose declared component
+// types are both unit or pair is walked only the first time its pointer is
+// seen. Skipping a repeat is always sound: constants are immutable, and the
+// first walk either found a Value, ending the search, or found none.
 func constantHasValueData(con IConstant, items *int) (bool, error) {
 	var frameStack [16]valueDataFrame
 	frames := append(frameStack[:0], valueDataFrame{constant: con})
 	dataNodes := 0
+	var dataRoot data.PlutusData
+	var seenPairs map[*ProtoPair]struct{}
 	for len(frames) > 0 {
 		frame := &frames[len(frames)-1]
 		var (
@@ -280,10 +291,10 @@ func constantHasValueData(con IConstant, items *int) (bool, error) {
 			switch k := constant.(type) {
 			case *Data:
 				if k != nil {
-					item, dataNodes = k.Inner, 0
+					item, dataRoot, dataNodes = k.Inner, k.Inner, 0
 				}
 			case Data:
-				item, dataNodes = k.Inner, 0
+				item, dataRoot, dataNodes = k.Inner, k.Inner, 0
 			case *ProtoList:
 				if k != nil {
 					collection = k.List
@@ -297,13 +308,14 @@ func constantHasValueData(con IConstant, items *int) (bool, error) {
 			case ProtoArray:
 				collection = k.Array
 			case *ProtoPair:
-				if k != nil {
-					frames = append(
-						frames,
-						valueDataFrame{constant: k.Second},
-						valueDataFrame{constant: k.First},
-					)
+				if k == nil || (maybeZeroWidthPair(k) && !firstVisit(&seenPairs, k)) {
+					continue
 				}
+				frames = append(
+					frames,
+					valueDataFrame{constant: k.Second},
+					valueDataFrame{constant: k.First},
+				)
 			case ProtoPair:
 				frames = append(
 					frames,
@@ -323,9 +335,15 @@ func constantHasValueData(con IConstant, items *int) (bool, error) {
 			continue
 		}
 
+		// A data constant has no node limit (the reference has none, and
+		// a decoded one has at most one node per input byte), but a value
+		// built by hand could share or cycle children and make this walk
+		// unbounded; past maxProgramNodes it must prove to be a tree.
 		dataNodes++
-		if dataNodes > maxProgramNodes {
-			return false, errors.New("program has too many nodes")
+		if dataNodes == maxProgramNodes+1 {
+			if err := data.CheckTree(dataRoot); err != nil {
+				return false, fmt.Errorf("program data constant: %w", err)
+			}
 		}
 		switch d := item.(type) {
 		case *data.Value, data.Value:
@@ -351,6 +369,36 @@ func constantHasValueData(con IConstant, items *int) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// maybeZeroWidthPair reports whether both declared component types of p are
+// unit or pair, the shape of every pair the decoders share between
+// occurrences. It is a constant-time filter that keeps the seen-pair set of
+// constantHasValueData empty for ordinary constants.
+func maybeZeroWidthPair(p *ProtoPair) bool {
+	return isUnitOrPairType(p.FstType) && isUnitOrPairType(p.SndType)
+}
+
+// firstVisit adds p to *seen, allocating the set on first use, and reports
+// whether p was not already in it.
+func firstVisit(seen *map[*ProtoPair]struct{}, p *ProtoPair) bool {
+	if _, ok := (*seen)[p]; ok {
+		return false
+	}
+	if *seen == nil {
+		*seen = make(map[*ProtoPair]struct{})
+	}
+	(*seen)[p] = struct{}{}
+	return true
+}
+
+func isUnitOrPairType(t Typ) bool {
+	switch t.(type) {
+	case *TUnit, *TPair:
+		return true
+	default:
+		return false
+	}
 }
 
 // DecodeWithContext decodes and validates a FLAT-encoded UPLC program before

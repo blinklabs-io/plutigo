@@ -14,8 +14,6 @@
 
 package data
 
-import "math/big"
-
 // Normalize returns a deep copy of pd with every Constr, Map, and List node's
 // definite/indefinite-length CBOR encoding reset to the package default,
 // discarding whatever encoding style the value originally carried from
@@ -48,76 +46,8 @@ import "math/big"
 // read-only. Typed-nil container pointers are returned unchanged. Container
 // nodes held in their value form rather than as a pointer are normalized too,
 // and come back as pointers, the same conversion Clone makes.
+//
+// Normalize does not recurse, so it handles values of any nesting depth.
 func Normalize(pd PlutusData) PlutusData {
-	switch v := pd.(type) {
-	case *Constr:
-		if v == nil {
-			return pd
-		}
-		fields := make([]PlutusData, len(v.Fields))
-		for i, f := range v.Fields {
-			fields[i] = Normalize(f)
-		}
-		// Copy the tag rather than aliasing it: big.Int is mutable, so
-		// sharing the pointer would let a write through one value reach
-		// the other. A nil tag stays nil; MarshalCBOR treats it as zero.
-		tag := v.Tag
-		if tag != nil {
-			tag = new(big.Int).Set(tag)
-		}
-		return &Constr{Tag: tag, Fields: fields}
-	case *Map:
-		if v == nil {
-			return pd
-		}
-		pairs := make([][2]PlutusData, len(v.Pairs))
-		for i, p := range v.Pairs {
-			pairs[i] = [2]PlutusData{Normalize(p[0]), Normalize(p[1])}
-		}
-		return &Map{Pairs: pairs}
-	case *List:
-		if v == nil {
-			return pd
-		}
-		items := make([]PlutusData, len(v.Items))
-		for i, item := range v.Items {
-			items[i] = Normalize(item)
-		}
-		return &List{Items: items}
-	// The value forms satisfy PlutusData as well: isPlutusData, Clone, Equal
-	// and String all take value receivers. Nothing in this package produces
-	// one -- Decode and Clone both yield pointers, and Equal only ever
-	// asserts to the pointer forms -- but a caller can construct one, and
-	// falling through to the default case would hand it back with its
-	// original encoding intact and no error. A silently unnormalized node is
-	// the one result this function must never return, so delegate to the
-	// pointer branches above. v is already a copy, so taking its address
-	// aliases nothing the caller holds, and that branch deep-copies from
-	// there. Like Clone, this converts a value form to a pointer form.
-	case Constr:
-		return Normalize(&v)
-	case Map:
-		return Normalize(&v)
-	case List:
-		return Normalize(&v)
-	case *Value:
-		// A nil receiver or nil Inner stays empty, as Clone does; the
-		// typed-nil pointer is returned unchanged.
-		if v == nil {
-			return v
-		}
-		if v.Inner == nil {
-			return &Value{}
-		}
-		return &Value{Inner: Normalize(v.Inner).(*Map)}
-	case Value:
-		return Normalize(&v)
-	case *Integer, Integer, *ByteString, ByteString, nil:
-		// Leaves carry no encoding-style state.
-		return pd
-	default:
-		// PlutusData is sealed by an unexported method, so every
-		// implementation is listed above; a new one must choose a case.
-		return pd
-	}
+	return copyData(pd, true)
 }
