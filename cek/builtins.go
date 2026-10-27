@@ -30,7 +30,6 @@ import (
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
-	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 	"github.com/btcsuite/btcd/btcec/v2"
 	ecdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
@@ -2116,10 +2115,6 @@ func chooseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	listBranch := m.argHolder[3]
 	integerBranch := m.argHolder[4]
 	bytesBranch := m.argHolder[5]
-	var valueBranch Value[T]
-	if m.version == lang.LanguageVersionV4 {
-		valueBranch = m.argHolder[6]
-	}
 
 	err = m.CostSix(&b.Func,
 		dataExMem(arg1),
@@ -2148,16 +2143,6 @@ func chooseData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	case *data.ByteString:
 		return bytesBranch, nil
-
-	case *data.Value:
-		if valueBranch == nil {
-			return nil, &BuiltinError{
-				Code:    ErrCodeInvalidArgument,
-				Builtin: "chooseData",
-				Message: "the Value Data constructor is unavailable before Plutus V4",
-			}
-		}
-		return valueBranch, nil
 
 	default:
 		return nil, &BuiltinError{Code: ErrCodeInvalidArgument, Builtin: "chooseData", Message: "unexpected data variant"}

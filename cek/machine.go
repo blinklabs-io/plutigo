@@ -662,7 +662,7 @@ func newBuiltinNoArgValues[T syn.Eval](version lang.LanguageVersion) *[builtin.T
 			values[fn][forces] = &Builtin[T]{
 				Func:   fn,
 				Forces: forces,
-				arity:  builtinArityForVersion(fn, version),
+				arity:  fn.Arity(),
 			}
 		}
 	}

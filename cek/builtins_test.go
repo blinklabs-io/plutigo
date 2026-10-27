@@ -529,41 +529,56 @@ func TestChooseDataBuiltin(t *testing.T) {
 	}
 }
 
-func TestChooseDataBuiltinV4ValueBranch(t *testing.T) {
+// TestChooseDataBuiltinV4SixArguments pins the reference denotation: the
+// builtin takes the same six arguments (data plus five branches) under every
+// language version, including Plutus V4.
+func TestChooseDataBuiltinV4SixArguments(t *testing.T) {
+	t.Parallel()
+
 	m := newTestMachineV4()
-	b := newTestBuiltin(builtin.ChooseData)
-	dataVal := &Constant{&syn.Data{Inner: &data.Value{Inner: &data.Map{}}}}
+	b := m.allocBuiltin(
+		builtin.ChooseData,
+		builtin.ChooseData.ForceCount(),
+		0,
+		nil,
+	)
+	dataVal := &Constant{&syn.Data{Inner: data.NewInteger(big.NewInt(1))}}
 	branches := []Value[syn.DeBruijn]{
 		&Constant{&syn.String{Inner: "constr"}},
 		&Constant{&syn.String{Inner: "map"}},
 		&Constant{&syn.String{Inner: "list"}},
 		&Constant{&syn.String{Inner: "integer"}},
 		&Constant{&syn.String{Inner: "bytes"}},
-		&Constant{&syn.String{Inner: "value"}},
 	}
 	b = b.ApplyArg(dataVal)
 	for _, branch := range branches {
 		b = b.ApplyArg(branch)
 	}
+	if !b.IsReady() {
+		t.Fatalf("V4 ChooseData not ready after %d args", b.ArgCount)
+	}
 
 	str := expectString(t, expectConstant(t, evalBuiltin(t, m, b)))
-	if str.Inner != "value" {
-		t.Fatalf("expected 'value', got %v", str.Inner)
+	if str.Inner != "integer" {
+		t.Fatalf("expected 'integer', got %v", str.Inner)
 	}
 }
 
 func TestChooseDataBuiltinArityMatchesLanguageVersion(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		newMachine func() *Machine[syn.DeBruijn]
-		readyAfter bool
 	}{
-		{name: "V3", newMachine: newTestMachine, readyAfter: true},
-		{name: "V4", newMachine: newTestMachineV4, readyAfter: false},
+		{name: "V3", newMachine: newTestMachine},
+		{name: "V4", newMachine: newTestMachineV4},
 	}
 	arg := &Constant{&syn.String{Inner: "arg"}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			value := tt.newMachine().allocBuiltin(
 				builtin.ChooseData,
 				builtin.ChooseData.ForceCount(),
@@ -573,14 +588,55 @@ func TestChooseDataBuiltinArityMatchesLanguageVersion(t *testing.T) {
 			for i := uint(0); i < builtin.ChooseData.Arity(); i++ {
 				value = value.ApplyArg(arg)
 			}
-			if value.IsReady() != tt.readyAfter || value.IsArrow() != !tt.readyAfter {
-				t.Fatalf("ChooseData after %d args: ready=%v arrow=%v, want ready=%v arrow=%v", value.ArgCount, value.IsReady(), value.IsArrow(), tt.readyAfter, !tt.readyAfter)
+			if !value.IsReady() || value.IsArrow() {
+				t.Fatalf("ChooseData after %d args: ready=%v arrow=%v, want ready=true arrow=false", value.ArgCount, value.IsReady(), value.IsArrow())
 			}
-			if !tt.readyAfter {
-				value = value.ApplyArg(arg)
-				if !value.IsReady() || value.IsArrow() {
-					t.Fatalf("V4 ChooseData should be ready after %d args", value.ArgCount)
-				}
+		})
+	}
+}
+
+// TestChooseDataProgramV4CaseSaturates evaluates a program in which case
+// applies the five branches and the data to chooseData; with six arguments
+// the builtin is saturated and yields the branch, instead of staying a
+// partial application that case rejects.
+func TestChooseDataProgramV4CaseSaturates(t *testing.T) {
+	t.Parallel()
+
+	const src = `(program 1.1.0
+		(case
+			(constr 0
+				(con data (I 1))
+				(con integer 10)
+				(con integer 11)
+				(con integer 12)
+				(con integer 13)
+				(con integer 14))
+			(force (builtin chooseData))))`
+	for _, tt := range []struct {
+		name     string
+		language lang.LanguageVersion
+	}{
+		{"V3", lang.LanguageVersionV3},
+		{"V4", lang.LanguageVersionV4},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := runTextProgramIn(t, tt.language, src, 12)
+			if err != nil {
+				t.Fatalf("evaluate: %v", err)
+			}
+			want, err := runTextProgramIn(
+				t,
+				tt.language,
+				`(program 1.1.0 (con integer 13))`,
+				12,
+			)
+			if err != nil {
+				t.Fatalf("evaluate expected result: %v", err)
+			}
+			if got != want {
+				t.Fatalf("result = %s, want %s", got, want)
 			}
 		})
 	}

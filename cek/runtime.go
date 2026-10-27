@@ -39,18 +39,8 @@ func (m *Machine[T]) checkBuiltinCancellation() error {
 	return m.activeContext.Err()
 }
 
-func builtinArityForVersion(
-	fn builtin.DefaultFunction,
-	version lang.LanguageVersion,
-) uint {
-	if fn == builtin.ChooseData && version == lang.LanguageVersionV4 {
-		return fn.Arity() + 1
-	}
-	return fn.Arity()
-}
-
 func (m *Machine[T]) builtinArity(fn builtin.DefaultFunction) uint {
-	return builtinArityForVersion(fn, m.version)
+	return fn.Arity()
 }
 
 var (
