@@ -20,7 +20,7 @@ import (
 
 const (
 	dataDecodeChunkSize = 64
-	dataDecodeRetainCap = 2
+	dataDecodeRetainCap = 32
 	dataSliceRetainCap  = 4
 )
 

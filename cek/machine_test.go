@@ -22,6 +22,7 @@ import (
 	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/builtin"
+	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 )
@@ -79,6 +80,20 @@ func TestNewMachineSharesImmutableBuiltinPrototypes(t *testing.T) {
 	}
 	if got := *prototype; got != want {
 		t.Fatalf("builtin prototype mutated: got %+v, want %+v", got, want)
+	}
+}
+
+func TestBuiltinForceCountCache(t *testing.T) {
+	machine := newTestMachine()
+	for fn := builtin.DefaultFunction(0); fn < builtin.TotalBuiltinCount; fn++ {
+		want := fn.ForceCount()
+		if got := uint(machine.builtinNoArgValues[fn][0].forceCount); got != want {
+			t.Errorf("builtin %s prototype force count = %d, want %d", fn, got, want)
+		}
+
+		if got := uint(machine.allocBuiltin(fn, 0, 1, nil).forceCount); got != want {
+			t.Errorf("builtin %s allocated force count = %d, want %d", fn, got, want)
+		}
 	}
 }
 
@@ -330,6 +345,57 @@ func TestRunStackLambdaImmediateFastPathSkipsLambdaArena(t *testing.T) {
 
 	if got := len(m.lambdaChunks); got != 0 {
 		t.Fatalf("len(lambdaChunks) after lambda immediate fast path = %d, want 0", got)
+	}
+}
+
+func TestMachineReusesUnConstrDataValueWithinRun(t *testing.T) {
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+	m.ExBudget = ExBudget{Cpu: 1 << 60, Mem: 1 << 60}
+	constr := &data.Constr{
+		Tag:    big.NewInt(7),
+		Fields: []data.PlutusData{&data.Integer{Inner: big.NewInt(9)}},
+	}
+	otherConstr := &data.Constr{Tag: big.NewInt(8)}
+	arg := &dataValue[syn.DeBruijn]{item: constr}
+
+	beforeCPU := m.ExBudget.Cpu
+	first, handled, err := m.evalUnaryBuiltinFast(builtin.UnConstrData, arg)
+	if err != nil || !handled {
+		t.Fatalf("first unConstrData = %v, %v, %v", first, handled, err)
+	}
+	firstCost := beforeCPU - m.ExBudget.Cpu
+	firstPair, ok := first.(*pairValue[syn.DeBruijn])
+	if !ok {
+		t.Fatalf("first unConstrData returned %T, want pairValue", first)
+	}
+	firstTag := firstPair.first.(*Constant).Constant.(*syn.Integer).Inner.Int64()
+	if firstTag != 7 {
+		t.Fatalf("unConstrData tag = %d, want 7", firstTag)
+	}
+	firstFields := firstPair.second.(*dataListValue[syn.DeBruijn]).items
+	if len(firstFields) != 1 || firstFields[0] != constr.Fields[0] {
+		t.Fatalf("unConstrData fields = %v, want original constructor fields", firstFields)
+	}
+
+	beforeCPU = m.ExBudget.Cpu
+	second, handled, err := m.evalUnaryBuiltinFast(builtin.UnConstrData, arg)
+	if err != nil || !handled {
+		t.Fatalf("second unConstrData = %v, %v, %v", second, handled, err)
+	}
+	secondCost := beforeCPU - m.ExBudget.Cpu
+	if second != first {
+		t.Fatal("repeated unConstrData conversion did not reuse its value")
+	}
+	if firstCost == 0 || secondCost != firstCost {
+		t.Fatalf("unConstrData costs = %d then %d, want equal nonzero costs", firstCost, secondCost)
+	}
+	if got := m.unConstrDataValue(otherConstr); got == firstPair {
+		t.Fatal("different constructor reused the previous unConstrData value")
+	}
+
+	m.resetValueArenas()
+	if m.lastUnConstrData != nil || m.lastUnConstrValue != nil {
+		t.Fatal("unConstrData cache retained pointers after resetting value arenas")
 	}
 }
 

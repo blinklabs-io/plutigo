@@ -157,6 +157,14 @@ func (b *structureValidationBudget) consume(kind string) error {
 	return nil
 }
 
+func (b *structureValidationBudget) consumeTerms(count int) error {
+	if count > b.remaining {
+		return malformedASTError("term structure exceeds %d nodes", maxDischargeWork)
+	}
+	b.remaining -= count
+	return nil
+}
+
 func (b *structureValidationBudget) consumeScalarBytes(size int64) error {
 	if b.discharge == nil {
 		return nil
@@ -214,7 +222,8 @@ func validateTermStructure[T syn.Eval](
 		remaining:         maxDischargeWork,
 		trustedData:       trustedData,
 	}
-	work := make([]termValidationItem[T], 0, 1)
+	var initialWork [16]termValidationItem[T]
+	work := initialWork[:0]
 	if err := scheduleValidationItem(
 		&budget,
 		"term",
@@ -227,6 +236,7 @@ func validateTermStructure[T syn.Eval](
 		last := len(work) - 1
 		item := work[last]
 		work = work[:last]
+	visitItem:
 		if item.depth > maxDischargeDepth {
 			return malformedASTError("term structure exceeds depth %d", maxDischargeDepth)
 		}
@@ -252,33 +262,53 @@ func validateTermStructure[T syn.Eval](
 			if t == nil {
 				return malformedASTError("term contains a nil delay")
 			}
-			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Term, depth: nextDepth, scope: item.scope}); err != nil {
+			if err := budget.consume("term"); err != nil {
 				return err
 			}
+			item.term = t.Term
+			item.depth = nextDepth
+			goto visitItem
 		case *syn.Force[T]:
 			if t == nil {
 				return malformedASTError("term contains a nil force")
 			}
-			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Term, depth: nextDepth, scope: item.scope}); err != nil {
+			if err := budget.consume("term"); err != nil {
 				return err
 			}
+			item.term = t.Term
+			item.depth = nextDepth
+			goto visitItem
 		case *syn.Lambda[T]:
 			if t == nil {
 				return malformedASTError("term contains a nil lambda")
 			}
-			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Body, depth: nextDepth, scope: lambdaScope(item.scope)}); err != nil {
+			if err := budget.consume("term"); err != nil {
 				return err
 			}
+			item.term = t.Body
+			item.depth = nextDepth
+			item.scope = lambdaScope(item.scope)
+			goto visitItem
 		case *syn.Apply[T]:
 			if t == nil {
 				return malformedASTError("term contains a nil application")
 			}
-			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Function, depth: nextDepth, scope: item.scope}); err != nil {
-				return err
+			if budget.checkCancellation || budget.discharge != nil {
+				if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Function, depth: nextDepth, scope: item.scope}); err != nil {
+					return err
+				}
+				if err := budget.consume("term"); err != nil {
+					return err
+				}
+			} else {
+				if err := budget.consumeTerms(2); err != nil {
+					return err
+				}
+				work = append(work, termValidationItem[T]{term: t.Function, depth: nextDepth, scope: item.scope})
 			}
-			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Argument, depth: nextDepth, scope: item.scope}); err != nil {
-				return err
-			}
+			item.term = t.Argument
+			item.depth = nextDepth
+			goto visitItem
 		case *syn.Builtin:
 			if t == nil {
 				return malformedASTError("term contains a nil builtin")
@@ -291,9 +321,18 @@ func validateTermStructure[T syn.Eval](
 				return malformedASTError("term contains a nil constructor")
 			}
 			scope := caseConstrScope(item.scope, fullScopeCheck)
-			for _, field := range t.Fields {
-				if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: field, depth: nextDepth, scope: scope}); err != nil {
+			if budget.checkCancellation || budget.discharge != nil {
+				for _, field := range t.Fields {
+					if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: field, depth: nextDepth, scope: scope}); err != nil {
+						return err
+					}
+				}
+			} else {
+				if err := budget.consumeTerms(len(t.Fields)); err != nil {
 					return err
+				}
+				for _, field := range t.Fields {
+					work = append(work, termValidationItem[T]{term: field, depth: nextDepth, scope: scope})
 				}
 			}
 		case *syn.Case[T]:
@@ -301,12 +340,22 @@ func validateTermStructure[T syn.Eval](
 				return malformedASTError("term contains a nil case")
 			}
 			scope := caseConstrScope(item.scope, fullScopeCheck)
-			if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Constr, depth: nextDepth, scope: scope}); err != nil {
-				return err
-			}
-			for _, branch := range t.Branches {
-				if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: branch, depth: nextDepth, scope: scope}); err != nil {
+			if budget.checkCancellation || budget.discharge != nil {
+				if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Constr, depth: nextDepth, scope: scope}); err != nil {
 					return err
+				}
+				for _, branch := range t.Branches {
+					if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: branch, depth: nextDepth, scope: scope}); err != nil {
+						return err
+					}
+				}
+			} else {
+				if err := budget.consumeTerms(1 + len(t.Branches)); err != nil {
+					return err
+				}
+				work = append(work, termValidationItem[T]{term: t.Constr, depth: nextDepth, scope: scope})
+				for _, branch := range t.Branches {
+					work = append(work, termValidationItem[T]{term: branch, depth: nextDepth, scope: scope})
 				}
 			}
 		case *syn.Error:
@@ -348,6 +397,84 @@ func validateConstantStructureWithBudget(
 	constant syn.IConstant,
 	budget *structureValidationBudget,
 ) error {
+	switch c := constant.(type) {
+	case *syn.Integer:
+		if err := budget.consume("constant"); err != nil {
+			return err
+		}
+		if c == nil || c.Inner == nil {
+			return malformedASTError("constant contains a nil Integer")
+		}
+		return budget.consumeScalarBytes(integerMagnitudeBytes(c.Inner))
+	case *syn.ByteString:
+		if err := budget.consume("constant"); err != nil {
+			return err
+		}
+		if c == nil {
+			return malformedASTError("constant contains a nil ByteString")
+		}
+		return budget.consumeScalarBytes(int64(len(c.Inner)))
+	case *syn.String:
+		if err := budget.consume("constant"); err != nil {
+			return err
+		}
+		if c == nil {
+			return malformedASTError("constant contains a nil String")
+		}
+		return budget.consumeScalarBytes(int64(len(c.Inner)))
+	case *syn.Unit:
+		if err := budget.consume("constant"); err != nil {
+			return err
+		}
+		if c == nil {
+			return malformedASTError("constant contains a nil Unit")
+		}
+		return nil
+	case *syn.Bool:
+		if err := budget.consume("constant"); err != nil {
+			return err
+		}
+		if c == nil {
+			return malformedASTError("constant contains a nil Bool")
+		}
+		return nil
+	case *syn.Value:
+		if err := budget.consume("constant"); err != nil {
+			return err
+		}
+		if c == nil {
+			return malformedASTError("constant contains a nil Value")
+		}
+		if _, _, _, ok := c.Sizes(); !ok {
+			return malformedASTError("constant contains an uninitialized Value")
+		}
+		return nil
+	case *syn.Bls12_381G1Element:
+		if err := budget.consume("constant"); err != nil {
+			return err
+		}
+		if c == nil || c.Inner == nil {
+			return malformedASTError("constant contains a nil BLS G1 element")
+		}
+		return nil
+	case *syn.Bls12_381G2Element:
+		if err := budget.consume("constant"); err != nil {
+			return err
+		}
+		if c == nil || c.Inner == nil {
+			return malformedASTError("constant contains a nil BLS G2 element")
+		}
+		return nil
+	case *syn.Bls12_381MlResult:
+		if err := budget.consume("constant"); err != nil {
+			return err
+		}
+		if c == nil || c.Inner == nil {
+			return malformedASTError("constant contains a nil BLS Miller loop result")
+		}
+		return nil
+	}
+
 	work := make([]constantValidationItem, 0, 1)
 	if err := scheduleValidationItem(
 		budget,

@@ -381,3 +381,20 @@ func TestRunAcceptsValueFormPlutusData(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateTermStructureDepthBoundary(t *testing.T) {
+	var term syn.Term[syn.DeBruijn] = &syn.Error{}
+	for range maxDischargeDepth {
+		term = &syn.Delay[syn.DeBruijn]{Term: term}
+	}
+	if err := validateTermStructure[syn.DeBruijn](context.Background(), false, term, nil, true); err != nil {
+		t.Fatalf("validation at maximum allowed depth failed: %v", err)
+	}
+
+	term = &syn.Delay[syn.DeBruijn]{Term: term}
+	err := validateTermStructure[syn.DeBruijn](context.Background(), false, term, nil, true)
+	var typeErr *TypeError
+	if !errors.As(err, &typeErr) || !strings.Contains(typeErr.Message, "structure exceeds depth") {
+		t.Fatalf("validation beyond maximum depth = %v, want term depth TypeError", err)
+	}
+}

@@ -112,10 +112,60 @@ func decodeDeBruijn(bytes []byte) (*Program[DeBruijn], error) {
 // a program that must outlive the next call. A DeBruijnDecoder is not safe for
 // concurrent use.
 func (d *DeBruijnDecoder) DecodeBorrowed(bytes []byte) (*Program[DeBruijn], error) {
+	return d.decodeBorrowed(bytes, false, false)
+}
+
+// DecodeBorrowedWithScopeCheck decodes a FLAT program like DecodeBorrowed
+// and checks its De Bruijn variable scopes while decoding. fullScopeCheck
+// selects the reference's Full scope mode; when false, variables inside
+// constr fields and case scrutinees or branches are left unchecked. This is
+// a structural check only and does not perform ledger-language or builtin
+// availability validation. The result has the same borrowed lifetime as
+// DecodeBorrowed.
+func (d *DeBruijnDecoder) DecodeBorrowedWithScopeCheck(
+	bytes []byte,
+	fullScopeCheck bool,
+) (*Program[DeBruijn], error) {
+	return d.decodeBorrowed(bytes, true, fullScopeCheck)
+}
+
+func (d *DeBruijnDecoder) decodeBorrowed(
+	bytes []byte,
+	checkScope bool,
+	fullScopeCheck bool,
+) (*Program[DeBruijn], error) {
 	d.decoder.reset(bytes)
+	d.decoder.checkScope = checkScope
+	d.decoder.fullScopeCheck = fullScopeCheck
 	d.arena.reset()
 	d.consts.reset()
-	return decodeDeBruijnProgram(&d.decoder, &d.arena, &d.consts, nil)
+	// Decoding overwrites used nodes and clears spare list entries; afterward,
+	// clear only previous slots the new program left unused.
+	program, err := decodeDeBruijnProgram(&d.decoder, &d.arena, &d.consts, nil)
+	if err != nil {
+		d.arena.clearUsed()
+		d.consts.clearUsed()
+		return nil, err
+	}
+	if d.decoder.scopeError != nil {
+		d.arena.clearUsed()
+		d.consts.clearUsed()
+		return nil, d.decoder.scopeError
+	}
+	d.arena.clearUnused()
+	d.consts.clearUnused()
+	return program, nil
+}
+
+// DeBruijnScopeError reports a variable index that is not bound at its
+// lexical scope in a decoded program.
+type DeBruijnScopeError struct {
+	Index DeBruijn
+	Scope int
+}
+
+func (e *DeBruijnScopeError) Error() string {
+	return fmt.Sprintf("open term: DeBruijn index %d at scope %d", e.Index, e.Scope)
 }
 
 // Decode decodes a FLAT program. Unlike DecodeBorrowed, the returned program
@@ -259,7 +309,6 @@ func decodeTermDeBruijnWithArena(
 	if err := d.node(); err != nil {
 		return nil, err
 	}
-
 	tag, err := d.bits4()
 	if err != nil {
 		return nil, err
@@ -271,6 +320,11 @@ func decodeTermDeBruijnWithArena(
 		if err != nil {
 			return nil, err
 		}
+		if d.checkScope && (name < 1 || int(name) > d.scope) {
+			// The CEK validator visits siblings in reverse decode order, so
+			// retain the last decode-order error to match its first result.
+			d.scopeError = &DeBruijnScopeError{Index: name, Scope: d.scope}
+		}
 		return arena.allocVar(name), nil
 	case DelayTag:
 		t, err := decodeTermDeBruijnWithArena(d, arena, consts, depth+1)
@@ -279,7 +333,13 @@ func decodeTermDeBruijnWithArena(
 		}
 		return arena.allocDelay(t), nil
 	case LambdaTag:
+		if d.checkScope {
+			d.scope++
+		}
 		t, err := decodeTermDeBruijnWithArena(d, arena, consts, depth+1)
+		if d.checkScope {
+			d.scope--
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -326,9 +386,14 @@ func decodeTermDeBruijnWithArena(
 		if err != nil {
 			return nil, err
 		}
+		checkScope := d.checkScope
+		if !d.fullScopeCheck {
+			d.checkScope = false
+		}
 		fields, err := decodeTermListDeBruijnWithArena(
 			d, arena, consts, depth+1, d.maxConstrFields,
 		)
+		d.checkScope = checkScope
 		if err != nil {
 			return nil, err
 		}
@@ -337,13 +402,19 @@ func decodeTermDeBruijnWithArena(
 		if err := d.checkConstrCaseVersion("case"); err != nil {
 			return nil, err
 		}
+		checkScope := d.checkScope
+		if !d.fullScopeCheck {
+			d.checkScope = false
+		}
 		constr, err := decodeTermDeBruijnWithArena(d, arena, consts, depth+1)
 		if err != nil {
+			d.checkScope = checkScope
 			return nil, err
 		}
 		branches, err := decodeTermListDeBruijnWithArena(
 			d, arena, consts, depth+1, maxCollectionWidth,
 		)
+		d.checkScope = checkScope
 		if err != nil {
 			return nil, err
 		}
@@ -519,6 +590,7 @@ func decodeTermListDeBruijnWithArena(
 			if result == nil {
 				return emptyDeBruijnTermList, nil
 			}
+			clear(result[len(result):cap(result)])
 			return result, nil
 		}
 		if len(result) >= maxWidth {
@@ -536,10 +608,13 @@ func decodeTermListDeBruijnWithArena(
 }
 
 type arenaChunks[S any] struct {
-	chunks      [][]S
-	chunkIdx    int
-	offset      int
-	activeChunk []S // cached pointer to chunks[chunkIdx]; nil when chunkIdx >= len(chunks)
+	chunks           [][]S
+	chunkIdx         int
+	offset           int
+	activeChunk      []S // cached pointer to chunks[chunkIdx]; nil when chunkIdx >= len(chunks)
+	previousUsed     int
+	previousChunkIdx int
+	previousOffset   int
 	// firstSize, when larger than decodeTermMinChunkSize, sizes the first
 	// chunk of an empty arena. Later chunks still grow geometrically.
 	firstSize int
@@ -615,26 +690,9 @@ func (a *arenaChunks[S]) setActiveChunkAfterReset() {
 }
 
 func (a *arenaChunks[S]) reset(retainCap int) {
-	used := a.used()
-	retained := len(a.chunks)
-	if retained > retainCap {
-		retained = retainCap
-	}
-	if used > 0 && retained > 0 {
-		remaining := used
-		for i := 0; i < retained && remaining > 0; i++ {
-			chunk := a.chunks[i]
-			if chunk == nil {
-				continue
-			}
-			clearCount := len(chunk)
-			if remaining < clearCount {
-				clearCount = remaining
-			}
-			clear(chunk[:clearCount])
-			remaining -= clearCount
-		}
-	}
+	a.previousUsed = a.used()
+	a.previousChunkIdx = a.chunkIdx
+	a.previousOffset = a.offset
 	if len(a.chunks) > retainCap {
 		for i := retainCap; i < len(a.chunks); i++ {
 			a.chunks[i] = nil
@@ -644,6 +702,25 @@ func (a *arenaChunks[S]) reset(retainCap int) {
 	a.chunkIdx = 0
 	a.offset = 0
 	a.setActiveChunkAfterReset()
+}
+
+func (a *arenaChunks[S]) clearUnused() {
+	if a.chunkIdx != a.previousChunkIdx || a.offset != a.previousOffset {
+		used := a.used()
+		if used < a.previousUsed {
+			clearArenaRange(a.chunks, used, a.previousUsed)
+		}
+	}
+	a.previousUsed = 0
+	a.previousChunkIdx = 0
+	a.previousOffset = 0
+}
+
+func (a *arenaChunks[S]) clearUsed() {
+	clearArenaRange(a.chunks, 0, a.used())
+	a.previousUsed = 0
+	a.previousChunkIdx = 0
+	a.previousOffset = 0
 }
 
 func resetBigIntChunks(a *arenaChunks[big.Int], retainCap int) {
@@ -661,9 +738,23 @@ func resetBigIntChunks(a *arenaChunks[big.Int], retainCap int) {
 }
 
 type arenaSlices[S any] struct {
-	chunks   [][]S
-	chunkIdx int
-	offset   int
+	chunks           [][]S
+	chunkIdx         int
+	offset           int
+	previousUsed     int
+	previousChunkIdx int
+	previousOffset   int
+}
+
+func (a *arenaSlices[S]) used() int {
+	if len(a.chunks) == 0 {
+		return 0
+	}
+	used := a.offset
+	for i := 0; i < a.chunkIdx && i < len(a.chunks); i++ {
+		used += len(a.chunks[i])
+	}
+	return used
 }
 
 func (a *arenaSlices[S]) alloc(n int) []S {
@@ -705,24 +796,9 @@ func (a *arenaSlices[S]) alloc(n int) []S {
 }
 
 func (a *arenaSlices[S]) reset(retainCap int) {
-	retained := len(a.chunks)
-	if retained > retainCap {
-		retained = retainCap
-	}
-	for i := 0; i < retained; i++ {
-		chunk := a.chunks[i]
-		if chunk == nil {
-			continue
-		}
-		if i < a.chunkIdx {
-			clear(chunk)
-		} else if i == a.chunkIdx {
-			if a.offset > 0 {
-				clear(chunk[:a.offset])
-			}
-			break
-		}
-	}
+	a.previousUsed = a.used()
+	a.previousChunkIdx = a.chunkIdx
+	a.previousOffset = a.offset
 	if len(a.chunks) > retainCap {
 		for i := retainCap; i < len(a.chunks); i++ {
 			a.chunks[i] = nil
@@ -731,6 +807,46 @@ func (a *arenaSlices[S]) reset(retainCap int) {
 	}
 	a.chunkIdx = 0
 	a.offset = 0
+}
+
+func (a *arenaSlices[S]) clearUnused() {
+	if a.chunkIdx != a.previousChunkIdx || a.offset != a.previousOffset {
+		used := a.used()
+		if used < a.previousUsed {
+			clearArenaRange(a.chunks, used, a.previousUsed)
+		}
+	}
+	a.previousUsed = 0
+	a.previousChunkIdx = 0
+	a.previousOffset = 0
+}
+
+func (a *arenaSlices[S]) clearUsed() {
+	clearArenaRange(a.chunks, 0, a.used())
+	a.previousUsed = 0
+	a.previousChunkIdx = 0
+	a.previousOffset = 0
+}
+
+func clearArenaRange[S any](chunks [][]S, start, end int) {
+	if start >= end {
+		return
+	}
+	offset := 0
+	for _, chunk := range chunks {
+		chunkEnd := offset + len(chunk)
+		if start < chunkEnd && end > offset {
+			lo := max(start-offset, 0)
+			hi := min(end-offset, len(chunk))
+			if chunk != nil {
+				clear(chunk[lo:hi])
+			}
+		}
+		offset = chunkEnd
+		if offset >= end {
+			return
+		}
+	}
 }
 
 func resetWordSlices(a *arenaSlices[big.Word], retainCap int) {
@@ -801,6 +917,34 @@ func (a *termArena[T]) reset() {
 	a.constants.reset(decodeRetainVarCap)
 	a.builtins.reset(decodeRetainVarCap)
 	a.termLists.reset(decodeRetainListCap)
+}
+
+func (a *termArena[T]) clearUnused() {
+	a.vars.clearUnused()
+	a.delays.clearUnused()
+	a.forces.clearUnused()
+	a.lambdas.clearUnused()
+	a.applies.clearUnused()
+	a.constrs.clearUnused()
+	a.cases.clearUnused()
+	a.errors.clearUnused()
+	a.constants.clearUnused()
+	a.builtins.clearUnused()
+	a.termLists.clearUnused()
+}
+
+func (a *termArena[T]) clearUsed() {
+	a.vars.clearUsed()
+	a.delays.clearUsed()
+	a.forces.clearUsed()
+	a.lambdas.clearUsed()
+	a.applies.clearUsed()
+	a.constrs.clearUsed()
+	a.cases.clearUsed()
+	a.errors.clearUsed()
+	a.constants.clearUsed()
+	a.builtins.clearUsed()
+	a.termLists.clearUsed()
 }
 
 func (a *termArena[T]) allocVar(name T) *Var[T] {
@@ -913,6 +1057,38 @@ func (a *constantArena) reset() {
 	resetByteSlices(&a.bytes, decodeRetainBytesCap)
 	resetWordSlices(&a.words, decodeRetainBytesCap)
 	a.dataDecoder.Reset()
+}
+
+func (a *constantArena) clearUnused() {
+	a.integers.clearUnused()
+	a.byteStrings.clearUnused()
+	a.strings.clearUnused()
+	a.units.clearUnused()
+	a.bools.clearUnused()
+	a.protoLists.clearUnused()
+	a.protoArrays.clearUnused()
+	a.protoPairs.clearUnused()
+	a.tLists.clearUnused()
+	a.tPairs.clearUnused()
+	a.values.clearUnused()
+	a.datas.clearUnused()
+	a.lists.clearUnused()
+}
+
+func (a *constantArena) clearUsed() {
+	a.integers.clearUsed()
+	a.byteStrings.clearUsed()
+	a.strings.clearUsed()
+	a.units.clearUsed()
+	a.bools.clearUsed()
+	a.protoLists.clearUsed()
+	a.protoArrays.clearUsed()
+	a.protoPairs.clearUsed()
+	a.tLists.clearUsed()
+	a.tPairs.clearUsed()
+	a.values.clearUsed()
+	a.datas.clearUsed()
+	a.lists.clearUsed()
 }
 
 // listType returns a new list type over elem, from the arena when there is
@@ -1040,6 +1216,22 @@ func (a *constantArena) allocBytes(n int) []byte {
 }
 
 func decodeDeBruijnBinder(d *decoder) (DeBruijn, error) {
+	if d.usedBits == 0 {
+		if d.pos < len(d.buffer) {
+			word8 := d.buffer[d.pos]
+			if word8&128 == 0 {
+				d.pos++
+				return DeBruijn(word8), nil
+			}
+		}
+	} else if d.pos+1 < len(d.buffer) {
+		word8 := (d.buffer[d.pos] << byte(d.usedBits)) |
+			(d.buffer[d.pos+1] >> (8 - byte(d.usedBits)))
+		if word8&128 == 0 {
+			d.pos++
+			return DeBruijn(word8), nil
+		}
+	}
 	i, err := d.word()
 	if err != nil {
 		return 0, err
@@ -1780,6 +1972,9 @@ type decoder struct {
 	depth    int
 	// nodes counts the terms and constant list items decoded so far.
 	nodes int
+	// Terms consume four tag bits and collection items consume a one-bit
+	// marker, so inputs this small cannot decode more than maxProgramNodes.
+	skipNodeLimit bool
 	// zeroWidth memoizes the value of every zero-width pair type (one built
 	// solely from unit and pair) of the constant being decoded. Such a value
 	// occupies no bits, so without the memo a list of them would rebuild the
@@ -1793,6 +1988,10 @@ type decoder struct {
 	// maxConstrFields is the widest constr field list accepted.
 	maxConstrFields int
 	strictValues    bool
+	checkScope      bool
+	fullScopeCheck  bool
+	scope           int
+	scopeError      *DeBruijnScopeError
 	// version is the program version once the header is decoded; constr and
 	// case terms are rejected before 1.1.0.
 	version      lang.LanguageVersion
@@ -1813,12 +2012,20 @@ func newDecoder(bytes []byte) *decoder {
 }
 
 func (d *decoder) reset(bytes []byte) {
-	*d = decoder{buffer: bytes, maxConstrFields: maxCollectionWidth, strictValues: true}
+	*d = decoder{
+		buffer:          bytes,
+		maxConstrFields: maxCollectionWidth,
+		strictValues:    true,
+		skipNodeLimit:   len(bytes) <= maxProgramNodes/8,
+	}
 }
 
 // node charges one term or constant list item against the program's node
 // budget.
 func (d *decoder) node() error {
+	if d.skipNodeLimit {
+		return nil
+	}
 	d.nodes++
 	if d.nodes > maxProgramNodes {
 		return errors.New("program has too many nodes")
@@ -2208,7 +2415,6 @@ func (d *decoder) utf8() (string, error) {
 	if !utf8.Valid(b) {
 		return "", fmt.Errorf("bytes are not valid utf8 (length %d)", len(b))
 	}
-
 	return string(b), nil
 }
 
@@ -2221,7 +2427,6 @@ func (d *decoder) utf8WithArena(arena *constantArena) (string, error) {
 	if !utf8.Valid(b) {
 		return "", fmt.Errorf("bytes are not valid utf8 (length %d)", len(b))
 	}
-
 	return string(b), nil
 }
 

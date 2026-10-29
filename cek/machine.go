@@ -16,6 +16,7 @@ package cek
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -161,6 +162,8 @@ type Machine[T syn.Eval] struct {
 	dataListValueChunkPos  int
 	dataMapValueChunks     [][]dataMapValue[T]
 	dataMapValueChunkPos   int
+	lastUnConstrData       *data.Constr
+	lastUnConstrValue      *pairValue[T]
 	pairValueChunks        [][]pairValue[T]
 	pairValueChunkPos      int
 	listShare              listShare
@@ -598,6 +601,23 @@ func (m *Machine[T]) allocDataMapValue(
 	return listValue
 }
 
+func (m *Machine[T]) unConstrDataValue(constr *data.Constr) *pairValue[T] {
+	if m.lastUnConstrData == constr && m.lastUnConstrValue != nil {
+		return m.lastUnConstrValue
+	}
+	tag := constr.Tag
+	if tag == nil {
+		tag = new(big.Int)
+	}
+	value := m.allocPairValue(
+		m.allocConstant(m.allocIntegerConstant(tag)),
+		m.allocDataListValue(constr.Fields),
+	)
+	m.lastUnConstrData = constr
+	m.lastUnConstrValue = value
+	return value
+}
+
 func (m *Machine[T]) allocDataPairValue(
 	first data.PlutusData,
 	second data.PlutusData,
@@ -648,6 +668,7 @@ func (m *Machine[T]) allocBuiltin(
 	}
 	builtinValue := allocArenaSlot(&m.builtinChunks, &m.builtinChunkPos, m.valueArenaChunkSize)
 	builtinValue.Func = fn
+	builtinValue.forceCount = uint8(fn.ForceCount())
 	builtinValue.Forces = forces
 	builtinValue.ArgCount = argCount
 	builtinValue.Args = args
@@ -660,9 +681,10 @@ func newBuiltinNoArgValues[T syn.Eval](version lang.LanguageVersion) *[builtin.T
 	for fn := builtin.DefaultFunction(0); fn < builtin.TotalBuiltinCount; fn++ {
 		for forces := uint(0); forces < 3; forces++ {
 			values[fn][forces] = &Builtin[T]{
-				Func:   fn,
-				Forces: forces,
-				arity:  fn.Arity(),
+				Func:       fn,
+				forceCount: uint8(fn.ForceCount()),
+				Forces:     forces,
+				arity:      fn.Arity(),
 			}
 		}
 	}
@@ -932,6 +954,7 @@ func (m *Machine[T]) dropEnvArena() {
 }
 
 func (m *Machine[T]) resetValueArenas() {
+	m.resetUnConstrDataCache()
 	resetArenaChunks(&m.constrChunks, &m.constrChunkPos, valueRetainChunkCap)
 	resetArenaChunks(&m.delayChunks, &m.delayChunkPos, valueRetainChunkCap)
 	resetArenaChunks(&m.lambdaChunks, &m.lambdaChunkPos, valueRetainChunkCap)
@@ -951,6 +974,7 @@ func (m *Machine[T]) resetValueArenas() {
 }
 
 func (m *Machine[T]) lazyPrepareValueArenas() {
+	m.resetUnConstrDataCache()
 	lazyPrepareArenaChunks(&m.constrChunks, &m.constrChunkPos, valueRetainChunkCap)
 	lazyPrepareArenaChunks(&m.delayChunks, &m.delayChunkPos, valueRetainChunkCap)
 	lazyPrepareArenaChunks(&m.lambdaChunks, &m.lambdaChunkPos, valueRetainChunkCap)
@@ -970,6 +994,7 @@ func (m *Machine[T]) lazyPrepareValueArenas() {
 }
 
 func (m *Machine[T]) dropValueArenas() {
+	m.resetUnConstrDataCache()
 	m.constrChunks = nil
 	m.constrChunkPos = 0
 	m.delayChunks = nil
@@ -1002,6 +1027,11 @@ func (m *Machine[T]) dropValueArenas() {
 	m.builtinChunkPos = 0
 	m.builtinArgChunks = nil
 	m.builtinArgChunkPos = 0
+}
+
+func (m *Machine[T]) resetUnConstrDataCache() {
+	m.lastUnConstrData = nil
+	m.lastUnConstrValue = nil
 }
 
 func (m *Machine[T]) finishReturn(ret *Return[T]) (syn.Term[T], error) {
@@ -1080,7 +1110,53 @@ func isUnitValue[T syn.Eval](value Value[T]) bool {
 // m.ExBudget == Available - Requested. These are the ledger's numbers for any
 // slippage that selects DefaultSlippage (0, 1 and 200).
 func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
-	return m.runContext(context.Background(), false, term, nil)
+	return m.runContext(context.Background(), false, term, nil, false)
+}
+
+// maxFlatRunSkipValidationBytes keeps RunFlat's decoder-trusted fast path
+// well below the CEK's aggregate structure-validation work cap. Collection
+// items are the densest FLAT structure, at one marker bit per item; the
+// margin also covers type tags, term nodes, and constant roots.
+const maxFlatRunSkipValidationBytes = maxDischargeWork / 64
+
+// RunFlat decodes and evaluates a FLAT-encoded De Bruijn program. The supplied
+// decoder's arenas are reused, and neither it nor the machine may be used
+// concurrently. The returned term may reference decoder-owned data and is
+// valid only until the decoder's next call.
+//
+// RunFlat checks De Bruijn scope during decoding and skips the full AST walk
+// performed by Run. Like Run, it does not perform ledger-language, builtin
+// availability, or execution-time program-version validation. Ledger callers
+// must complete those checks before evaluation.
+func RunFlat(
+	machine *Machine[syn.DeBruijn],
+	decoder *syn.DeBruijnDecoder,
+	flat []byte,
+) (syn.Term[syn.DeBruijn], error) {
+	if machine == nil {
+		return nil, errors.New("machine is required")
+	}
+	if decoder == nil {
+		return nil, errors.New("decoder is required")
+	}
+	program, err := decoder.DecodeBorrowedWithScopeCheck(
+		flat,
+		machine.protoMajor == 0 || machine.protoMajor >= dijkstraProtoMajorVersion,
+	)
+	if err != nil {
+		var scopeErr *syn.DeBruijnScopeError
+		if errors.As(err, &scopeErr) {
+			return nil, &TypeError{Code: ErrCodeOpenTerm, Message: scopeErr.Error()}
+		}
+		return nil, err
+	}
+	return machine.runContext(
+		context.Background(),
+		false,
+		program.Term,
+		nil,
+		len(flat) <= maxFlatRunSkipValidationBytes,
+	)
 }
 
 // RunContext executes a Plutus term using the CEK machine.
@@ -1094,7 +1170,7 @@ func (m *Machine[T]) RunContext(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return m.runContext(ctx, true, term, nil)
+	return m.runContext(ctx, true, term, nil, false)
 }
 
 // RunContextWithTrustedDataArguments applies ledger-supplied data arguments to
@@ -1128,7 +1204,7 @@ func (m *Machine[T]) RunContextWithTrustedDataArguments(
 			Argument: &syn.Constant{Con: constant},
 		}
 	}
-	return m.runContext(ctx, true, term, trustedData)
+	return m.runContext(ctx, true, term, trustedData, false)
 }
 
 // RunScriptContext evaluates a ledger script as the reference ledger does
@@ -1194,6 +1270,7 @@ func (m *Machine[T]) runContext(
 	checkCancellation bool,
 	term syn.Term[T],
 	trustedData map[*syn.Data]struct{},
+	skipTermValidation bool,
 ) (result syn.Term[T], err error) {
 	// Embedding hosts must never crash on an evaluator bug: convert any
 	// panic into a typed InternalError. Declared first so it runs last,
@@ -1210,16 +1287,18 @@ func (m *Machine[T]) runContext(
 		m.activeContext = nil
 	}
 	defer func() { m.activeContext = nil }()
-	if err := validateTermStructure[T](
-		ctx,
-		checkCancellation,
-		term,
-		trustedData,
-		// A zero protocol major selects no protocol version and so the
-		// current (Full) mode.
-		m.protoMajor == 0 || m.protoMajor >= dijkstraProtoMajorVersion,
-	); err != nil {
-		return nil, err
+	if !skipTermValidation {
+		if err := validateTermStructure[T](
+			ctx,
+			checkCancellation,
+			term,
+			trustedData,
+			// A zero protocol major selects no protocol version and so the
+			// current (Full) mode.
+			m.protoMajor == 0 || m.protoMajor >= dijkstraProtoMajorVersion,
+		); err != nil {
+			return nil, err
+		}
 	}
 	firstRun := !m.hasRun
 	if m.hasRun {
@@ -1277,12 +1356,16 @@ func (m *Machine[T]) runContext(
 	// skips the metrics counters, so a metered machine runs runStack.
 	if dbTerm, ok := any(term).(syn.Term[syn.DeBruijn]); ok && m.metrics == nil {
 		dbMachine := (*Machine[syn.DeBruijn])(unsafe.Pointer(m))
+		steps := newStepCounter(m.slippage)
 		dbResult, err := runStackDeBruijn(
 			ctx,
 			checkCancellation,
 			dbMachine,
 			dbTerm,
+			&steps,
 		)
+		m.unbudgetedSteps = steps.counts
+		m.unbudgetedTotal = steps.slippage - steps.remaining
 		if err != nil {
 			return nil, normalizeEvalError(err)
 		}
