@@ -60,9 +60,10 @@ func (m *Machine[T]) resetFrameStack() {
 }
 
 func (m *Machine[T]) pushFrame(frame stackFrame[T]) {
+	frameIdx := len(m.frameStack)
 	m.frameStack = append(m.frameStack, frame)
-	if len(m.frameStack) > m.frameStackUsed {
-		m.frameStackUsed = len(m.frameStack)
+	if frameIdx >= m.frameStackUsed {
+		m.frameStackUsed = frameIdx + 1
 	}
 }
 
@@ -73,8 +74,8 @@ func (m *Machine[T]) pushFrameSlot() *stackFrame[T] {
 	} else {
 		m.frameStack = append(m.frameStack, stackFrame[T]{})
 	}
-	if len(m.frameStack) > m.frameStackUsed {
-		m.frameStackUsed = len(m.frameStack)
+	if frameIdx >= m.frameStackUsed {
+		m.frameStackUsed = frameIdx + 1
 	}
 	return &m.frameStack[frameIdx]
 }
@@ -534,7 +535,7 @@ func (m *Machine[T]) applyEvaluateStack(
 	case *Builtin[T]:
 		// Cache the per-builtin force/arity table lookups so we don't repeat
 		// them for each branch below.
-		forceCount := f.Func.ForceCount()
+		forceCount := uint(f.forceCount)
 		arity := f.arity
 		if arity == 0 {
 			arity = m.builtinArity(f.Func)

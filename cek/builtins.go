@@ -483,9 +483,6 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 	if arg == nil {
 		return nil, true, internalError("unary builtin evaluated nil argument")
 	}
-	if err := m.checkBoundedArgs1(fn, arg); err != nil {
-		return nil, true, err
-	}
 
 	switch fn {
 	case builtin.FstPair:
@@ -663,14 +660,7 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 				Message: "data is not a constr",
 			}
 		}
-		tag := constr.Tag
-		if tag == nil {
-			tag = new(big.Int)
-		}
-		return m.allocPairValue(
-			m.allocConstant(m.allocIntegerConstant(tag)),
-			m.allocDataListValue(constr.Fields),
-		), true, nil
+		return m.unConstrDataValue(constr), true, nil
 	case builtin.UnMapData:
 		datum, err := unwrapData[T](arg)
 		if err != nil {
@@ -743,6 +733,11 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 		}
 		return m.allocConstant(m.allocByteStringConstant(bytesData.Inner)), true, nil
 	default:
+		// Builtins handled above have no bounded unary arguments. Keep this
+		// check for builtins that continue through the generic evaluation path.
+		if err := m.checkBoundedArgs1(fn, arg); err != nil {
+			return nil, true, err
+		}
 		return nil, false, nil
 	}
 }

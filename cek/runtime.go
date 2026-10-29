@@ -280,11 +280,12 @@ func (m *Machine[T]) evalBuiltinAppReady(
 	// per machine is enough; it is cleared afterwards so it pins no arena.
 	ready := &m.readyBuiltin
 	*ready = Builtin[T]{
-		Func:     fn,
-		Forces:   forces,
-		ArgCount: argCount,
-		Args:     args,
-		arity:    m.builtinArity(fn),
+		Func:       fn,
+		forceCount: uint8(fn.ForceCount()),
+		Forces:     forces,
+		ArgCount:   argCount,
+		Args:       args,
+		arity:      m.builtinArity(fn),
 	}
 	value, err := m.evalBuiltinApp(ready)
 	*ready = Builtin[T]{}

@@ -87,10 +87,47 @@ func benchFlatFiles(b *testing.B, includeDecode, includeEval bool) {
 			if includeDecode {
 				decoder = syn.NewDeBruijnDecoder()
 			}
+			if includeDecode && includeEval {
+				verifyMachine := cek.NewMachine[syn.DeBruijn](
+					programVersion,
+					0,
+					evalContext,
+				)
+				want, wantErr := verifyMachine.Run(decodedProgram.Term)
+				verifyFlatMachine := cek.NewMachine[syn.DeBruijn](
+					programVersion,
+					0,
+					evalContext,
+				)
+				got, gotErr := cek.RunFlat(
+					verifyFlatMachine,
+					syn.NewDeBruijnDecoder(),
+					content,
+				)
+				if (wantErr == nil) != (gotErr == nil) {
+					b.Fatalf("Run/RunFlat errors differ: Run %v, RunFlat %v", wantErr, gotErr)
+				}
+				if wantErr != nil && wantErr.Error() != gotErr.Error() {
+					b.Fatalf("Run error %q differs from RunFlat error %q", wantErr, gotErr)
+				}
+				if wantErr == nil && syn.PrettyTerm[syn.DeBruijn](want) != syn.PrettyTerm[syn.DeBruijn](got) {
+					b.Fatalf("Run and RunFlat returned different terms")
+				}
+				if verifyMachine.ExBudget != verifyFlatMachine.ExBudget {
+					b.Fatalf("Run remaining budget %+v differs from RunFlat remaining budget %+v", verifyMachine.ExBudget, verifyFlatMachine.ExBudget)
+				}
+			}
 
 			for b.Loop() {
 				program := decodedProgram
 				if includeDecode {
+					if includeEval {
+						_, err := cek.RunFlat(machine, decoder, content)
+						if err != nil {
+							b.Fatalf("eval error: %v", err)
+						}
+						continue
+					}
 					var decodeErr error
 					program, decodeErr = decoder.DecodeBorrowed(content)
 					if decodeErr != nil {

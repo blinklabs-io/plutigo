@@ -697,11 +697,12 @@ func (Lambda[T]) toExMem() ExMem {
 }
 
 type Builtin[T syn.Eval] struct {
-	Func     builtin.DefaultFunction
-	Forces   uint
-	ArgCount uint
-	Args     *BuiltinArgs[T]
-	arity    uint
+	Func       builtin.DefaultFunction
+	forceCount uint8
+	Forces     uint
+	ArgCount   uint
+	Args       *BuiltinArgs[T]
+	arity      uint
 }
 
 func (b Builtin[T]) String() string {
@@ -720,21 +721,23 @@ func (b Builtin[T]) NeedsForce() bool {
 
 func (b *Builtin[T]) ConsumeForce() *Builtin[T] {
 	return &Builtin[T]{
-		Func:     b.Func,
-		Forces:   b.Forces + 1,
-		ArgCount: b.ArgCount,
-		Args:     b.Args,
-		arity:    b.arity,
+		Func:       b.Func,
+		Forces:     b.Forces + 1,
+		ArgCount:   b.ArgCount,
+		Args:       b.Args,
+		arity:      b.arity,
+		forceCount: b.forceCount,
 	}
 }
 
 func (b *Builtin[T]) ApplyArg(arg Value[T]) *Builtin[T] {
 	return &Builtin[T]{
-		Func:     b.Func,
-		Forces:   b.Forces,
-		ArgCount: b.ArgCount + 1,
-		Args:     b.Args.Extend(arg),
-		arity:    b.arity,
+		Func:       b.Func,
+		Forces:     b.Forces,
+		ArgCount:   b.ArgCount + 1,
+		Args:       b.Args.Extend(arg),
+		arity:      b.arity,
+		forceCount: b.forceCount,
 	}
 }
 
