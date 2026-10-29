@@ -717,7 +717,7 @@ func (a *arenaChunks[S]) clearUnused() {
 }
 
 func (a *arenaChunks[S]) clearUsed() {
-	clearArenaRange(a.chunks, 0, a.used())
+	clearArenaRange(a.chunks, 0, max(a.used(), a.previousUsed))
 	a.previousUsed = 0
 	a.previousChunkIdx = 0
 	a.previousOffset = 0
@@ -822,7 +822,7 @@ func (a *arenaSlices[S]) clearUnused() {
 }
 
 func (a *arenaSlices[S]) clearUsed() {
-	clearArenaRange(a.chunks, 0, a.used())
+	clearArenaRange(a.chunks, 0, max(a.used(), a.previousUsed))
 	a.previousUsed = 0
 	a.previousChunkIdx = 0
 	a.previousOffset = 0

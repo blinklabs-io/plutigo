@@ -119,3 +119,60 @@ func TestDecodeBorrowedWithScopeCheckKeepsDecodeErrorPrecedence(t *testing.T) {
 		t.Fatalf("DecodeBorrowedWithScopeCheck() error = %v, want trailing-byte error", err)
 	}
 }
+
+func TestDecodeBorrowedFailureClearsPreviousDecode(t *testing.T) {
+	fields := make([]Term[DeBruijn], 4)
+	for i := range fields {
+		fields[i] = &Apply[DeBruijn]{
+			Function: &Constant{Con: &ByteString{Inner: []byte{byte(i)}}},
+			Argument: &Error{},
+		}
+	}
+	previous, err := Encode(&Program[DeBruijn]{
+		Version: lang.LanguageVersionV2,
+		Term:    &Constr[DeBruijn]{Fields: fields},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	decoder := NewDeBruijnDecoder()
+	if _, err := decoder.DecodeBorrowed(previous); err != nil {
+		t.Fatal(err)
+	}
+
+	failed, err := Encode(&Program[DeBruijn]{
+		Version: lang.LanguageVersionV2,
+		Term:    &Error{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failed = append(failed, 0)
+	if _, err := decoder.DecodeBorrowed(failed); err == nil || err.Error() !=
+		"trailing bytes after program: 1 byte(s) not consumed" {
+		t.Fatalf("DecodeBorrowed() error = %v, want trailing-byte error", err)
+	}
+
+	for _, chunk := range decoder.arena.applies.chunks {
+		for _, apply := range chunk {
+			if apply.Function != nil || apply.Argument != nil {
+				t.Fatal("failed decode retained an Apply from the previous decode")
+			}
+		}
+	}
+	for _, chunk := range decoder.arena.termLists.chunks {
+		for _, term := range chunk {
+			if term != nil {
+				t.Fatal("failed decode retained a term list from the previous decode")
+			}
+		}
+	}
+	for _, chunk := range decoder.consts.byteStrings.chunks {
+		for _, byteString := range chunk {
+			if byteString.Inner != nil {
+				t.Fatal("failed decode retained a byte string from the previous decode")
+			}
+		}
+	}
+}
