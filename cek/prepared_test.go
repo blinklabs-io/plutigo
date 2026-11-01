@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
 	"sync"
 	"testing"
 
@@ -284,5 +285,64 @@ func TestPrepareDecodedProgramRequiresProgram(t *testing.T) {
 	}
 	if _, err := cek.PrepareDecodedProgram(&syn.Program[syn.DeBruijn]{}, pc); err == nil {
 		t.Fatal("program without a term accepted")
+	}
+}
+
+// TestPreparedArgumentChainLimits checks that the application chain built for
+// the trusted data arguments counts against the structure depth and work
+// limits on the prepared path as it does in RunScriptContext: a program that
+// passes the walk alone but not once the arguments are applied must fail with
+// the same error and budget.
+func TestPreparedArgumentChainLimits(t *testing.T) {
+	deep := func() syn.Term[syn.DeBruijn] {
+		var term syn.Term[syn.DeBruijn] = &syn.Error{}
+		for range 100_000 {
+			term = &syn.Delay[syn.DeBruijn]{Term: term}
+		}
+		return term
+	}
+	wide := func() syn.Term[syn.DeBruijn] {
+		fields := make([]syn.Term[syn.DeBruijn], 999_999)
+		for i := range fields {
+			fields[i] = &syn.Error{}
+		}
+		return &syn.Constr[syn.DeBruijn]{Fields: fields}
+	}
+	for _, tc := range []struct {
+		name string
+		term func() syn.Term[syn.DeBruijn]
+	}{
+		{"depth", deep},
+		{"work", wide},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			term := tc.term()
+			pc := syn.ProgramContext{LedgerLanguage: lang.LanguageVersionV3, ProtocolMajor: 11}
+			prepared, err := cek.PrepareDecodedProgram(
+				&syn.Program[syn.DeBruijn]{Version: lang.LanguageVersion{1, 1, 0}, Term: term},
+				pc,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ec := cek.NewDefaultEvalContext(lang.LanguageVersionV3, cek.ProtoVersion{Major: 11})
+			budget := cek.ExBudget{Mem: 1_000_000, Cpu: 1_000_000_000}
+			args := []data.PlutusData{data.NewInteger(big.NewInt(1))}
+
+			ref := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ec)
+			ref.ExBudget = budget
+			_, wantErr := ref.RunScriptContext(context.Background(), term, args...)
+			if wantErr == nil {
+				t.Fatal("RunScriptContext accepted a term over the structure limit")
+			}
+
+			m := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ec)
+			m.ExBudget = budget
+			_, gotErr := cek.RunPreparedScriptContext(context.Background(), m, prepared, args...)
+			if gotErr == nil || gotErr.Error() != wantErr.Error() || m.ExBudget != ref.ExBudget {
+				t.Fatalf("prepared (err %v, budget %+v), RunScriptContext (err %v, budget %+v)",
+					gotErr, m.ExBudget, wantErr, ref.ExBudget)
+			}
+		})
 	}
 }

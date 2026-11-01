@@ -39,9 +39,11 @@ type PreparedProgram struct {
 	term    syn.Term[syn.DeBruijn]
 	version lang.LanguageVersion
 	// validated reports that term passed validateTermStructure, in Full
-	// scope mode when fullScope is set and in NoCaseConstr mode otherwise.
+	// scope mode when fullScope is set and in NoCaseConstr mode otherwise,
+	// using usage of the structure limits.
 	validated bool
 	fullScope bool
+	usage     termStructureUsage
 }
 
 // PrepareProgram decodes a FLAT-encoded De Bruijn program for the given
@@ -74,18 +76,21 @@ func PrepareDecodedProgram(
 		return nil, errors.New("program is required")
 	}
 	fullScope := fullScopeCheckFor(context.ProtocolMajor)
-	validated := validateTermStructure[syn.DeBruijn](
+	var usage termStructureUsage
+	validated := validateTermStructureUsage[syn.DeBruijn](
 		contextBackground,
 		false,
 		program.Term,
 		nil,
 		fullScope,
+		&usage,
 	) == nil
 	return &PreparedProgram{
 		term:      program.Term,
 		version:   program.Version,
 		validated: validated,
 		fullScope: fullScope,
+		usage:     usage,
 	}, nil
 }
 
@@ -120,9 +125,16 @@ func RunPreparedScriptContext(
 		return false, err
 	}
 	// Full mode checks every position NoCaseConstr mode checks, so a program
-	// that passed in Full mode is valid in either.
+	// that passed in Full mode is valid in either. The walk RunScriptContext
+	// performs also covers the argument application chain, which nests the
+	// program one level deeper per argument and adds three nodes per argument
+	// (the application, its argument slot and the data constant), so the
+	// program is walked again whenever the chain would exceed a limit the
+	// program alone stayed within.
 	skip := program.validated &&
-		(program.fullScope || !fullScopeCheckFor(machine.protoMajor))
+		(program.fullScope || !fullScopeCheckFor(machine.protoMajor)) &&
+		len(arguments) <= maxDischargeDepth-int(program.usage.maxDepth) &&
+		len(arguments) <= (maxDischargeWork-program.usage.work)/3
 	machine.skipDischarge = true
 	machine.resultIsUnit = false
 	defer func() {
