@@ -1873,12 +1873,44 @@ type ConstAboveDiagonalIntoQuadraticXAndYModel struct {
 	TwoArgumentsQuadraticFunction
 }
 
+// quadraticFastLimit bounds the inputs and coefficients for which
+// ConstAboveDiagonalIntoQuadraticXAndYModel can be evaluated exactly in int64.
+// With |x|, |y| and every |coefficient| at most 2^20, each of the six terms is
+// at most 2^60 in magnitude, so their sum stays below 2^63.
+const quadraticFastLimit = 1 << 20
+
 func (c ConstAboveDiagonalIntoQuadraticXAndYModel) CostTwo(x, y ExMem) int64 {
 	if int64(x) < int64(y) {
 		return c.constant
 	}
+	xVal, yVal := int64(x), int64(y)
+	// x >= y here, so y >= 0 implies x >= 0.
+	if yVal >= 0 && xVal <= quadraticFastLimit && c.coefficientsWithin(quadraticFastLimit) {
+		value := c.coeff00 +
+			c.coeff10*xVal +
+			c.coeff01*yVal +
+			c.coeff20*xVal*xVal +
+			c.coeff11*xVal*yVal +
+			c.coeff02*yVal*yVal
+		if value < c.minimum {
+			return c.minimum
+		}
+		return value
+	}
+	return c.costTwoBig(xVal, yVal)
+}
 
-	xVal, yVal := big.NewInt(int64(x)), big.NewInt(int64(y))
+func (c ConstAboveDiagonalIntoQuadraticXAndYModel) coefficientsWithin(limit int64) bool {
+	within := func(v int64) bool { return v >= -limit && v <= limit }
+	return within(c.coeff00) && within(c.coeff10) && within(c.coeff01) &&
+		within(c.coeff20) && within(c.coeff11) && within(c.coeff02)
+}
+
+// costTwoBig evaluates the quadratic exactly with math/big and saturates the
+// result at the int64 bounds. CostTwo uses it when the int64 path could
+// overflow.
+func (c ConstAboveDiagonalIntoQuadraticXAndYModel) costTwoBig(x, y int64) int64 {
+	xVal, yVal := big.NewInt(x), big.NewInt(y)
 	result := big.NewInt(c.coeff00)
 	result.Add(result, new(big.Int).Mul(big.NewInt(c.coeff10), xVal))
 	result.Add(result, new(big.Int).Mul(big.NewInt(c.coeff01), yVal))
