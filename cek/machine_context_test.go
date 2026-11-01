@@ -54,14 +54,19 @@ func (c *cancelAfterChecksContext) Err() error {
 
 func (*cancelAfterChecksContext) Value(any) any { return nil }
 
+// TestRunContextStopsOnCancellation checks that a divergent run stops on
+// cancellation. The De Bruijn loop polls the context each time it spends a
+// slippage batch of steps, so cancellation is observed within one batch, and
+// the environments the run allocates are bounded by the batches it ran.
 func TestRunContextStopsOnCancellation(t *testing.T) {
+	const slippage = 200
 	term := divergentTerm()
 	machine := NewMachine[syn.DeBruijn](
 		lang.LanguageVersionV1,
-		200,
+		slippage,
 		testEvalContext(),
 	)
-	machine.ExBudget = ExBudget{Cpu: 1_000_000, Mem: 1_000_000}
+	machine.ExBudget = ExBudget{Cpu: math.MaxInt64, Mem: math.MaxInt64}
 	ctx := &cancelAfterChecksContext{limit: 64, done: make(chan struct{})}
 
 	_, err := machine.RunContext(ctx, term)
@@ -71,7 +76,7 @@ func TestRunContextStopsOnCancellation(t *testing.T) {
 	if ctx.checks != ctx.limit {
 		t.Errorf("context checks = %d, want %d", ctx.checks, ctx.limit)
 	}
-	maxEnvironments := ctx.limit + 1
+	maxEnvironments := (ctx.limit + 1) * slippage
 	if machine.lastRunEnvHighWatermark > maxEnvironments {
 		t.Errorf(
 			"environment high-watermark = %d, exceeds cancellation-derived cap %d",
