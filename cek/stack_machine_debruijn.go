@@ -66,16 +66,24 @@ func (s *stepCounter) count(step StepKind) bool {
 	return s.remaining != 0
 }
 
+// spend charges the batched steps and then, for a cancellable run, polls the
+// context. Charging first keeps the remaining budget exact when a run is
+// canceled: every step that executed has been paid for.
+//
 //go:noinline
 func (s *stepCounter) spend(m *Machine[syn.DeBruijn]) error {
-	if s.ctx != nil {
-		if err := s.ctx.Err(); err != nil {
+	if s.remaining != s.slippage {
+		if err := s.charge(m); err != nil {
 			return err
 		}
 	}
-	if s.remaining == s.slippage {
-		return nil
+	if s.ctx != nil {
+		return s.ctx.Err()
 	}
+	return nil
+}
+
+func (s *stepCounter) charge(m *Machine[syn.DeBruijn]) error {
 	if m.stepBatchFits && !DebugBudget {
 		var total ExBudget
 		for i, n := range s.counts {

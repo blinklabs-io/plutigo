@@ -228,3 +228,37 @@ func divergentTerm() syn.Term[syn.DeBruijn] {
 		Argument: selfApply,
 	}
 }
+
+// TestRunContextCancellationChargesExecutedSteps checks that a canceled run
+// has paid for every step it executed: the pending step batch is charged
+// before the context is polled, so none is left unbudgeted.
+func TestRunContextCancellationChargesExecutedSteps(t *testing.T) {
+	const slippage = 200
+	machine := NewMachine[syn.DeBruijn](
+		lang.LanguageVersionV1,
+		slippage,
+		testEvalContext(),
+	)
+	stepCost := machine.stepCosts[ExVar]
+	for kind, cost := range machine.stepCosts {
+		if cost != stepCost {
+			t.Fatalf("step %d cost %+v differs from %+v; test assumes uniform step costs", kind, cost, stepCost)
+		}
+	}
+	machine.ExBudget = ExBudget{Cpu: math.MaxInt64, Mem: math.MaxInt64}
+	ctx := &cancelAfterChecksContext{limit: 64, done: make(chan struct{})}
+
+	_, err := machine.RunContext(ctx, divergentTerm())
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("RunContext() error = %v, want context.Canceled", err)
+	}
+	if machine.unbudgetedTotal != 0 {
+		t.Errorf("%d executed steps left unbudgeted after cancellation", machine.unbudgetedTotal)
+	}
+	startup := machine.costs.machineCosts.startup
+	spentCpu := math.MaxInt64 - machine.ExBudget.Cpu - startup.Cpu
+	batchCpu := int64(slippage) * stepCost.Cpu
+	if spentCpu <= 0 || spentCpu%batchCpu != 0 {
+		t.Errorf("step CPU charged = %d, want a positive multiple of the %d batch cost", spentCpu, batchCpu)
+	}
+}
