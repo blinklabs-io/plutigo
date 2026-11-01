@@ -8,7 +8,6 @@ require (
 	github.com/cloudflare/circl v1.6.5
 	github.com/consensys/gnark-crypto v0.22.0
 	github.com/fxamacker/cbor/v2 v2.9.6
-	github.com/minio/sha256-simd v1.0.1
 	golang.org/x/crypto v0.58.0
 )
 
@@ -18,7 +17,6 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/decred/dcrd/crypto/blake256 v1.1.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
-	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 )
