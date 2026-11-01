@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"crypto/sha3"
 	"encoding/binary"
 	"errors"
@@ -37,7 +38,6 @@ import (
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 	blsfr "github.com/consensys/gnark-crypto/ecc/bls12-381/fr"
-	sha256 "github.com/minio/sha256-simd"
 	"golang.org/x/crypto/blake2b"
 	legacyripemd160 "golang.org/x/crypto/ripemd160" //nolint:staticcheck,gosec
 	legacykeccak "golang.org/x/crypto/sha3"

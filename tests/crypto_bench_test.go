@@ -16,6 +16,7 @@ package tests
 
 import (
 	"crypto/ed25519"
+	"crypto/sha256"
 	"math/big"
 	"testing"
 
@@ -23,7 +24,6 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	circlbls "github.com/cloudflare/circl/ecc/bls12381"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
-	sha256 "github.com/minio/sha256-simd"
 	"golang.org/x/crypto/blake2b"
 	legacykeccak "golang.org/x/crypto/sha3"
 )
@@ -38,7 +38,7 @@ func BenchmarkDirectCrypto(b *testing.B) {
 	hash := make([]byte, 32)
 	dst := []byte("BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_")
 
-	b.Run("SHA256_minio", func(b *testing.B) {
+	b.Run("SHA256", func(b *testing.B) {
 		for b.Loop() {
 			sha256.Sum256(message)
 		}
