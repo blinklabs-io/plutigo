@@ -216,6 +216,29 @@ func validateTermStructure[T syn.Eval](
 	trustedData map[*syn.Data]struct{},
 	fullScopeCheck bool,
 ) error {
+	return validateTermStructureUsage[T](ctx, checkCancellation, term, trustedData, fullScopeCheck, nil)
+}
+
+// termStructureUsage is how much of the structure limits a successful
+// validateTermStructure walk used: the nodes counted against
+// maxDischargeWork and the deepest term depth checked against
+// maxDischargeDepth.
+type termStructureUsage struct {
+	work     int
+	maxDepth int32
+}
+
+// validateTermStructureUsage is validateTermStructure that, when usage is not
+// nil and the walk succeeds, stores the limits the walk used in usage.
+func validateTermStructureUsage[T syn.Eval](
+	ctx context.Context,
+	checkCancellation bool,
+	term syn.Term[T],
+	trustedData map[*syn.Data]struct{},
+	fullScopeCheck bool,
+	usage *termStructureUsage,
+) error {
+	var maxDepth int32
 	budget := structureValidationBudget{
 		ctx:               ctx,
 		checkCancellation: checkCancellation,
@@ -240,6 +263,7 @@ func validateTermStructure[T syn.Eval](
 		if item.depth > maxDischargeDepth {
 			return malformedASTError("term structure exceeds depth %d", maxDischargeDepth)
 		}
+		maxDepth = max(maxDepth, item.depth)
 
 		nextDepth := item.depth + 1
 		switch t := item.term.(type) {
@@ -371,6 +395,12 @@ func validateTermStructure[T syn.Eval](
 			}
 		default:
 			return malformedASTError("unsupported term type %T", item.term)
+		}
+	}
+	if usage != nil {
+		*usage = termStructureUsage{
+			work:     maxDischargeWork - budget.remaining,
+			maxDepth: maxDepth,
 		}
 	}
 	return nil

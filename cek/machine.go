@@ -1141,7 +1141,7 @@ func RunFlat(
 	}
 	program, err := decoder.DecodeBorrowedWithScopeCheck(
 		flat,
-		machine.protoMajor == 0 || machine.protoMajor >= dijkstraProtoMajorVersion,
+		fullScopeCheckFor(machine.protoMajor),
 	)
 	if err != nil {
 		var scopeErr *syn.DeBruijnScopeError
@@ -1189,22 +1189,41 @@ func (m *Machine[T]) RunContextWithTrustedDataArguments(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	return m.runWithTrustedDataArguments(ctx, term, false, arguments)
+}
+
+// runWithTrustedDataArguments applies the trusted data arguments to term and
+// evaluates it. With skipTermValidation the caller vouches that term already
+// passed validateTermStructure in the machine's scope mode; the generated
+// application nodes and data constants are well formed by construction, so
+// nothing is walked.
+func (m *Machine[T]) runWithTrustedDataArguments(
+	ctx context.Context,
+	term syn.Term[T],
+	skipTermValidation bool,
+	arguments []data.PlutusData,
+) (syn.Term[T], error) {
 	if len(arguments) > (maxDischargeWork-1)/3 {
 		return nil, malformedASTError("too many trusted data arguments: %d", len(arguments))
 	}
-	trustedData := make(map[*syn.Data]struct{}, len(arguments))
+	var trustedData map[*syn.Data]struct{}
+	if !skipTermValidation {
+		trustedData = make(map[*syn.Data]struct{}, len(arguments))
+	}
 	for i, argument := range arguments {
 		if isNilPlutusData(argument) {
 			return nil, malformedASTError("trusted data argument %d is nil", i)
 		}
 		constant := &syn.Data{Inner: argument}
-		trustedData[constant] = struct{}{}
+		if trustedData != nil {
+			trustedData[constant] = struct{}{}
+		}
 		term = &syn.Apply[T]{
 			Function: term,
 			Argument: &syn.Constant{Con: constant},
 		}
 	}
-	return m.runContext(ctx, true, term, trustedData, false)
+	return m.runContext(ctx, true, term, trustedData, skipTermValidation)
 }
 
 // RunScriptContext evaluates a ledger script as the reference ledger does
@@ -1293,9 +1312,7 @@ func (m *Machine[T]) runContext(
 			checkCancellation,
 			term,
 			trustedData,
-			// A zero protocol major selects no protocol version and so the
-			// current (Full) mode.
-			m.protoMajor == 0 || m.protoMajor >= dijkstraProtoMajorVersion,
+			fullScopeCheckFor(m.protoMajor),
 		); err != nil {
 			return nil, err
 		}
