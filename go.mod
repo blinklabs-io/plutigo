@@ -7,7 +7,7 @@ require (
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.2.0
 	github.com/cloudflare/circl v1.6.5
 	github.com/consensys/gnark-crypto v0.22.0
-	github.com/fxamacker/cbor/v2 v2.9.6
+	github.com/fxamacker/cbor/v2 v2.10.0
 	golang.org/x/crypto v0.58.0
 )
 
