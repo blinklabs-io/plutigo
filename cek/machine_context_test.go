@@ -54,14 +54,19 @@ func (c *cancelAfterChecksContext) Err() error {
 
 func (*cancelAfterChecksContext) Value(any) any { return nil }
 
+// TestRunContextStopsOnCancellation checks that a divergent run stops on
+// cancellation. The De Bruijn loop polls the context each time it spends a
+// slippage batch of steps, so cancellation is observed within one batch, and
+// the environments the run allocates are bounded by the batches it ran.
 func TestRunContextStopsOnCancellation(t *testing.T) {
+	const slippage = 200
 	term := divergentTerm()
 	machine := NewMachine[syn.DeBruijn](
 		lang.LanguageVersionV1,
-		200,
+		slippage,
 		testEvalContext(),
 	)
-	machine.ExBudget = ExBudget{Cpu: 1_000_000, Mem: 1_000_000}
+	machine.ExBudget = ExBudget{Cpu: math.MaxInt64, Mem: math.MaxInt64}
 	ctx := &cancelAfterChecksContext{limit: 64, done: make(chan struct{})}
 
 	_, err := machine.RunContext(ctx, term)
@@ -71,7 +76,7 @@ func TestRunContextStopsOnCancellation(t *testing.T) {
 	if ctx.checks != ctx.limit {
 		t.Errorf("context checks = %d, want %d", ctx.checks, ctx.limit)
 	}
-	maxEnvironments := ctx.limit + 1
+	maxEnvironments := (ctx.limit + 1) * slippage
 	if machine.lastRunEnvHighWatermark > maxEnvironments {
 		t.Errorf(
 			"environment high-watermark = %d, exceeds cancellation-derived cap %d",
@@ -221,5 +226,39 @@ func divergentTerm() syn.Term[syn.DeBruijn] {
 	return &syn.Apply[syn.DeBruijn]{
 		Function: selfApply,
 		Argument: selfApply,
+	}
+}
+
+// TestRunContextCancellationChargesExecutedSteps checks that a canceled run
+// has paid for every step it executed: the pending step batch is charged
+// before the context is polled, so none is left unbudgeted.
+func TestRunContextCancellationChargesExecutedSteps(t *testing.T) {
+	const slippage = 200
+	machine := NewMachine[syn.DeBruijn](
+		lang.LanguageVersionV1,
+		slippage,
+		testEvalContext(),
+	)
+	stepCost := machine.stepCosts[ExVar]
+	for kind, cost := range machine.stepCosts {
+		if cost != stepCost {
+			t.Fatalf("step %d cost %+v differs from %+v; test assumes uniform step costs", kind, cost, stepCost)
+		}
+	}
+	machine.ExBudget = ExBudget{Cpu: math.MaxInt64, Mem: math.MaxInt64}
+	ctx := &cancelAfterChecksContext{limit: 64, done: make(chan struct{})}
+
+	_, err := machine.RunContext(ctx, divergentTerm())
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("RunContext() error = %v, want context.Canceled", err)
+	}
+	if machine.unbudgetedTotal != 0 {
+		t.Errorf("%d executed steps left unbudgeted after cancellation", machine.unbudgetedTotal)
+	}
+	startup := machine.costs.machineCosts.startup
+	spentCpu := math.MaxInt64 - machine.ExBudget.Cpu - startup.Cpu
+	batchCpu := int64(slippage) * stepCost.Cpu
+	if spentCpu <= 0 || spentCpu%batchCpu != 0 {
+		t.Errorf("step CPU charged = %d, want a positive multiple of the %d batch cost", spentCpu, batchCpu)
 	}
 }
