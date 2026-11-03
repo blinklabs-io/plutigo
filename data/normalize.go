@@ -51,3 +51,85 @@ package data
 func Normalize(pd PlutusData) PlutusData {
 	return copyData(pd, true)
 }
+
+// NormalizeShared returns pd itself when pd is already in the form Normalize
+// produces, and Normalize(pd) otherwise. Either way the result encodes to the
+// bytes Normalize(pd) encodes to and holds every container as a pointer, as
+// Normalize's result does.
+//
+// A node is in that form when it is held as a pointer and its encoding flag
+// is unset or already selects the package default for that node: indefinite
+// length for a non-empty Constr or List, definite for a Map. An empty Constr
+// or List encodes definite whatever its flag. Most on-chain data is encoded
+// that way, so for it NormalizeShared allocates nothing.
+//
+// The result may share nodes with pd, so callers must treat both as
+// read-only. Callers that need a value independent of pd use Normalize.
+//
+// NormalizeShared does not recurse, so it handles values of any nesting
+// depth.
+func NormalizeShared(pd PlutusData) PlutusData {
+	if isNormalized(pd) {
+		return pd
+	}
+	return Normalize(pd)
+}
+
+// isNormalized reports whether every node of pd is already in the form
+// Normalize produces. It allocates only when more than 64 nodes are pending
+// at once.
+func isNormalized(pd PlutusData) bool {
+	var buf [64]PlutusData
+	stack := append(buf[:0], pd)
+	for len(stack) > 0 {
+		n := len(stack) - 1
+		node := stack[n]
+		stack = stack[:n]
+		switch v := node.(type) {
+		case *Constr:
+			if v == nil {
+				continue
+			}
+			if len(v.Fields) > 0 && v.useIndef != nil && !*v.useIndef {
+				return false
+			}
+			stack = append(stack, v.Fields...)
+		case *List:
+			if v == nil {
+				continue
+			}
+			if len(v.Items) > 0 && v.useIndef != nil && !*v.useIndef {
+				return false
+			}
+			stack = append(stack, v.Items...)
+		case *Map:
+			if v == nil {
+				continue
+			}
+			if !mapIsNormalized(v) {
+				return false
+			}
+			for _, pair := range v.Pairs {
+				stack = append(stack, pair[0], pair[1])
+			}
+		case *Value:
+			if v == nil || v.Inner == nil {
+				continue
+			}
+			if !mapIsNormalized(v.Inner) {
+				return false
+			}
+			for _, pair := range v.Inner.Pairs {
+				stack = append(stack, pair[0], pair[1])
+			}
+		case Constr, List, Map, Value:
+			// Normalize returns containers as pointers.
+			return false
+		}
+	}
+	return true
+}
+
+func mapIsNormalized(m *Map) bool {
+	return m.useIndef == nil || !*m.useIndef
+}
