@@ -183,6 +183,12 @@ type Machine[T syn.Eval] struct {
 	budgetTemplate         ExBudget
 	lastRunRemaining       ExBudget
 	hasRun                 bool
+
+	// valueArenaSmallerRuns counts consecutive runs that would have fit a
+	// smaller value arena chunk size; see nextRetainedValueArenaChunkSize.
+	valueArenaSmallerRuns int
+	// budgetSet records a SetExBudget call since the last run.
+	budgetSet bool
 	// skipDischarge is set by RunScriptContext: the final value is only
 	// classified (resultIsUnit), never discharged into a term.
 	skipDischarge bool
@@ -492,6 +498,30 @@ func nextValueArenaChunkSize(used int) int {
 		chunkSize *= 2
 	}
 	return chunkSize
+}
+
+// valueArenaShrinkRuns is how many consecutive runs must fit a smaller value
+// arena chunk size before a machine shrinks to it.
+const valueArenaShrinkRuns = 16
+
+// nextRetainedValueArenaChunkSize picks the chunk size for a machine's next
+// run from the size this run used and the size this run would have needed.
+// Changing the size drops the value arenas, so a pooled machine that runs
+// scripts of different sizes in turn would otherwise drop and reallocate them
+// on nearly every run. It grows at once but shrinks only after
+// valueArenaShrinkRuns consecutive smaller runs, which still releases the
+// memory of a machine that ran one large script.
+func (m *Machine[T]) nextRetainedValueArenaChunkSize(current, needed int) int {
+	if needed >= current {
+		m.valueArenaSmallerRuns = 0
+		return needed
+	}
+	m.valueArenaSmallerRuns++
+	if m.valueArenaSmallerRuns < valueArenaShrinkRuns {
+		return current
+	}
+	m.valueArenaSmallerRuns = 0
+	return needed
 }
 
 func (m *Machine[T]) valueArenaHighWatermark() int {
@@ -1075,6 +1105,20 @@ func isUnitValue[T syn.Eval](value Value[T]) bool {
 	}
 }
 
+// SetExBudget sets the budget of the machine's next run.
+//
+// Assigning m.ExBudget has the same effect, except in one case. A run that
+// finds m.ExBudget still equal to the budget the previous run left treats the
+// field as unchanged and restores the previous run's initial budget, so that
+// running the same machine repeatedly charges each run the same budget. A
+// caller that wants the next run to have exactly the previous run's remaining
+// budget, such as one passing what is left of a transaction's budget from one
+// script to the next, must use SetExBudget.
+func (m *Machine[T]) SetExBudget(budget ExBudget) {
+	m.ExBudget = budget
+	m.budgetSet = true
+}
+
 // Run executes a Plutus term using the CEK (Control, Environment, Kontinuation) abstract machine.
 // This implementation now uses an explicit machine-owned frame stack on the hot
 // path while preserving the existing setup, teardown, budget, and discharge
@@ -1322,15 +1366,17 @@ func (m *Machine[T]) runContext(
 		if m.valueArenaChunkSize <= 0 {
 			m.valueArenaChunkSize = valueColdChunkSize
 		}
-		if m.ExBudget != m.lastRunRemaining {
+		if m.budgetSet || m.ExBudget != m.lastRunRemaining {
 			m.budgetTemplate = m.ExBudget
 		} else {
 			m.ExBudget = m.budgetTemplate
 		}
+		m.budgetSet = false
 		m.resetFrameStack()
 	} else {
 		m.valueArenaChunkSize = valueColdChunkSize
 		m.budgetTemplate = m.ExBudget
+		m.budgetSet = false
 	}
 	runValueArenaChunkSize := m.valueArenaChunkSize
 	m.Logs = m.Logs[:0]
@@ -1343,7 +1389,10 @@ func (m *Machine[T]) runContext(
 		if m.metrics != nil {
 			m.metrics.MaxStackDepth = m.frameStackUsed
 		}
-		nextChunkSize := nextValueArenaChunkSize(m.valueArenaHighWatermark())
+		nextChunkSize := m.nextRetainedValueArenaChunkSize(
+			runValueArenaChunkSize,
+			nextValueArenaChunkSize(m.valueArenaHighWatermark()),
+		)
 		m.lastRunEnvHighWatermark = m.envChunkPos
 		m.lastRunRemaining = m.ExBudget
 		m.hasRun = true
