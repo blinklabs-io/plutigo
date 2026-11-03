@@ -131,10 +131,6 @@ func TestValueArenaShrinksAfterSmallerRuns(t *testing.T) {
 	run(large)
 	grown := m.valueArenaChunkSize
 	run(small)
-	smallSize := nextValueArenaChunkSize(m.valueArenaHighWatermark())
-	if smallSize >= grown {
-		t.Fatalf("small script needs chunk size %d, not below the large script's %d", smallSize, grown)
-	}
 	for i := 1; i < valueArenaShrinkRuns; i++ {
 		if m.valueArenaChunkSize != grown {
 			t.Fatalf("after %d smaller runs the chunk size is %d, want %d", i, m.valueArenaChunkSize, grown)
@@ -143,5 +139,39 @@ func TestValueArenaShrinksAfterSmallerRuns(t *testing.T) {
 	}
 	if m.valueArenaChunkSize >= grown {
 		t.Errorf("after %d smaller runs the chunk size is still %d", valueArenaShrinkRuns, m.valueArenaChunkSize)
+	}
+}
+
+// TestValueArenaShrinkCountRestartsAfterLargerRun checks that a larger run
+// restarts the count of smaller runs, so a machine shrinks only after
+// valueArenaShrinkRuns consecutive smaller runs.
+func TestValueArenaShrinkCountRestartsAfterLargerRun(t *testing.T) {
+	small := pooledTestProgram(t, "guardrail-sorted-small")
+	large := pooledTestProgram(t, "stablecoin_1-5")
+	m := pooledTestMachine()
+	run := func(p *PreparedProgram) {
+		m.SetExBudget(DefaultExBudget)
+		if _, err := RunPreparedScriptContext(context.Background(), m, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run(large)
+	run(large)
+	grown := m.valueArenaChunkSize
+	for range valueArenaShrinkRuns / 2 {
+		run(small)
+	}
+	run(large)
+	for i := 1; i < valueArenaShrinkRuns; i++ {
+		run(small)
+		if m.valueArenaChunkSize != grown {
+			t.Fatalf("after %d smaller runs following a larger run the chunk size is %d, want %d",
+				i, m.valueArenaChunkSize, grown)
+		}
+	}
+	run(small)
+	if m.valueArenaChunkSize >= grown {
+		t.Errorf("after %d smaller runs following a larger run the chunk size is still %d",
+			valueArenaShrinkRuns, m.valueArenaChunkSize)
 	}
 }
