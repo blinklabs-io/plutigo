@@ -209,7 +209,7 @@ func TestPreparedScopeModes(t *testing.T) {
 func TestPreparedConcurrentUse(t *testing.T) {
 	gt := loadNodeFixture[nodeGroundTruth](t, "node_ground_truth_pv11.json.gz")
 	var flat []byte
-	var sc = gt.Scripts[0]
+	sc := gt.Scripts[0]
 	for _, s := range gt.Scripts {
 		if s.Outcome == "ok" && s.Lang == "V3" {
 			sc = s

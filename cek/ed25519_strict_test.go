@@ -74,10 +74,14 @@ func TestEd25519VerifyStrictRejects(t *testing.T) {
 	both := []string{"", "abc"}
 	tests := []tc{
 		{"identity pk and R", identity, ed25519TestCat(identity, zero32), both},
-		{"non-canonical identity", nonCanonIdentity,
-			ed25519TestCat(nonCanonIdentity, zero32), both},
-		{"order-4 pk, identity R", zero32,
-			ed25519TestCat(identity, zero32), both},
+		{
+			"non-canonical identity", nonCanonIdentity,
+			ed25519TestCat(nonCanonIdentity, zero32), both,
+		},
+		{
+			"order-4 pk, identity R", zero32,
+			ed25519TestCat(identity, zero32), both,
+		},
 		{"S+L", pub, sigSL, []string{"abc"}},
 		{"order8a pk", order8a, ed25519TestCat(sig[:32], sig[32:]), both},
 		{"order8b pk", order8b, ed25519TestCat(sig[:32], sig[32:]), both},
@@ -110,16 +114,20 @@ func reverseBytes(b []byte) []byte {
 
 func TestEd25519VerifyStrictAcceptsRFC8032(t *testing.T) {
 	tests := []struct{ name, pk, msg, sig string }{
-		{"test1",
+		{
+			"test1",
 			"d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
 			"",
 			"e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e06522490155" +
-				"5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b"},
-		{"test2",
+				"5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b",
+		},
+		{
+			"test2",
 			"3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c",
 			"72",
 			"92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da" +
-				"085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00"},
+				"085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

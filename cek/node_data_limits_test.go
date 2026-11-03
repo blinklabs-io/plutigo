@@ -183,6 +183,7 @@ func pErr() probeTerm              { return func(w *flatWriter) { w.uint(6, 4) }
 func pBuiltin(tag uint64) probeTerm {
 	return func(w *flatWriter) { w.uint(7, 4); w.uint(tag, 7) }
 }
+
 func pCon(typ uint64, value func(w *flatWriter)) probeTerm {
 	return func(w *flatWriter) {
 		w.uint(4, 4)
