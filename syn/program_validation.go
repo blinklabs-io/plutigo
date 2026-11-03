@@ -498,6 +498,10 @@ type DecodeInfo struct {
 // the Full mode when fullScopeCheck is set and otherwise in the mode that
 // leaves constr and case subterms unchecked. An out-of-scope variable does not
 // fail the decode; it is reported in the returned [DecodeInfo].
+//
+// The returned term is read-only: its variable, builtin and error nodes are
+// shared by every occurrence, in this program and in others decoded this way,
+// so modifying one would change them all.
 func DecodeDeBruijnWithContextInfo(
 	bytes []byte,
 	context ProgramContext,
@@ -507,13 +511,14 @@ func DecodeDeBruijnWithContextInfo(
 	d.strictValues = true
 	d.checkScope = true
 	d.fullScopeCheck = fullScopeCheck
+	d.shareLeaves = true
 	arena := newTermArena[DeBruijn]()
 	program, err := decodeDeBruijnProgram(d, arena, &constantArena{}, &context)
 	if err != nil {
 		return nil, nil, err
 	}
 	return program, &DecodeInfo{
-		Terms:      arena.terms(),
+		Terms:      arena.terms() + d.sharedLeaves,
 		MaxDepth:   d.maxDepth,
 		Constants:  arena.constantTerms(),
 		ScopeError: d.scopeError,

@@ -338,6 +338,10 @@ func decodeTermDeBruijnWithArena(
 			// retain the last decode-order error to match its first result.
 			d.scopeError = &DeBruijnScopeError{Index: name, Scope: d.scope}
 		}
+		if d.shareLeaves && uint64(name) < sharedVarCount {
+			d.sharedLeaves++
+			return &sharedVars[name], nil
+		}
 		return arena.allocVar(name), nil
 	case DelayTag:
 		t, err := decodeTermDeBruijnWithArena(d, arena, consts, depth+1)
@@ -385,6 +389,10 @@ func decodeTermDeBruijnWithArena(
 		}
 		return arena.allocForce(t), nil
 	case ErrorTag:
+		if d.shareLeaves {
+			d.sharedLeaves++
+			return &sharedError, nil
+		}
 		return arena.allocError(), nil
 	case BuiltinTag:
 		builtinTag, err := d.bits7()
@@ -399,6 +407,10 @@ func decodeTermDeBruijnWithArena(
 			if err := d.contextChecks.builtin(fn); err != nil {
 				d.contextError = err
 			}
+		}
+		if d.shareLeaves && int(fn) < len(sharedBuiltins) {
+			d.sharedLeaves++
+			return &sharedBuiltins[fn], nil
 		}
 		return arena.allocBuiltin(fn), nil
 	case ConstrTag:
@@ -911,6 +923,32 @@ type termArena[T Binder] struct {
 func newTermArena[T Binder]() *termArena[T] {
 	return &termArena[T]{}
 }
+
+// sharedVarCount bounds the De Bruijn indices that have a shared node.
+// Scripts bind few variables at a time, so nearly every index is small.
+const sharedVarCount = 1024
+
+// The shared leaf nodes a decode with shareLeaves set returns. No code
+// writes to a decoded node, so one node can stand for every occurrence of a
+// variable index, builtin or error, in any number of programs. They must
+// never be modified.
+var (
+	sharedVars = func() *[sharedVarCount]Var[DeBruijn] {
+		var vars [sharedVarCount]Var[DeBruijn]
+		for i := range vars {
+			vars[i].Name = DeBruijn(i)
+		}
+		return &vars
+	}()
+	sharedBuiltins = func() *[builtin.MaxDefaultFunction + 1]Builtin {
+		var builtins [builtin.MaxDefaultFunction + 1]Builtin
+		for i := range builtins {
+			builtins[i].DefaultFunction = builtin.DefaultFunction(i)
+		}
+		return &builtins
+	}()
+	sharedError Error
+)
 
 // terms is the number of term nodes allocated from the arena.
 func (a *termArena[T]) terms() int {
@@ -2050,6 +2088,11 @@ type decoder struct {
 	contextError  error
 	// maxDepth is the deepest term nesting decoded, the root being 0.
 	maxDepth int
+	// shareLeaves makes the decode return the shared immutable sharedVars,
+	// sharedBuiltins and sharedError nodes instead of allocating a variable,
+	// builtin or error node per occurrence; sharedLeaves counts them.
+	shareLeaves  bool
+	sharedLeaves int
 	// version is the program version once the header is decoded; constr and
 	// case terms are rejected before 1.1.0.
 	version      lang.LanguageVersion
