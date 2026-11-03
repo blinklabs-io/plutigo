@@ -17,12 +17,10 @@ jobs:
     with:
       nilaway-exclude-file-docstrings: <nilaway skip stack-machine>
       nilaway-include-pkgs: github.com/blinklabs-io/plutigo
-      pre-test-command: make test
       run-golangci-lint: true
       run-nilaway: true
       submodules: true
-      test-flags: -race -coverprofile=coverage.out -covermode=atomic
-      upload-coverage: true
+      test-flags: -race
   publish:
     needs: [go-test]
     if: github.event_name == 'push' && github.ref_type == 'tag'
