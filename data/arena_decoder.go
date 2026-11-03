@@ -321,10 +321,12 @@ func (d *Decoder) allocBigInt() *big.Int {
 }
 
 // countMagnitude adds the heap storage of an integer's magnitude to
-// heapBytes.
+// heapBytes, rounded up to the 16-byte granularity of the allocator's size
+// classes.
 func (d *Decoder) countMagnitude(inner *big.Int) {
 	if d != nil {
-		d.heapBytes += int64(cap(inner.Bits())) * int64(unsafe.Sizeof(big.Word(0)))
+		n := int64(cap(inner.Bits())) * int64(unsafe.Sizeof(big.Word(0)))
+		d.heapBytes += (n + 15) &^ 15
 	}
 }
 

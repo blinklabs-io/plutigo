@@ -83,7 +83,7 @@ func retainedShapes(t *testing.T) map[string][]byte {
 }
 
 // TestPreparedRetainedBytesTracksHeap checks that RetainedBytes stays close
-// to, and not below, the heap a prepared program actually keeps alive, for
+// to, and never below, the heap a prepared program actually keeps alive, for
 // the benchmark scripts and for shapes whose memory is not proportional to
 // their size.
 func TestPreparedRetainedBytesTracksHeap(t *testing.T) {
@@ -128,7 +128,7 @@ func TestPreparedRetainedBytesTracksHeap(t *testing.T) {
 		ratio := float64(estimate) / actual
 		// Small programs carry the fixed overhead, so the upper bound
 		// allows a few kilobytes of slack.
-		if ratio < 0.95 || (ratio > 1.5 && float64(estimate)-actual > 4096) {
+		if ratio < 1 || (ratio > 1.5 && float64(estimate)-actual > 4096) {
 			t.Errorf("%s: RetainedBytes %d is %.2f times the %.0f bytes retained",
 				name, estimate, ratio, actual)
 		}

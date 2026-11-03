@@ -76,7 +76,7 @@ func PrepareProgram(flat []byte, context syn.ProgramContext) (*PreparedProgram, 
 // Besides the storage syn.DecodeInfo.RetainedBytes counts, a prepared
 // program keeps the PreparedProgram and its program, and allocator
 // size-class rounding. The eighth and preparedProgramOverhead cover them.
-const preparedProgramOverhead = 1024
+const preparedProgramOverhead = 2048
 
 // decodedStructureUsage is the outcome of validateTermStructureUsage for a
 // program the decoder produced, computed from what the decoder recorded
