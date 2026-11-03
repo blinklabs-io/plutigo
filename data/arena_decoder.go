@@ -253,6 +253,8 @@ type Decoder struct {
 	items       arenaSlices[PlutusData]
 	pairs       arenaSlices[[2]PlutusData]
 	bytes       arenaSlices[byte]
+	// heapBytes counts integer magnitudes allocated outside the arenas.
+	heapBytes int64
 }
 
 // NewDecoder returns a ready-to-use Decoder with empty internal pools.
@@ -272,12 +274,14 @@ func (d *Decoder) Reset() {
 	d.items.reset(dataSliceRetainCap)
 	d.pairs.reset(dataSliceRetainCap)
 	d.bytes.reset(dataSliceRetainCap)
+	d.heapBytes = 0
 }
 
-// ArenaBytes reports the bytes of arena storage the Decoder holds, which
-// every value it decoded since the last Reset may keep alive.
-func (d *Decoder) ArenaBytes() int64 {
-	return d.bigInts.capacityBytes() + d.integers.capacityBytes() +
+// RetainedBytes reports the storage the values decoded since the last Reset
+// may keep alive: the Decoder's arenas and the integer magnitudes it
+// allocated outside them. Allocator rounding is not included.
+func (d *Decoder) RetainedBytes() int64 {
+	return d.heapBytes + d.bigInts.capacityBytes() + d.integers.capacityBytes() +
 		d.byteStrings.capacityBytes() + d.values.capacityBytes() +
 		d.constrs.capacityBytes() + d.lists.capacityBytes() +
 		d.maps.capacityBytes() + d.items.capacityBytes() +
@@ -314,6 +318,14 @@ func (d *Decoder) allocBigInt() *big.Int {
 		return new(big.Int)
 	}
 	return d.bigInts.alloc()
+}
+
+// countMagnitude adds the heap storage of an integer's magnitude to
+// heapBytes.
+func (d *Decoder) countMagnitude(inner *big.Int) {
+	if d != nil {
+		d.heapBytes += int64(cap(inner.Bits())) * int64(unsafe.Sizeof(big.Word(0)))
+	}
 }
 
 func (d *Decoder) allocInteger(inner *big.Int) *Integer {

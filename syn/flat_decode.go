@@ -627,13 +627,14 @@ func decodeTermListDeBruijnWithArena(
 				return emptyDeBruijnTermList, nil
 			}
 			clear(result[len(result):cap(result)])
+			d.countGrownList(cap(result), termSlotBytes)
 			return result, nil
 		}
 		if len(result) >= maxWidth {
 			return nil, errTooMany("term list items", maxWidth)
 		}
 		if result == nil {
-			result = arena.allocTermList(4)[:0]
+			result = arena.allocTermList(listArenaSlots)[:0]
 		}
 		item, err := decodeTermDeBruijnWithArena(d, arena, consts, depth)
 		if err != nil {
@@ -945,6 +946,22 @@ func newTermArena[T Binder]() *termArena[T] {
 	return &termArena[T]{}
 }
 
+const (
+	termSlotBytes     = int64(unsafe.Sizeof(Term[DeBruijn](nil)))
+	constantSlotBytes = int64(unsafe.Sizeof(IConstant(nil)))
+	// listArenaSlots is the number of slots a term or constant list takes
+	// from the arena before it grows on the heap.
+	listArenaSlots = 4
+)
+
+// countGrownList adds a list's heap storage to heapBytes once it has grown
+// past its first arena slots.
+func (d *decoder) countGrownList(capacity int, slotBytes int64) {
+	if capacity > listArenaSlots {
+		d.heapBytes += int64(capacity) * slotBytes
+	}
+}
+
 // sharedVarCount bounds the De Bruijn indices that have a shared node.
 // Scripts bind few variables at a time, so nearly every index is small.
 const sharedVarCount = 1024
@@ -1143,7 +1160,7 @@ func (a *constantArena) capacityBytes() int64 {
 		a.tPairs.capacityBytes() + a.values.capacityBytes() +
 		a.datas.capacityBytes() + a.lists.capacityBytes() +
 		a.bytes.capacityBytes() + a.words.capacityBytes() +
-		a.dataDecoder.ArenaBytes()
+		a.dataDecoder.RetainedBytes()
 }
 
 type constantArena struct {
@@ -1676,6 +1693,7 @@ func decodeConstantListWithArena(
 			if result == nil {
 				return emptyConstantList, nil
 			}
+			d.countGrownList(cap(result), constantSlotBytes)
 			return result, nil
 		}
 		if len(result) >= maxCollectionWidth {
@@ -1685,7 +1703,7 @@ func decodeConstantListWithArena(
 			return nil, err
 		}
 		if result == nil {
-			result = arena.allocList(4)[:0]
+			result = arena.allocList(listArenaSlots)[:0]
 		}
 		item, err := decodeConstantValueWithArena(d, itemType, arena)
 		if err != nil {
@@ -2138,6 +2156,11 @@ type decoder struct {
 	// builtin or error node per occurrence; sharedLeaves counts them.
 	shareLeaves  bool
 	sharedLeaves int
+	// heapBytes counts storage a decoded program keeps outside the decode
+	// arenas: term and constant lists grown past their first arena slots.
+	// A string's contents are copied out of the arena's byte chunk, which
+	// is counted instead.
+	heapBytes int64
 	// version is the program version once the header is decoded; constr and
 	// case terms are rejected before 1.1.0.
 	version      lang.LanguageVersion
