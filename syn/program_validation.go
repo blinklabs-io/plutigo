@@ -503,9 +503,11 @@ type DecodeInfo struct {
 // leaves constr and case subterms unchecked. An out-of-scope variable does not
 // fail the decode; it is reported in the returned [DecodeInfo].
 //
-// The returned term is read-only: its variable, builtin and error nodes are
-// shared by every occurrence, in this program and in others decoded this way,
-// so modifying one would change them all.
+// The returned term is read-only: its builtin and error nodes, and its
+// variable nodes with a De Bruijn index below 1024, are shared by every
+// occurrence, in this program and in others decoded this way, so modifying
+// one would change them all. A variable with a larger index gets its own node
+// at each occurrence.
 func DecodeDeBruijnWithContextInfo(
 	bytes []byte,
 	context ProgramContext,

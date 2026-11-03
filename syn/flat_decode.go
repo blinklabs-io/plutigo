@@ -968,8 +968,8 @@ const sharedVarCount = 1024
 
 // The shared leaf nodes a decode with shareLeaves set returns. No code
 // writes to a decoded node, so one node can stand for every occurrence of a
-// variable index, builtin or error, in any number of programs. They must
-// never be modified.
+// builtin, an error, or a variable index below sharedVarCount, in any number
+// of programs. They must never be modified.
 var (
 	sharedVars = func() *[sharedVarCount]Var[DeBruijn] {
 		var vars [sharedVarCount]Var[DeBruijn]
@@ -2152,8 +2152,9 @@ type decoder struct {
 	// maxDepth is the deepest term nesting decoded, the root being 0.
 	maxDepth int
 	// shareLeaves makes the decode return the shared immutable sharedVars,
-	// sharedBuiltins and sharedError nodes instead of allocating a variable,
-	// builtin or error node per occurrence; sharedLeaves counts them.
+	// sharedBuiltins and sharedError nodes instead of allocating a builtin,
+	// error, or variable below sharedVarCount per occurrence; sharedLeaves
+	// counts them.
 	shareLeaves  bool
 	sharedLeaves int
 	// heapBytes counts storage a decoded program keeps outside the decode

@@ -50,8 +50,11 @@ type PreparedProgram struct {
 }
 
 // PrepareProgram decodes a FLAT-encoded De Bruijn program for the given
-// ledger context, like [syn.DecodeDeBruijnWithContext], and prepares it with
-// [PrepareDecodedProgram].
+// ledger context, like [syn.DecodeDeBruijnWithContext], and prepares it. It
+// checks the program's structure as [PrepareDecodedProgram] does, but in the
+// same pass as the decode, using [syn.DecodeDeBruijnWithContextInfo] in the
+// scope mode of context.ProtocolMajor rather than walking the decoded term
+// again. The returned program shares the decoder's read-only leaf nodes.
 //
 // It does not apply the execution-time version gate: ledger callers must
 // still call [syn.ValidateTermVersionForExecution] with [PreparedProgram.Version]
