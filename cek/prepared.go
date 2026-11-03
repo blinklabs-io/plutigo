@@ -54,11 +54,45 @@ type PreparedProgram struct {
 // still call [syn.ValidateTermVersionForExecution] with [PreparedProgram.Version]
 // before evaluating the program.
 func PrepareProgram(flat []byte, context syn.ProgramContext) (*PreparedProgram, error) {
-	program, err := syn.DecodeDeBruijnWithContext(flat, context)
+	fullScope := fullScopeCheckFor(context.ProtocolMajor)
+	program, info, err := syn.DecodeDeBruijnWithContextInfo(flat, context, fullScope)
 	if err != nil {
 		return nil, err
 	}
-	return PrepareDecodedProgram(program, context)
+	usage, validated := decodedStructureUsage(info)
+	return &PreparedProgram{
+		term:      program.Term,
+		version:   program.Version,
+		validated: validated,
+		fullScope: fullScope,
+		usage:     usage,
+	}, nil
+}
+
+// decodedStructureUsage is the outcome of validateTermStructureUsage for a
+// program the decoder produced, computed from what the decoder recorded
+// rather than by walking the term. A decoded term has no nil, cyclic or
+// unknown nodes, so the walk can fail only on scope, depth, its work limit or
+// a constant. Its work is one unit per term node plus the work of each
+// constant, which the constant walk itself measures.
+func decodedStructureUsage(info *syn.DecodeInfo) (termStructureUsage, bool) {
+	if info.ScopeError != nil || info.MaxDepth > maxDischargeDepth ||
+		info.Terms > maxDischargeWork {
+		return termStructureUsage{}, false
+	}
+	budget := structureValidationBudget{
+		ctx:       contextBackground,
+		remaining: maxDischargeWork - info.Terms,
+	}
+	for _, constant := range info.Constants {
+		if err := validateConstantStructureWithBudget(constant.Con, &budget); err != nil {
+			return termStructureUsage{}, false
+		}
+	}
+	return termStructureUsage{
+		work:     maxDischargeWork - budget.remaining,
+		maxDepth: int32(info.MaxDepth),
+	}, true
 }
 
 // PrepareDecodedProgram checks the structure of a program decoded for context

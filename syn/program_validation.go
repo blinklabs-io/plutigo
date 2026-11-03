@@ -93,6 +93,75 @@ func constantSize(con IConstant) int {
 	}
 }
 
+// contextChecks are the per-node checks [ValidateProgram] applies for a
+// ledger context to constants and builtins. The De Bruijn decoder applies the
+// same checks while decoding a program for a context, so that decoding and
+// validating it takes one pass.
+type contextChecks struct {
+	plutusVersion builtin.PlutusVersion
+	protocolMajor uint
+	// PlutusData Value is a V4 constructor; earlier ledger languages must
+	// not carry it in any constant. valueDataItems counts constant list and
+	// array items across the program, as the decoder does.
+	checkValueData bool
+	valueDataItems int
+}
+
+func newContextChecks(context ProgramContext) (contextChecks, error) {
+	plutusVersion, err := plutusVersionForLedgerLanguage(context.LedgerLanguage)
+	if err != nil {
+		return contextChecks{}, err
+	}
+	return contextChecks{
+		plutusVersion:  plutusVersion,
+		protocolMajor:  context.ProtocolMajor,
+		checkValueData: plutusVersion < builtin.PlutusV4,
+	}, nil
+}
+
+// constant checks a constant term's value against the context.
+func (c *contextChecks) constant(con IConstant) error {
+	if c.checkValueData && isCompositeConstant(con) {
+		found, err := constantHasValueData(con, &c.valueDataItems)
+		if err != nil {
+			return err
+		}
+		if found {
+			return fmt.Errorf(
+				"Value data is not available in Plutus V%d",
+				c.plutusVersion,
+			)
+		}
+	}
+	if con != nil && c.protocolMajor >= builtin.VanRossemProtoVersion {
+		size := constantSize(con)
+		if size > maxConstantTypeTagsPV11 {
+			return fmt.Errorf(
+				"constant type of size %d is not available in protocol version %d",
+				size,
+				c.protocolMajor,
+			)
+		}
+	}
+	return nil
+}
+
+// builtin checks that fn is a valid builtin available in the context.
+func (c *contextChecks) builtin(fn builtin.DefaultFunction) error {
+	if fn > builtin.MaxDefaultFunction {
+		return fmt.Errorf("builtin tag %d is invalid", fn)
+	}
+	if !fn.IsAvailableInWithProto(c.plutusVersion, c.protocolMajor) {
+		return fmt.Errorf(
+			"builtin %s is not available in Plutus V%d at protocol version %d",
+			fn.String(),
+			c.plutusVersion,
+			c.protocolMajor,
+		)
+	}
+	return nil
+}
+
 // ValidateProgram is a phase-1, decode-time well-formedness check: language
 // introduction, builtin availability, and structural bounds such as
 // constructor arity. It applies uniformly to witness scripts and to a
@@ -110,16 +179,10 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 		return err
 	}
 
-	plutusVersion, err := plutusVersionForLedgerLanguage(context.LedgerLanguage)
+	checks, err := newContextChecks(context)
 	if err != nil {
 		return err
 	}
-
-	// PlutusData Value is a V4 constructor; earlier ledger languages must not
-	// carry it in any constant. valueDataItems counts constant list and array
-	// items across the program, as the decoder does.
-	checkValueData := plutusVersion < builtin.PlutusV4
-	valueDataItems := 0
 
 	// The worklist starts on the stack; it holds pending siblings along one
 	// path, so ledger scripts rarely outgrow it.
@@ -137,28 +200,8 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 		case *Var[T], *Error:
 			// No version-dependent validation is needed for these terms.
 		case *Constant:
-			if checkValueData && isCompositeConstant(t.Con) {
-				found, err := constantHasValueData(t.Con, &valueDataItems)
-				if err != nil {
-					return err
-				}
-				if found {
-					return fmt.Errorf(
-						"Value data is not available in Plutus V%d",
-						plutusVersion,
-					)
-				}
-			}
-			if t.Con != nil &&
-				context.ProtocolMajor >= builtin.VanRossemProtoVersion {
-				size := constantSize(t.Con)
-				if size > maxConstantTypeTagsPV11 {
-					return fmt.Errorf(
-						"constant type of size %d is not available in protocol version %d",
-						size,
-						context.ProtocolMajor,
-					)
-				}
+			if err := checks.constant(t.Con); err != nil {
+				return err
 			}
 		case *Delay[T]:
 			terms = append(terms, t.Term)
@@ -169,19 +212,8 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 		case *Apply[T]:
 			terms = append(terms, t.Function, t.Argument)
 		case *Builtin:
-			if t.DefaultFunction > builtin.MaxDefaultFunction {
-				return fmt.Errorf("builtin tag %d is invalid", t.DefaultFunction)
-			}
-			if !t.IsAvailableInWithProto(
-				plutusVersion,
-				context.ProtocolMajor,
-			) {
-				return fmt.Errorf(
-					"builtin %s is not available in Plutus V%d at protocol version %d",
-					t.String(),
-					plutusVersion,
-					context.ProtocolMajor,
-				)
+			if err := checks.builtin(t.DefaultFunction); err != nil {
+				return err
 			}
 		case *Constr[T]:
 			if !supportsConstructors(program.Version) {
@@ -411,6 +443,11 @@ func DecodeWithContext[T Binder](bytes []byte, context ProgramContext) (*Program
 	if err != nil {
 		return nil, err
 	}
+	if _, ok := any(program).(*Program[DeBruijn]); ok {
+		// The De Bruijn decoder applies ValidateProgram's checks while
+		// decoding for a context.
+		return program, nil
+	}
 	if err := ValidateProgram(program, context); err != nil {
 		return nil, err
 	}
@@ -440,6 +477,47 @@ func DecodeDeBruijnWithContext(
 	context ProgramContext,
 ) (*Program[DeBruijn], error) {
 	return DecodeWithContext[DeBruijn](bytes, context)
+}
+
+// DecodeInfo describes a program decoded by [DecodeDeBruijnWithContextInfo]:
+// what a walk of its term would find, gathered while decoding.
+type DecodeInfo struct {
+	// Terms is the number of term nodes in the program.
+	Terms int
+	// MaxDepth is the deepest term nesting, the root term being at depth 0.
+	MaxDepth int
+	// Constants holds every constant term of the program.
+	Constants []*Constant
+	// ScopeError, when not nil, is a De Bruijn variable that is not bound
+	// by an enclosing lambda, checked in the scope mode the decode used.
+	ScopeError *DeBruijnScopeError
+}
+
+// DecodeDeBruijnWithContextInfo decodes and validates a program like
+// [DecodeDeBruijnWithContext], also checking its De Bruijn variable scopes in
+// the Full mode when fullScopeCheck is set and otherwise in the mode that
+// leaves constr and case subterms unchecked. An out-of-scope variable does not
+// fail the decode; it is reported in the returned [DecodeInfo].
+func DecodeDeBruijnWithContextInfo(
+	bytes []byte,
+	context ProgramContext,
+	fullScopeCheck bool,
+) (*Program[DeBruijn], *DecodeInfo, error) {
+	d := newDecoder(bytes)
+	d.strictValues = true
+	d.checkScope = true
+	d.fullScopeCheck = fullScopeCheck
+	arena := newTermArena[DeBruijn]()
+	program, err := decodeDeBruijnProgram(d, arena, &constantArena{}, &context)
+	if err != nil {
+		return nil, nil, err
+	}
+	return program, &DecodeInfo{
+		Terms:      arena.terms(),
+		MaxDepth:   d.maxDepth,
+		Constants:  arena.constantTerms(),
+		ScopeError: d.scopeError,
+	}, nil
 }
 
 // DecodeDeBruijnForExecution decodes a FLAT-encoded UPLC program that is

@@ -230,6 +230,13 @@ func decodeDeBruijnProgram(
 	if err != nil {
 		return nil, err
 	}
+	if context != nil {
+		checks, err := newContextChecks(*context)
+		if err != nil {
+			return nil, err
+		}
+		d.contextChecks = &checks
+	}
 
 	arena.sizeForInput(len(d.buffer))
 	terms, err := decodeTermDeBruijnWithArena(d, arena, consts, 0)
@@ -248,6 +255,9 @@ func decodeDeBruijnProgram(
 
 	if err := d.ensureFullyConsumed(); err != nil {
 		return nil, err
+	}
+	if d.contextError != nil {
+		return nil, d.contextError
 	}
 
 	return program, nil
@@ -306,6 +316,9 @@ func decodeTermDeBruijnWithArena(
 	if depth >= maxFlatDecodeDepth {
 		return nil, errors.New("term nesting too deep")
 	}
+	if depth > d.maxDepth {
+		d.maxDepth = depth
+	}
 	if err := d.node(); err != nil {
 		return nil, err
 	}
@@ -359,6 +372,11 @@ func decodeTermDeBruijnWithArena(
 		if err != nil {
 			return nil, err
 		}
+		if d.contextChecks != nil {
+			if err := d.contextChecks.constant(constant); err != nil {
+				d.contextError = err
+			}
+		}
 		return arena.allocConstant(constant), nil
 	case ForceTag:
 		t, err := decodeTermDeBruijnWithArena(d, arena, consts, depth+1)
@@ -376,6 +394,11 @@ func decodeTermDeBruijnWithArena(
 		fn, err := builtin.FromByte(builtinTag)
 		if err != nil {
 			return nil, err
+		}
+		if d.contextChecks != nil {
+			if err := d.contextChecks.builtin(fn); err != nil {
+				d.contextError = err
+			}
 		}
 		return arena.allocBuiltin(fn), nil
 	case ConstrTag:
@@ -887,6 +910,33 @@ type termArena[T Binder] struct {
 
 func newTermArena[T Binder]() *termArena[T] {
 	return &termArena[T]{}
+}
+
+// terms is the number of term nodes allocated from the arena.
+func (a *termArena[T]) terms() int {
+	return a.vars.used() + a.delays.used() + a.forces.used() +
+		a.lambdas.used() + a.applies.used() + a.constrs.used() +
+		a.cases.used() + a.errors.used() + a.constants.used() +
+		a.builtins.used()
+}
+
+// constantTerms returns every constant term allocated from the arena, in
+// allocation order.
+func (a *termArena[T]) constantTerms() []*Constant {
+	n := a.constants.used()
+	if n == 0 {
+		return nil
+	}
+	out := make([]*Constant, 0, n)
+	for _, chunk := range a.constants.chunks {
+		for i := range chunk {
+			if len(out) == n {
+				return out
+			}
+			out = append(out, &chunk[i])
+		}
+	}
+	return out
 }
 
 // sizeForInput sizes the first chunk of the densest node arenas from the
@@ -1992,6 +2042,14 @@ type decoder struct {
 	fullScopeCheck  bool
 	scope           int
 	scopeError      *DeBruijnScopeError
+	// contextChecks, when set, applies ValidateProgram's checks to every
+	// constant and builtin as it is decoded; contextError keeps the last
+	// failure in decode order, which is the first ValidateProgram reports
+	// (it visits siblings in reverse decode order, and only leaves fail).
+	contextChecks *contextChecks
+	contextError  error
+	// maxDepth is the deepest term nesting decoded, the root being 0.
+	maxDepth int
 	// version is the program version once the header is decoded; constr and
 	// case terms are rejected before 1.1.0.
 	version      lang.LanguageVersion
