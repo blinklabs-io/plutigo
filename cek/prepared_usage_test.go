@@ -87,11 +87,18 @@ func preparedUsageCorpus(t *testing.T) [][]byte {
 // derives from the decoder, whether the structure walk passes and the limits
 // it uses, equals the walk itself in both scope modes.
 func TestDecodedStructureUsageMatchesWalk(t *testing.T) {
+	// The race detector slows the walk about tenfold; it samples the corpus.
+	stride, minCompared := 1, 2000
+	if raceEnabled {
+		stride, minCompared = 8, 250
+	}
 	compared, open := 0, 0
+	corpus := preparedUsageCorpus(t)
 	for _, proto := range []uint{11, 12} {
 		context := syn.ProgramContext{LedgerLanguage: lang.LanguageVersionV3, ProtocolMajor: proto}
 		fullScope := fullScopeCheckFor(proto)
-		for i, b := range preparedUsageCorpus(t) {
+		for i := 0; i < len(corpus); i += stride {
+			b := corpus[i]
 			program, info, err := syn.DecodeDeBruijnWithContextInfo(b, context, fullScope)
 			if err != nil {
 				continue
@@ -111,7 +118,7 @@ func TestDecodedStructureUsageMatchesWalk(t *testing.T) {
 			}
 		}
 	}
-	if compared < 2000 || open == 0 {
+	if compared < minCompared || open == 0 {
 		t.Fatalf("compared %d programs, %d failing the walk", compared, open)
 	}
 	t.Logf("%d programs compared, %d failing the walk", compared, open)
