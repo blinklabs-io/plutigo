@@ -40,10 +40,11 @@ func uCons(h, t string) string { return fmt.Sprintf("[(force (builtin mkCons)) %
 func uHead(l string) string    { return fmt.Sprintf("[(force (builtin headList)) %s]", l) }
 func uTail(l string) string    { return fmt.Sprintf("[(force (builtin tailList)) %s]", l) }
 func uSub1(n string) string    { return fmt.Sprintf("[(builtin subtractInteger) %s (con integer 1)]", n) }
-func uIsZero(n string) string  { return fmt.Sprintf("[(builtin equalsInteger) %s (con integer 0)]", n) }
-func uAdd(a, b string) string  { return fmt.Sprintf("[(builtin addInteger) %s %s]", a, b) }
-func uIData(n string) string   { return fmt.Sprintf("[(builtin iData) %s]", n) }
-func uInt(n int) string        { return fmt.Sprintf("(con integer %d)", n) }
+
+func uIsZero(n string) string { return fmt.Sprintf("[(builtin equalsInteger) %s (con integer 0)]", n) }
+func uAdd(a, b string) string { return fmt.Sprintf("[(builtin addInteger) %s %s]", a, b) }
+func uIData(n string) string  { return fmt.Sprintf("[(builtin iData) %s]", n) }
+func uInt(n int) string       { return fmt.Sprintf("(con integer %d)", n) }
 
 func uPairData(n string) string {
 	return fmt.Sprintf("[(builtin mkPairData) %s %s]", uIData(n), uIData(n))

@@ -1188,6 +1188,7 @@ func containsInner(s, substr string) bool {
 	}
 	return false
 }
+
 func TestValueString(t *testing.T) {
 	// Test Constant String
 	constant := Constant{Constant: &syn.Integer{Inner: big.NewInt(99)}}
