@@ -16,6 +16,7 @@
 
 package cek
 
-// raceEnabled reports whether the race detector is on, which slows the
-// decoder comparison tests about tenfold.
+// raceEnabled reports whether the race detector is on. Tests use it to
+// sample checks the race detector slows, or to skip measurements it
+// distorts, such as allocation and heap counts.
 const raceEnabled = true
