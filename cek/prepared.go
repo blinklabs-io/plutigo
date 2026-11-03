@@ -44,21 +44,67 @@ type PreparedProgram struct {
 	validated bool
 	fullScope bool
 	usage     termStructureUsage
+	// retainedBytes estimates the memory the program keeps alive; zero
+	// when unknown.
+	retainedBytes int64
 }
 
 // PrepareProgram decodes a FLAT-encoded De Bruijn program for the given
-// ledger context, like [syn.DecodeDeBruijnWithContext], and prepares it with
-// [PrepareDecodedProgram].
+// ledger context, like [syn.DecodeDeBruijnWithContext], and prepares it. It
+// checks the program's structure as [PrepareDecodedProgram] does, but in the
+// same pass as the decode, using [syn.DecodeDeBruijnWithContextInfo] in the
+// scope mode of context.ProtocolMajor rather than walking the decoded term
+// again. The returned program shares the decoder's read-only leaf nodes.
 //
 // It does not apply the execution-time version gate: ledger callers must
 // still call [syn.ValidateTermVersionForExecution] with [PreparedProgram.Version]
 // before evaluating the program.
 func PrepareProgram(flat []byte, context syn.ProgramContext) (*PreparedProgram, error) {
-	program, err := syn.DecodeDeBruijnWithContext(flat, context)
+	fullScope := fullScopeCheckFor(context.ProtocolMajor)
+	program, info, err := syn.DecodeDeBruijnWithContextInfo(flat, context, fullScope)
 	if err != nil {
 		return nil, err
 	}
-	return PrepareDecodedProgram(program, context)
+	usage, validated := decodedStructureUsage(info)
+	return &PreparedProgram{
+		term:          program.Term,
+		version:       program.Version,
+		validated:     validated,
+		fullScope:     fullScope,
+		usage:         usage,
+		retainedBytes: info.RetainedBytes + info.RetainedBytes/8 + preparedProgramOverhead,
+	}, nil
+}
+
+// Besides the storage syn.DecodeInfo.RetainedBytes counts, a prepared
+// program keeps the PreparedProgram and its program, and allocator
+// size-class rounding. The eighth and preparedProgramOverhead cover them.
+const preparedProgramOverhead = 2048
+
+// decodedStructureUsage is the outcome of validateTermStructureUsage for a
+// program the decoder produced, computed from what the decoder recorded
+// rather than by walking the term. A decoded term has no nil, cyclic or
+// unknown nodes, so the walk can fail only on scope, depth, its work limit or
+// a constant. Its work is one unit per term node plus the work of each
+// constant, which the constant walk itself measures.
+func decodedStructureUsage(info *syn.DecodeInfo) (termStructureUsage, bool) {
+	if info.ScopeError != nil || info.MaxDepth > maxDischargeDepth ||
+		info.Terms > maxDischargeWork {
+		return termStructureUsage{}, false
+	}
+	budget := structureValidationBudget{
+		ctx:       contextBackground,
+		remaining: maxDischargeWork - info.Terms,
+	}
+	for _, constant := range info.Constants {
+		if err := validateConstantStructureWithBudget(constant.Con, &budget); err != nil {
+			return termStructureUsage{}, false
+		}
+	}
+	return termStructureUsage{
+		work:     maxDischargeWork - budget.remaining,
+		maxDepth: int32(info.MaxDepth),
+	}, true
 }
 
 // PrepareDecodedProgram checks the structure of a program decoded for context
@@ -92,6 +138,15 @@ func PrepareDecodedProgram(
 		fullScope: fullScope,
 		usage:     usage,
 	}, nil
+}
+
+// RetainedBytes estimates the memory a program prepared by [PrepareProgram]
+// keeps alive: the decode storage of its nodes and constants, plus an eighth
+// and a fixed overhead for allocator rounding and bookkeeping. It returns 0
+// for a program prepared by [PrepareDecodedProgram], whose storage it cannot
+// see.
+func (p *PreparedProgram) RetainedBytes() int64 {
+	return p.retainedBytes
 }
 
 // Version returns the program's UPLC version.

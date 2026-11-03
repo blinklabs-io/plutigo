@@ -16,6 +16,7 @@ package data
 
 import (
 	"math/big"
+	"unsafe"
 )
 
 const (
@@ -29,6 +30,16 @@ type arenaChunks[S any] struct {
 	chunkIdx    int
 	offset      int
 	activeChunk []S // cached pointer to chunks[chunkIdx]; nil when uninitialized
+}
+
+// capacityBytes is the storage the arena's chunks hold.
+func (a *arenaChunks[S]) capacityBytes() int64 {
+	var zero S
+	n := 0
+	for _, chunk := range a.chunks {
+		n += len(chunk)
+	}
+	return int64(n) * int64(unsafe.Sizeof(zero))
 }
 
 func (a *arenaChunks[S]) used() int {
@@ -141,6 +152,16 @@ type arenaSlices[S any] struct {
 // alloc returns n elements whose capacity equals n, so an append by a caller
 // of a decoded value reallocates instead of writing into the neighbouring
 // live allocation.
+// capacityBytes is the storage the arena's chunks hold.
+func (a *arenaSlices[S]) capacityBytes() int64 {
+	var zero S
+	n := 0
+	for _, chunk := range a.chunks {
+		n += len(chunk)
+	}
+	return int64(n) * int64(unsafe.Sizeof(zero))
+}
+
 func (a *arenaSlices[S]) alloc(n int) []S {
 	if n == 0 {
 		return make([]S, 0)
@@ -232,6 +253,8 @@ type Decoder struct {
 	items       arenaSlices[PlutusData]
 	pairs       arenaSlices[[2]PlutusData]
 	bytes       arenaSlices[byte]
+	// heapBytes counts integer magnitudes allocated outside the arenas.
+	heapBytes int64
 }
 
 // NewDecoder returns a ready-to-use Decoder with empty internal pools.
@@ -251,6 +274,18 @@ func (d *Decoder) Reset() {
 	d.items.reset(dataSliceRetainCap)
 	d.pairs.reset(dataSliceRetainCap)
 	d.bytes.reset(dataSliceRetainCap)
+	d.heapBytes = 0
+}
+
+// RetainedBytes reports the storage the values decoded since the last Reset
+// may keep alive: the Decoder's arenas and the integer magnitudes it
+// allocated outside them. Allocator rounding is not included.
+func (d *Decoder) RetainedBytes() int64 {
+	return d.heapBytes + d.bigInts.capacityBytes() + d.integers.capacityBytes() +
+		d.byteStrings.capacityBytes() + d.values.capacityBytes() +
+		d.constrs.capacityBytes() + d.lists.capacityBytes() +
+		d.maps.capacityBytes() + d.items.capacityBytes() +
+		d.pairs.capacityBytes() + d.bytes.capacityBytes()
 }
 
 // Decode decodes CBOR bytes into PlutusData; the Decoder is not safe for
@@ -283,6 +318,16 @@ func (d *Decoder) allocBigInt() *big.Int {
 		return new(big.Int)
 	}
 	return d.bigInts.alloc()
+}
+
+// countMagnitude adds the heap storage of an integer's magnitude to
+// heapBytes, rounded up to the 16-byte granularity of the allocator's size
+// classes.
+func (d *Decoder) countMagnitude(inner *big.Int) {
+	if d != nil {
+		n := int64(cap(inner.Bits())) * int64(unsafe.Sizeof(big.Word(0)))
+		d.heapBytes += (n + 15) &^ 15
+	}
 }
 
 func (d *Decoder) allocInteger(inner *big.Int) *Integer {

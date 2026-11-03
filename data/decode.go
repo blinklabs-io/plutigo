@@ -453,6 +453,7 @@ func (d *Decoder) closeFrame(
 		}
 		constr := d.allocConstr()
 		constr.Tag = d.allocBigInt().SetUint64(frame.tag)
+		d.countMagnitude(constr.Tag)
 		constr.Fields = d.copyItems(children)
 		constr.useIndef = useIndefPtr(frame.indef)
 		return constr, rest, nil
@@ -492,6 +493,7 @@ func (d *Decoder) decodeSmallInteger(data []byte) (*Integer, []byte, error) {
 		inner.Add(inner, bigIntOne)
 		inner.Neg(inner)
 	}
+	d.countMagnitude(inner)
 	return d.allocInteger(inner), rest, nil
 }
 
@@ -506,6 +508,7 @@ func (d *Decoder) decodeBignum(tag uint64, content []byte) (*Integer, []byte, er
 		inner.Add(inner, bigIntOne)
 		inner.Neg(inner)
 	}
+	d.countMagnitude(inner)
 	return d.allocInteger(inner), rest, nil
 }
 

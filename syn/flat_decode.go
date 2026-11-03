@@ -21,6 +21,7 @@ import (
 	"math/big"
 	"math/bits"
 	"unicode/utf8"
+	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
@@ -230,6 +231,13 @@ func decodeDeBruijnProgram(
 	if err != nil {
 		return nil, err
 	}
+	if context != nil {
+		checks, err := newContextChecks(*context)
+		if err != nil {
+			return nil, err
+		}
+		d.contextChecks = &checks
+	}
 
 	arena.sizeForInput(len(d.buffer))
 	terms, err := decodeTermDeBruijnWithArena(d, arena, consts, 0)
@@ -248,6 +256,9 @@ func decodeDeBruijnProgram(
 
 	if err := d.ensureFullyConsumed(); err != nil {
 		return nil, err
+	}
+	if d.contextError != nil {
+		return nil, d.contextError
 	}
 
 	return program, nil
@@ -306,6 +317,9 @@ func decodeTermDeBruijnWithArena(
 	if depth >= maxFlatDecodeDepth {
 		return nil, errors.New("term nesting too deep")
 	}
+	if depth > d.maxDepth {
+		d.maxDepth = depth
+	}
 	if err := d.node(); err != nil {
 		return nil, err
 	}
@@ -324,6 +338,10 @@ func decodeTermDeBruijnWithArena(
 			// The CEK validator visits siblings in reverse decode order, so
 			// retain the last decode-order error to match its first result.
 			d.scopeError = &DeBruijnScopeError{Index: name, Scope: d.scope}
+		}
+		if d.shareLeaves && uint64(name) < sharedVarCount {
+			d.sharedLeaves++
+			return &sharedVars[name], nil
 		}
 		return arena.allocVar(name), nil
 	case DelayTag:
@@ -359,6 +377,11 @@ func decodeTermDeBruijnWithArena(
 		if err != nil {
 			return nil, err
 		}
+		if d.contextChecks != nil {
+			if err := d.contextChecks.constant(constant); err != nil {
+				d.contextError = err
+			}
+		}
 		return arena.allocConstant(constant), nil
 	case ForceTag:
 		t, err := decodeTermDeBruijnWithArena(d, arena, consts, depth+1)
@@ -367,6 +390,10 @@ func decodeTermDeBruijnWithArena(
 		}
 		return arena.allocForce(t), nil
 	case ErrorTag:
+		if d.shareLeaves {
+			d.sharedLeaves++
+			return &sharedError, nil
+		}
 		return arena.allocError(), nil
 	case BuiltinTag:
 		builtinTag, err := d.bits7()
@@ -376,6 +403,15 @@ func decodeTermDeBruijnWithArena(
 		fn, err := builtin.FromByte(builtinTag)
 		if err != nil {
 			return nil, err
+		}
+		if d.contextChecks != nil {
+			if err := d.contextChecks.builtin(fn); err != nil {
+				d.contextError = err
+			}
+		}
+		if d.shareLeaves && int(fn) < len(sharedBuiltins) {
+			d.sharedLeaves++
+			return &sharedBuiltins[fn], nil
 		}
 		return arena.allocBuiltin(fn), nil
 	case ConstrTag:
@@ -591,13 +627,14 @@ func decodeTermListDeBruijnWithArena(
 				return emptyDeBruijnTermList, nil
 			}
 			clear(result[len(result):cap(result)])
+			d.countGrownList(cap(result), termSlotBytes)
 			return result, nil
 		}
 		if len(result) >= maxWidth {
 			return nil, errTooMany("term list items", maxWidth)
 		}
 		if result == nil {
-			result = arena.allocTermList(4)[:0]
+			result = arena.allocTermList(listArenaSlots)[:0]
 		}
 		item, err := decodeTermDeBruijnWithArena(d, arena, consts, depth)
 		if err != nil {
@@ -618,6 +655,16 @@ type arenaChunks[S any] struct {
 	// firstSize, when larger than decodeTermMinChunkSize, sizes the first
 	// chunk of an empty arena. Later chunks still grow geometrically.
 	firstSize int
+}
+
+// capacityBytes is the storage the arena's chunks hold.
+func (a *arenaChunks[S]) capacityBytes() int64 {
+	var zero S
+	n := 0
+	for _, chunk := range a.chunks {
+		n += len(chunk)
+	}
+	return int64(n) * int64(unsafe.Sizeof(zero))
 }
 
 func (a *arenaChunks[S]) used() int {
@@ -744,6 +791,16 @@ type arenaSlices[S any] struct {
 	previousUsed     int
 	previousChunkIdx int
 	previousOffset   int
+}
+
+// capacityBytes is the storage the arena's chunks hold.
+func (a *arenaSlices[S]) capacityBytes() int64 {
+	var zero S
+	n := 0
+	for _, chunk := range a.chunks {
+		n += len(chunk)
+	}
+	return int64(n) * int64(unsafe.Sizeof(zero))
 }
 
 func (a *arenaSlices[S]) used() int {
@@ -889,6 +946,85 @@ func newTermArena[T Binder]() *termArena[T] {
 	return &termArena[T]{}
 }
 
+const (
+	termSlotBytes     = int64(unsafe.Sizeof(Term[DeBruijn](nil)))
+	constantSlotBytes = int64(unsafe.Sizeof(IConstant(nil)))
+	// listArenaSlots is the number of slots a term or constant list takes
+	// from the arena before it grows on the heap.
+	listArenaSlots = 4
+)
+
+// countGrownList adds a list's heap storage to heapBytes once it has grown
+// past its first arena slots.
+func (d *decoder) countGrownList(capacity int, slotBytes int64) {
+	if capacity > listArenaSlots {
+		d.heapBytes += int64(capacity) * slotBytes
+	}
+}
+
+// sharedVarCount bounds the De Bruijn indices that have a shared node.
+// Scripts bind few variables at a time, so nearly every index is small.
+const sharedVarCount = 1024
+
+// The shared leaf nodes a decode with shareLeaves set returns. No code
+// writes to a decoded node, so one node can stand for every occurrence of a
+// builtin, an error, or a variable index below sharedVarCount, in any number
+// of programs. They must never be modified.
+var (
+	sharedVars = func() *[sharedVarCount]Var[DeBruijn] {
+		var vars [sharedVarCount]Var[DeBruijn]
+		for i := range vars {
+			vars[i].Name = DeBruijn(i)
+		}
+		return &vars
+	}()
+	sharedBuiltins = func() *[builtin.MaxDefaultFunction + 1]Builtin {
+		var builtins [builtin.MaxDefaultFunction + 1]Builtin
+		for i := range builtins {
+			builtins[i].DefaultFunction = builtin.DefaultFunction(i)
+		}
+		return &builtins
+	}()
+	sharedError Error
+)
+
+// capacityBytes is the storage the arena's chunks hold.
+func (a *termArena[T]) capacityBytes() int64 {
+	return a.vars.capacityBytes() + a.delays.capacityBytes() +
+		a.forces.capacityBytes() + a.lambdas.capacityBytes() +
+		a.applies.capacityBytes() + a.constrs.capacityBytes() +
+		a.cases.capacityBytes() + a.errors.capacityBytes() +
+		a.constants.capacityBytes() + a.builtins.capacityBytes() +
+		a.termLists.capacityBytes()
+}
+
+// terms is the number of term nodes allocated from the arena.
+func (a *termArena[T]) terms() int {
+	return a.vars.used() + a.delays.used() + a.forces.used() +
+		a.lambdas.used() + a.applies.used() + a.constrs.used() +
+		a.cases.used() + a.errors.used() + a.constants.used() +
+		a.builtins.used()
+}
+
+// constantTerms returns every constant term allocated from the arena, in
+// allocation order.
+func (a *termArena[T]) constantTerms() []*Constant {
+	n := a.constants.used()
+	if n == 0 {
+		return nil
+	}
+	out := make([]*Constant, 0, n)
+	for _, chunk := range a.constants.chunks {
+		for i := range chunk {
+			if len(out) == n {
+				return out
+			}
+			out = append(out, &chunk[i])
+		}
+	}
+	return out
+}
+
 // sizeForInput sizes the first chunk of the densest node arenas from the
 // FLAT input length. Each divisor is below the smallest nodes-per-byte ratio
 // measured on mainnet and benchmark validators (applications 0.28-0.43,
@@ -1011,6 +1147,20 @@ func (a *termArena[T]) allocBuiltin(fn builtin.DefaultFunction) *Builtin {
 
 func (a *termArena[T]) allocTermList(n int) []Term[T] {
 	return a.termLists.alloc(n)
+}
+
+// capacityBytes is the storage the arena's chunks hold, including the
+// arenas of its PlutusData decoder.
+func (a *constantArena) capacityBytes() int64 {
+	return a.bigInts.capacityBytes() + a.integers.capacityBytes() +
+		a.byteStrings.capacityBytes() + a.strings.capacityBytes() +
+		a.units.capacityBytes() + a.bools.capacityBytes() +
+		a.protoLists.capacityBytes() + a.protoArrays.capacityBytes() +
+		a.protoPairs.capacityBytes() + a.tLists.capacityBytes() +
+		a.tPairs.capacityBytes() + a.values.capacityBytes() +
+		a.datas.capacityBytes() + a.lists.capacityBytes() +
+		a.bytes.capacityBytes() + a.words.capacityBytes() +
+		a.dataDecoder.RetainedBytes()
 }
 
 type constantArena struct {
@@ -1543,6 +1693,7 @@ func decodeConstantListWithArena(
 			if result == nil {
 				return emptyConstantList, nil
 			}
+			d.countGrownList(cap(result), constantSlotBytes)
 			return result, nil
 		}
 		if len(result) >= maxCollectionWidth {
@@ -1552,7 +1703,7 @@ func decodeConstantListWithArena(
 			return nil, err
 		}
 		if result == nil {
-			result = arena.allocList(4)[:0]
+			result = arena.allocList(listArenaSlots)[:0]
 		}
 		item, err := decodeConstantValueWithArena(d, itemType, arena)
 		if err != nil {
@@ -1992,6 +2143,25 @@ type decoder struct {
 	fullScopeCheck  bool
 	scope           int
 	scopeError      *DeBruijnScopeError
+	// contextChecks, when set, applies ValidateProgram's checks to every
+	// constant and builtin as it is decoded; contextError keeps the last
+	// failure in decode order, which is the first ValidateProgram reports
+	// (it visits siblings in reverse decode order, and only leaves fail).
+	contextChecks *contextChecks
+	contextError  error
+	// maxDepth is the deepest term nesting decoded, the root being 0.
+	maxDepth int
+	// shareLeaves makes the decode return the shared immutable sharedVars,
+	// sharedBuiltins and sharedError nodes instead of allocating a builtin,
+	// error, or variable below sharedVarCount per occurrence; sharedLeaves
+	// counts them.
+	shareLeaves  bool
+	sharedLeaves int
+	// heapBytes counts storage a decoded program keeps outside the decode
+	// arenas: term and constant lists grown past their first arena slots.
+	// A string's contents are copied out of the arena's byte chunk, which
+	// is counted instead.
+	heapBytes int64
 	// version is the program version once the header is decoded; constr and
 	// case terms are rejected before 1.1.0.
 	version      lang.LanguageVersion
