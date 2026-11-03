@@ -19,6 +19,7 @@ package replay
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
@@ -175,8 +176,9 @@ var defaultCorpusDecodeLimits = corpusDecodeLimits{
 	decodedBytes:        maxCorpusDecodedBytes,
 }
 
-// LoadFile loads and validates the corpus at path. Loading stops with the
-// context's error once ctx is canceled.
+// LoadFile loads and validates the corpus at path, decompressing it when the
+// path ends in ".gz". Loading stops with the context's error once ctx is
+// canceled.
 func LoadFile(ctx context.Context, path string) (*Corpus, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -184,7 +186,20 @@ func LoadFile(ctx context.Context, path string) (*Corpus, error) {
 	}
 	defer f.Close()
 
-	corpus, err := Load(ctx, f)
+	// A ".gz" corpus is decompressed as it is read; the corpus limits apply
+	// to the decompressed JSON, so they also bound what a compressed file
+	// can expand to.
+	var r io.Reader = f
+	if strings.HasSuffix(path, ".gz") {
+		zr, err := gzip.NewReader(f)
+		if err != nil {
+			return nil, fmt.Errorf("open replay corpus %q: %w", path, err)
+		}
+		defer zr.Close()
+		r = zr
+	}
+
+	corpus, err := Load(ctx, r)
 	if err != nil {
 		return nil, fmt.Errorf("load replay corpus %q: %w", path, err)
 	}
