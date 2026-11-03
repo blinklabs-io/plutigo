@@ -209,8 +209,11 @@ func TestDecodeWithContextMatchesDecodeThenValidate(t *testing.T) {
 				t.Fatalf("program %d, %v PV%d: shared-leaf error %v, legacy error %v", i, ledger, proto, sharedErr, wantErr)
 			}
 			// The term does not depend on the context, so compare it once.
-			if sharedErr == nil && !termChecked[i] {
+			if sharedErr == nil && wantErr == nil && !termChecked[i] {
 				termChecked[i] = true
+				if want == nil || info == nil {
+					t.Fatalf("program %d, %v PV%d: decode returned neither a result nor an error", i, ledger, proto)
+				}
 				if !reflect.DeepEqual(shared, want) {
 					t.Fatalf("program %d, %v PV%d: shared-leaf term differs from legacy term", i, ledger, proto)
 				}
