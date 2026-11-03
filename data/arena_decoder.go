@@ -16,6 +16,7 @@ package data
 
 import (
 	"math/big"
+	"unsafe"
 )
 
 const (
@@ -29,6 +30,16 @@ type arenaChunks[S any] struct {
 	chunkIdx    int
 	offset      int
 	activeChunk []S // cached pointer to chunks[chunkIdx]; nil when uninitialized
+}
+
+// capacityBytes is the storage the arena's chunks hold.
+func (a *arenaChunks[S]) capacityBytes() int64 {
+	var zero S
+	n := 0
+	for _, chunk := range a.chunks {
+		n += len(chunk)
+	}
+	return int64(n) * int64(unsafe.Sizeof(zero))
 }
 
 func (a *arenaChunks[S]) used() int {
@@ -141,6 +152,16 @@ type arenaSlices[S any] struct {
 // alloc returns n elements whose capacity equals n, so an append by a caller
 // of a decoded value reallocates instead of writing into the neighbouring
 // live allocation.
+// capacityBytes is the storage the arena's chunks hold.
+func (a *arenaSlices[S]) capacityBytes() int64 {
+	var zero S
+	n := 0
+	for _, chunk := range a.chunks {
+		n += len(chunk)
+	}
+	return int64(n) * int64(unsafe.Sizeof(zero))
+}
+
 func (a *arenaSlices[S]) alloc(n int) []S {
 	if n == 0 {
 		return make([]S, 0)
@@ -251,6 +272,16 @@ func (d *Decoder) Reset() {
 	d.items.reset(dataSliceRetainCap)
 	d.pairs.reset(dataSliceRetainCap)
 	d.bytes.reset(dataSliceRetainCap)
+}
+
+// ArenaBytes reports the bytes of arena storage the Decoder holds, which
+// every value it decoded since the last Reset may keep alive.
+func (d *Decoder) ArenaBytes() int64 {
+	return d.bigInts.capacityBytes() + d.integers.capacityBytes() +
+		d.byteStrings.capacityBytes() + d.values.capacityBytes() +
+		d.constrs.capacityBytes() + d.lists.capacityBytes() +
+		d.maps.capacityBytes() + d.items.capacityBytes() +
+		d.pairs.capacityBytes() + d.bytes.capacityBytes()
 }
 
 // Decode decodes CBOR bytes into PlutusData; the Decoder is not safe for

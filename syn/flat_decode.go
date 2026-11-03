@@ -21,6 +21,7 @@ import (
 	"math/big"
 	"math/bits"
 	"unicode/utf8"
+	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
@@ -655,6 +656,16 @@ type arenaChunks[S any] struct {
 	firstSize int
 }
 
+// capacityBytes is the storage the arena's chunks hold.
+func (a *arenaChunks[S]) capacityBytes() int64 {
+	var zero S
+	n := 0
+	for _, chunk := range a.chunks {
+		n += len(chunk)
+	}
+	return int64(n) * int64(unsafe.Sizeof(zero))
+}
+
 func (a *arenaChunks[S]) used() int {
 	if len(a.chunks) == 0 {
 		return 0
@@ -779,6 +790,16 @@ type arenaSlices[S any] struct {
 	previousUsed     int
 	previousChunkIdx int
 	previousOffset   int
+}
+
+// capacityBytes is the storage the arena's chunks hold.
+func (a *arenaSlices[S]) capacityBytes() int64 {
+	var zero S
+	n := 0
+	for _, chunk := range a.chunks {
+		n += len(chunk)
+	}
+	return int64(n) * int64(unsafe.Sizeof(zero))
 }
 
 func (a *arenaSlices[S]) used() int {
@@ -950,6 +971,16 @@ var (
 	sharedError Error
 )
 
+// capacityBytes is the storage the arena's chunks hold.
+func (a *termArena[T]) capacityBytes() int64 {
+	return a.vars.capacityBytes() + a.delays.capacityBytes() +
+		a.forces.capacityBytes() + a.lambdas.capacityBytes() +
+		a.applies.capacityBytes() + a.constrs.capacityBytes() +
+		a.cases.capacityBytes() + a.errors.capacityBytes() +
+		a.constants.capacityBytes() + a.builtins.capacityBytes() +
+		a.termLists.capacityBytes()
+}
+
 // terms is the number of term nodes allocated from the arena.
 func (a *termArena[T]) terms() int {
 	return a.vars.used() + a.delays.used() + a.forces.used() +
@@ -1099,6 +1130,20 @@ func (a *termArena[T]) allocBuiltin(fn builtin.DefaultFunction) *Builtin {
 
 func (a *termArena[T]) allocTermList(n int) []Term[T] {
 	return a.termLists.alloc(n)
+}
+
+// capacityBytes is the storage the arena's chunks hold, including the
+// arenas of its PlutusData decoder.
+func (a *constantArena) capacityBytes() int64 {
+	return a.bigInts.capacityBytes() + a.integers.capacityBytes() +
+		a.byteStrings.capacityBytes() + a.strings.capacityBytes() +
+		a.units.capacityBytes() + a.bools.capacityBytes() +
+		a.protoLists.capacityBytes() + a.protoArrays.capacityBytes() +
+		a.protoPairs.capacityBytes() + a.tLists.capacityBytes() +
+		a.tPairs.capacityBytes() + a.values.capacityBytes() +
+		a.datas.capacityBytes() + a.lists.capacityBytes() +
+		a.bytes.capacityBytes() + a.words.capacityBytes() +
+		a.dataDecoder.ArenaBytes()
 }
 
 type constantArena struct {

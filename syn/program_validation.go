@@ -491,6 +491,11 @@ type DecodeInfo struct {
 	// ScopeError, when not nil, is a De Bruijn variable that is not bound
 	// by an enclosing lambda, checked in the scope mode the decode used.
 	ScopeError *DeBruijnScopeError
+	// ArenaBytes is the arena storage holding the program's nodes and
+	// constants, which the program keeps alive. Values the decoder
+	// allocates outside its arenas, such as large integers, are not
+	// included.
+	ArenaBytes int64
 }
 
 // DecodeDeBruijnWithContextInfo decodes and validates a program like
@@ -513,11 +518,13 @@ func DecodeDeBruijnWithContextInfo(
 	d.fullScopeCheck = fullScopeCheck
 	d.shareLeaves = true
 	arena := newTermArena[DeBruijn]()
-	program, err := decodeDeBruijnProgram(d, arena, &constantArena{}, &context)
+	consts := &constantArena{}
+	program, err := decodeDeBruijnProgram(d, arena, consts, &context)
 	if err != nil {
 		return nil, nil, err
 	}
 	return program, &DecodeInfo{
+		ArenaBytes: arena.capacityBytes() + consts.capacityBytes(),
 		Terms:      arena.terms() + d.sharedLeaves,
 		MaxDepth:   d.maxDepth,
 		Constants:  arena.constantTerms(),

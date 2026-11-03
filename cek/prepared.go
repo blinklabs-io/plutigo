@@ -44,6 +44,9 @@ type PreparedProgram struct {
 	validated bool
 	fullScope bool
 	usage     termStructureUsage
+	// retainedBytes estimates the memory the program keeps alive; zero
+	// when unknown.
+	retainedBytes int64
 }
 
 // PrepareProgram decodes a FLAT-encoded De Bruijn program for the given
@@ -61,13 +64,21 @@ func PrepareProgram(flat []byte, context syn.ProgramContext) (*PreparedProgram, 
 	}
 	usage, validated := decodedStructureUsage(info)
 	return &PreparedProgram{
-		term:      program.Term,
-		version:   program.Version,
-		validated: validated,
-		fullScope: fullScope,
-		usage:     usage,
+		term:          program.Term,
+		version:       program.Version,
+		validated:     validated,
+		fullScope:     fullScope,
+		usage:         usage,
+		retainedBytes: info.ArenaBytes + info.ArenaBytes/8 + preparedProgramOverhead,
 	}, nil
 }
+
+// A prepared program retains its arenas plus heap objects outside them: the
+// PreparedProgram and its program, allocator size-class rounding, and
+// decoder storage such as wide integers. Measured on the benchmark scripts,
+// those add 2-12% to the arenas, which the eighth and preparedProgramOverhead
+// cover.
+const preparedProgramOverhead = 1024
 
 // decodedStructureUsage is the outcome of validateTermStructureUsage for a
 // program the decoder produced, computed from what the decoder recorded
@@ -126,6 +137,15 @@ func PrepareDecodedProgram(
 		fullScope: fullScope,
 		usage:     usage,
 	}, nil
+}
+
+// RetainedBytes estimates the memory a program prepared by [PrepareProgram]
+// keeps alive: the arena storage of its nodes and constants, plus an eighth
+// and a fixed overhead for the objects outside the arenas. It returns 0
+// for a program prepared by [PrepareDecodedProgram], whose storage it cannot
+// see.
+func (p *PreparedProgram) RetainedBytes() int64 {
+	return p.retainedBytes
 }
 
 // Version returns the program's UPLC version.
