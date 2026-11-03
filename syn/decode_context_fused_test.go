@@ -18,9 +18,11 @@ import (
 	"compress/gzip"
 	"encoding/hex"
 	"encoding/json"
+	"io/fs"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/lang"
@@ -76,12 +78,24 @@ func fusedDecodeCorpus(t *testing.T, stride int) [][]byte {
 		}
 		corpus = append(corpus, b)
 	}
-	uplcs, err := filepath.Glob("../tests/conformance/*/*/*.uplc")
+	var uplcs []string
+	err = filepath.WalkDir("../tests/conformance", func(p string, e fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !e.IsDir() && filepath.Ext(p) == ".uplc" {
+			uplcs = append(uplcs, p)
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	more, _ := filepath.Glob("../tests/conformance/*/*/*/*.uplc")
-	uplcs = append(uplcs, more...)
+	// The conformance suite nests programs at several depths, so a short
+	// count means the walk missed most of it.
+	if len(uplcs) < 1000 {
+		t.Fatalf("found %d conformance programs", len(uplcs))
+	}
 	for i, p := range uplcs {
 		if !keep(i) {
 			continue
@@ -170,11 +184,12 @@ func TestDecodeWithContextMatchesDecodeThenValidate(t *testing.T) {
 		t.Fatalf("corpus has %d programs", len(corpus))
 	}
 	compared, rejected := 0, 0
+	termChecked := make([]bool, len(corpus))
 	for _, context := range contexts {
 		ledger, proto := context.LedgerLanguage, context.ProtocolMajor
 		for i, b := range corpus {
 			_, gotErr := DecodeDeBruijnWithContext(b, context)
-			_, wantErr := legacyDecodeWithContext(b, context)
+			want, wantErr := legacyDecodeWithContext(b, context)
 			compared++
 			if (gotErr == nil) != (wantErr == nil) {
 				t.Fatalf("program %d, %v PV%d: fused error %v, legacy error %v", i, ledger, proto, gotErr, wantErr)
@@ -185,7 +200,53 @@ func TestDecodeWithContextMatchesDecodeThenValidate(t *testing.T) {
 					t.Fatalf("program %d, %v PV%d: fused error %q, legacy error %q", i, ledger, proto, gotErr, wantErr)
 				}
 			}
+			// The shared-leaf decode reports scope errors in its info
+			// instead of failing, so it must fail exactly where the
+			// context decode does and otherwise return the same term.
+			shared, info, sharedErr := DecodeDeBruijnWithContextInfo(b, context, i%2 == 0)
+			if (sharedErr == nil) != (wantErr == nil) ||
+				(sharedErr != nil && sharedErr.Error() != wantErr.Error()) {
+				t.Fatalf("program %d, %v PV%d: shared-leaf error %v, legacy error %v", i, ledger, proto, sharedErr, wantErr)
+			}
+			// The term does not depend on the context, so compare it once.
+			if sharedErr == nil && !termChecked[i] {
+				termChecked[i] = true
+				if !reflect.DeepEqual(shared, want) {
+					t.Fatalf("program %d, %v PV%d: shared-leaf term differs from legacy term", i, ledger, proto)
+				}
+				if info.Terms != countTerms(want.Term) {
+					t.Fatalf("program %d, %v PV%d: info reports %d terms, term has %d", i, ledger, proto, info.Terms, countTerms(want.Term))
+				}
+			}
 		}
 	}
 	t.Logf("%d decodes compared, %d rejected", compared, rejected)
+}
+
+// countTerms counts the term nodes of term, every occurrence of a node once.
+func countTerms(term Term[DeBruijn]) int {
+	n := 0
+	terms := []Term[DeBruijn]{term}
+	for len(terms) > 0 {
+		last := len(terms) - 1
+		t := terms[last]
+		terms = terms[:last]
+		n++
+		switch t := t.(type) {
+		case *Lambda[DeBruijn]:
+			terms = append(terms, t.Body)
+		case *Delay[DeBruijn]:
+			terms = append(terms, t.Term)
+		case *Force[DeBruijn]:
+			terms = append(terms, t.Term)
+		case *Apply[DeBruijn]:
+			terms = append(terms, t.Function, t.Argument)
+		case *Constr[DeBruijn]:
+			terms = append(terms, t.Fields...)
+		case *Case[DeBruijn]:
+			terms = append(terms, t.Constr)
+			terms = append(terms, t.Branches...)
+		}
+	}
+	return n
 }
