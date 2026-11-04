@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -139,5 +140,19 @@ func TestLoadFileDecompressesGzip(t *testing.T) {
 	}
 	if _, err := LoadFile(context.Background(), bad); err == nil {
 		t.Fatal("LoadFile accepted a .gz path holding plain JSON")
+	}
+}
+
+// TestLoadFileCanceledBeforeGzipHeader checks that cancellation stops a
+// malformed ".gz" corpus while its header is read.
+func TestLoadFileCanceledBeforeGzipHeader(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bad.json.gz")
+	if err := os.WriteFile(path, []byte("not gzip"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := LoadFile(ctx, path); !errors.Is(err, context.Canceled) {
+		t.Fatalf("LoadFile() error = %v, want context.Canceled", err)
 	}
 }

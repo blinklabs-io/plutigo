@@ -191,7 +191,7 @@ func LoadFile(ctx context.Context, path string) (*Corpus, error) {
 	// can expand to.
 	var r io.Reader = f
 	if strings.HasSuffix(path, ".gz") {
-		zr, err := gzip.NewReader(f)
+		zr, err := gzip.NewReader(contextReader{ctx: ctx, r: f})
 		if err != nil {
 			return nil, fmt.Errorf("open replay corpus %q: %w", path, err)
 		}
