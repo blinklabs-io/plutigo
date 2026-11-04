@@ -69,13 +69,21 @@ func TestSetExBudgetToPreviousRemaining(t *testing.T) {
 	m.SetExBudget(remaining)
 	run(m)
 	if want := remaining.Sub(&used); m.ExBudget != want {
-		t.Errorf("after SetExBudget(remaining): budget %+v, want %+v", m.ExBudget, want)
+		t.Errorf(
+			"after SetExBudget(remaining): budget %+v, want %+v",
+			m.ExBudget,
+			want,
+		)
 	}
 
 	// Leaving ExBudget as the run left it restores the initial budget.
 	run(m)
 	if want := remaining.Sub(&used); m.ExBudget != want {
-		t.Errorf("after an unchanged budget: budget %+v, want %+v", m.ExBudget, want)
+		t.Errorf(
+			"after an unchanged budget: budget %+v, want %+v",
+			m.ExBudget,
+			want,
+		)
 	}
 }
 
@@ -110,7 +118,10 @@ func TestPooledMachineKeepsArenasAcrossScripts(t *testing.T) {
 	// Reallocating the arenas costs megabytes per pair; reusing them,
 	// kilobytes.
 	if perPair := (after.TotalAlloc - before.TotalAlloc) / pairs; perPair > 256<<10 {
-		t.Errorf("alternating runs allocate %d bytes per pair, want at most 256KiB", perPair)
+		t.Errorf(
+			"alternating runs allocate %d bytes per pair, want at most 256KiB",
+			perPair,
+		)
 	}
 }
 
@@ -133,12 +144,21 @@ func TestValueArenaShrinksAfterSmallerRuns(t *testing.T) {
 	run(small)
 	for i := 1; i < valueArenaShrinkRuns; i++ {
 		if m.valueArenaChunkSize != grown {
-			t.Fatalf("after %d smaller runs the chunk size is %d, want %d", i, m.valueArenaChunkSize, grown)
+			t.Fatalf(
+				"after %d smaller runs the chunk size is %d, want %d",
+				i,
+				m.valueArenaChunkSize,
+				grown,
+			)
 		}
 		run(small)
 	}
 	if m.valueArenaChunkSize >= grown {
-		t.Errorf("after %d smaller runs the chunk size is still %d", valueArenaShrinkRuns, m.valueArenaChunkSize)
+		t.Errorf(
+			"after %d smaller runs the chunk size is still %d",
+			valueArenaShrinkRuns,
+			m.valueArenaChunkSize,
+		)
 	}
 }
 
@@ -165,13 +185,20 @@ func TestValueArenaShrinkCountRestartsAfterLargerRun(t *testing.T) {
 	for i := 1; i < valueArenaShrinkRuns; i++ {
 		run(small)
 		if m.valueArenaChunkSize != grown {
-			t.Fatalf("after %d smaller runs following a larger run the chunk size is %d, want %d",
-				i, m.valueArenaChunkSize, grown)
+			t.Fatalf(
+				"after %d smaller runs following a larger run the chunk size is %d, want %d",
+				i,
+				m.valueArenaChunkSize,
+				grown,
+			)
 		}
 	}
 	run(small)
 	if m.valueArenaChunkSize >= grown {
-		t.Errorf("after %d smaller runs following a larger run the chunk size is still %d",
-			valueArenaShrinkRuns, m.valueArenaChunkSize)
+		t.Errorf(
+			"after %d smaller runs following a larger run the chunk size is still %d",
+			valueArenaShrinkRuns,
+			m.valueArenaChunkSize,
+		)
 	}
 }

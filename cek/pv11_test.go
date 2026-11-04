@@ -47,7 +47,11 @@ func TestNewDefaultEvalContext(t *testing.T) {
 		t.Fatalf("ProtoMajor = %d, want 11", ctx.ProtoMajor)
 	}
 	if ctx.SemanticsVariant != SemanticsVariantD {
-		t.Fatalf("SemanticsVariant = %v, want %v", ctx.SemanticsVariant, SemanticsVariantD)
+		t.Fatalf(
+			"SemanticsVariant = %v, want %v",
+			ctx.SemanticsVariant,
+			SemanticsVariantD,
+		)
 	}
 }
 
@@ -71,7 +75,13 @@ func TestGetSemanticsVanRossemMapping(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := GetSemantics(tt.version, ProtoVersion{Major: tt.proto})
 			if got != tt.want {
-				t.Fatalf("GetSemantics(%v, PV%d) = %v, want %v", tt.version, tt.proto, got, tt.want)
+				t.Fatalf(
+					"GetSemantics(%v, PV%d) = %v, want %v",
+					tt.version,
+					tt.proto,
+					got,
+					tt.want,
+				)
 			}
 		})
 	}
@@ -193,10 +203,18 @@ func TestUnavailableBuiltinReturnsBuiltinError(t *testing.T) {
 		t.Fatalf("expected BuiltinError, got %T: %v", err, err)
 	}
 	if builtinErr.Code != ErrCodeBuiltinFailure {
-		t.Fatalf("BuiltinError.Code = %v, want %v", builtinErr.Code, ErrCodeBuiltinFailure)
+		t.Fatalf(
+			"BuiltinError.Code = %v, want %v",
+			builtinErr.Code,
+			ErrCodeBuiltinFailure,
+		)
 	}
 	if builtinErr.Builtin != builtin.Bls12_381_G1_Add.String() {
-		t.Fatalf("BuiltinError.Builtin = %q, want %q", builtinErr.Builtin, builtin.Bls12_381_G1_Add.String())
+		t.Fatalf(
+			"BuiltinError.Builtin = %q, want %q",
+			builtinErr.Builtin,
+			builtin.Bls12_381_G1_Add.String(),
+		)
 	}
 	want := "builtin " + builtin.Bls12_381_G1_Add.String() + " is not available in Plutus V1 at protocol version 0 (introduced in V3)"
 	if builtinErr.Error() != want {

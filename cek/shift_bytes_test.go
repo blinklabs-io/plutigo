@@ -59,7 +59,14 @@ func TestShiftBytesMatchesOracleExhaustiveSmall(t *testing.T) {
 				got := shiftBytes(in, s)
 				want := shiftBytesOracle(in, s)
 				if !bytes.Equal(got, want) {
-					t.Fatalf("n=%d in=%x shift=%d got=%x want=%x", n, in, s, got, want)
+					t.Fatalf(
+						"n=%d in=%x shift=%d got=%x want=%x",
+						n,
+						in,
+						s,
+						got,
+						want,
+					)
 				}
 			}
 		}

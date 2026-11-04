@@ -183,7 +183,8 @@ func decodeAll(d *Decoder, data []byte, allowValue bool) (PlutusData, error) {
 }
 
 func isConstrTag(tag uint64) bool {
-	return tag == 102 || (tag >= 121 && tag <= 127) || (tag >= 1280 && tag <= 1400)
+	return tag == 102 || (tag >= 121 && tag <= 127) ||
+		(tag >= 1280 && tag <= 1400)
 }
 
 // Container kinds of a decodeFrame.
@@ -244,9 +245,13 @@ func decodeItem(
 				// where its next item would start.
 				if len(rest) == 0 {
 					if top.kind == frameMap || top.kind == frameValue {
-						return nil, nil, errors.New("unterminated indefinite-length CBOR map")
+						return nil, nil, errors.New(
+							"unterminated indefinite-length CBOR map",
+						)
 					}
-					return nil, nil, errors.New("unterminated indefinite-length CBOR array")
+					return nil, nil, errors.New(
+						"unterminated indefinite-length CBOR array",
+					)
 				}
 				if rest[0] == 0xff {
 					if (top.kind == frameMap || top.kind == frameValue) &&
@@ -355,7 +360,12 @@ func (d *Decoder) decodeHead(
 
 // openSequence opens a list-like container of count items (indef: ended by a
 // break) whose items start at rest.
-func openSequence(kind uint8, count int, indef bool, rest []byte) (decodeFrame, error) {
+func openSequence(
+	kind uint8,
+	count int,
+	indef bool,
+	rest []byte,
+) (decodeFrame, error) {
 	if indef {
 		return decodeFrame{kind: kind, indef: true, remaining: -1}, nil
 	}
@@ -447,7 +457,9 @@ func (d *Decoder) closeFrame(
 	case frameConstr:
 		if frame.outerIndef {
 			if len(rest) == 0 || rest[0] != 0xff {
-				return nil, nil, errors.New("unterminated indefinite-length CBOR array")
+				return nil, nil, errors.New(
+					"unterminated indefinite-length CBOR array",
+				)
 			}
 			rest = rest[1:]
 		}
@@ -498,7 +510,10 @@ func (d *Decoder) decodeSmallInteger(data []byte) (*Integer, []byte, error) {
 }
 
 // decodeBignum decodes the byte string content of a bignum tag (2 or 3).
-func (d *Decoder) decodeBignum(tag uint64, content []byte) (*Integer, []byte, error) {
+func (d *Decoder) decodeBignum(
+	tag uint64,
+	content []byte,
+) (*Integer, []byte, error) {
 	magnitude, rest, err := d.decodeByteStringContent(content)
 	if err != nil {
 		return nil, nil, err
@@ -516,7 +531,10 @@ func (d *Decoder) decodeBignum(tag uint64, content []byte) (*Integer, []byte, er
 // definite-length or chunked, with every chunk at most
 // MaxByteStringLeafSize bytes as the reference decoder requires.
 func (d *Decoder) decodeByteStringContent(data []byte) ([]byte, []byte, error) {
-	value, rest, indefinite, err := decodeCBORHeadValue(data, CborTypeByteString)
+	value, rest, indefinite, err := decodeCBORHeadValue(
+		data,
+		CborTypeByteString,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -536,17 +554,24 @@ func (d *Decoder) decodeByteStringContent(data []byte) ([]byte, []byte, error) {
 	scan := rest
 	for {
 		if len(scan) == 0 {
-			return nil, nil, errors.New("unterminated indefinite-length CBOR string")
+			return nil, nil, errors.New(
+				"unterminated indefinite-length CBOR string",
+			)
 		}
 		if scan[0] == 0xff {
 			break
 		}
-		chunkType, chunkValue, chunkRest, chunkIndef, err := decodeCBORHead(scan)
+		chunkType, chunkValue, chunkRest, chunkIndef, err := decodeCBORHead(
+			scan,
+		)
 		if err != nil {
 			return nil, nil, err
 		}
 		if chunkIndef || chunkType != CborTypeByteString {
-			return nil, nil, fmt.Errorf("invalid CBOR chunk type 0x%02x", chunkType)
+			return nil, nil, fmt.Errorf(
+				"invalid CBOR chunk type 0x%02x",
+				chunkType,
+			)
 		}
 		if err := checkByteStringLeafSize(chunkValue); err != nil {
 			return nil, nil, err

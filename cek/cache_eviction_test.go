@@ -70,7 +70,11 @@ func TestEd25519VerifyCacheResetOnFull(t *testing.T) {
 	full := len(target.values)
 	target.Unlock()
 	if full != ed25519VerifyShardLimit {
-		t.Fatalf("expected shard at capacity %d, got %d", ed25519VerifyShardLimit, full)
+		t.Fatalf(
+			"expected shard at capacity %d, got %d",
+			ed25519VerifyShardLimit,
+			full,
+		)
 	}
 
 	// Storing a brand-new key for the now-full shard must still be admitted:
@@ -78,7 +82,9 @@ func TestEd25519VerifyCacheResetOnFull(t *testing.T) {
 	newKey := keys[ed25519VerifyShardLimit]
 	ed25519VerifyCache.store(&newKey, true)
 	if _, cached := ed25519VerifyCache.get(&newKey); !cached {
-		t.Fatal("new entry was not admitted after shard was full — reset-on-full fix is missing")
+		t.Fatal(
+			"new entry was not admitted after shard was full — reset-on-full fix is missing",
+		)
 	}
 }
 
@@ -101,7 +107,11 @@ func TestEd25519VerifyCacheConcurrentAccess(t *testing.T) {
 				// Can't call t.Fatal from goroutine; just return.
 				return
 			}
-			m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+			m := NewMachine[syn.DeBruijn](
+				lang.LanguageVersionV3,
+				0,
+				testEvalContext(),
+			)
 			for i := 0; i < 300; i++ {
 				msg := make([]byte, 8)
 				msg[0] = byte(g)
@@ -153,13 +163,17 @@ func TestSharedDynamicIntCacheResetOnFull(t *testing.T) {
 	c := newDynamicIntConstant(newVal)
 	stored := storeSharedDynamicIntConstant(newVal, c)
 	if stored == nil {
-		t.Fatal("new entry was not admitted to sharedDynamicInts after cache was full — reset-on-full fix is missing")
+		t.Fatal(
+			"new entry was not admitted to sharedDynamicInts after cache was full — reset-on-full fix is missing",
+		)
 	}
 
 	// Verify it is now retrievable from the shared cache.
 	got := loadSharedDynamicIntConstant(newVal)
 	if got == nil {
-		t.Fatal("new entry not found in sharedDynamicInts after reset-on-full insert")
+		t.Fatal(
+			"new entry not found in sharedDynamicInts after reset-on-full insert",
+		)
 	}
 }
 
@@ -181,7 +195,11 @@ func TestSharedDynamicIntCacheConcurrentAccess(t *testing.T) {
 		g := g
 		go func() {
 			defer wg.Done()
-			m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+			m := NewMachine[syn.DeBruijn](
+				lang.LanguageVersionV3,
+				0,
+				testEvalContext(),
+			)
 			for i := 0; i < 500; i++ {
 				v := base + int64(g*500+i)
 				_ = m.int64Constant(v)

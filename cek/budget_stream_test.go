@@ -58,23 +58,61 @@ func TestCostStreamCombinators(t *testing.T) {
 		want   []int64
 	}{
 		{"add singles", newAddChunks(chunksOf(1)(), chunksOf(2)()), []int64{3}},
-		{"add long left", newAddChunks(chunksOf(1, 2, 3)(), chunksOf(10)()), []int64{1, 10, 2, 3}},
-		{"add single left", newAddChunks(chunksOf(1)(), chunksOf(10, 20)()), []int64{1, 10, 20}},
-		{"add interleave", newAddChunks(chunksOf(1, 2)(), chunksOf(10, 20, 30)()), []int64{1, 10, 2, 20, 30}},
+		{
+			"add long left",
+			newAddChunks(chunksOf(1, 2, 3)(), chunksOf(10)()),
+			[]int64{1, 10, 2, 3},
+		},
+		{
+			"add single left",
+			newAddChunks(chunksOf(1)(), chunksOf(10, 20)()),
+			[]int64{1, 10, 20},
+		},
+		{
+			"add interleave",
+			newAddChunks(chunksOf(1, 2)(), chunksOf(10, 20, 30)()),
+			[]int64{1, 10, 2, 20, 30},
+		},
 		{"min singles", newMinChunks(chunksOf(5)(), chunksOf(3)()), []int64{3}},
-		{"min carries difference", newMinChunks(chunksOf(4, 4)(), chunksOf(3, 10)()), []int64{3, 1, 4}},
-		{"min ends with shorter", newMinChunks(chunksOf(4)(), chunksOf(4, 1)()), []int64{4}},
-		{"min right shorter", newMinChunks(chunksOf(1, 1, 1)(), chunksOf(2)()), []int64{1, 1}},
+		{
+			"min carries difference",
+			newMinChunks(chunksOf(4, 4)(), chunksOf(3, 10)()),
+			[]int64{3, 1, 4},
+		},
+		{
+			"min ends with shorter",
+			newMinChunks(chunksOf(4)(), chunksOf(4, 1)()),
+			[]int64{4},
+		},
+		{
+			"min right shorter",
+			newMinChunks(chunksOf(1, 1, 1)(), chunksOf(2)()),
+			[]int64{1, 1},
+		},
 		{"linear single", scaleLinearly(10, 2, chunksOf(3)()), []int64{16}},
-		{"linear stream", scaleLinearly(10, 2, chunksOf(3, 4)()), []int64{10, 6, 8}},
+		{
+			"linear stream",
+			scaleLinearly(10, 2, chunksOf(3, 4)()),
+			[]int64{10, 6, 8},
+		},
 		{
 			"quadratic single",
-			&quadraticChunks{src: &peekChunks{src: chunksOf(5)()}, c0: 1, c1: 2, c2: 3},
+			&quadraticChunks{
+				src: &peekChunks{src: chunksOf(5)()},
+				c0:  1,
+				c1:  2,
+				c2:  3,
+			},
 			[]int64{86},
 		},
 		{
 			"quadratic stream",
-			&quadraticChunks{src: &peekChunks{src: chunksOf(1, 2)()}, c0: 1, c1: 2, c2: 3},
+			&quadraticChunks{
+				src: &peekChunks{src: chunksOf(1, 2)()},
+				c0:  1,
+				c1:  2,
+				c2:  3,
+			},
 			[]int64{1, 5, 28},
 		},
 		{"list empty", &listSizeChunks{left: 0}, []int64{0}},
@@ -94,7 +132,10 @@ func TestCostStreamCombinators(t *testing.T) {
 		},
 		{
 			"data node count",
-			newDataSizeChunks(data.NewList(data.NewInteger(big.NewInt(7)), data.NewList()), true),
+			newDataSizeChunks(
+				data.NewList(data.NewInteger(big.NewInt(7)), data.NewList()),
+				true,
+			),
 			[]int64{1, 1, 1},
 		},
 	}
@@ -145,9 +186,17 @@ func TestSpendChunksStopsAtOverdraw(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := newTestMachine()
-			err := m.spendChunks(tt.before, chunksOf(tt.cpu...)(), chunksOf(tt.mem...)())
+			err := m.spendChunks(
+				tt.before,
+				chunksOf(tt.cpu...)(),
+				chunksOf(tt.mem...)(),
+			)
 			if m.ExBudget != tt.wantRemaining {
-				t.Fatalf("remaining = %+v, want %+v", m.ExBudget, tt.wantRemaining)
+				t.Fatalf(
+					"remaining = %+v, want %+v",
+					m.ExBudget,
+					tt.wantRemaining,
+				)
 			}
 			if !tt.wantErr {
 				if err != nil {
@@ -160,10 +209,18 @@ func TestSpendChunksStopsAtOverdraw(t *testing.T) {
 				t.Fatalf("error = %v, want BudgetError", err)
 			}
 			if budgetErr.Requested != tt.wantRequested {
-				t.Fatalf("requested = %+v, want %+v", budgetErr.Requested, tt.wantRequested)
+				t.Fatalf(
+					"requested = %+v, want %+v",
+					budgetErr.Requested,
+					tt.wantRequested,
+				)
 			}
 			if got := budgetErr.Available.Sub(&budgetErr.Requested); got != m.ExBudget {
-				t.Fatalf("available - requested = %+v, want remaining %+v", got, m.ExBudget)
+				t.Fatalf(
+					"available - requested = %+v, want remaining %+v",
+					got,
+					m.ExBudget,
+				)
 			}
 		})
 	}

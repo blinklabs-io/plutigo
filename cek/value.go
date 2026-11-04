@@ -93,7 +93,8 @@ func storeSharedDynamicIntConstant(v int64, constant *Constant) *Constant {
 	if cached := sharedDynamicInts[v]; cached != nil {
 		return cached
 	}
-	if sharedDynamicInts == nil || len(sharedDynamicInts) >= int64ConstantCacheCap {
+	if sharedDynamicInts == nil ||
+		len(sharedDynamicInts) >= int64ConstantCacheCap {
 		sharedDynamicInts = make(map[int64]*Constant, 64)
 	}
 	sharedDynamicInts[v] = constant
@@ -126,7 +127,10 @@ func (m *Machine[T]) int64Constant(v int64) *Constant {
 	return constant
 }
 
-func machineConstantValue[T syn.Eval](m *Machine[T], constant syn.IConstant) Value[T] {
+func machineConstantValue[T syn.Eval](
+	m *Machine[T],
+	constant syn.IConstant,
+) Value[T] {
 	switch c := constant.(type) {
 	case *syn.Bool:
 		return boolConstant(c.Inner)
@@ -229,7 +233,13 @@ func (dataMapValue[T]) isValue() {}
 func (d dataMapValue[T]) toExMem() ExMem {
 	acc := ExMem(NilCost)
 	for _, item := range d.items {
-		acc += ExMem(PairCost) + dataExMem(item[0])() + dataExMem(item[1])() + ConsCost
+		acc += ExMem(
+			PairCost,
+		) + dataExMem(
+			item[0],
+		)() + dataExMem(
+			item[1],
+		)() + ConsCost
 	}
 	return acc
 }
@@ -306,7 +316,13 @@ func materializeConstantValueDepth[T syn.Eval](
 	// Builtins also materialize values while evaluating, so this path must be
 	// bounded just like final result discharge.
 	budget := dischargeWorkBudget{remaining: maxDischargeWork}
-	return materializeConstantValueShared[T](value, depth, maxDepth, &budget, nil)
+	return materializeConstantValueShared[T](
+		value,
+		depth,
+		maxDepth,
+		&budget,
+		nil,
+	)
 }
 
 // materializeConstantValueShared materializes a constant under a work budget,
@@ -652,7 +668,10 @@ func cloneBytesContext(
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		copy(target[offset:min(offset+cloneBytesChunkSize, len(source))], source[offset:])
+		copy(
+			target[offset:min(offset+cloneBytesChunkSize, len(source))],
+			source[offset:],
+		)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err

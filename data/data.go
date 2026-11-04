@@ -223,10 +223,14 @@ func appendCBORHead(buf *bytes.Buffer, majorType uint8, n uint64) {
 		buf.WriteByte(uint8(n)) //nolint:gosec // n <= MaxUint8
 	case n <= math.MaxUint16:
 		buf.WriteByte(majorType | 25)
-		buf.Write(binary.BigEndian.AppendUint16(nil, uint16(n))) //nolint:gosec // n <= MaxUint16
+		buf.Write(
+			binary.BigEndian.AppendUint16(nil, uint16(n)),
+		) //nolint:gosec // n <= MaxUint16
 	case n <= math.MaxUint32:
 		buf.WriteByte(majorType | 26)
-		buf.Write(binary.BigEndian.AppendUint32(nil, uint32(n))) //nolint:gosec // n <= MaxUint32
+		buf.Write(
+			binary.BigEndian.AppendUint32(nil, uint32(n)),
+		) //nolint:gosec // n <= MaxUint32
 	default:
 		buf.WriteByte(majorType | 27)
 		buf.Write(binary.BigEndian.AppendUint64(nil, n))
@@ -387,7 +391,9 @@ const MaxValueKeyLength = 32
 var ErrValueQuantityRange = errors.New("quantity out of signed 128-bit range")
 
 var (
-	valueQuantityMax = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 127), big.NewInt(1))
+	valueQuantityMax = new(
+		big.Int,
+	).Sub(new(big.Int).Lsh(big.NewInt(1), 127), big.NewInt(1))
 	valueQuantityMin = new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), 127))
 )
 
@@ -403,7 +409,10 @@ func (v Value) Validate() error {
 	for i, policy := range v.Inner.Pairs {
 		policyKey, ok := policy[0].(*ByteString)
 		if !ok || policyKey == nil {
-			return fmt.Errorf("Value policy key must be a bytestring, got %T", policy[0])
+			return fmt.Errorf(
+				"Value policy key must be a bytestring, got %T",
+				policy[0],
+			)
 		}
 		if err := CheckValueKey("policy", i, policyKey.Inner, prevPolicy); err != nil {
 			return err
@@ -411,7 +420,10 @@ func (v Value) Validate() error {
 		prevPolicy = policyKey.Inner
 		tokens, ok := policy[1].(*Map)
 		if !ok || tokens == nil {
-			return fmt.Errorf("Value policy value must be a map, got %T", policy[1])
+			return fmt.Errorf(
+				"Value policy value must be a map, got %T",
+				policy[1],
+			)
 		}
 		if err := CheckValueTokenCount(i, len(tokens.Pairs)); err != nil {
 			return err
@@ -420,7 +432,10 @@ func (v Value) Validate() error {
 		for j, token := range tokens.Pairs {
 			tokenKey, ok := token[0].(*ByteString)
 			if !ok || tokenKey == nil {
-				return fmt.Errorf("Value token key must be a bytestring, got %T", token[0])
+				return fmt.Errorf(
+					"Value token key must be a bytestring, got %T",
+					token[0],
+				)
 			}
 			if err := CheckValueKey("token", j, tokenKey.Inner, prevToken); err != nil {
 				return err
@@ -428,7 +443,10 @@ func (v Value) Validate() error {
 			prevToken = tokenKey.Inner
 			quantity, ok := token[1].(*Integer)
 			if !ok || quantity == nil || quantity.Inner == nil {
-				return fmt.Errorf("Value token quantity must be an integer, got %T", token[1])
+				return fmt.Errorf(
+					"Value token quantity must be an integer, got %T",
+					token[1],
+				)
 			}
 			if err := CheckValueQuantity(i, j, quantity.Inner); err != nil {
 				return err
@@ -443,10 +461,19 @@ func (v Value) Validate() error {
 // index because an empty key is a valid predecessor.
 func CheckValueKey(kind string, i int, key, prev []byte) error {
 	if len(key) > MaxValueKeyLength {
-		return fmt.Errorf("Value %s %d key exceeds %d bytes", kind, i, MaxValueKeyLength)
+		return fmt.Errorf(
+			"Value %s %d key exceeds %d bytes",
+			kind,
+			i,
+			MaxValueKeyLength,
+		)
 	}
 	if i > 0 && bytes.Compare(prev, key) >= 0 {
-		return fmt.Errorf("Value %s keys must be strictly ascending (index %d)", kind, i)
+		return fmt.Errorf(
+			"Value %s keys must be strictly ascending (index %d)",
+			kind,
+			i,
+		)
 	}
 	return nil
 }
@@ -466,9 +493,18 @@ func CheckValueQuantity(policy, token int, quantity *big.Int) error {
 	case quantity == nil:
 		return errors.New("Value token quantity must be an integer")
 	case quantity.Sign() == 0:
-		return fmt.Errorf("Value policy %d token %d has a zero quantity", policy, token)
+		return fmt.Errorf(
+			"Value policy %d token %d has a zero quantity",
+			policy,
+			token,
+		)
 	case quantity.Cmp(valueQuantityMin) < 0, quantity.Cmp(valueQuantityMax) > 0:
-		return fmt.Errorf("Value policy %d token %d: %w", policy, token, ErrValueQuantityRange)
+		return fmt.Errorf(
+			"Value policy %d token %d: %w",
+			policy,
+			token,
+			ErrValueQuantityRange,
+		)
 	}
 	return nil
 }
@@ -500,11 +536,17 @@ func (i *Integer) UnmarshalCBOR(data []byte) error {
 	case len(data) == 0:
 		return errors.New("empty data")
 	case isBignumHead(data[0]):
-		decoded, rest, err = (*Decoder)(nil).decodeBignum(uint64(data[0]-CborTypeTag), data[1:])
-	case data[0]&CborTypeMask == CborTypeUnsignedInt, data[0]&CborTypeMask == CborTypeNegativeInt:
+		decoded, rest, err = (*Decoder)(
+			nil,
+		).decodeBignum(uint64(data[0]-CborTypeTag), data[1:])
+	case data[0]&CborTypeMask == CborTypeUnsignedInt,
+		data[0]&CborTypeMask == CborTypeNegativeInt:
 		decoded, rest, err = (*Decoder)(nil).decodeSmallInteger(data)
 	default:
-		return fmt.Errorf("unsupported CBOR head 0x%02x for PlutusData Integer", data[0])
+		return fmt.Errorf(
+			"unsupported CBOR head 0x%02x for PlutusData Integer",
+			data[0],
+		)
 	}
 	if err != nil {
 		return err

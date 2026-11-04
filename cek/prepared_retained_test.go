@@ -103,7 +103,10 @@ func TestPreparedRetainedBytesTracksHeap(t *testing.T) {
 		programs[filepath.Base(p)] = b
 	}
 	// Protocol 10 admits the wide constructor, which PV11 limits.
-	pc := syn.ProgramContext{LedgerLanguage: lang.LanguageVersionV3, ProtocolMajor: 10}
+	pc := syn.ProgramContext{
+		LedgerLanguage: lang.LanguageVersionV3,
+		ProtocolMajor:  10,
+	}
 	const copies = 20
 	for name, b := range programs {
 		var before, after runtime.MemStats
@@ -129,8 +132,13 @@ func TestPreparedRetainedBytesTracksHeap(t *testing.T) {
 		// Small programs carry the fixed overhead, so the upper bound
 		// allows a few kilobytes of slack.
 		if ratio < 1 || (ratio > 1.5 && float64(estimate)-actual > 4096) {
-			t.Errorf("%s: RetainedBytes %d is %.2f times the %.0f bytes retained",
-				name, estimate, ratio, actual)
+			t.Errorf(
+				"%s: RetainedBytes %d is %.2f times the %.0f bytes retained",
+				name,
+				estimate,
+				ratio,
+				actual,
+			)
 		}
 	}
 }

@@ -438,7 +438,10 @@ func isUnitOrPairType(t Typ) bool {
 // program header is read; terms are then checked exhaustively before the
 // program is returned. The program's own UPLC term version is not checked
 // here; see [ValidateTermVersionForExecution].
-func DecodeWithContext[T Binder](bytes []byte, context ProgramContext) (*Program[T], error) {
+func DecodeWithContext[T Binder](
+	bytes []byte,
+	context ProgramContext,
+) (*Program[T], error) {
 	program, err := decodeWithContext[T](bytes, context)
 	if err != nil {
 		return nil, err
@@ -456,7 +459,10 @@ func DecodeWithContext[T Binder](bytes []byte, context ProgramContext) (*Program
 
 // ParseWithContext parses and validates a textual UPLC program against the
 // selected ledger language and protocol version.
-func ParseWithContext(input string, context ProgramContext) (*Program[Name], error) {
+func ParseWithContext(
+	input string,
+	context ProgramContext,
+) (*Program[Name], error) {
 	p := NewParser(input)
 	p.maxConstrFields = constrFieldLimit(context.ProtocolMajor)
 	p.strictValues = true
@@ -562,7 +568,9 @@ func DecodeDeBruijnForExecution(
 	return program, nil
 }
 
-func plutusVersionForLedgerLanguage(version lang.LanguageVersion) (builtin.PlutusVersion, error) {
+func plutusVersionForLedgerLanguage(
+	version lang.LanguageVersion,
+) (builtin.PlutusVersion, error) {
 	switch version {
 	case lang.LanguageVersionV1:
 		return builtin.PlutusV1, nil
@@ -573,7 +581,10 @@ func plutusVersionForLedgerLanguage(version lang.LanguageVersion) (builtin.Plutu
 	case lang.LanguageVersionV4:
 		return builtin.PlutusV4, nil
 	default:
-		return 0, fmt.Errorf("unsupported Plutus ledger language version %s", formatVersion(version))
+		return 0, fmt.Errorf(
+			"unsupported Plutus ledger language version %s",
+			formatVersion(version),
+		)
 	}
 }
 
@@ -630,7 +641,10 @@ func validateLedgerLanguageAvailability(context ProgramContext) error {
 // UPLC 1.1.0
 // sums-of-products are only legal for Plutus V1/V2 at protocol major version
 // 11 and above.
-func ValidateTermVersionForExecution(version lang.LanguageVersion, context ProgramContext) error {
+func ValidateTermVersionForExecution(
+	version lang.LanguageVersion,
+	context ProgramContext,
+) error {
 	if version != uplcVersion100 && version != uplcVersion110 {
 		return fmt.Errorf(
 			"unsupported UPLC program version %s; supported versions are 1.0.0 and 1.1.0",

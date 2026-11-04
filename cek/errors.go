@@ -202,7 +202,8 @@ func normalizeEvalError(err error) error {
 	if errors.As(err, &evalErr) {
 		return err
 	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
 	return internalError(err.Error())
@@ -216,7 +217,8 @@ func normalizeBuiltinError(fn string, err error) error {
 	if errors.As(err, &evalErr) {
 		return err
 	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
 	return &BuiltinError{

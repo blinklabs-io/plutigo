@@ -123,7 +123,10 @@ func TestDischargeStopsDuringConstantClone(t *testing.T) {
 		}},
 	)
 	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("dischargeValueContext() error = %v, want context.Canceled", err)
+		t.Fatalf(
+			"dischargeValueContext() error = %v, want context.Canceled",
+			err,
+		)
 	}
 }
 
@@ -140,7 +143,10 @@ func TestDischargeStopsDuringPlutusDataClone(t *testing.T) {
 		&Constant{Constant: &syn.Data{Inner: &data.List{Items: items}}},
 	)
 	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("dischargeValueContext() error = %v, want context.Canceled", err)
+		t.Fatalf(
+			"dischargeValueContext() error = %v, want context.Canceled",
+			err,
+		)
 	}
 }
 
@@ -176,7 +182,10 @@ func TestDischargeStopsDuringByteStringClone(t *testing.T) {
 				&Constant{Constant: test.constant},
 			)
 			if !errors.Is(err, context.Canceled) {
-				t.Fatalf("dischargeValueContext() error = %v, want context.Canceled", err)
+				t.Fatalf(
+					"dischargeValueContext() error = %v, want context.Canceled",
+					err,
+				)
 			}
 		})
 	}
@@ -242,7 +251,12 @@ func TestRunContextCancellationChargesExecutedSteps(t *testing.T) {
 	stepCost := machine.stepCosts[ExVar]
 	for kind, cost := range machine.stepCosts {
 		if cost != stepCost {
-			t.Fatalf("step %d cost %+v differs from %+v; test assumes uniform step costs", kind, cost, stepCost)
+			t.Fatalf(
+				"step %d cost %+v differs from %+v; test assumes uniform step costs",
+				kind,
+				cost,
+				stepCost,
+			)
 		}
 	}
 	machine.ExBudget = ExBudget{Cpu: math.MaxInt64, Mem: math.MaxInt64}
@@ -253,12 +267,19 @@ func TestRunContextCancellationChargesExecutedSteps(t *testing.T) {
 		t.Fatalf("RunContext() error = %v, want context.Canceled", err)
 	}
 	if machine.unbudgetedTotal != 0 {
-		t.Errorf("%d executed steps left unbudgeted after cancellation", machine.unbudgetedTotal)
+		t.Errorf(
+			"%d executed steps left unbudgeted after cancellation",
+			machine.unbudgetedTotal,
+		)
 	}
 	startup := machine.costs.machineCosts.startup
 	spentCpu := math.MaxInt64 - machine.ExBudget.Cpu - startup.Cpu
 	batchCpu := int64(slippage) * stepCost.Cpu
 	if spentCpu <= 0 || spentCpu%batchCpu != 0 {
-		t.Errorf("step CPU charged = %d, want a positive multiple of the %d batch cost", spentCpu, batchCpu)
+		t.Errorf(
+			"step CPU charged = %d, want a positive multiple of the %d batch cost",
+			spentCpu,
+			batchCpu,
+		)
 	}
 }

@@ -111,10 +111,19 @@ func requireValueDataRejected(
 ) {
 	t.Helper()
 	if err == nil {
-		t.Fatalf("%s accepted Value data for ledger language %v", path, language)
+		t.Fatalf(
+			"%s accepted Value data for ledger language %v",
+			path,
+			language,
+		)
 	}
 	if !strings.Contains(err.Error(), "Value data is not available") {
-		t.Fatalf("%s for ledger language %v: unexpected error %v", path, language, err)
+		t.Fatalf(
+			"%s for ledger language %v: unexpected error %v",
+			path,
+			language,
+			err,
+		)
 	}
 }
 
@@ -129,7 +138,11 @@ func TestValidateProgramAcceptsDataWithoutValueBeforeV4(t *testing.T) {
 		lang.LanguageVersionV3,
 	} {
 		if _, err := ParseWithContext(src, valueDataContext(language)); err != nil {
-			t.Fatalf("ledger language %v rejected ordinary data: %v", language, err)
+			t.Fatalf(
+				"ledger language %v rejected ordinary data: %v",
+				language,
+				err,
+			)
 		}
 	}
 }
@@ -229,8 +242,22 @@ func TestValidateProgramRejectsValueDataInCallerConstants(t *testing.T) {
 			List: []IConstant{ProtoPair{
 				FstType: &TData{},
 				SndType: &TData{},
-				First:   Data{Inner: data.List{Items: []data.PlutusData{data.Constr{Fields: []data.PlutusData{data.Map{Pairs: [][2]data.PlutusData{{data.Integer{}, *newValueData()}}}}}}}},
-				Second:  Data{Inner: data.Integer{}},
+				First: Data{
+					Inner: data.List{
+						Items: []data.PlutusData{
+							data.Constr{
+								Fields: []data.PlutusData{
+									data.Map{
+										Pairs: [][2]data.PlutusData{
+											{data.Integer{}, *newValueData()},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				Second: Data{Inner: data.Integer{}},
 			}},
 		},
 		"value-form array": ProtoArray{
@@ -241,7 +268,8 @@ func TestValidateProgramRejectsValueDataInCallerConstants(t *testing.T) {
 	for name, con := range cases {
 		t.Run(name, func(t *testing.T) {
 			err := valueDataV3(con)
-			if err == nil || !strings.Contains(err.Error(), "Value data is not available") {
+			if err == nil ||
+				!strings.Contains(err.Error(), "Value data is not available") {
 				t.Fatalf("expected Value data rejection, got %v", err)
 			}
 		})
@@ -257,7 +285,8 @@ func TestValidateProgramRejectsDeeplyNestedValueData(t *testing.T) {
 		nested = data.NewList(data.NewInteger(big.NewInt(0)), nested)
 	}
 	err := valueDataV3(&Data{Inner: nested})
-	if err == nil || !strings.Contains(err.Error(), "Value data is not available") {
+	if err == nil ||
+		!strings.Contains(err.Error(), "Value data is not available") {
 		t.Fatalf("expected Value data rejection, got %v", err)
 	}
 }

@@ -123,7 +123,9 @@ func TestDeepDataWalkers(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Decoder.Decode: %v", err)
 				}
-				prefix, err := DecodePrefix(append(append([]byte{}, raw...), 0xff, 0x00))
+				prefix, err := DecodePrefix(
+					append(append([]byte{}, raw...), 0xff, 0x00),
+				)
 				if err != nil {
 					t.Fatalf("DecodePrefix: %v", err)
 				}
@@ -207,8 +209,17 @@ func TestDecodeMemoryLinear(t *testing.T) {
 			t.Fatalf("%s: %v", name, err)
 		}
 		runtime.ReadMemStats(&after)
-		perByte := float64(after.TotalAlloc-before.TotalAlloc) / float64(len(raw))
-		t.Logf("%s: %d input bytes, %.0f bytes allocated per input byte", name, len(raw), perByte)
+		perByte := float64(
+			after.TotalAlloc-before.TotalAlloc,
+		) / float64(
+			len(raw),
+		)
+		t.Logf(
+			"%s: %d input bytes, %.0f bytes allocated per input byte",
+			name,
+			len(raw),
+			perByte,
+		)
 		if perByte > 256 {
 			t.Errorf("%s: %.0f bytes allocated per input byte", name, perByte)
 		}
@@ -223,7 +234,10 @@ func TestCheckTreeRejectsSharedChildren(t *testing.T) {
 	if err := CheckTree(NewList(shared, NewList(leaf))); err != nil {
 		t.Fatalf("CheckTree rejected a tree: %v", err)
 	}
-	if err := CheckTree(NewList(shared, shared)); !errors.Is(err, ErrSharedNodes) {
+	if err := CheckTree(NewList(shared, shared)); !errors.Is(
+		err,
+		ErrSharedNodes,
+	) {
 		t.Fatalf("CheckTree on shared children = %v, want ErrSharedNodes", err)
 	}
 	cyclic := &List{Items: make([]PlutusData, 1)}

@@ -33,7 +33,10 @@ func TestBoolConstantReturnsDistinctValues(t *testing.T) {
 	}
 	secondBool, ok := second.Constant.(*syn.Bool)
 	if !ok || !secondBool.Inner {
-		t.Fatalf("boolConstant(true) second call = %#v, want true bool constant", second)
+		t.Fatalf(
+			"boolConstant(true) second call = %#v, want true bool constant",
+			second,
+		)
 	}
 	if first != second {
 		t.Fatal("boolConstant(true) should reuse the cached constant")
@@ -43,7 +46,10 @@ func TestBoolConstantReturnsDistinctValues(t *testing.T) {
 	falseSecond := boolConstant(false)
 	falseBool, ok := falseFirst.Constant.(*syn.Bool)
 	if !ok || falseBool.Inner {
-		t.Fatalf("boolConstant(false) = %#v, want false bool constant", falseFirst)
+		t.Fatalf(
+			"boolConstant(false) = %#v, want false bool constant",
+			falseFirst,
+		)
 	}
 	if falseFirst != falseSecond {
 		t.Fatal("boolConstant(false) should reuse the cached constant")

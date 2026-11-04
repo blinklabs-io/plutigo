@@ -116,8 +116,11 @@ func TestNormalizeIsIdentityOnReferenceEncodedArguments(t *testing.T) {
 				t.Errorf(
 					"%s arg %d (%s): Normalize changed reference-canonical bytes\n"+
 						" reference: %s\n normalized: %s",
-					tc.ID, i, tc.Language,
-					argHex, hex.EncodeToString(got),
+					tc.ID,
+					i,
+					tc.Language,
+					argHex,
+					hex.EncodeToString(got),
 				)
 				continue
 			}
@@ -235,7 +238,8 @@ func TestNormalizeIsIdentityOnNodeConstructedScriptContexts(t *testing.T) {
 	}
 	t.Logf(
 		"Normalize is byte-identity on %d of %d node-constructed ScriptContexts",
-		identity, decoded,
+		identity,
+		decoded,
 	)
 }
 

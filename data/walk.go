@@ -185,7 +185,11 @@ func equalValue(l *Value, y PlutusData) (childFrame, childFrame, bool) {
 	if len(l.Inner.Pairs) != len(r.Inner.Pairs) {
 		return childFrame{}, childFrame{}, false
 	}
-	return childFrame{pairs: l.Inner.Pairs}, childFrame{pairs: r.Inner.Pairs}, true
+	return childFrame{
+			pairs: l.Inner.Pairs,
+		}, childFrame{
+			pairs: r.Inner.Pairs,
+		}, true
 }
 
 func (i Integer) equalLeaf(pd PlutusData) bool {

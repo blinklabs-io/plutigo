@@ -68,7 +68,12 @@ func valueProgramMallocs(t *testing.T, prog string) uint64 {
 
 // checkMallocGrowth fails if evaluating the large program allocates more
 // than maxRatio times as often as the small one.
-func checkMallocGrowth(t *testing.T, what string, small, large string, maxRatio float64) {
+func checkMallocGrowth(
+	t *testing.T,
+	what string,
+	small, large string,
+	maxRatio float64,
+) {
 	t.Helper()
 	smallMallocs := valueProgramMallocs(t, small)
 	largeMallocs := valueProgramMallocs(t, large)
@@ -99,7 +104,9 @@ func insertCoinChainProgram(n int) string {
 	for j := range n {
 		p = fmt.Sprintf(
 			"[(builtin insertCoin) (con bytestring #%04x) (con bytestring #01) (con integer 5) %s]",
-			j, p)
+			j,
+			p,
+		)
 	}
 	return "(program 1.1.0 " + p + ")"
 }
@@ -122,7 +129,9 @@ func insertCoinOnValueProgram(size, inserts int) string {
 	for j := range inserts {
 		p = fmt.Sprintf(
 			"[(builtin insertCoin) (con bytestring #ff%02x) (con bytestring #01) (con integer 5) %s]",
-			j, p)
+			j,
+			p,
+		)
 	}
 	return "(program 1.1.0 " + p + ")"
 }
@@ -139,7 +148,10 @@ func TestInsertCoinOnLargeValueIsCheap(t *testing.T) {
 		maxInsertTotal = inserts * maxPerInsert
 	)
 	base := valueProgramMallocs(t, insertCoinOnValueProgram(size, 0))
-	withInserts := valueProgramMallocs(t, insertCoinOnValueProgram(size, inserts))
+	withInserts := valueProgramMallocs(
+		t,
+		insertCoinOnValueProgram(size, inserts),
+	)
 	if withInserts > base && withInserts-base > maxInsertTotal {
 		t.Fatalf(
 			"%d insertCoin on a %d entry Value made %d allocations, limit %d",
@@ -153,9 +165,16 @@ func valueContainsProgram(size int) string {
 	body := "(con unit ())"
 	for j := range calls {
 		body = fmt.Sprintf(
-			"[(lam d%d %s) [(builtin valueContains) (con value []) v]]", j, body)
+			"[(lam d%d %s) [(builtin valueContains) (con value []) v]]",
+			j,
+			body,
+		)
 	}
-	return fmt.Sprintf("(program 1.1.0 [(lam v %s) (con value %s)])", body, valueLiteral(size))
+	return fmt.Sprintf(
+		"(program 1.1.0 [(lam v %s) (con value %s)])",
+		body,
+		valueLiteral(size),
+	)
 }
 
 // Regression: valueContains with a small required value is charged a constant

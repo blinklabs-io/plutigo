@@ -423,7 +423,10 @@ func (m *Machine[T]) runStack(
 			m.frameStack = m.frameStack[:frameIdx]
 
 			var err error
-			currentTerm, currentEnv, currentValue, returning, err = m.applyEvaluateStack(builtinValue, currentValue)
+			currentTerm, currentEnv, currentValue, returning, err = m.applyEvaluateStack(
+				builtinValue,
+				currentValue,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -523,10 +526,14 @@ func (m *Machine[T]) applyEvaluateStack(
 	arg Value[T],
 ) (syn.Term[T], *Env[T], Value[T], bool, error) {
 	if function == nil {
-		return nil, nil, nil, false, internalError("stack apply evaluated nil function")
+		return nil, nil, nil, false, internalError(
+			"stack apply evaluated nil function",
+		)
 	}
 	if arg == nil {
-		return nil, nil, nil, false, internalError("stack apply evaluated nil argument")
+		return nil, nil, nil, false, internalError(
+			"stack apply evaluated nil argument",
+		)
 	}
 
 	switch f := function.(type) {
@@ -614,7 +621,9 @@ func (m *Machine[T]) forceEvaluateStack(
 	value Value[T],
 ) (syn.Term[T], *Env[T], Value[T], bool, error) {
 	if value == nil {
-		return nil, nil, nil, false, internalError("stack force evaluated nil value")
+		return nil, nil, nil, false, internalError(
+			"stack force evaluated nil value",
+		)
 	}
 
 	switch v := value.(type) {
@@ -656,7 +665,9 @@ func (m *Machine[T]) caseEvaluateStack(
 	value Value[T],
 ) (syn.Term[T], *Env[T], Value[T], bool, error) {
 	if value == nil {
-		return nil, nil, nil, false, internalError("stack case evaluated nil value")
+		return nil, nil, nil, false, internalError(
+			"stack case evaluated nil value",
+		)
 	}
 	if err := m.checkCaseOnBuiltin(value); err != nil {
 		return nil, nil, nil, false, err

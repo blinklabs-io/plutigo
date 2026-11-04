@@ -86,6 +86,9 @@ func TestPrettyInvalidValueIsNotSilentlyRewritten(t *testing.T) {
 
 	pretty := Pretty(program)
 	if !strings.Contains(pretty, "Value{invalid:") {
-		t.Fatalf("invalid Value pretty output = %q, want explicit invalid marker", pretty)
+		t.Fatalf(
+			"invalid Value pretty output = %q, want explicit invalid marker",
+			pretty,
+		)
 	}
 }

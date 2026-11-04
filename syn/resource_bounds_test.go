@@ -147,7 +147,10 @@ func TestFlatDecodeProtocolConstrBoundBeforeAllocation(t *testing.T) {
 	context.ProtocolMajor = builtin.VanRossemProtoVersion - 1
 	_, err = DecodeWithContext[DeBruijn](truncated, context)
 	if err == nil || strings.Contains(err.Error(), "too many") {
-		t.Errorf("pre-PV11 decode should not apply the PV11 bound, got: %v", err)
+		t.Errorf(
+			"pre-PV11 decode should not apply the PV11 bound, got: %v",
+			err,
+		)
 	}
 }
 
@@ -161,7 +164,10 @@ func TestParseNodeLimit(t *testing.T) {
 	t.Parallel()
 	group := "(constr 0" + strings.Repeat(" (error)", maxCollectionWidth) + ")"
 	groups := maxProgramNodes/maxCollectionWidth + 1
-	input := "(program 1.1.0 (constr 0 " + strings.Repeat(group+" ", groups) + "))"
+	input := "(program 1.1.0 (constr 0 " + strings.Repeat(
+		group+" ",
+		groups,
+	) + "))"
 	_, err := Parse(input)
 	requireErrContains(t, "Parse", err, "too many nodes")
 }
@@ -169,7 +175,10 @@ func TestParseNodeLimit(t *testing.T) {
 func TestParseCollectionWidthLimit(t *testing.T) {
 	t.Parallel()
 	fields := strings.Repeat(" (error)", maxCollectionWidth+1)
-	listItems := strings.TrimSuffix(strings.Repeat("0,", maxCollectionWidth+1), ",")
+	listItems := strings.TrimSuffix(
+		strings.Repeat("0,", maxCollectionWidth+1),
+		",",
+	)
 	tests := map[string]string{
 		"constr fields": "(program 1.1.0 (constr 0" + fields + "))",
 		"case branches": "(program 1.1.0 (case (error)" + fields + "))",
@@ -252,8 +261,14 @@ func TestPrettyWithLimitsMatchesPrettyForShallowPrograms(t *testing.T) {
 func TestPrettyDefaultsStopDeepTerms(t *testing.T) {
 	t.Parallel()
 	term := buildNestedDelay(maxFlatDecodeDepth - 1)
-	if out := PrettyTerm[DeBruijn](term); len(out) > defaultPrettyMaxOutputBytes {
-		t.Errorf("PrettyTerm produced %d bytes, default limit is %d", len(out), defaultPrettyMaxOutputBytes)
+	if out := PrettyTerm[DeBruijn](term); len(
+		out,
+	) > defaultPrettyMaxOutputBytes {
+		t.Errorf(
+			"PrettyTerm produced %d bytes, default limit is %d",
+			len(out),
+			defaultPrettyMaxOutputBytes,
+		)
 	}
 	if _, err := PrettyTermWithLimits[DeBruijn](term, PrettyLimits{}); err == nil {
 		t.Error("default limits should reject a 100k-deep unary term")
@@ -403,7 +418,10 @@ func checkAllocationBound(t *testing.T, run func()) {
 	run()
 	runtime.ReadMemStats(&after)
 	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 1<<20 {
-		t.Errorf("allocated %d bytes with a small output/input allowance", allocated)
+		t.Errorf(
+			"allocated %d bytes with a small output/input allowance",
+			allocated,
+		)
 	}
 }
 
@@ -429,7 +447,10 @@ func TestParseValueNodeAccounting(t *testing.T) {
 		p := NewParser(input)
 		p.nodes = maxProgramNodes - 3
 		if _, err := p.ParseTerm(); err != nil {
-			t.Errorf("three remaining nodes should admit a term, policy and token: %v", err)
+			t.Errorf(
+				"three remaining nodes should admit a term, policy and token: %v",
+				err,
+			)
 		}
 	}
 }
@@ -448,7 +469,10 @@ func TestParsePlutusDataNodeAccounting(t *testing.T) {
 		p = NewParser(input)
 		p.nodes = maxProgramNodes - 2
 		if _, err := p.ParseTerm(); err != nil {
-			t.Errorf("two remaining nodes should admit a term and data item: %v", err)
+			t.Errorf(
+				"two remaining nodes should admit a term and data item: %v",
+				err,
+			)
 		}
 	}
 }
@@ -491,7 +515,11 @@ func TestParsePlutusDataWidthBeforeCompletion(t *testing.T) {
 
 		input := test.prefix + strings.TrimSuffix(items, ",") + "]))"
 		if _, err := NewParser(input).ParseTerm(); err != nil {
-			t.Errorf("%s: width at the limit should parse, got: %v", test.name, err)
+			t.Errorf(
+				"%s: width at the limit should parse, got: %v",
+				test.name,
+				err,
+			)
 		}
 	}
 }
@@ -514,7 +542,10 @@ func TestPrettyRecursiveDepth(t *testing.T) {
 		"case scrutinees": term,
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := PrettyTermWithLimits[DeBruijn](node, PrettyLimits{MaxDepth: 10})
+			_, err := PrettyTermWithLimits[DeBruijn](
+				node,
+				PrettyLimits{MaxDepth: 10},
+			)
 			requireErrContains(t, name, err, "depth")
 			if _, err := PrettyTermWithLimits[DeBruijn](node, PrettyLimits{MaxDepth: 100}); err != nil {
 				t.Errorf("within the depth limit: %v", err)
@@ -531,7 +562,10 @@ func TestPrettyLeafAllocationBound(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			checkAllocationBound(t, func() {
-				_, err := PrettyTermWithLimits[DeBruijn](&Constant{Con: con}, PrettyLimits{MaxOutputBytes: 32})
+				_, err := PrettyTermWithLimits[DeBruijn](
+					&Constant{Con: con},
+					PrettyLimits{MaxOutputBytes: 32},
+				)
 				requireErrContains(t, name, err, "output")
 			})
 		})
@@ -542,7 +576,10 @@ func TestPrettyDataConstrTagAllocationBound(t *testing.T) {
 	tag := new(big.Int).Lsh(big.NewInt(1), 8<<20)
 	term := &Constant{Con: &Data{Inner: &data.Constr{Tag: tag}}}
 	checkAllocationBound(t, func() {
-		_, err := PrettyTermWithLimits[DeBruijn](term, PrettyLimits{MaxOutputBytes: 32})
+		_, err := PrettyTermWithLimits[DeBruijn](
+			term,
+			PrettyLimits{MaxOutputBytes: 32},
+		)
 		requireErrContains(t, "constr tag", err, "output")
 	})
 }
@@ -560,9 +597,15 @@ func TestPrettyStopsBeforeNextConstant(t *testing.T) {
 }
 
 func TestPrettyStopsBeforeNextData(t *testing.T) {
-	out, err := PrettyTermWithLimits[DeBruijn](&Constant{Con: &Data{Inner: &data.List{
-		Items: []data.PlutusData{data.NewByteString(make([]byte, 100)), (*data.ByteString)(nil)},
-	}}}, PrettyLimits{MaxOutputBytes: 50})
+	out, err := PrettyTermWithLimits[DeBruijn](
+		&Constant{Con: &Data{Inner: &data.List{
+			Items: []data.PlutusData{
+				data.NewByteString(make([]byte, 100)),
+				(*data.ByteString)(nil),
+			},
+		}}},
+		PrettyLimits{MaxOutputBytes: 50},
+	)
 	requireErrContains(t, "PrettyTermWithLimits", err, "output")
 	if out != "" {
 		t.Errorf("output on failure: %q", out)
@@ -586,11 +629,17 @@ func TestPrettyExactOutputAllowance(t *testing.T) {
 		if want == "" {
 			t.Fatal("unbounded control failed")
 		}
-		got, err := PrettyTermWithLimits[DeBruijn](term, PrettyLimits{MaxOutputBytes: len(want)})
+		got, err := PrettyTermWithLimits[DeBruijn](
+			term,
+			PrettyLimits{MaxOutputBytes: len(want)},
+		)
 		if err != nil || got != want {
 			t.Errorf("exact allowance: got %q, %v; want %q", got, err, want)
 		}
-		_, err = PrettyTermWithLimits[DeBruijn](term, PrettyLimits{MaxOutputBytes: len(want) - 1})
+		_, err = PrettyTermWithLimits[DeBruijn](
+			term,
+			PrettyLimits{MaxOutputBytes: len(want) - 1},
+		)
 		requireErrContains(t, "one byte below allowance", err, "output")
 	}
 }
@@ -600,10 +649,17 @@ func TestPrettyValueOutputLimit(t *testing.T) {
 		{data.NewByteString(nil), data.NewInteger(big.NewInt(1))},
 		{data.NewByteString([]byte{1}), data.NewInteger(big.NewInt(2))},
 	}}
-	term := &Constant{Con: &Data{Inner: &data.Value{Inner: &data.Map{Pairs: [][2]data.PlutusData{
-		{data.NewByteString(nil), tokens},
-		{data.NewByteString([]byte{1}), tokens},
-	}}}}}
-	_, err := PrettyTermWithLimits[DeBruijn](term, PrettyLimits{MaxOutputBytes: 32})
+	term := &Constant{
+		Con: &Data{
+			Inner: &data.Value{Inner: &data.Map{Pairs: [][2]data.PlutusData{
+				{data.NewByteString(nil), tokens},
+				{data.NewByteString([]byte{1}), tokens},
+			}}},
+		},
+	}
+	_, err := PrettyTermWithLimits[DeBruijn](
+		term,
+		PrettyLimits{MaxOutputBytes: 32},
+	)
 	requireErrContains(t, "PrettyTermWithLimits", err, "output")
 }

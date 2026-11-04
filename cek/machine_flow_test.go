@@ -29,7 +29,11 @@ import (
 // Helper functions for machine flow tests
 
 func newTestMachineFlow() *Machine[syn.DeBruijn] {
-	return NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+	return NewMachine[syn.DeBruijn](
+		lang.LanguageVersionV3,
+		0,
+		testEvalContext(),
+	)
 }
 
 // Helper to run a term and assert no error
@@ -114,8 +118,12 @@ func TestRunPreservesEvaluatorErrorClasses(t *testing.T) {
 			name: "invalid BLS point is a builtin failure",
 			term: &syn.Force[syn.DeBruijn]{
 				Term: &syn.Apply[syn.DeBruijn]{
-					Function: &syn.Builtin{DefaultFunction: builtin.Bls12_381_G1_Uncompress},
-					Argument: &syn.Constant{Con: &syn.ByteString{Inner: invalidG1}},
+					Function: &syn.Builtin{
+						DefaultFunction: builtin.Bls12_381_G1_Uncompress,
+					},
+					Argument: &syn.Constant{
+						Con: &syn.ByteString{Inner: invalidG1},
+					},
 				},
 			},
 			wantBuiltin: true,
@@ -123,8 +131,12 @@ func TestRunPreservesEvaluatorErrorClasses(t *testing.T) {
 		{
 			name: "invalid application is a type failure",
 			term: &syn.Apply[syn.DeBruijn]{
-				Function: &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(1)}},
-				Argument: &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(2)}},
+				Function: &syn.Constant{
+					Con: &syn.Integer{Inner: big.NewInt(1)},
+				},
+				Argument: &syn.Constant{
+					Con: &syn.Integer{Inner: big.NewInt(2)},
+				},
 			},
 			wantType: true,
 		},
@@ -140,13 +152,31 @@ func TestRunPreservesEvaluatorErrorClasses(t *testing.T) {
 			var builtinErr *BuiltinError
 			var typeErr *TypeError
 			if got := errors.As(err, &scriptErr); got != tt.wantScript {
-				t.Errorf("ScriptError match = %v, want %v (%T: %v)", got, tt.wantScript, err, err)
+				t.Errorf(
+					"ScriptError match = %v, want %v (%T: %v)",
+					got,
+					tt.wantScript,
+					err,
+					err,
+				)
 			}
 			if got := errors.As(err, &builtinErr); got != tt.wantBuiltin {
-				t.Errorf("BuiltinError match = %v, want %v (%T: %v)", got, tt.wantBuiltin, err, err)
+				t.Errorf(
+					"BuiltinError match = %v, want %v (%T: %v)",
+					got,
+					tt.wantBuiltin,
+					err,
+					err,
+				)
 			}
 			if got := errors.As(err, &typeErr); got != tt.wantType {
-				t.Errorf("TypeError match = %v, want %v (%T: %v)", got, tt.wantType, err, err)
+				t.Errorf(
+					"TypeError match = %v, want %v (%T: %v)",
+					got,
+					tt.wantType,
+					err,
+					err,
+				)
 			}
 		})
 	}
@@ -278,15 +308,24 @@ func TestBuiltinPartialApplicationDischargesAppliedTerm(t *testing.T) {
 		t.Fatalf("expected partial builtin application, got %T", out)
 	}
 	if _, ok := app.Function.(*syn.Builtin); !ok {
-		t.Fatalf("expected builtin function in discharged term, got %T", app.Function)
+		t.Fatalf(
+			"expected builtin function in discharged term, got %T",
+			app.Function,
+		)
 	}
 	constant, ok := app.Argument.(*syn.Constant)
 	if !ok {
-		t.Fatalf("expected constant argument in discharged term, got %T", app.Argument)
+		t.Fatalf(
+			"expected constant argument in discharged term, got %T",
+			app.Argument,
+		)
 	}
 	integer, ok := constant.Con.(*syn.Integer)
 	if !ok {
-		t.Fatalf("expected integer argument in discharged term, got %T", constant.Con)
+		t.Fatalf(
+			"expected integer argument in discharged term, got %T",
+			constant.Con,
+		)
 	}
 	if got := integer.Inner.Int64(); got != 2 {
 		t.Fatalf("partial builtin argument = %d, want 2", got)

@@ -60,7 +60,10 @@ type nodeBudgetCase struct {
 // "unset" slippages 0 and 1 (which select it), and a metered machine (which
 // runs the generic loop instead of the De Bruijn one).
 func TestNodeBudgetFailures(t *testing.T) {
-	fx := loadNodeFixture[nodeBudgetFailures](t, "node_budget_failures_pv11.json.gz")
+	fx := loadNodeFixture[nodeBudgetFailures](
+		t,
+		"node_budget_failures_pv11.json.gz",
+	)
 	if len(fx.Cases) < 100 {
 		t.Fatalf("fixture has %d cases, want at least 100", len(fx.Cases))
 	}
@@ -82,12 +85,19 @@ func TestNodeBudgetFailures(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			pc := syn.ProgramContext{LedgerLanguage: lv, ProtocolMajor: fx.Protocol}
+			pc := syn.ProgramContext{
+				LedgerLanguage: lv,
+				ProtocolMajor:  fx.Protocol,
+			}
 			prog, err := syn.DecodeDeBruijnWithContext(flat, pc)
 			if err != nil {
 				t.Fatal(err)
 			}
-			ec, err := cek.NewEvalContext(lv, cek.ProtoVersion{Major: fx.Protocol}, fx.CostModels[ln])
+			ec, err := cek.NewEvalContext(
+				lv,
+				cek.ProtoVersion{Major: fx.Protocol},
+				fx.CostModels[ln],
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -102,7 +112,10 @@ func TestNodeBudgetFailures(t *testing.T) {
 				// report the same failure.
 				for run := range 2 {
 					m.ExBudget = budget
-					isUnit, err := m.RunScriptContext(context.Background(), prog.Term, args...)
+					isUnit, err := m.RunScriptContext(
+						context.Background(),
+						prog.Term,
+						args...)
 					where := fmt.Sprintf("%s run %d", cfg.name, run)
 					checkNodeBudgetCase(t, where, &sc, isUnit, err, m)
 				}
@@ -125,14 +138,20 @@ func checkNodeBudgetCase(
 	switch sc.Outcome {
 	case "ok":
 		if err != nil || (sc.Lang == "V3" && !isUnit) {
-			t.Fatalf("%s: got error %v (unit %t), node accepted", where, err, isUnit)
+			t.Fatalf(
+				"%s: got error %v (unit %t), node accepted",
+				where,
+				err,
+				isUnit,
+			)
 		}
 	case "budget":
 		if sc.Remaining == nil {
 			t.Fatalf("fixture budget outcome has no remaining budget")
 			return
 		}
-		if !isBudget || budgetErr == nil || budgetErr.Code != cek.ErrCodeBudgetExhausted {
+		if !isBudget || budgetErr == nil ||
+			budgetErr.Code != cek.ErrCodeBudgetExhausted {
 			t.Fatalf("%s: got %v, node ran out of budget", where, err)
 			return
 		}
@@ -142,12 +161,21 @@ func checkNodeBudgetCase(
 				where, m.ExBudget.Mem, m.ExBudget.Cpu, want.Mem, want.Cpu)
 		}
 		if got := budgetErr.Available.Sub(&budgetErr.Requested); got != want {
-			t.Fatalf("%s: BudgetError available-requested = %+v, want remaining %+v",
-				where, got, want)
+			t.Fatalf(
+				"%s: BudgetError available-requested = %+v, want remaining %+v",
+				where,
+				got,
+				want,
+			)
 		}
 	case "error":
 		if err == nil || isBudget {
-			t.Fatalf("%s: got %v, node failed with %q", where, err, sc.EvaluationError)
+			t.Fatalf(
+				"%s: got %v, node failed with %q",
+				where,
+				err,
+				sc.EvaluationError,
+			)
 		}
 		var scriptErr *cek.ScriptError
 		var builtinErr *cek.BuiltinError
@@ -159,7 +187,12 @@ func checkNodeBudgetCase(
 		}
 		if strings.HasPrefix(cause, "error") {
 			if !errors.As(err, &scriptErr) {
-				t.Fatalf("%s: got %T %v, node failed with an explicit error", where, err, err)
+				t.Fatalf(
+					"%s: got %T %v, node failed with an explicit error",
+					where,
+					err,
+					err,
+				)
 			}
 		} else if !errors.As(err, &builtinErr) {
 			t.Fatalf("%s: got %T %v, node failed in a builtin: %s", where, err, err, cause)

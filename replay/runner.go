@@ -97,7 +97,11 @@ func (l Limits) check(ctx context.Context, corpus *Corpus) error {
 		return errors.New("replay limits must be positive")
 	}
 	if l.Cases > 0 && len(corpus.Cases) > l.Cases {
-		return fmt.Errorf("replay corpus has %d cases, exceeds the case-count limit %d", len(corpus.Cases), l.Cases)
+		return fmt.Errorf(
+			"replay corpus has %d cases, exceeds the case-count limit %d",
+			len(corpus.Cases),
+			l.Cases,
+		)
 	}
 	var total ExUnits
 	for i := range corpus.Cases {
@@ -243,7 +247,10 @@ type evaluation struct {
 	budget          cek.ExBudget
 }
 
-func prepareEvaluation(replayCase *Case, decoded decodedCase) (evaluation, error) {
+func prepareEvaluation(
+	replayCase *Case,
+	decoded decodedCase,
+) (evaluation, error) {
 	languageVersion, err := replayCase.Language.Version()
 	if err != nil {
 		return evaluation{}, err
@@ -270,7 +277,11 @@ func prepareEvaluation(replayCase *Case, decoded decodedCase) (evaluation, error
 	}, nil
 }
 
-func evaluate(ctx context.Context, replayCase *Case, decoded decodedCase) Actual {
+func evaluate(
+	ctx context.Context,
+	replayCase *Case,
+	decoded decodedCase,
+) Actual {
 	prepared, err := prepareEvaluation(replayCase, decoded)
 	if err != nil {
 		return setupFailure(err)
@@ -355,7 +366,10 @@ func compare(expected Expected, actual Actual) []string {
 		if actual.ErrorCode == nil {
 			mismatches = append(
 				mismatches,
-				fmt.Sprintf("error_code: got none, want %d", *expected.ErrorCode),
+				fmt.Sprintf(
+					"error_code: got none, want %d",
+					*expected.ErrorCode,
+				),
 			)
 		} else if *actual.ErrorCode != *expected.ErrorCode {
 			mismatches = append(

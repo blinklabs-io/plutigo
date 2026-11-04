@@ -49,7 +49,13 @@ func (w *ampBitWriter) bits(v byte, k int) {
 func pairChainTags(depth int) []byte {
 	tags := make([]byte, 0, 4*depth+1)
 	for range depth {
-		tags = append(tags, ProtoPairOneTag, ProtoPairTwoTag, ProtoPairThreeTag, UnitTag)
+		tags = append(
+			tags,
+			ProtoPairOneTag,
+			ProtoPairTwoTag,
+			ProtoPairThreeTag,
+			UnitTag,
+		)
 	}
 	return append(tags, UnitTag)
 }
@@ -77,7 +83,9 @@ func buildConstantProgram(tags []byte, value func(w *ampBitWriter)) []byte {
 // encoded as a single bit, so a decoder that materializes every item
 // separately allocates depth nodes per input bit.
 func buildAmplifyProgram(depth, items int) []byte {
-	tags := append([]byte{ProtoListOneTag, ProtoListTwoTag}, pairChainTags(depth)...)
+	tags := append(
+		[]byte{ProtoListOneTag, ProtoListTwoTag},
+		pairChainTags(depth)...)
 	return buildConstantProgram(tags, func(w *ampBitWriter) {
 		for range items {
 			w.bit(1)
@@ -91,7 +99,12 @@ func buildAmplifyProgram(depth, items int) []byte {
 // buildAmplifyProgram, so each element costs three bits.
 func buildNestedAmplifyProgram(depth, items int) []byte {
 	tags := append(
-		[]byte{ProtoListOneTag, ProtoListTwoTag, ProtoListOneTag, ProtoListTwoTag},
+		[]byte{
+			ProtoListOneTag,
+			ProtoListTwoTag,
+			ProtoListOneTag,
+			ProtoListTwoTag,
+		},
 		pairChainTags(depth)...,
 	)
 	return buildConstantProgram(tags, func(w *ampBitWriter) {
@@ -110,7 +123,14 @@ func buildNestedAmplifyProgram(depth, items int) []byte {
 // bits.
 func buildMixedAmplifyProgram(depth, items int) []byte {
 	tags := append(
-		[]byte{ProtoListOneTag, ProtoArrayTag, ProtoPairOneTag, ProtoPairTwoTag, ProtoPairThreeTag, BoolTag},
+		[]byte{
+			ProtoListOneTag,
+			ProtoArrayTag,
+			ProtoPairOneTag,
+			ProtoPairTwoTag,
+			ProtoPairThreeTag,
+			BoolTag,
+		},
 		pairChainTags(depth)...,
 	)
 	return buildConstantProgram(tags, func(w *ampBitWriter) {
@@ -128,7 +148,10 @@ func balancedPairType(depth int) Typ {
 	if depth == 0 {
 		return &TUnit{}
 	}
-	return &TPair{First: balancedPairType(depth - 1), Second: balancedPairType(depth - 1)}
+	return &TPair{
+		First:  balancedPairType(depth - 1),
+		Second: balancedPairType(depth - 1),
+	}
 }
 
 func balancedPairValue(depth int) IConstant {
@@ -157,17 +180,20 @@ var zeroWidthDecodePaths = []struct {
 		}
 		return p.Term, func() ([]byte, error) { return Encode(p) }, nil
 	}},
-	{"generic-named-debruijn", func(b []byte) (Term[DeBruijn], func() ([]byte, error), error) {
-		p, err := Decode[NamedDeBruijn](b)
-		if err != nil {
-			return nil, nil, err
-		}
-		c, ok := p.Term.(*Constant)
-		if !ok {
-			return nil, nil, nil
-		}
-		return c, func() ([]byte, error) { return Encode(p) }, nil
-	}},
+	{
+		"generic-named-debruijn",
+		func(b []byte) (Term[DeBruijn], func() ([]byte, error), error) {
+			p, err := Decode[NamedDeBruijn](b)
+			if err != nil {
+				return nil, nil, err
+			}
+			c, ok := p.Term.(*Constant)
+			if !ok {
+				return nil, nil, nil
+			}
+			return c, func() ([]byte, error) { return Encode(p) }, nil
+		},
+	},
 }
 
 // TestDecodeZeroWidthListOfPairsIsAccepted guards against charging unit and
@@ -200,7 +226,13 @@ func TestDecodeZeroWidthListOfPairsIsAccepted(t *testing.T) {
 			t.Run(path.name, func(t *testing.T) {
 				term, encode, err := path.decode(input)
 				if err != nil {
-					t.Fatalf("depth %d x %d (%d bytes): %v", tc.depth, tc.items, len(input), err)
+					t.Fatalf(
+						"depth %d x %d (%d bytes): %v",
+						tc.depth,
+						tc.items,
+						len(input),
+						err,
+					)
 				}
 				c, ok := term.(*Constant)
 				if !ok {
@@ -211,10 +243,18 @@ func TestDecodeZeroWidthListOfPairsIsAccepted(t *testing.T) {
 					t.Fatalf("decoded constant is %T, want *ProtoList", c.Con)
 				}
 				if !reflect.DeepEqual(got.LTyp, want.LTyp) {
-					t.Fatalf("decoded list type %v, want %v", got.LTyp, want.LTyp)
+					t.Fatalf(
+						"decoded list type %v, want %v",
+						got.LTyp,
+						want.LTyp,
+					)
 				}
 				if len(got.List) != tc.items {
-					t.Fatalf("decoded %d items, want %d", len(got.List), tc.items)
+					t.Fatalf(
+						"decoded %d items, want %d",
+						len(got.List),
+						tc.items,
+					)
 				}
 				for i, item := range got.List {
 					if i > 0 && item == got.List[0] {
@@ -253,10 +293,34 @@ func TestDecodeConstantValueAmplificationBounded(t *testing.T) {
 		items int
 		check func(t *testing.T, con IConstant, depth, items int)
 	}{
-		{"list-d1000-n10000", buildAmplifyProgram(1000, 10_000), 1000, 10_000, checkAmplifyList},
-		{"list-d400-n4000", buildAmplifyProgram(400, 4000), 400, 4000, checkAmplifyList},
-		{"nested-list-d1000-n10000", buildNestedAmplifyProgram(1000, 10_000), 1000, 10_000, checkNestedAmplifyList},
-		{"array-of-mixed-pair-d1000-n10000", buildMixedAmplifyProgram(1000, 10_000), 1000, 10_000, checkMixedAmplifyArray},
+		{
+			"list-d1000-n10000",
+			buildAmplifyProgram(1000, 10_000),
+			1000,
+			10_000,
+			checkAmplifyList,
+		},
+		{
+			"list-d400-n4000",
+			buildAmplifyProgram(400, 4000),
+			400,
+			4000,
+			checkAmplifyList,
+		},
+		{
+			"nested-list-d1000-n10000",
+			buildNestedAmplifyProgram(1000, 10_000),
+			1000,
+			10_000,
+			checkNestedAmplifyList,
+		},
+		{
+			"array-of-mixed-pair-d1000-n10000",
+			buildMixedAmplifyProgram(1000, 10_000),
+			1000,
+			10_000,
+			checkMixedAmplifyArray,
+		},
 	}
 	for _, tc := range tests {
 		for _, path := range zeroWidthDecodePaths {
@@ -319,7 +383,11 @@ func checkNestedAmplifyList(t *testing.T, con IConstant, depth, items int) {
 	for _, i := range []int{0, items - 1} {
 		inner, ok := list.List[i].(*ProtoList)
 		if !ok || len(inner.List) != 1 {
-			t.Fatalf("outer item %d is %T, want a singleton list", i, list.List[i])
+			t.Fatalf(
+				"outer item %d is %T, want a singleton list",
+				i,
+				list.List[i],
+			)
 		}
 		checkPairChain(t, inner.List[0], depth)
 	}
@@ -338,7 +406,12 @@ func checkMixedAmplifyArray(t *testing.T, con IConstant, depth, items int) {
 		}
 		flag, ok := pair.First.(*Bool)
 		if !ok || flag.Inner != (i&1 == 1) {
-			t.Fatalf("item %d first = %v, want bool %v", i, pair.First, i&1 == 1)
+			t.Fatalf(
+				"item %d first = %v, want bool %v",
+				i,
+				pair.First,
+				i&1 == 1,
+			)
 		}
 		checkPairChain(t, pair.Second, depth)
 	}
@@ -357,10 +430,18 @@ func checkPairChain(t *testing.T, con IConstant, depth int) {
 			t.Fatalf("level %d first is %T, want unit", level, pair.First)
 		}
 		if _, ok := pair.FstType.(*TUnit); !ok {
-			t.Fatalf("level %d first type is %T, want unit", level, pair.FstType)
+			t.Fatalf(
+				"level %d first type is %T, want unit",
+				level,
+				pair.FstType,
+			)
 		}
 		if _, ok := pair.SndType.(*TPair); !ok && level < depth-1 {
-			t.Fatalf("level %d second type is %T, want pair", level, pair.SndType)
+			t.Fatalf(
+				"level %d second type is %T, want pair",
+				level,
+				pair.SndType,
+			)
 		}
 		con = pair.Second
 	}

@@ -708,7 +708,10 @@ var variantACostModels = map[lang.LanguageVersion]func() (CostModel, error){
 func defaultVariantACostModel(version lang.LanguageVersion) (CostModel, error) {
 	build, ok := variantACostModels[version]
 	if !ok {
-		return CostModel{}, fmt.Errorf("no variant A cost model for language %v", version)
+		return CostModel{}, fmt.Errorf(
+			"no variant A cost model for language %v",
+			version,
+		)
 	}
 	return build()
 }
@@ -722,7 +725,10 @@ func buildVariantACostModel(version lang.LanguageVersion) (CostModel, error) {
 	for _, name := range lang.GetParamNamesForVersion(version) {
 		value, ok := all[name]
 		if !ok {
-			return CostModel{}, fmt.Errorf("variant A cost model lacks parameter %s", name)
+			return CostModel{}, fmt.Errorf(
+				"variant A cost model lacks parameter %s",
+				name,
+			)
 		}
 		params[name] = value
 	}

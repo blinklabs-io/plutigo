@@ -1126,7 +1126,10 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 
 		for p.curToken.Type != lex.TokenRBracket {
 			if len(items) >= maxCollectionWidth {
-				return nil, errTooMany("PlutusData list items", maxCollectionWidth)
+				return nil, errTooMany(
+					"PlutusData list items",
+					maxCollectionWidth,
+				)
 			}
 			if err := p.node(); err != nil {
 				return nil, err
@@ -1161,7 +1164,10 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 
 		for p.curToken.Type != lex.TokenRBracket {
 			if len(pairs) >= maxCollectionWidth {
-				return nil, errTooMany("PlutusData map items", maxCollectionWidth)
+				return nil, errTooMany(
+					"PlutusData map items",
+					maxCollectionWidth,
+				)
 			}
 			if err := p.node(); err != nil {
 				return nil, err
@@ -1234,7 +1240,10 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 
 		for p.curToken.Type != lex.TokenRBracket {
 			if len(fields) >= maxCollectionWidth {
-				return nil, errTooMany("PlutusData constr fields", maxCollectionWidth)
+				return nil, errTooMany(
+					"PlutusData constr fields",
+					maxCollectionWidth,
+				)
 			}
 			if err := p.node(); err != nil {
 				return nil, err
@@ -1324,7 +1333,10 @@ func (p *Parser) parsePlutusValue() (data.PlutusData, error) {
 			}
 			quantity, ok := p.curToken.Value.(*big.Int)
 			if !ok {
-				return nil, fmt.Errorf("invalid Value quantity at position %d", p.curToken.Position)
+				return nil, fmt.Errorf(
+					"invalid Value quantity at position %d",
+					p.curToken.Position,
+				)
 			}
 			if err := data.CheckValueQuantity(len(pairs), len(tokens), quantity); err != nil {
 				return nil, err
@@ -1333,7 +1345,10 @@ func (p *Parser) parsePlutusValue() (data.PlutusData, error) {
 			if err := p.expect(lex.TokenRParen); err != nil {
 				return nil, err
 			}
-			tokens = append(tokens, [2]data.PlutusData{token, data.NewInteger(quantity)})
+			tokens = append(
+				tokens,
+				[2]data.PlutusData{token, data.NewInteger(quantity)},
+			)
 			if p.curToken.Type != lex.TokenRBracket {
 				if err := p.expect(lex.TokenComma); err != nil {
 					return nil, err
@@ -1366,7 +1381,11 @@ func (p *Parser) parsePlutusValue() (data.PlutusData, error) {
 	return value, nil
 }
 
-func (p *Parser) parseValueBytes(kind string, index int, prev []byte) (*data.ByteString, error) {
+func (p *Parser) parseValueBytes(
+	kind string,
+	index int,
+	prev []byte,
+) (*data.ByteString, error) {
 	if p.curToken.Type != lex.TokenByteString {
 		return nil, fmt.Errorf(
 			"expected Value bytestring, got %v at position %d",
@@ -1376,7 +1395,10 @@ func (p *Parser) parseValueBytes(kind string, index int, prev []byte) (*data.Byt
 	}
 	value, ok := p.curToken.Value.([]byte)
 	if !ok {
-		return nil, fmt.Errorf("invalid Value bytestring at position %d", p.curToken.Position)
+		return nil, fmt.Errorf(
+			"invalid Value bytestring at position %d",
+			p.curToken.Position,
+		)
 	}
 	if err := data.CheckValueKey(kind, index, value, prev); err != nil {
 		return nil, err

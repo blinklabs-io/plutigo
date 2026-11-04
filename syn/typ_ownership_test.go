@@ -136,7 +136,11 @@ func TestDecodedCompositeConstantTypesAreNotShared(t *testing.T) {
 					want = listOfDataPairs().Typ()
 				}
 				if !EqualType(c.Typ(), want) {
-					t.Fatalf("later decode constant %d has type %#v", i, c.Typ())
+					t.Fatalf(
+						"later decode constant %d has type %#v",
+						i,
+						c.Typ(),
+					)
 				}
 			}
 		})

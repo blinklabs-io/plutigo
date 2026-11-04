@@ -57,10 +57,16 @@ func TestDecodedFlatUniverseConstantsEvaluate(t *testing.T) {
 				}
 				valueMap, ok := wrapped.Inner.(*data.Map)
 				if !ok {
-					t.Fatalf("result data type = %T, want *data.Map", wrapped.Inner)
+					t.Fatalf(
+						"result data type = %T, want *data.Map",
+						wrapped.Inner,
+					)
 				}
 				if len(valueMap.Pairs) != 0 {
-					t.Fatalf("result map length = %d, want 0", len(valueMap.Pairs))
+					t.Fatalf(
+						"result map length = %d, want 0",
+						len(valueMap.Pairs),
+					)
 				}
 			},
 		},
@@ -75,10 +81,16 @@ func TestDecodedFlatUniverseConstantsEvaluate(t *testing.T) {
 				}
 				valueMap, ok := wrapped.Inner.(*data.Map)
 				if !ok {
-					t.Fatalf("result data type = %T, want *data.Map", wrapped.Inner)
+					t.Fatalf(
+						"result data type = %T, want *data.Map",
+						wrapped.Inner,
+					)
 				}
 				if len(valueMap.Pairs) != 1 {
-					t.Fatalf("result map length = %d, want 1", len(valueMap.Pairs))
+					t.Fatalf(
+						"result map length = %d, want 1",
+						len(valueMap.Pairs),
+					)
 				}
 			},
 		},
@@ -240,7 +252,11 @@ func TestFlatUniverseConstantExMem(t *testing.T) {
 	})
 }
 
-func assertConstantEncoding(t *testing.T, constant syn.IConstant, wantHex string) {
+func assertConstantEncoding(
+	t *testing.T,
+	constant syn.IConstant,
+	wantHex string,
+) {
 	t.Helper()
 	encoded, err := syn.Encode(&syn.Program[syn.DeBruijn]{
 		Version: lang.LanguageVersionV4,

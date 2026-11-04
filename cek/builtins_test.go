@@ -46,11 +46,19 @@ func hexDecode(t *testing.T, s string) []byte {
 // Helper functions to reduce test code duplication
 
 func newTestMachine() *Machine[syn.DeBruijn] {
-	return NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+	return NewMachine[syn.DeBruijn](
+		lang.LanguageVersionV3,
+		0,
+		testEvalContext(),
+	)
 }
 
 func newTestMachineV4() *Machine[syn.DeBruijn] {
-	return NewMachine[syn.DeBruijn](lang.LanguageVersionV4, 0, testEvalContext())
+	return NewMachine[syn.DeBruijn](
+		lang.LanguageVersionV4,
+		0,
+		testEvalContext(),
+	)
 }
 
 func newTestBuiltin(fn builtin.DefaultFunction) *Builtin[syn.DeBruijn] {
@@ -252,21 +260,38 @@ func TestAddIntegerBuiltinFastPathMatchesBigInt(t *testing.T) {
 			constVal := expectConstant(t, val)
 			i := expectInteger(t, constVal)
 
-			expected := new(big.Int).Add(big.NewInt(tt.left), big.NewInt(tt.right))
+			expected := new(
+				big.Int,
+			).Add(big.NewInt(tt.left), big.NewInt(tt.right))
 			if i.Inner.Cmp(expected) != 0 {
-				t.Fatalf("addInteger(%d, %d) = %v, want %v", tt.left, tt.right, i.Inner, expected)
+				t.Fatalf(
+					"addInteger(%d, %d) = %v, want %v",
+					tt.left,
+					tt.right,
+					i.Inner,
+					expected,
+				)
 			}
 
 			resultInfo, err := unwrapIntegerInfo[syn.DeBruijn](constVal)
 			if err != nil {
 				t.Fatalf("unwrapIntegerInfo returned error: %v", err)
 			}
-			if expected.IsInt64() && expected.Int64() >= cachedIntMin && expected.Int64() <= cachedIntMax {
+			if expected.IsInt64() && expected.Int64() >= cachedIntMin &&
+				expected.Int64() <= cachedIntMax {
 				if constVal != int64Constant(expected.Int64()) {
-					t.Fatalf("expected cached int64Constant(%d) result", expected.Int64())
+					t.Fatalf(
+						"expected cached int64Constant(%d) result",
+						expected.Int64(),
+					)
 				}
-				if !resultInfo.isInt64 || resultInfo.int64Val != expected.Int64() {
-					t.Fatalf("result integer info = %+v, want int64Val=%d", resultInfo, expected.Int64())
+				if !resultInfo.isInt64 ||
+					resultInfo.int64Val != expected.Int64() {
+					t.Fatalf(
+						"result integer info = %+v, want int64Val=%d",
+						resultInfo,
+						expected.Int64(),
+					)
 				}
 			}
 		})
@@ -466,18 +491,90 @@ func TestIntegerDivisionEdgeCases(t *testing.T) {
 		right    int64
 		expected string
 	}{
-		{name: "divide_neg_pos", fn: builtin.DivideInteger, left: -10, right: 3, expected: "-4"},
-		{name: "divide_pos_neg", fn: builtin.DivideInteger, left: 10, right: -3, expected: "-4"},
-		{name: "divide_minint_fallback", fn: builtin.DivideInteger, left: math.MinInt64, right: -1, expected: "9223372036854775808"},
-		{name: "quotient_neg_pos", fn: builtin.QuotientInteger, left: -10, right: 3, expected: "-3"},
-		{name: "quotient_pos_neg", fn: builtin.QuotientInteger, left: 10, right: -3, expected: "-3"},
-		{name: "quotient_minint_fallback", fn: builtin.QuotientInteger, left: math.MinInt64, right: -1, expected: "9223372036854775808"},
-		{name: "remainder_neg_pos", fn: builtin.RemainderInteger, left: -10, right: 3, expected: "-1"},
-		{name: "remainder_pos_neg", fn: builtin.RemainderInteger, left: 10, right: -3, expected: "1"},
-		{name: "remainder_minint", fn: builtin.RemainderInteger, left: math.MinInt64, right: -1, expected: "0"},
-		{name: "mod_neg_pos", fn: builtin.ModInteger, left: -10, right: 3, expected: "2"},
-		{name: "mod_pos_neg", fn: builtin.ModInteger, left: 10, right: -3, expected: "-2"},
-		{name: "mod_minint", fn: builtin.ModInteger, left: math.MinInt64, right: -1, expected: "0"},
+		{
+			name:     "divide_neg_pos",
+			fn:       builtin.DivideInteger,
+			left:     -10,
+			right:    3,
+			expected: "-4",
+		},
+		{
+			name:     "divide_pos_neg",
+			fn:       builtin.DivideInteger,
+			left:     10,
+			right:    -3,
+			expected: "-4",
+		},
+		{
+			name:     "divide_minint_fallback",
+			fn:       builtin.DivideInteger,
+			left:     math.MinInt64,
+			right:    -1,
+			expected: "9223372036854775808",
+		},
+		{
+			name:     "quotient_neg_pos",
+			fn:       builtin.QuotientInteger,
+			left:     -10,
+			right:    3,
+			expected: "-3",
+		},
+		{
+			name:     "quotient_pos_neg",
+			fn:       builtin.QuotientInteger,
+			left:     10,
+			right:    -3,
+			expected: "-3",
+		},
+		{
+			name:     "quotient_minint_fallback",
+			fn:       builtin.QuotientInteger,
+			left:     math.MinInt64,
+			right:    -1,
+			expected: "9223372036854775808",
+		},
+		{
+			name:     "remainder_neg_pos",
+			fn:       builtin.RemainderInteger,
+			left:     -10,
+			right:    3,
+			expected: "-1",
+		},
+		{
+			name:     "remainder_pos_neg",
+			fn:       builtin.RemainderInteger,
+			left:     10,
+			right:    -3,
+			expected: "1",
+		},
+		{
+			name:     "remainder_minint",
+			fn:       builtin.RemainderInteger,
+			left:     math.MinInt64,
+			right:    -1,
+			expected: "0",
+		},
+		{
+			name:     "mod_neg_pos",
+			fn:       builtin.ModInteger,
+			left:     -10,
+			right:    3,
+			expected: "2",
+		},
+		{
+			name:     "mod_pos_neg",
+			fn:       builtin.ModInteger,
+			left:     10,
+			right:    -3,
+			expected: "-2",
+		},
+		{
+			name:     "mod_minint",
+			fn:       builtin.ModInteger,
+			left:     math.MinInt64,
+			right:    -1,
+			expected: "0",
+		},
 	}
 
 	for _, tt := range tests {
@@ -492,7 +589,14 @@ func TestIntegerDivisionEdgeCases(t *testing.T) {
 			integer := expectInteger(t, constVal)
 
 			if got := integer.Inner.String(); got != tt.expected {
-				t.Fatalf("%s(%d, %d) = %s, want %s", tt.fn, tt.left, tt.right, got, tt.expected)
+				t.Fatalf(
+					"%s(%d, %d) = %s, want %s",
+					tt.fn,
+					tt.left,
+					tt.right,
+					got,
+					tt.expected,
+				)
 			}
 		})
 	}
@@ -589,7 +693,12 @@ func TestChooseDataBuiltinArityMatchesLanguageVersion(t *testing.T) {
 				value = value.ApplyArg(arg)
 			}
 			if !value.IsReady() || value.IsArrow() {
-				t.Fatalf("ChooseData after %d args: ready=%v arrow=%v, want ready=true arrow=false", value.ArgCount, value.IsReady(), value.IsArrow())
+				t.Fatalf(
+					"ChooseData after %d args: ready=%v arrow=%v, want ready=true arrow=false",
+					value.ArgCount,
+					value.IsReady(),
+					value.IsArrow(),
+				)
 			}
 		})
 	}
@@ -1646,18 +1755,70 @@ func TestConstrDataTagSemantics(t *testing.T) {
 		tag       *big.Int
 		wantCode  ErrorCode
 	}{
-		{name: "variant A accepts negative", semantics: SemanticsVariantA, tag: big.NewInt(-1)},
-		{name: "variant A accepts unbounded", semantics: SemanticsVariantA, tag: twoTo80},
-		{name: "variant B accepts negative", semantics: SemanticsVariantB, tag: big.NewInt(-1)},
-		{name: "variant B accepts unbounded", semantics: SemanticsVariantB, tag: twoTo80},
-		{name: "variant C accepts negative", semantics: SemanticsVariantC, tag: big.NewInt(-1)},
-		{name: "variant C accepts unbounded", semantics: SemanticsVariantC, tag: twoTo80},
-		{name: "variant D accepts Word64 max", semantics: SemanticsVariantD, tag: maxWord64},
-		{name: "variant D rejects negative", semantics: SemanticsVariantD, tag: big.NewInt(-1), wantCode: ErrCodeInvalidArgument},
-		{name: "variant D rejects above Word64", semantics: SemanticsVariantD, tag: twoTo64, wantCode: ErrCodeOverflow},
-		{name: "variant E accepts Word64 max", semantics: SemanticsVariantE, tag: maxWord64},
-		{name: "variant E rejects negative", semantics: SemanticsVariantE, tag: big.NewInt(-1), wantCode: ErrCodeInvalidArgument},
-		{name: "variant E rejects above Word64", semantics: SemanticsVariantE, tag: twoTo64, wantCode: ErrCodeOverflow},
+		{
+			name:      "variant A accepts negative",
+			semantics: SemanticsVariantA,
+			tag:       big.NewInt(-1),
+		},
+		{
+			name:      "variant A accepts unbounded",
+			semantics: SemanticsVariantA,
+			tag:       twoTo80,
+		},
+		{
+			name:      "variant B accepts negative",
+			semantics: SemanticsVariantB,
+			tag:       big.NewInt(-1),
+		},
+		{
+			name:      "variant B accepts unbounded",
+			semantics: SemanticsVariantB,
+			tag:       twoTo80,
+		},
+		{
+			name:      "variant C accepts negative",
+			semantics: SemanticsVariantC,
+			tag:       big.NewInt(-1),
+		},
+		{
+			name:      "variant C accepts unbounded",
+			semantics: SemanticsVariantC,
+			tag:       twoTo80,
+		},
+		{
+			name:      "variant D accepts Word64 max",
+			semantics: SemanticsVariantD,
+			tag:       maxWord64,
+		},
+		{
+			name:      "variant D rejects negative",
+			semantics: SemanticsVariantD,
+			tag:       big.NewInt(-1),
+			wantCode:  ErrCodeInvalidArgument,
+		},
+		{
+			name:      "variant D rejects above Word64",
+			semantics: SemanticsVariantD,
+			tag:       twoTo64,
+			wantCode:  ErrCodeOverflow,
+		},
+		{
+			name:      "variant E accepts Word64 max",
+			semantics: SemanticsVariantE,
+			tag:       maxWord64,
+		},
+		{
+			name:      "variant E rejects negative",
+			semantics: SemanticsVariantE,
+			tag:       big.NewInt(-1),
+			wantCode:  ErrCodeInvalidArgument,
+		},
+		{
+			name:      "variant E rejects above Word64",
+			semantics: SemanticsVariantE,
+			tag:       twoTo64,
+			wantCode:  ErrCodeOverflow,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1670,9 +1831,13 @@ func TestConstrDataTagSemantics(t *testing.T) {
 			constructed := &syn.Apply[syn.DeBruijn]{
 				Function: &syn.Apply[syn.DeBruijn]{
 					Function: &syn.Builtin{DefaultFunction: builtin.ConstrData},
-					Argument: &syn.Constant{Con: &syn.Integer{Inner: new(big.Int).Set(tt.tag)}},
+					Argument: &syn.Constant{
+						Con: &syn.Integer{Inner: new(big.Int).Set(tt.tag)},
+					},
 				},
-				Argument: &syn.Constant{Con: &syn.ProtoList{LTyp: &syn.TData{}}},
+				Argument: &syn.Constant{
+					Con: &syn.ProtoList{LTyp: &syn.TData{}},
+				},
 			}
 			term := &syn.Apply[syn.DeBruijn]{
 				Function: &syn.Builtin{DefaultFunction: builtin.UnConstrData},
@@ -1689,7 +1854,11 @@ func TestConstrDataTagSemantics(t *testing.T) {
 					t.Fatalf("expected BuiltinError, got %T: %v", err, err)
 				}
 				if builtinErr.Code != tt.wantCode {
-					t.Fatalf("error code = %v, want %v", builtinErr.Code, tt.wantCode)
+					t.Fatalf(
+						"error code = %v, want %v",
+						builtinErr.Code,
+						tt.wantCode,
+					)
 				}
 				return
 			}
@@ -1702,11 +1871,17 @@ func TestConstrDataTagSemantics(t *testing.T) {
 			}
 			pair, ok := constant.Con.(*syn.ProtoPair)
 			if !ok {
-				t.Fatalf("Run constant has type %T, want *syn.ProtoPair", constant.Con)
+				t.Fatalf(
+					"Run constant has type %T, want *syn.ProtoPair",
+					constant.Con,
+				)
 			}
 			gotTag, ok := pair.First.(*syn.Integer)
 			if !ok {
-				t.Fatalf("constructor tag result has type %T, want *syn.Integer", pair.First)
+				t.Fatalf(
+					"constructor tag result has type %T, want *syn.Integer",
+					pair.First,
+				)
 			}
 			if gotTag.Inner.Cmp(tt.tag) != 0 {
 				t.Fatalf("constructor tag = %s, want %s", gotTag.Inner, tt.tag)
@@ -2711,30 +2886,36 @@ func TestTypedErrorsBuiltinValidation(t *testing.T) {
 	})
 
 	// verifyEd25519Signature: invalid signature length (line ~1234)
-	t.Run("verifyEd25519Signature/invalid_signature_length", func(t *testing.T) {
-		m := newTestMachine()
-		b := newTestBuiltin(builtin.VerifyEd25519Signature)
+	t.Run(
+		"verifyEd25519Signature/invalid_signature_length",
+		func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.VerifyEd25519Signature)
 
-		validKey := make([]byte, ed25519.PublicKeySize)
-		msg := []byte("hello")
-		shortSig := make([]byte, 10) // not 64
+			validKey := make([]byte, ed25519.PublicKeySize)
+			msg := []byte("hello")
+			shortSig := make([]byte, 10) // not 64
 
-		b = b.ApplyArg(&Constant{&syn.ByteString{Inner: validKey}})
-		b = b.ApplyArg(&Constant{&syn.ByteString{Inner: msg}})
-		b = b.ApplyArg(&Constant{&syn.ByteString{Inner: shortSig}})
+			b = b.ApplyArg(&Constant{&syn.ByteString{Inner: validKey}})
+			b = b.ApplyArg(&Constant{&syn.ByteString{Inner: msg}})
+			b = b.ApplyArg(&Constant{&syn.ByteString{Inner: shortSig}})
 
-		_, err := evalBuiltinWithError(t, m, b)
-		if err == nil {
-			t.Fatal("expected error for invalid signature length, got nil")
-		}
-		var builtinErr *BuiltinError
-		if !errors.As(err, &builtinErr) {
-			t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
-		}
-		if builtinErr.Code != ErrCodeInvalidArgument {
-			t.Fatalf("expected ErrCodeInvalidArgument, got %v", builtinErr.Code)
-		}
-	})
+			_, err := evalBuiltinWithError(t, m, b)
+			if err == nil {
+				t.Fatal("expected error for invalid signature length, got nil")
+			}
+			var builtinErr *BuiltinError
+			if !errors.As(err, &builtinErr) {
+				t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+			}
+			if builtinErr.Code != ErrCodeInvalidArgument {
+				t.Fatalf(
+					"expected ErrCodeInvalidArgument, got %v",
+					builtinErr.Code,
+				)
+			}
+		},
+	)
 
 	// verifySchnorrSecp256k1Signature: schnorr.ParsePubKey returns raw error (line ~1469)
 	t.Run("verifySchnorrSecp256k1Signature/invalid_pubkey", func(t *testing.T) {
@@ -2785,42 +2966,52 @@ func TestTypedErrorsBuiltinValidation(t *testing.T) {
 		}
 	})
 
-	t.Run("integerToByteString/large_negative_input_is_metered_before_error", func(t *testing.T) {
-		m := newTestMachine()
-		m.ExBudget = ExBudget{}
-		b := newTestBuiltin(builtin.IntegerToByteString)
-		large := new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), 4096))
+	t.Run(
+		"integerToByteString/large_negative_input_is_metered_before_error",
+		func(t *testing.T) {
+			m := newTestMachine()
+			m.ExBudget = ExBudget{}
+			b := newTestBuiltin(builtin.IntegerToByteString)
+			large := new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), 4096))
 
-		b = b.ApplyArg(&Constant{&syn.Bool{Inner: true}})
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: large}})
+			b = b.ApplyArg(&Constant{&syn.Bool{Inner: true}})
+			b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})
+			b = b.ApplyArg(&Constant{&syn.Integer{Inner: large}})
 
-		_, err := evalBuiltinWithError(t, m, b)
-		var budgetErr *BudgetError
-		if !errors.As(err, &budgetErr) {
-			t.Fatalf("expected cost failure before invalid-input error, got %T: %v", err, err)
-		}
-	})
+			_, err := evalBuiltinWithError(t, m, b)
+			var budgetErr *BudgetError
+			if !errors.As(err, &budgetErr) {
+				t.Fatalf(
+					"expected cost failure before invalid-input error, got %T: %v",
+					err,
+					err,
+				)
+			}
+		},
+	)
 
-	t.Run("integerToByteString/large_negative_input_error_is_bounded", func(t *testing.T) {
-		m := newTestMachine()
-		b := newTestBuiltin(builtin.IntegerToByteString)
-		large := new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), 4096))
+	t.Run(
+		"integerToByteString/large_negative_input_error_is_bounded",
+		func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.IntegerToByteString)
+			large := new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), 4096))
 
-		b = b.ApplyArg(&Constant{&syn.Bool{Inner: true}})
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: large}})
+			b = b.ApplyArg(&Constant{&syn.Bool{Inner: true}})
+			b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})
+			b = b.ApplyArg(&Constant{&syn.Integer{Inner: large}})
 
-		_, err := evalBuiltinWithError(t, m, b)
-		var builtinErr *BuiltinError
-		if !errors.As(err, &builtinErr) {
-			t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
-		}
-		want := "negative input (sign=-1, bit length=4097)"
-		if builtinErr.Message != want {
-			t.Fatalf("message = %q, want %q", builtinErr.Message, want)
-		}
-	})
+			_, err := evalBuiltinWithError(t, m, b)
+			var builtinErr *BuiltinError
+			if !errors.As(err, &builtinErr) {
+				t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+			}
+			want := "negative input (sign=-1, bit length=4097)"
+			if builtinErr.Message != want {
+				t.Fatalf("message = %q, want %q", builtinErr.Message, want)
+			}
+		},
+	)
 
 	// integerToByteString: negative size (line ~2989)
 	t.Run("integerToByteString/negative_size", func(t *testing.T) {
@@ -2852,15 +3043,21 @@ func TestTypedErrorsBuiltinValidation(t *testing.T) {
 		// Build a number that requires more than max bytes
 		// IntegerToByteStringMaximumOutputLength is 8192 bytes = 65536 bits
 		// So we need a number with more than 65536 bits
-		large := new(big.Int).Lsh(big.NewInt(1), 8*IntegerToByteStringMaximumOutputLength)
+		large := new(
+			big.Int,
+		).Lsh(big.NewInt(1), 8*IntegerToByteStringMaximumOutputLength)
 
 		b = b.ApplyArg(&Constant{&syn.Bool{Inner: true}})
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(0)}}) // size=0 means auto
+		b = b.ApplyArg(
+			&Constant{&syn.Integer{Inner: big.NewInt(0)}},
+		) // size=0 means auto
 		b = b.ApplyArg(&Constant{&syn.Integer{Inner: large}})
 
 		_, err := evalBuiltinWithError(t, m, b)
 		if err == nil {
-			t.Fatal("expected error for zero-size with too-large input, got nil")
+			t.Fatal(
+				"expected error for zero-size with too-large input, got nil",
+			)
 		}
 		var builtinErr *BuiltinError
 		if !errors.As(err, &builtinErr) {
@@ -2877,8 +3074,12 @@ func TestTypedErrorsBuiltinValidation(t *testing.T) {
 		b := newTestBuiltin(builtin.IntegerToByteString)
 
 		b = b.ApplyArg(&Constant{&syn.Bool{Inner: true}})
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(1)}})      // size=1
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(0xABCD)}}) // needs 2 bytes
+		b = b.ApplyArg(
+			&Constant{&syn.Integer{Inner: big.NewInt(1)}},
+		) // size=1
+		b = b.ApplyArg(
+			&Constant{&syn.Integer{Inner: big.NewInt(0xABCD)}},
+		) // needs 2 bytes
 
 		_, err := evalBuiltinWithError(t, m, b)
 		if err == nil {
@@ -2929,8 +3130,12 @@ func TestTypedErrorsBuiltinValidation(t *testing.T) {
 		m := newTestMachine()
 		b := newTestBuiltin(builtin.ReplicateByte)
 
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})   // size=4
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(256)}}) // byte=256, out of range
+		b = b.ApplyArg(
+			&Constant{&syn.Integer{Inner: big.NewInt(4)}},
+		) // size=4
+		b = b.ApplyArg(
+			&Constant{&syn.Integer{Inner: big.NewInt(256)}},
+		) // byte=256, out of range
 
 		_, err := evalBuiltinWithError(t, m, b)
 		if err == nil {
@@ -2945,48 +3150,62 @@ func TestTypedErrorsBuiltinValidation(t *testing.T) {
 		}
 	})
 
-	t.Run("replicateByte/cost_is_charged_before_invalid_byte_error", func(t *testing.T) {
-		m := newTestMachine()
-		m.ExBudget = ExBudget{}
-		b := newTestBuiltin(builtin.ReplicateByte)
+	t.Run(
+		"replicateByte/cost_is_charged_before_invalid_byte_error",
+		func(t *testing.T) {
+			m := newTestMachine()
+			m.ExBudget = ExBudget{}
+			b := newTestBuiltin(builtin.ReplicateByte)
 
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(256)}})
+			b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})
+			b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(256)}})
 
-		_, err := evalBuiltinWithError(t, m, b)
-		var budgetErr *BudgetError
-		if !errors.As(err, &budgetErr) {
-			t.Fatalf("expected cost failure before invalid-input error, got %T: %v", err, err)
-		}
-	})
+			_, err := evalBuiltinWithError(t, m, b)
+			var budgetErr *BudgetError
+			if !errors.As(err, &budgetErr) {
+				t.Fatalf(
+					"expected cost failure before invalid-input error, got %T: %v",
+					err,
+					err,
+				)
+			}
+		},
+	)
 
-	t.Run("replicateByte/large_byte_value_error_is_bounded", func(t *testing.T) {
-		m := newTestMachine()
-		b := newTestBuiltin(builtin.ReplicateByte)
-		large := new(big.Int).Lsh(big.NewInt(1), 4096)
+	t.Run(
+		"replicateByte/large_byte_value_error_is_bounded",
+		func(t *testing.T) {
+			m := newTestMachine()
+			b := newTestBuiltin(builtin.ReplicateByte)
+			large := new(big.Int).Lsh(big.NewInt(1), 4096)
 
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: large}})
+			b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})
+			b = b.ApplyArg(&Constant{&syn.Integer{Inner: large}})
 
-		_, err := evalBuiltinWithError(t, m, b)
-		var builtinErr *BuiltinError
-		if !errors.As(err, &builtinErr) {
-			t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
-		}
-		want := "byte value out of bounds (sign=1, bit length=4097; want 0-255)"
-		if builtinErr.Message != want {
-			t.Fatalf("message = %q, want %q", builtinErr.Message, want)
-		}
-	})
+			_, err := evalBuiltinWithError(t, m, b)
+			var builtinErr *BuiltinError
+			if !errors.As(err, &builtinErr) {
+				t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+			}
+			want := "byte value out of bounds (sign=1, bit length=4097; want 0-255)"
+			if builtinErr.Message != want {
+				t.Fatalf("message = %q, want %q", builtinErr.Message, want)
+			}
+		},
+	)
 
 	// expModInteger: 0^negative is undefined (line ~3952)
 	t.Run("expModInteger/zero_to_negative_exponent", func(t *testing.T) {
 		m := newTestMachine()
 		b := newTestBuiltin(builtin.ExpModInteger)
 
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(0)}})  // base=0
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(-1)}}) // exponent=-1
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(5)}})  // modulus=5
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(0)}}) // base=0
+		b = b.ApplyArg(
+			&Constant{&syn.Integer{Inner: big.NewInt(-1)}},
+		) // exponent=-1
+		b = b.ApplyArg(
+			&Constant{&syn.Integer{Inner: big.NewInt(5)}},
+		) // modulus=5
 
 		_, err := evalBuiltinWithError(t, m, b)
 		if err == nil {
@@ -3007,9 +3226,13 @@ func TestTypedErrorsBuiltinValidation(t *testing.T) {
 		b := newTestBuiltin(builtin.ExpModInteger)
 
 		// 2^(-1) mod 4 is undefined because gcd(2,4) = 2 != 1
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(2)}})  // base=2
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(-1)}}) // exponent=-1
-		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(4)}})  // modulus=4
+		b = b.ApplyArg(&Constant{&syn.Integer{Inner: big.NewInt(2)}}) // base=2
+		b = b.ApplyArg(
+			&Constant{&syn.Integer{Inner: big.NewInt(-1)}},
+		) // exponent=-1
+		b = b.ApplyArg(
+			&Constant{&syn.Integer{Inner: big.NewInt(4)}},
+		) // modulus=4
 
 		_, err := evalBuiltinWithError(t, m, b)
 		if err == nil {
@@ -3024,38 +3247,48 @@ func TestTypedErrorsBuiltinValidation(t *testing.T) {
 		}
 	})
 
-	t.Run("expModInteger/large_invalid_integer_errors_are_bounded", func(t *testing.T) {
-		large := new(big.Int).Lsh(big.NewInt(1), 4096)
-		for _, tt := range []struct {
-			name string
-			base *big.Int
-			exp  *big.Int
-			mod  *big.Int
-		}{
-			{name: "zero base", base: big.NewInt(0), exp: new(big.Int).Neg(large), mod: big.NewInt(5)},
-			{name: "non-invertible", base: new(big.Int).Lsh(big.NewInt(1), 4096), exp: big.NewInt(-1), mod: new(big.Int).Lsh(big.NewInt(1), 4000)},
-		} {
-			t.Run(tt.name, func(t *testing.T) {
-				m := newTestMachine()
-				b := newTestBuiltin(builtin.ExpModInteger)
-				b = b.ApplyArg(&Constant{&syn.Integer{Inner: tt.base}})
-				b = b.ApplyArg(&Constant{&syn.Integer{Inner: tt.exp}})
-				b = b.ApplyArg(&Constant{&syn.Integer{Inner: tt.mod}})
+	t.Run(
+		"expModInteger/large_invalid_integer_errors_are_bounded",
+		func(t *testing.T) {
+			large := new(big.Int).Lsh(big.NewInt(1), 4096)
+			for _, tt := range []struct {
+				name string
+				base *big.Int
+				exp  *big.Int
+				mod  *big.Int
+			}{
+				{name: "zero base", base: big.NewInt(0), exp: new(big.Int).Neg(large), mod: big.NewInt(5)},
+				{name: "non-invertible", base: new(big.Int).Lsh(big.NewInt(1), 4096), exp: big.NewInt(-1), mod: new(big.Int).Lsh(big.NewInt(1), 4000)},
+			} {
+				t.Run(tt.name, func(t *testing.T) {
+					m := newTestMachine()
+					b := newTestBuiltin(builtin.ExpModInteger)
+					b = b.ApplyArg(&Constant{&syn.Integer{Inner: tt.base}})
+					b = b.ApplyArg(&Constant{&syn.Integer{Inner: tt.exp}})
+					b = b.ApplyArg(&Constant{&syn.Integer{Inner: tt.mod}})
 
-				_, err := evalBuiltinWithError(t, m, b)
-				var builtinErr *BuiltinError
-				if !errors.As(err, &builtinErr) {
-					t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
-				}
-				if len(builtinErr.Message) > 160 {
-					t.Fatalf("error message is not bounded (%d bytes): %q", len(builtinErr.Message), builtinErr.Message)
-				}
-				if !strings.Contains(builtinErr.Message, "bit length=") {
-					t.Fatalf("error message lacks bounded integer metadata: %q", builtinErr.Message)
-				}
-			})
-		}
-	})
+					_, err := evalBuiltinWithError(t, m, b)
+					var builtinErr *BuiltinError
+					if !errors.As(err, &builtinErr) {
+						t.Fatalf("expected *BuiltinError, got %T: %v", err, err)
+					}
+					if len(builtinErr.Message) > 160 {
+						t.Fatalf(
+							"error message is not bounded (%d bytes): %q",
+							len(builtinErr.Message),
+							builtinErr.Message,
+						)
+					}
+					if !strings.Contains(builtinErr.Message, "bit length=") {
+						t.Fatalf(
+							"error message lacks bounded integer metadata: %q",
+							builtinErr.Message,
+						)
+					}
+				})
+			}
+		},
+	)
 }
 
 func TestSliceByteStringBuiltin(t *testing.T) {
@@ -3853,20 +4086,37 @@ func TestMkConsDataValueOntoConstantList(t *testing.T) {
 
 	expectedValues := []int64{42, 1, 2}
 	if len(resultList.List) != len(expectedValues) {
-		t.Fatalf("expected list with %d elements, got %d", len(expectedValues), len(resultList.List))
+		t.Fatalf(
+			"expected list with %d elements, got %d",
+			len(expectedValues),
+			len(resultList.List),
+		)
 	}
 
 	for i, expectedValue := range expectedValues {
 		dataElem, ok := resultList.List[i].(*syn.Data)
 		if !ok {
-			t.Fatalf("expected element %d to be Data, got %T", i, resultList.List[i])
+			t.Fatalf(
+				"expected element %d to be Data, got %T",
+				i,
+				resultList.List[i],
+			)
 		}
 		intElem, ok := dataElem.Inner.(*data.Integer)
 		if !ok {
-			t.Fatalf("expected element %d inner to be Integer, got %T", i, dataElem.Inner)
+			t.Fatalf(
+				"expected element %d inner to be Integer, got %T",
+				i,
+				dataElem.Inner,
+			)
 		}
 		if intElem.Inner.Cmp(big.NewInt(expectedValue)) != 0 {
-			t.Fatalf("expected element %d value %d, got %v", i, expectedValue, intElem.Inner)
+			t.Fatalf(
+				"expected element %d value %d, got %v",
+				i,
+				expectedValue,
+				intElem.Inner,
+			)
 		}
 	}
 }
@@ -4343,7 +4593,11 @@ func TestIntegerToByteStringRejectsUnrepresentableSize(t *testing.T) {
 		wantBudget bool
 	}{
 		{"ledger budget", DefaultExBudget, true},
-		{"budget covers the charge", ExBudget{Mem: math.MaxInt64, Cpu: math.MaxInt64}, false},
+		{
+			"budget covers the charge",
+			ExBudget{Mem: math.MaxInt64, Cpu: math.MaxInt64},
+			false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -4366,7 +4620,10 @@ func TestIntegerToByteStringRejectsUnrepresentableSize(t *testing.T) {
 					t.Fatalf("expected BudgetError, got %T: %v", err, err)
 				}
 				if budgetErr.Requested.Mem != 1<<60 {
-					t.Fatalf("requested mem = %d, want 2^60", budgetErr.Requested.Mem)
+					t.Fatalf(
+						"requested mem = %d, want 2^60",
+						budgetErr.Requested.Mem,
+					)
 				}
 				if got := budgetErr.Available.Sub(&budgetErr.Requested); m.ExBudget != got {
 					t.Fatalf("remaining = %+v, want %+v", m.ExBudget, got)
@@ -4378,7 +4635,11 @@ func TestIntegerToByteStringRejectsUnrepresentableSize(t *testing.T) {
 				t.Fatalf("expected BuiltinError, got %T: %v", err, err)
 			}
 			if builtinErr.Code != ErrCodeOverflow {
-				t.Fatalf("error code = %v, want %v", builtinErr.Code, ErrCodeOverflow)
+				t.Fatalf(
+					"error code = %v, want %v",
+					builtinErr.Code,
+					ErrCodeOverflow,
+				)
 			}
 		})
 	}
@@ -4820,7 +5081,12 @@ func TestBuiltinArgsExtract(t *testing.T) {
 		got := holder[i].(Constant).Constant.(*syn.Integer)
 		wantInt := want.(Constant).Constant.(*syn.Integer)
 		if got.Inner.Cmp(wantInt.Inner) != 0 {
-			t.Fatalf("at index %d, expected %v, got %v", i, wantInt.Inner, got.Inner)
+			t.Fatalf(
+				"at index %d, expected %v, got %v",
+				i,
+				wantInt.Inner,
+				got.Inner,
+			)
 		}
 	}
 }
@@ -4830,11 +5096,20 @@ func TestBuiltinArgsExtract(t *testing.T) {
 func TestVerifyEcdsaSecp256k1HighS(t *testing.T) {
 	// Static test vector from conformance test-vector-03 (OpenSSL-generated).
 	// Same keypair and message as test-vector-01, but with high-s.
-	pubKeyBytes := hexDecode(t, "032e433589dce61863199171f4d1e3fa946a5832621fcd29559940a0950f96fb6f")
-	rawSig := hexDecode(t, "603e6e7bf67152188204f76f6274d38c477bdbc3954cdaa44e4ef49691a517de"+
-		"d5eaad30c2e69e3e9b124bcc48fa0e4d0aa0dfdb4ca9d537ea1dcd46c94b8f56")
+	pubKeyBytes := hexDecode(
+		t,
+		"032e433589dce61863199171f4d1e3fa946a5832621fcd29559940a0950f96fb6f",
+	)
+	rawSig := hexDecode(
+		t,
+		"603e6e7bf67152188204f76f6274d38c477bdbc3954cdaa44e4ef49691a517de"+
+			"d5eaad30c2e69e3e9b124bcc48fa0e4d0aa0dfdb4ca9d537ea1dcd46c94b8f56",
+	)
 	// The message is sha2_256("") = e3b0c442...
-	message := hexDecode(t, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+	message := hexDecode(
+		t,
+		"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+	)
 
 	// Verify s is actually high (over half the curve order)
 	s := new(btcec.ModNScalar)
@@ -4871,16 +5146,31 @@ func TestBLSMSMScalarBounds(t *testing.T) {
 		scalar *big.Int
 		want   bool
 	}{
-		{"maximum", new(big.Int).Sub(new(big.Int).Set(limit), big.NewInt(1)), true},
+		{
+			"maximum",
+			new(big.Int).Sub(new(big.Int).Set(limit), big.NewInt(1)),
+			true,
+		},
 		{"above maximum", new(big.Int).Set(limit), false},
 		{"minimum", new(big.Int).Neg(new(big.Int).Set(limit)), true},
-		{"below minimum", new(big.Int).Sub(new(big.Int).Neg(new(big.Int).Set(limit)), big.NewInt(1)), false},
+		{
+			"below minimum",
+			new(
+				big.Int,
+			).Sub(new(big.Int).Neg(new(big.Int).Set(limit)), big.NewInt(1)),
+			false,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := validBLSMSMScalar(tt.scalar); got != tt.want {
-				t.Fatalf("validBLSMSMScalar(%s) = %v, want %v", tt.scalar, got, tt.want)
+				t.Fatalf(
+					"validBLSMSMScalar(%s) = %v, want %v",
+					tt.scalar,
+					got,
+					tt.want,
+				)
 			}
 		})
 	}
@@ -4910,7 +5200,9 @@ func TestBLSMultiScalarMulValidatesUnpairedScalar(t *testing.T) {
 					t.Fatalf("expected G1 result, got %T", val)
 				}
 				if !got.Inner.Equal(&g1Gen) {
-					t.Fatal("valid length mismatch should use the paired G1 prefix")
+					t.Fatal(
+						"valid length mismatch should use the paired G1 prefix",
+					)
 				}
 			},
 		},
@@ -4927,7 +5219,9 @@ func TestBLSMultiScalarMulValidatesUnpairedScalar(t *testing.T) {
 					t.Fatalf("expected G2 result, got %T", val)
 				}
 				if !got.Inner.Equal(&g2Gen) {
-					t.Fatal("valid length mismatch should use the paired G2 prefix")
+					t.Fatal(
+						"valid length mismatch should use the paired G2 prefix",
+					)
 				}
 			},
 		},
@@ -4960,13 +5254,23 @@ func TestBLSMultiScalarMulValidatesUnpairedScalar(t *testing.T) {
 			_, err = evaluate(&syn.Integer{Inner: limit})
 			var builtinErr *BuiltinError
 			if !errors.As(err, &builtinErr) {
-				t.Fatalf("expected BuiltinError for unpaired out-of-range scalar, got %v", err)
+				t.Fatalf(
+					"expected BuiltinError for unpaired out-of-range scalar, got %v",
+					err,
+				)
 			}
 			if builtinErr.Code != ErrCodeInvalidArgument {
-				t.Fatalf("expected ErrCodeInvalidArgument, got %d", builtinErr.Code)
+				t.Fatalf(
+					"expected ErrCodeInvalidArgument, got %d",
+					builtinErr.Code,
+				)
 			}
 			if builtinErr.Builtin != tt.builtinName {
-				t.Fatalf("expected builtin %q, got %q", tt.builtinName, builtinErr.Builtin)
+				t.Fatalf(
+					"expected builtin %q, got %q",
+					tt.builtinName,
+					builtinErr.Builtin,
+				)
 			}
 			if builtinErr.Message != "scalar is outside the signed 4096-bit range" {
 				t.Fatalf("unexpected error message: %q", builtinErr.Message)
@@ -4975,13 +5279,23 @@ func TestBLSMultiScalarMulValidatesUnpairedScalar(t *testing.T) {
 			_, err = evaluate(&syn.Integer{})
 			builtinErr = nil
 			if !errors.As(err, &builtinErr) {
-				t.Fatalf("expected BuiltinError for unpaired malformed scalar, got %v", err)
+				t.Fatalf(
+					"expected BuiltinError for unpaired malformed scalar, got %v",
+					err,
+				)
 			}
 			if builtinErr.Code != ErrCodeInvalidArgument {
-				t.Fatalf("expected ErrCodeInvalidArgument, got %d", builtinErr.Code)
+				t.Fatalf(
+					"expected ErrCodeInvalidArgument, got %d",
+					builtinErr.Code,
+				)
 			}
 			if builtinErr.Builtin != tt.builtinName {
-				t.Fatalf("expected builtin %q, got %q", tt.builtinName, builtinErr.Builtin)
+				t.Fatalf(
+					"expected builtin %q, got %q",
+					tt.builtinName,
+					builtinErr.Builtin,
+				)
 			}
 			if builtinErr.Message != "expected integer list" {
 				t.Fatalf("unexpected error message: %q", builtinErr.Message)
@@ -5111,7 +5425,11 @@ func TestValueDataEntryLimit(t *testing.T) {
 		wantErr    bool
 		wantOutput int
 	}{
-		{name: "below limit", entries: maxEntries - 1, wantOutput: maxEntries - 1},
+		{
+			name:       "below limit",
+			entries:    maxEntries - 1,
+			wantOutput: maxEntries - 1,
+		},
 		{name: "at limit", entries: maxEntries, wantOutput: maxEntries},
 		{name: "above limit", entries: maxEntries + 1, wantErr: true},
 	}
@@ -5132,13 +5450,20 @@ func TestValueDataEntryLimit(t *testing.T) {
 					t.Fatalf("expected BuiltinError, got %T: %v", err, err)
 				}
 				if builtinErr.Code != ErrCodeInvalidArgument {
-					t.Fatalf("expected ErrCodeInvalidArgument, got %d", builtinErr.Code)
+					t.Fatalf(
+						"expected ErrCodeInvalidArgument, got %d",
+						builtinErr.Code,
+					)
 				}
 				return
 			}
 
 			if err != nil {
-				t.Fatalf("valueData(%d entries) returned error: %v", tt.entries, err)
+				t.Fatalf(
+					"valueData(%d entries) returned error: %v",
+					tt.entries,
+					err,
+				)
 			}
 			result := expectMaterializedData(t, val)
 			resultMap, ok := result.Inner.(*data.Map)
@@ -5146,14 +5471,24 @@ func TestValueDataEntryLimit(t *testing.T) {
 				t.Fatalf("expected data map, got %T", result.Inner)
 			}
 			if len(resultMap.Pairs) != 1 {
-				t.Fatalf("expected one policy entry, got %d", len(resultMap.Pairs))
+				t.Fatalf(
+					"expected one policy entry, got %d",
+					len(resultMap.Pairs),
+				)
 			}
 			tokens, ok := resultMap.Pairs[0][1].(*data.Map)
 			if !ok {
-				t.Fatalf("expected token data map, got %T", resultMap.Pairs[0][1])
+				t.Fatalf(
+					"expected token data map, got %T",
+					resultMap.Pairs[0][1],
+				)
 			}
 			if len(tokens.Pairs) != tt.wantOutput {
-				t.Fatalf("expected %d token entries, got %d", tt.wantOutput, len(tokens.Pairs))
+				t.Fatalf(
+					"expected %d token entries, got %d",
+					tt.wantOutput,
+					len(tokens.Pairs),
+				)
 			}
 		})
 	}
@@ -5184,7 +5519,9 @@ func TestValueDataEntryLimitChargesCostFirst(t *testing.T) {
 
 			_, err := evalBuiltinWithError(t, m, b)
 			if err == nil {
-				t.Fatal("expected insufficient budget to reject oversized valueData input")
+				t.Fatal(
+					"expected insufficient budget to reject oversized valueData input",
+				)
 			}
 			var budgetErr *BudgetError
 			if !errors.As(err, &budgetErr) {
@@ -5236,7 +5573,11 @@ func TestAssetCountHasNoValueDataLimit(t *testing.T) {
 
 			val, err := assetCount(m, b)
 			if err != nil {
-				t.Fatalf("assetCount(%d entries) returned error: %v", tt.entries, err)
+				t.Fatalf(
+					"assetCount(%d entries) returned error: %v",
+					tt.entries,
+					err,
+				)
 			}
 			got := expectInteger(t, expectConstant(t, val))
 			if got.Inner.Int64() != int64(tt.entries) {
@@ -5293,7 +5634,12 @@ func TestBigIntMod256Byte(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := bigIntMod256Byte(tt.input); got != tt.expected {
-				t.Fatalf("bigIntMod256Byte(%v) = %d, want %d", tt.input, got, tt.expected)
+				t.Fatalf(
+					"bigIntMod256Byte(%v) = %d, want %d",
+					tt.input,
+					got,
+					tt.expected,
+				)
 			}
 		})
 	}
@@ -5304,8 +5650,14 @@ func TestBigIntMod256Byte(t *testing.T) {
 // modulo 256 (floored), rather than failing because it does not fit in an
 // int64. The V3+ variants (C/E) still require the value to be in 0-255.
 func TestConsByteStringVariantABDBigInt(t *testing.T) {
-	twoPow64Plus5, _ := new(big.Int).SetString("18446744073709551621", 10)     // 2^64 + 5
-	negTwoPow64Plus5, _ := new(big.Int).SetString("-18446744073709551621", 10) // -(2^64 + 5)
+	twoPow64Plus5, _ := new(
+		big.Int,
+	).SetString("18446744073709551621", 10)
+	// 2^64 + 5
+	negTwoPow64Plus5, _ := new(
+		big.Int,
+	).SetString("-18446744073709551621", 10)
+	// -(2^64 + 5)
 	twoPow4096Plus5 := new(big.Int).Lsh(big.NewInt(1), 4096)
 	twoPow4096Plus5.Add(twoPow4096Plus5, big.NewInt(5))
 	negTwoPow4096Plus5 := new(big.Int).Neg(twoPow4096Plus5)
@@ -5378,10 +5730,14 @@ func TestConsByteStringVariantABDBigInt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := NewMachine[syn.DeBruijn](lang.LanguageVersionV1, 0, &EvalContext{
-				CostModel:        DefaultCostModel,
-				SemanticsVariant: tt.variant,
-			})
+			m := NewMachine[syn.DeBruijn](
+				lang.LanguageVersionV1,
+				0,
+				&EvalContext{
+					CostModel:        DefaultCostModel,
+					SemanticsVariant: tt.variant,
+				},
+			)
 			b := newTestBuiltin(builtin.ConsByteString)
 			b = b.ApplyArg(&Constant{&syn.Integer{Inner: tt.first}})
 			b = b.ApplyArg(&Constant{&syn.ByteString{Inner: tt.rest}})
@@ -5477,8 +5833,10 @@ func TestSliceByteStringClamping(t *testing.T) {
 			input: []byte{0x01, 0x02, 0x03},
 		},
 		{
-			name:  "skip below int64 fails",
-			skip:  new(big.Int).Sub(new(big.Int).SetInt64(math.MinInt64), big.NewInt(1)),
+			name: "skip below int64 fails",
+			skip: new(
+				big.Int,
+			).Sub(new(big.Int).SetInt64(math.MinInt64), big.NewInt(1)),
 			take:  big.NewInt(1),
 			input: []byte{0x01, 0x02, 0x03},
 		},
@@ -5624,8 +5982,18 @@ func runDropListCharacterization(
 	fastN := &Constant{&syn.Integer{Inner: new(big.Int).Set(n)}}
 	slowN := &Constant{&syn.Integer{Inner: new(big.Int).Set(n)}}
 
-	fastVal, fastBudget, fastErr := evalDropListConsumed(t, initial, fastN, fastArg)
-	slowVal, slowBudget, slowErr := evalDropListConsumed(t, initial, slowN, slowArg)
+	fastVal, fastBudget, fastErr := evalDropListConsumed(
+		t,
+		initial,
+		fastN,
+		fastArg,
+	)
+	slowVal, slowBudget, slowErr := evalDropListConsumed(
+		t,
+		initial,
+		slowN,
+		slowArg,
+	)
 
 	if fastBudget != slowBudget {
 		t.Fatalf(
@@ -5645,10 +6013,16 @@ func runDropListCharacterization(
 	if wantBudgetErr {
 		var fastBudgetErr, slowBudgetErr *BudgetError
 		if !errors.As(fastErr, &fastBudgetErr) {
-			t.Fatalf("expected BudgetError for data-backed arg, got %v", fastErr)
+			t.Fatalf(
+				"expected BudgetError for data-backed arg, got %v",
+				fastErr,
+			)
 		}
 		if !errors.As(slowErr, &slowBudgetErr) {
-			t.Fatalf("expected BudgetError for materialized arg, got %v", slowErr)
+			t.Fatalf(
+				"expected BudgetError for materialized arg, got %v",
+				slowErr,
+			)
 		}
 		return
 	}
@@ -5942,7 +6316,11 @@ func TestDropListUnListDataEndToEnd(t *testing.T) {
 	prettyResult := syn.PrettyTerm[syn.DeBruijn](result)
 	prettyExpected := syn.PrettyTerm[syn.DeBruijn](dExpected.Term)
 	if prettyResult != prettyExpected {
-		t.Fatalf("result mismatch\ngot:\n%s\nwant:\n%s", prettyResult, prettyExpected)
+		t.Fatalf(
+			"result mismatch\ngot:\n%s\nwant:\n%s",
+			prettyResult,
+			prettyExpected,
+		)
 	}
 
 	// Budget pinned from the pre-fast-path implementation; must never change.
@@ -6043,8 +6421,12 @@ func TestVerifySchnorrSecp256k1SignatureRange(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m := newTestMachine()
 			b := newTestBuiltin(builtin.VerifySchnorrSecp256k1Signature)
-			b = b.ApplyArg(&Constant{&syn.ByteString{Inner: hexDecode(t, bip340PubKey)}})
-			b = b.ApplyArg(&Constant{&syn.ByteString{Inner: hexDecode(t, bip340Msg)}})
+			b = b.ApplyArg(
+				&Constant{&syn.ByteString{Inner: hexDecode(t, bip340PubKey)}},
+			)
+			b = b.ApplyArg(
+				&Constant{&syn.ByteString{Inner: hexDecode(t, bip340Msg)}},
+			)
 			b = b.ApplyArg(&Constant{&syn.ByteString{Inner: tt.sig(t)}})
 
 			val, err := evalBuiltinWithError(t, m, b)

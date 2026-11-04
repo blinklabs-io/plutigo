@@ -95,11 +95,18 @@ func TestDecodedStructureUsageMatchesWalk(t *testing.T) {
 	compared, open := 0, 0
 	corpus := preparedUsageCorpus(t)
 	for _, proto := range []uint{11, 12} {
-		context := syn.ProgramContext{LedgerLanguage: lang.LanguageVersionV3, ProtocolMajor: proto}
+		context := syn.ProgramContext{
+			LedgerLanguage: lang.LanguageVersionV3,
+			ProtocolMajor:  proto,
+		}
 		fullScope := fullScopeCheckFor(proto)
 		for i := 0; i < len(corpus); i += stride {
 			b := corpus[i]
-			program, info, err := syn.DecodeDeBruijnWithContextInfo(b, context, fullScope)
+			program, info, err := syn.DecodeDeBruijnWithContextInfo(
+				b,
+				context,
+				fullScope,
+			)
 			if err != nil {
 				continue
 			}
@@ -113,8 +120,15 @@ func TestDecodedStructureUsageMatchesWalk(t *testing.T) {
 				open++
 			}
 			if gotOK != wantOK || (wantOK && got != want) {
-				t.Fatalf("program %d PV%d: decoder usage %+v ok=%v, walk usage %+v ok=%v",
-					i, proto, got, gotOK, want, wantOK)
+				t.Fatalf(
+					"program %d PV%d: decoder usage %+v ok=%v, walk usage %+v ok=%v",
+					i,
+					proto,
+					got,
+					gotOK,
+					want,
+					wantOK,
+				)
 			}
 		}
 	}

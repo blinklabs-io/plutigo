@@ -79,15 +79,18 @@ func fusedDecodeCorpus(t *testing.T, stride int) [][]byte {
 		corpus = append(corpus, b)
 	}
 	var uplcs []string
-	err = filepath.WalkDir("../tests/conformance", func(p string, e fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !e.IsDir() && filepath.Ext(p) == ".uplc" {
-			uplcs = append(uplcs, p)
-		}
-		return nil
-	})
+	err = filepath.WalkDir(
+		"../tests/conformance",
+		func(p string, e fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if !e.IsDir() && filepath.Ext(p) == ".uplc" {
+				uplcs = append(uplcs, p)
+			}
+			return nil
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,11 +140,19 @@ func fusedDecodeCorpus(t *testing.T, stride int) [][]byte {
 // legacyDecodeWithContext is DecodeDeBruijnWithContext as it was before the
 // decoder applied the context checks: a decode that only takes the constr
 // field limit from the context, followed by a ValidateProgram walk.
-func legacyDecodeWithContext(b []byte, context ProgramContext) (*Program[DeBruijn], error) {
+func legacyDecodeWithContext(
+	b []byte,
+	context ProgramContext,
+) (*Program[DeBruijn], error) {
 	d := newDecoder(b)
 	d.strictValues = true
 	d.maxConstrFields = constrFieldLimit(context.ProtocolMajor)
-	program, err := decodeDeBruijnProgram(d, newTermArena[DeBruijn](), &constantArena{}, nil)
+	program, err := decodeDeBruijnProgram(
+		d,
+		newTermArena[DeBruijn](),
+		&constantArena{},
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +177,10 @@ func TestDecodeWithContextMatchesDecodeThenValidate(t *testing.T) {
 		lang.LanguageVersionV3, lang.LanguageVersionV4,
 	} {
 		for _, proto := range []uint{9, 10, 11, 12} {
-			context := ProgramContext{LedgerLanguage: ledger, ProtocolMajor: proto}
+			context := ProgramContext{
+				LedgerLanguage: ledger,
+				ProtocolMajor:  proto,
+			}
 			if validateLedgerLanguageAvailability(context) == nil {
 				contexts = append(contexts, context)
 			}
@@ -192,33 +206,75 @@ func TestDecodeWithContextMatchesDecodeThenValidate(t *testing.T) {
 			want, wantErr := legacyDecodeWithContext(b, context)
 			compared++
 			if (gotErr == nil) != (wantErr == nil) {
-				t.Fatalf("program %d, %v PV%d: fused error %v, legacy error %v", i, ledger, proto, gotErr, wantErr)
+				t.Fatalf(
+					"program %d, %v PV%d: fused error %v, legacy error %v",
+					i,
+					ledger,
+					proto,
+					gotErr,
+					wantErr,
+				)
 			}
 			if gotErr != nil {
 				rejected++
 				if gotErr.Error() != wantErr.Error() {
-					t.Fatalf("program %d, %v PV%d: fused error %q, legacy error %q", i, ledger, proto, gotErr, wantErr)
+					t.Fatalf(
+						"program %d, %v PV%d: fused error %q, legacy error %q",
+						i,
+						ledger,
+						proto,
+						gotErr,
+						wantErr,
+					)
 				}
 			}
 			// The shared-leaf decode reports scope errors in its info
 			// instead of failing, so it must fail exactly where the
 			// context decode does and otherwise return the same term.
-			shared, info, sharedErr := DecodeDeBruijnWithContextInfo(b, context, i%2 == 0)
+			shared, info, sharedErr := DecodeDeBruijnWithContextInfo(
+				b,
+				context,
+				i%2 == 0,
+			)
 			if (sharedErr == nil) != (wantErr == nil) ||
 				(sharedErr != nil && sharedErr.Error() != wantErr.Error()) {
-				t.Fatalf("program %d, %v PV%d: shared-leaf error %v, legacy error %v", i, ledger, proto, sharedErr, wantErr)
+				t.Fatalf(
+					"program %d, %v PV%d: shared-leaf error %v, legacy error %v",
+					i,
+					ledger,
+					proto,
+					sharedErr,
+					wantErr,
+				)
 			}
 			// The term does not depend on the context, so compare it once.
 			if sharedErr == nil && wantErr == nil && !termChecked[i] {
 				termChecked[i] = true
 				if want == nil || info == nil {
-					t.Fatalf("program %d, %v PV%d: decode returned neither a result nor an error", i, ledger, proto)
+					t.Fatalf(
+						"program %d, %v PV%d: decode returned neither a result nor an error",
+						i,
+						ledger,
+						proto,
+					)
 				}
 				if !reflect.DeepEqual(shared, want) {
-					t.Fatalf("program %d, %v PV%d: shared-leaf term differs from legacy term", i, ledger, proto)
+					t.Fatalf(
+						"program %d, %v PV%d: shared-leaf term differs from legacy term",
+						i,
+						ledger,
+						proto,
+					)
 				}
 				if info.Terms != countTerms(want.Term) {
-					t.Fatalf("program %d, %v PV%d: info reports %d terms, term has %d", i, ledger, proto, info.Terms, countTerms(want.Term))
+					t.Fatalf(
+						"program %d, %v PV%d: info reports %d terms, term has %d",
+						i,
+						ledger,
+						proto,
+						info.Terms,
+						countTerms(want.Term),
+					)
 				}
 			}
 		}

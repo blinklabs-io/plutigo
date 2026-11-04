@@ -727,7 +727,9 @@ func (m *Machine[T]) overdraw(before ExBudget, cpu, mem costChunks) error {
 	if err := m.spendChunks(before, cpu, mem); err != nil {
 		return err
 	}
-	return internalError("builtin cost stream did not overdraw the budget its total overdrew")
+	return internalError(
+		"builtin cost stream did not overdraw the budget its total overdrew",
+	)
 }
 
 func twoArgumentDiagonalNondecreasing(model TwoArgument) bool {

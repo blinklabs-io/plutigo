@@ -210,9 +210,12 @@ func combineBatches(batches ...[]DefaultFunction) []DefaultFunction {
 }
 
 var (
-	batch1  = builtinRange(AddInteger, MkNilPairData)
-	batch2  = []DefaultFunction{SerialiseData}
-	batch3  = []DefaultFunction{VerifyEcdsaSecp256k1Signature, VerifySchnorrSecp256k1Signature}
+	batch1 = builtinRange(AddInteger, MkNilPairData)
+	batch2 = []DefaultFunction{SerialiseData}
+	batch3 = []DefaultFunction{
+		VerifyEcdsaSecp256k1Signature,
+		VerifySchnorrSecp256k1Signature,
+	}
 	batch4a = builtinRange(Bls12_381_G1_Add, Blake2b_224)
 	batch4b = []DefaultFunction{IntegerToByteString, ByteStringToInteger}
 	batch5  = builtinRange(AndByteString, Ripemd_160)
@@ -228,11 +231,21 @@ var builtinAvailability = map[PlutusVersion][]availabilityBatch{
 		{introducedAt: alonzoProtoVersion, functions: batch1},
 		{
 			introducedAt: VanRossemProtoVersion,
-			functions:    combineBatches(batch2, batch3, batch4a, batch4b, batch5, batch6),
+			functions: combineBatches(
+				batch2,
+				batch3,
+				batch4a,
+				batch4b,
+				batch5,
+				batch6,
+			),
 		},
 	},
 	PlutusV2: {
-		{introducedAt: vasilProtoVersion, functions: combineBatches(batch1, batch2)},
+		{
+			introducedAt: vasilProtoVersion,
+			functions:    combineBatches(batch1, batch2),
+		},
 		{introducedAt: valentineProtoVersion, functions: batch3},
 		{introducedAt: plominProtoVersion, functions: batch4b},
 		{
@@ -243,7 +256,13 @@ var builtinAvailability = map[PlutusVersion][]availabilityBatch{
 	PlutusV3: {
 		{
 			introducedAt: changProtoVersion,
-			functions:    combineBatches(batch1, batch2, batch3, batch4a, batch4b),
+			functions: combineBatches(
+				batch1,
+				batch2,
+				batch3,
+				batch4a,
+				batch4b,
+			),
 		},
 		{introducedAt: plominProtoVersion, functions: batch5},
 		{introducedAt: VanRossemProtoVersion, functions: batch6},
@@ -251,7 +270,15 @@ var builtinAvailability = map[PlutusVersion][]availabilityBatch{
 	PlutusV4: {
 		{
 			introducedAt: dijkstraProtoVersion,
-			functions:    combineBatches(batch1, batch2, batch3, batch4a, batch4b, batch5, batch6),
+			functions: combineBatches(
+				batch1,
+				batch2,
+				batch3,
+				batch4a,
+				batch4b,
+				batch5,
+				batch6,
+			),
 		},
 	},
 }

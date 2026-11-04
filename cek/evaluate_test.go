@@ -66,7 +66,10 @@ func TestEvaluateTextTakesLanguageFromCaller(t *testing.T) {
 		{lang.LanguageVersionV3, 10, false},
 		{lang.LanguageVersionV2, 10, true},
 	} {
-		evalCtx := NewDefaultEvalContext(tt.language, ProtoVersion{Major: tt.proto})
+		evalCtx := NewDefaultEvalContext(
+			tt.language,
+			ProtoVersion{Major: tt.proto},
+		)
 		_, _, err := EvaluateText(
 			context.Background(),
 			src,
@@ -75,7 +78,12 @@ func TestEvaluateTextTakesLanguageFromCaller(t *testing.T) {
 			DefaultExBudget,
 		)
 		if (err != nil) != tt.wantErr {
-			t.Fatalf("language %v: error = %v, wantErr %t", tt.language, err, tt.wantErr)
+			t.Fatalf(
+				"language %v: error = %v, wantErr %t",
+				tt.language,
+				err,
+				tt.wantErr,
+			)
 		}
 	}
 }
@@ -122,7 +130,10 @@ func TestEvaluateTextRejectsProgramsFailingValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			evalCtx := NewDefaultEvalContext(tt.language, ProtoVersion{Major: tt.proto})
+			evalCtx := NewDefaultEvalContext(
+				tt.language,
+				ProtoVersion{Major: tt.proto},
+			)
 			term, consumed, err := EvaluateText(
 				context.Background(),
 				tt.src,
@@ -134,7 +145,11 @@ func TestEvaluateTextRejectsProgramsFailingValidation(t *testing.T) {
 				t.Fatalf("error = %v, want %q", err, tt.wantError)
 			}
 			if term != nil || consumed != (ExBudget{}) {
-				t.Fatalf("evaluated a rejected program: %v, %+v", term, consumed)
+				t.Fatalf(
+					"evaluated a rejected program: %v, %+v",
+					term,
+					consumed,
+				)
 			}
 		})
 	}
@@ -143,8 +158,14 @@ func TestEvaluateTextRejectsProgramsFailingValidation(t *testing.T) {
 func TestEvaluateTextRejectsMismatchedContext(t *testing.T) {
 	t.Parallel()
 
-	v1Ctx := NewDefaultEvalContext(lang.LanguageVersionV1, ProtoVersion{Major: 11})
-	v2Ctx := NewDefaultEvalContext(lang.LanguageVersionV2, ProtoVersion{Major: 11})
+	v1Ctx := NewDefaultEvalContext(
+		lang.LanguageVersionV1,
+		ProtoVersion{Major: 11},
+	)
+	v2Ctx := NewDefaultEvalContext(
+		lang.LanguageVersionV2,
+		ProtoVersion{Major: 11},
+	)
 	for name, evalCtx := range map[string]*EvalContext{
 		"nil":                            nil,
 		"other language":                 v1Ctx,
@@ -168,10 +189,19 @@ func TestEvaluateTextRejectsMismatchedContext(t *testing.T) {
 func TestEvaluateTextHonorsCancellation(t *testing.T) {
 	t.Parallel()
 
-	evalCtx := NewDefaultEvalContext(lang.LanguageVersionV3, ProtoVersion{Major: 11})
+	evalCtx := NewDefaultEvalContext(
+		lang.LanguageVersionV3,
+		ProtoVersion{Major: 11},
+	)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, _, err := EvaluateText(ctx, addProgram, lang.LanguageVersionV3, evalCtx, DefaultExBudget)
+	_, _, err := EvaluateText(
+		ctx,
+		addProgram,
+		lang.LanguageVersionV3,
+		evalCtx,
+		DefaultExBudget,
+	)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want context cancellation", err)
 	}

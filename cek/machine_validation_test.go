@@ -102,7 +102,9 @@ func TestRunMethodsRejectMalformedAST(t *testing.T) {
 				Constr: &syn.Constr[syn.DeBruijn]{Tag: 0},
 				Branches: []syn.Term[syn.DeBruijn]{
 					&syn.Constant{Con: &syn.Integer{Inner: big.NewInt(1)}},
-					&syn.Builtin{DefaultFunction: builtin.MaxDefaultFunction + 1},
+					&syn.Builtin{
+						DefaultFunction: builtin.MaxDefaultFunction + 1,
+					},
 				},
 			},
 		},
@@ -147,7 +149,11 @@ func TestRunMethodsRejectMalformedAST(t *testing.T) {
 						t.Fatalf("error = %T %v, want TypeError", err, err)
 					}
 					if typeErr.Code != ErrCodeTypeMismatch {
-						t.Fatalf("error code = %d, want %d", typeErr.Code, ErrCodeTypeMismatch)
+						t.Fatalf(
+							"error code = %d, want %d",
+							typeErr.Code,
+							ErrCodeTypeMismatch,
+						)
 					}
 				})
 			}
@@ -160,12 +166,18 @@ func TestRunMethodsPreserveValidASTSemantics(t *testing.T) {
 		name string
 		run  func(*Machine[syn.DeBruijn], syn.Term[syn.DeBruijn]) (syn.Term[syn.DeBruijn], error)
 	}{
-		{name: "Run", run: func(machine *Machine[syn.DeBruijn], term syn.Term[syn.DeBruijn]) (syn.Term[syn.DeBruijn], error) {
-			return machine.Run(term)
-		}},
-		{name: "RunContext", run: func(machine *Machine[syn.DeBruijn], term syn.Term[syn.DeBruijn]) (syn.Term[syn.DeBruijn], error) {
-			return machine.RunContext(context.Background(), term)
-		}},
+		{
+			name: "Run",
+			run: func(machine *Machine[syn.DeBruijn], term syn.Term[syn.DeBruijn]) (syn.Term[syn.DeBruijn], error) {
+				return machine.Run(term)
+			},
+		},
+		{
+			name: "RunContext",
+			run: func(machine *Machine[syn.DeBruijn], term syn.Term[syn.DeBruijn]) (syn.Term[syn.DeBruijn], error) {
+				return machine.RunContext(context.Background(), term)
+			},
+		},
 	}
 
 	for _, runner := range runners {
@@ -226,12 +238,19 @@ func TestRunContextDataConstantsHaveNoAggregateLimit(t *testing.T) {
 		shared = data.NewList(shared, shared)
 	}
 	_, err := newTestMachineFlow().RunContext(context.Background(), &syn.Apply[syn.DeBruijn]{
-		Function: &syn.Lambda[syn.DeBruijn]{Body: &syn.Constant{Con: &syn.Unit{}}},
+		Function: &syn.Lambda[syn.DeBruijn]{
+			Body: &syn.Constant{Con: &syn.Unit{}},
+		},
 		Argument: &syn.Constant{Con: &syn.Data{Inner: shared}},
 	})
 	var typeErr *TypeError
-	if !errors.As(err, &typeErr) || !strings.Contains(typeErr.Message, "not a tree") {
-		t.Fatalf("RunContext() on shared data error = %T %v, want not-a-tree TypeError", err, err)
+	if !errors.As(err, &typeErr) ||
+		!strings.Contains(typeErr.Message, "not a tree") {
+		t.Fatalf(
+			"RunContext() on shared data error = %T %v, want not-a-tree TypeError",
+			err,
+			err,
+		)
 	}
 
 	result, err := newTestMachineFlow().RunContextWithTrustedDataArguments(
@@ -245,18 +264,28 @@ func TestRunContextDataConstantsHaveNoAggregateLimit(t *testing.T) {
 	}
 	constant, ok := result.(*syn.Constant)
 	if !ok {
-		t.Fatalf("RunContextWithTrustedDataArguments() result = %T, want *syn.Constant", result)
+		t.Fatalf(
+			"RunContextWithTrustedDataArguments() result = %T, want *syn.Constant",
+			result,
+		)
 	}
 	resultData, ok := constant.Con.(*syn.Data)
 	if !ok {
-		t.Fatalf("RunContextWithTrustedDataArguments() constant = %T, want *syn.Data", constant.Con)
+		t.Fatalf(
+			"RunContextWithTrustedDataArguments() constant = %T, want *syn.Data",
+			constant.Con,
+		)
 	}
 	if !firstData.Equal(resultData.Inner) {
-		t.Fatalf("RunContextWithTrustedDataArguments() returned data different from the first argument")
+		t.Fatalf(
+			"RunContextWithTrustedDataArguments() returned data different from the first argument",
+		)
 	}
 }
 
-func TestRunContextWithTrustedDataArgumentsRejectsNilAndMalformedInputs(t *testing.T) {
+func TestRunContextWithTrustedDataArgumentsRejectsNilAndMalformedInputs(
+	t *testing.T,
+) {
 	t.Run("nil context", func(t *testing.T) {
 		_, err := newTestMachineFlow().RunContextWithTrustedDataArguments(
 			nil,
@@ -275,7 +304,10 @@ func TestRunContextWithTrustedDataArgumentsRejectsNilAndMalformedInputs(t *testi
 			&syn.Constant{Con: &syn.Unit{}},
 		)
 		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("RunContextWithTrustedDataArguments() error = %v, want context.Canceled", err)
+			t.Fatalf(
+				"RunContextWithTrustedDataArguments() error = %v, want context.Canceled",
+				err,
+			)
 		}
 	})
 
@@ -311,8 +343,14 @@ func TestRunContextWithTrustedDataArgumentsRejectsNilAndMalformedInputs(t *testi
 				if !errors.As(err, &typeErr) {
 					t.Fatalf("error = %T %v, want TypeError", err, err)
 				}
-				if !strings.Contains(typeErr.Message, "trusted data argument 0 is nil") {
-					t.Fatalf("error = %q, want nil trusted data argument rejection", typeErr.Message)
+				if !strings.Contains(
+					typeErr.Message,
+					"trusted data argument 0 is nil",
+				) {
+					t.Fatalf(
+						"error = %q, want nil trusted data argument rejection",
+						typeErr.Message,
+					)
 				}
 			})
 		}
@@ -329,8 +367,14 @@ func TestRunContextWithTrustedDataArgumentsRejectsNilAndMalformedInputs(t *testi
 		if !errors.As(err, &typeErr) {
 			t.Fatalf("error = %T %v, want TypeError", err, err)
 		}
-		if !strings.Contains(typeErr.Message, "too many trusted data arguments") {
-			t.Fatalf("error = %q, want trusted data argument limit rejection", typeErr.Message)
+		if !strings.Contains(
+			typeErr.Message,
+			"too many trusted data arguments",
+		) {
+			t.Fatalf(
+				"error = %q, want trusted data argument limit rejection",
+				typeErr.Message,
+			)
 		}
 	})
 
@@ -345,7 +389,10 @@ func TestRunContextWithTrustedDataArgumentsRejectsNilAndMalformedInputs(t *testi
 			t.Fatalf("error = %T %v, want TypeError", err, err)
 		}
 		if !strings.Contains(typeErr.Message, "builtin tag") {
-			t.Fatalf("error = %q, want malformed program rejection", typeErr.Message)
+			t.Fatalf(
+				"error = %q, want malformed program rejection",
+				typeErr.Message,
+			)
 		}
 	})
 }
@@ -369,7 +416,10 @@ func TestRunAcceptsValueFormPlutusData(t *testing.T) {
 				&syn.Constant{Con: &syn.Data{Inner: test.data}},
 			)
 			if err != nil {
-				t.Fatalf("Run() returned error for value-form PlutusData: %v", err)
+				t.Fatalf(
+					"Run() returned error for value-form PlutusData: %v",
+					err,
+				)
 			}
 			constant, ok := result.(*syn.Constant)
 			if !ok {
@@ -392,9 +442,19 @@ func TestValidateTermStructureDepthBoundary(t *testing.T) {
 	}
 
 	term = &syn.Delay[syn.DeBruijn]{Term: term}
-	err := validateTermStructure[syn.DeBruijn](context.Background(), false, term, nil, true)
+	err := validateTermStructure[syn.DeBruijn](
+		context.Background(),
+		false,
+		term,
+		nil,
+		true,
+	)
 	var typeErr *TypeError
-	if !errors.As(err, &typeErr) || !strings.Contains(typeErr.Message, "structure exceeds depth") {
-		t.Fatalf("validation beyond maximum depth = %v, want term depth TypeError", err)
+	if !errors.As(err, &typeErr) ||
+		!strings.Contains(typeErr.Message, "structure exceeds depth") {
+		t.Fatalf(
+			"validation beyond maximum depth = %v, want term depth TypeError",
+			err,
+		)
 	}
 }

@@ -119,14 +119,26 @@ var deepJSONParserClassInputs = []string{
 // json.Decoder path that handles inputs below the standard library's own
 // nesting cap.
 func deepJSONParserClassMismatch(input string) string {
-	_, wantErr := parsePlutusDataJSONTree([]byte(input), MaxDecodeNestingDepth())
-	_, gotErr := parseDeepPlutusDataJSONTree([]byte(input), MaxDecodeNestingDepth())
+	_, wantErr := parsePlutusDataJSONTree(
+		[]byte(input),
+		MaxDecodeNestingDepth(),
+	)
+	_, gotErr := parseDeepPlutusDataJSONTree(
+		[]byte(input),
+		MaxDecodeNestingDepth(),
+	)
 	want, got := jsonErrorClass(wantErr), jsonErrorClass(gotErr)
 	if got == want {
 		return ""
 	}
-	return fmt.Sprintf("input %q: fallback class %s (%v), decoder class %s (%v)",
-		input, got, gotErr, want, wantErr)
+	return fmt.Sprintf(
+		"input %q: fallback class %s (%v), decoder class %s (%v)",
+		input,
+		got,
+		gotErr,
+		want,
+		wantErr,
+	)
 }
 
 func TestDeepJSONParserErrorClassMatchesDecoder(t *testing.T) {
@@ -153,7 +165,10 @@ func TestParseDeepPlutusDataJSONTreeTruncatedDeepInput(t *testing.T) {
 	input := nestedListJSON(depth)
 	for _, cut := range []int{1, 2, len(input) / 2} {
 		truncated := input[:len(input)-cut]
-		_, err := parseDeepPlutusDataJSONTree([]byte(truncated), MaxDecodeNestingDepth())
+		_, err := parseDeepPlutusDataJSONTree(
+			[]byte(truncated),
+			MaxDecodeNestingDepth(),
+		)
 		if err == nil || err.Error() != jsonUnexpectedEOF {
 			t.Errorf("cut %d: error = %v, want %q", cut, err, jsonUnexpectedEOF)
 		}
@@ -171,8 +186,14 @@ func TestParseDeepPlutusDataJSONTreeDepthLimit(t *testing.T) {
 		input := []byte(strings.Repeat("[", depth) + strings.Repeat("]", depth))
 		_, wantErr := parsePlutusDataJSONTree(input, 0)
 		_, gotErr := parseDeepPlutusDataJSONTree(input, 0)
-		if (gotErr == nil) != (wantErr == nil) || (depth == 4) != (gotErr != nil) {
-			t.Errorf("depth %d: fallback error %v, decoder error %v", depth, gotErr, wantErr)
+		if (gotErr == nil) != (wantErr == nil) ||
+			(depth == 4) != (gotErr != nil) {
+			t.Errorf(
+				"depth %d: fallback error %v, decoder error %v",
+				depth,
+				gotErr,
+				wantErr,
+			)
 		}
 	}
 }

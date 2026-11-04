@@ -37,9 +37,19 @@ func ownershipProgram(seed byte) *Program[DeBruijn] {
 					Tag: uint64(seed),
 					Fields: []Term[DeBruijn]{
 						&Var[DeBruijn]{Name: DeBruijn(1)},
-						&Constant{Con: &ByteString{Inner: []byte{seed, seed + 1, seed + 2}}},
-						&Constant{Con: &String{Inner: string(rune('a' + seed%26))}},
-						&Constant{Con: &Integer{Inner: new(big.Int).Lsh(big.NewInt(n+1), 90)}},
+						&Constant{
+							Con: &ByteString{
+								Inner: []byte{seed, seed + 1, seed + 2},
+							},
+						},
+						&Constant{
+							Con: &String{Inner: string(rune('a' + seed%26))},
+						},
+						&Constant{
+							Con: &Integer{
+								Inner: new(big.Int).Lsh(big.NewInt(n+1), 90),
+							},
+						},
 						&Constant{Con: &ProtoList{
 							LTyp: &TInteger{},
 							List: []IConstant{
@@ -56,9 +66,13 @@ func ownershipProgram(seed byte) *Program[DeBruijn] {
 								Second: &Data{Inner: &data.Constr{
 									Tag: big.NewInt(n),
 									Fields: []data.PlutusData{
-										&data.ByteString{Inner: []byte{seed, 0xaa}},
+										&data.ByteString{
+											Inner: []byte{seed, 0xaa},
+										},
 										&data.List{Items: []data.PlutusData{
-											&data.Integer{Inner: big.NewInt(n + 7)},
+											&data.Integer{
+												Inner: big.NewInt(n + 7),
+											},
 										}},
 									},
 								}},
@@ -119,10 +133,16 @@ func TestDeBruijnDecoderDecodeResultsAreOwned(t *testing.T) {
 			}
 
 			if got := Pretty(a); got != wantPretty {
-				t.Fatalf("retained program changed by later decode:\n got: %s\nwant: %s", got, wantPretty)
+				t.Fatalf(
+					"retained program changed by later decode:\n got: %s\nwant: %s",
+					got,
+					wantPretty,
+				)
 			}
 			if got := mustEncodeOwnership(t, a); !bytes.Equal(got, wantFlat) {
-				t.Fatalf("retained program re-encodes differently after later decode")
+				t.Fatalf(
+					"retained program re-encodes differently after later decode",
+				)
 			}
 			if !bytes.Equal(wantFlat, encodedA) {
 				t.Fatalf("decoded program A does not match its input")

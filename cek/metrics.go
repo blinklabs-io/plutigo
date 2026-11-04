@@ -55,7 +55,10 @@ func (m *Machine[T]) Metrics() *Metrics {
 
 // recordBuiltin attributes the budget spent since before to one invocation of
 // fn. A metered machine routes every invocation through evalBuiltinApp.
-func (m *Machine[T]) recordBuiltin(fn builtin.DefaultFunction, before ExBudget) {
+func (m *Machine[T]) recordBuiltin(
+	fn builtin.DefaultFunction,
+	before ExBudget,
+) {
 	bm := &m.metrics.Builtins[fn]
 	bm.Calls++
 	spent := before.Sub(&m.ExBudget)

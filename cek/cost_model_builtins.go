@@ -1636,7 +1636,10 @@ type LinearInXAndY struct {
 }
 
 func (l LinearInXAndY) CostTwo(x, y ExMem) int64 {
-	return satAdd(satAdd(satMul(l.slope1, int64(x)), satMul(l.slope2, int64(y))), l.intercept)
+	return satAdd(
+		satAdd(satMul(l.slope1, int64(x)), satMul(l.slope2, int64(y))),
+		l.intercept,
+	)
 }
 
 func (LinearInXAndY) HasConstants() []bool {
@@ -1885,7 +1888,8 @@ func (c ConstAboveDiagonalIntoQuadraticXAndYModel) CostTwo(x, y ExMem) int64 {
 	}
 	xVal, yVal := int64(x), int64(y)
 	// x >= y here, so y >= 0 implies x >= 0.
-	if yVal >= 0 && xVal <= quadraticFastLimit && c.coefficientsWithin(quadraticFastLimit) {
+	if yVal >= 0 && xVal <= quadraticFastLimit &&
+		c.coefficientsWithin(quadraticFastLimit) {
 		value := c.coeff00 +
 			c.coeff10*xVal +
 			c.coeff01*yVal +
@@ -1900,7 +1904,9 @@ func (c ConstAboveDiagonalIntoQuadraticXAndYModel) CostTwo(x, y ExMem) int64 {
 	return c.costTwoBig(xVal, yVal)
 }
 
-func (c ConstAboveDiagonalIntoQuadraticXAndYModel) coefficientsWithin(limit int64) bool {
+func (c ConstAboveDiagonalIntoQuadraticXAndYModel) coefficientsWithin(
+	limit int64,
+) bool {
 	within := func(v int64) bool { return v >= -limit && v <= limit }
 	return within(c.coeff00) && within(c.coeff10) && within(c.coeff01) &&
 		within(c.coeff20) && within(c.coeff11) && within(c.coeff02)
@@ -1909,7 +1915,9 @@ func (c ConstAboveDiagonalIntoQuadraticXAndYModel) coefficientsWithin(limit int6
 // costTwoBig evaluates the quadratic exactly with math/big and saturates the
 // result at the int64 bounds. CostTwo uses it when the int64 path could
 // overflow.
-func (c ConstAboveDiagonalIntoQuadraticXAndYModel) costTwoBig(x, y int64) int64 {
+func (c ConstAboveDiagonalIntoQuadraticXAndYModel) costTwoBig(
+	x, y int64,
+) int64 {
 	xVal, yVal := big.NewInt(x), big.NewInt(y)
 	result := big.NewInt(c.coeff00)
 	result.Add(result, new(big.Int).Mul(big.NewInt(c.coeff10), xVal))
@@ -1979,7 +1987,10 @@ type ThreeAddedSizesModel struct {
 }
 
 func (a ThreeAddedSizesModel) CostThree(x, y, z ExMem) int64 {
-	return satAdd(satMul(a.slope, satAdd(satAdd(int64(x), int64(y)), int64(z))), a.intercept)
+	return satAdd(
+		satMul(a.slope, satAdd(satAdd(int64(x), int64(y)), int64(z))),
+		a.intercept,
+	)
 }
 
 func (ThreeAddedSizesModel) HasConstants() []bool {
@@ -2101,7 +2112,10 @@ type ThreeLinearInYandZ struct {
 }
 
 func (l ThreeLinearInYandZ) CostThree(x, y, z ExMem) int64 {
-	return satAdd(satAdd(satMul(l.slope1, int64(y)), satMul(l.slope2, int64(z))), l.intercept)
+	return satAdd(
+		satAdd(satMul(l.slope1, int64(y)), satMul(l.slope2, int64(z))),
+		l.intercept,
+	)
 }
 
 // X is not used so constant

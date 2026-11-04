@@ -40,7 +40,11 @@ var arenaCapFixtures = map[string]string{
 	"empty containers": "9f" + "80" + "9fff" + "a0" + "bfff" + "d87980" + "d8799fff" + "40" + "5fff" + "ff",
 }
 
-func arenaWalk(t *testing.T, pd PlutusData, visit func(kind string, length, capacity int)) {
+func arenaWalk(
+	t *testing.T,
+	pd PlutusData,
+	visit func(kind string, length, capacity int),
+) {
 	t.Helper()
 	switch v := pd.(type) {
 	case *List:
@@ -93,7 +97,9 @@ func TestArenaDecodedSlicesCapEqualsLen(t *testing.T) {
 func TestArenaAppendDoesNotCorruptNeighbours(t *testing.T) {
 	t.Parallel()
 	// Two byte strings and two lists decoded back to back share arena chunks.
-	raw, err := hex.DecodeString("9f" + "42aabb" + "42ccdd" + "820102" + "820304" + "ff")
+	raw, err := hex.DecodeString(
+		"9f" + "42aabb" + "42ccdd" + "820102" + "820304" + "ff",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +114,11 @@ func TestArenaAppendDoesNotCorruptNeighbours(t *testing.T) {
 	l2 := list.Items[3].(*List)
 
 	first.Inner = append(first.Inner, 0xee, 0xee)
-	l1.Items = append(l1.Items, NewInteger(big.NewInt(7)), NewInteger(big.NewInt(8)))
+	l1.Items = append(
+		l1.Items,
+		NewInteger(big.NewInt(7)),
+		NewInteger(big.NewInt(8)),
+	)
 
 	if got := hex.EncodeToString(second.Inner); got != "ccdd" {
 		t.Errorf("second byte string overwritten: %s", got)

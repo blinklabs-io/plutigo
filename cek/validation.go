@@ -109,7 +109,10 @@ func (b *structureValidationBudget) enterConstant(
 		b.seenComposites = make(map[syn.IConstant]compositeVisit)
 	}
 	b.seenComposites[c] = compositeVisit{depth: depth}
-	*work = append(*work, constantValidationItem{constant: c, depth: depth, exit: true})
+	*work = append(
+		*work,
+		constantValidationItem{constant: c, depth: depth, exit: true},
+	)
 	return true, nil
 }
 
@@ -144,7 +147,11 @@ func (b *structureValidationBudget) consume(kind string) error {
 		}
 	}
 	if b.remaining == 0 {
-		return malformedASTError("%s structure exceeds %d nodes", kind, maxDischargeWork)
+		return malformedASTError(
+			"%s structure exceeds %d nodes",
+			kind,
+			maxDischargeWork,
+		)
 	}
 	if b.discharge != nil {
 		if b.credits > 0 {
@@ -159,7 +166,10 @@ func (b *structureValidationBudget) consume(kind string) error {
 
 func (b *structureValidationBudget) consumeTerms(count int) error {
 	if count > b.remaining {
-		return malformedASTError("term structure exceeds %d nodes", maxDischargeWork)
+		return malformedASTError(
+			"term structure exceeds %d nodes",
+			maxDischargeWork,
+		)
 	}
 	b.remaining -= count
 	return nil
@@ -216,7 +226,14 @@ func validateTermStructure[T syn.Eval](
 	trustedData map[*syn.Data]struct{},
 	fullScopeCheck bool,
 ) error {
-	return validateTermStructureUsage[T](ctx, checkCancellation, term, trustedData, fullScopeCheck, nil)
+	return validateTermStructureUsage[T](
+		ctx,
+		checkCancellation,
+		term,
+		trustedData,
+		fullScopeCheck,
+		nil,
+	)
 }
 
 // termStructureUsage is how much of the structure limits a successful
@@ -523,7 +540,10 @@ func validateConstantStructureWithBudget(
 			continue
 		}
 		if item.depth > maxDischargeDepth {
-			return malformedASTError("constant structure exceeds depth %d", maxDischargeDepth)
+			return malformedASTError(
+				"constant structure exceeds depth %d",
+				maxDischargeDepth,
+			)
 		}
 
 		nextDepth := item.depth + 1
@@ -678,7 +698,10 @@ func validateTypeStructureWithBudget(
 		item := work[last]
 		work = work[:last]
 		if item.depth > maxDischargeDepth {
-			return malformedASTError("constant type structure exceeds depth %d", maxDischargeDepth)
+			return malformedASTError(
+				"constant type structure exceeds depth %d",
+				maxDischargeDepth,
+			)
 		}
 
 		nextDepth := item.depth + 1
@@ -775,7 +798,10 @@ func validateDataStructureWithBudget(
 		item := work[last]
 		work = work[:last]
 		if item.depth > maxDischargeDepth {
-			return malformedASTError("PlutusData structure exceeds depth %d", maxDischargeDepth)
+			return malformedASTError(
+				"PlutusData structure exceeds depth %d",
+				maxDischargeDepth,
+			)
 		}
 
 		nextDepth := item.depth + 1
@@ -900,7 +926,10 @@ func validateDataStructureWithBudget(
 // Only a value built by hand can make a walk longer than its memory: once a
 // constant exceeds maxDischargeWork nodes, data.CheckTree confirms it is a
 // tree (no shared or cyclic children), which every decoded value is.
-func validateDataConstant(value data.PlutusData, budget *structureValidationBudget) error {
+func validateDataConstant(
+	value data.PlutusData,
+	budget *structureValidationBudget,
+) error {
 	var stackBuf [16]data.PlutusData
 	work := append(stackBuf[:0], value)
 	nodes := 0
@@ -970,7 +999,10 @@ func validateDataConstant(value data.PlutusData, budget *structureValidationBudg
 		// pending stack beyond it either.
 		if !treeChecked && nodes+len(work) > maxDischargeWork {
 			if err := data.CheckTree(value); err != nil {
-				return malformedASTError("PlutusData structure is not a tree: %v", err)
+				return malformedASTError(
+					"PlutusData structure is not a tree: %v",
+					err,
+				)
 			}
 			treeChecked = true
 		}
@@ -978,7 +1010,10 @@ func validateDataConstant(value data.PlutusData, budget *structureValidationBudg
 	return nil
 }
 
-func appendDataPairs(work []data.PlutusData, pairs [][2]data.PlutusData) []data.PlutusData {
+func appendDataPairs(
+	work []data.PlutusData,
+	pairs [][2]data.PlutusData,
+) []data.PlutusData {
 	for _, pair := range pairs {
 		work = append(work, pair[0], pair[1])
 	}

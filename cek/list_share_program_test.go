@@ -128,7 +128,11 @@ func TestListSharingPrograms(t *testing.T) {
 		},
 		{
 			name: "interleaved chains on long literal tails",
-			prog: interleave(4, intList(seq(20, 32)...), intList(seq(40, 52)...)),
+			prog: interleave(
+				4,
+				intList(seq(20, 32)...),
+				intList(seq(40, 52)...),
+			),
 			want: interleaveModel(4, seq(20, 32), seq(40, 52)),
 		},
 		{
@@ -139,30 +143,78 @@ func TestListSharingPrograms(t *testing.T) {
 						uLet("d", uCons("(con integer 400)", "t"),
 							uLet("e", uCons("(con integer 500)", "a"),
 								uConstr("t", "a", "b", "c", "d", "e"))))))),
-			want: uConstr(intList(seq(1, 10)...), intList(cat([]int{100}, seq(1, 10))...),
-				intList(cat([]int{200}, seq(1, 10))...), intList(cat([]int{300, 100}, seq(1, 10))...),
-				intList(cat([]int{400}, seq(1, 10))...), intList(cat([]int{500, 100}, seq(1, 10))...)),
+			want: uConstr(
+				intList(seq(1, 10)...),
+				intList(cat([]int{100}, seq(1, 10))...),
+				intList(
+					cat([]int{200}, seq(1, 10))...),
+				intList(cat([]int{300, 100}, seq(1, 10))...),
+				intList(
+					cat([]int{400}, seq(1, 10))...),
+				intList(cat([]int{500, 100}, seq(1, 10))...),
+			),
 		},
 		{
 			name: "cons onto a short tail built by mkCons",
-			prog: uLet("l", uCons("(con integer 5)", uCons("(con integer 4)", uNilInt)),
+			prog: uLet(
+				"l",
+				uCons("(con integer 5)", uCons("(con integer 4)", uNilInt)),
 				uLet("a", uCons("(con integer 7)", "l"),
 					uLet("b", uCons("(con integer 9)", "l"),
-						uLet("c", uCons("(con integer 3)", "a"),
-							uConstr("l", "a", "b", "c", uHead(uTail("b")), uHead(uTail(uTail("c")))))))),
-			want: uConstr(intList(5, 4), intList(7, 5, 4), intList(9, 5, 4), intList(3, 7, 5, 4),
-				"(con integer 5)", "(con integer 5)"),
+						uLet(
+							"c",
+							uCons("(con integer 3)", "a"),
+							uConstr(
+								"l",
+								"a",
+								"b",
+								"c",
+								uHead(uTail("b")),
+								uHead(uTail(uTail("c"))),
+							),
+						))),
+			),
+			want: uConstr(
+				intList(5, 4),
+				intList(7, 5, 4),
+				intList(9, 5, 4),
+				intList(3, 7, 5, 4),
+				"(con integer 5)",
+				"(con integer 5)",
+			),
 		},
 		{
 			name: "listData of branches and of the shared tail",
-			prog: uLet("t", t10d, uLet("a", uCons(uIData("(con integer 100)"), "t"),
-				uLet("b", uCons(uIData("(con integer 200)"), "t"),
-					uLet("c", uCons(uIData("(con integer 300)"), "a"),
-						uConstr(uListData("b"), uListData("a"), uListData("c"), uListData("t"),
-							uListData(uCons(uIData("(con integer 400)"), "b")), uListData("b")))))),
-			want: uConstr(dataList(cat([]int{200}, seq(1, 10))...), dataList(cat([]int{100}, seq(1, 10))...),
-				dataList(cat([]int{300, 100}, seq(1, 10))...), dataList(seq(1, 10)...),
-				dataList(cat([]int{400, 200}, seq(1, 10))...), dataList(cat([]int{200}, seq(1, 10))...)),
+			prog: uLet(
+				"t",
+				t10d,
+				uLet("a", uCons(uIData("(con integer 100)"), "t"),
+					uLet("b", uCons(uIData("(con integer 200)"), "t"),
+						uLet(
+							"c",
+							uCons(uIData("(con integer 300)"), "a"),
+							uConstr(
+								uListData("b"),
+								uListData("a"),
+								uListData("c"),
+								uListData("t"),
+								uListData(
+									uCons(uIData("(con integer 400)"), "b"),
+								),
+								uListData("b"),
+							),
+						))),
+			),
+			want: uConstr(
+				dataList(cat([]int{200}, seq(1, 10))...),
+				dataList(cat([]int{100}, seq(1, 10))...),
+				dataList(
+					cat([]int{300, 100}, seq(1, 10))...),
+				dataList(seq(1, 10)...),
+				dataList(
+					cat([]int{400, 200}, seq(1, 10))...),
+				dataList(cat([]int{200}, seq(1, 10))...),
+			),
 		},
 		{
 			name: "cons after tailList",
@@ -170,62 +222,163 @@ func TestListSharingPrograms(t *testing.T) {
 				uLet("y", uCons("(con integer 9)", uTail("t")),
 					uLet("z", uCons("(con integer 7)", uTail("x")),
 						uConstr("x", "y", "z", uTail(uTail("z")), "t"))))),
-			want: uConstr(intList(cat([]int{0}, seq(2, 10))...), intList(cat([]int{9}, seq(2, 10))...),
-				intList(cat([]int{7}, seq(2, 10))...), intList(seq(3, 10)...), intList(seq(1, 10)...)),
+			want: uConstr(
+				intList(cat([]int{0}, seq(2, 10))...),
+				intList(cat([]int{9}, seq(2, 10))...),
+				intList(
+					cat([]int{7}, seq(2, 10))...),
+				intList(seq(3, 10)...),
+				intList(seq(1, 10)...),
+			),
 		},
 		{
 			name:  "cons after dropList",
 			proto: 11,
-			prog: uLet("t", t10, uLet("x", uCons("(con integer 0)", uDrop(3, "t")),
-				uLet("y", uCons("(con integer 9)", uDrop(3, "t")),
-					uConstr("x", "y", uDrop(2, "x"), uDrop(20, "y"), uDrop(-1, "x"), uDrop(0, "y"), "t")))),
-			want: uConstr(intList(cat([]int{0}, seq(4, 10))...), intList(cat([]int{9}, seq(4, 10))...),
-				intList(seq(5, 10)...), intList(), intList(cat([]int{0}, seq(4, 10))...),
-				intList(cat([]int{9}, seq(4, 10))...), intList(seq(1, 10)...)),
+			prog: uLet(
+				"t",
+				t10,
+				uLet("x", uCons("(con integer 0)", uDrop(3, "t")),
+					uLet(
+						"y",
+						uCons("(con integer 9)", uDrop(3, "t")),
+						uConstr(
+							"x",
+							"y",
+							uDrop(2, "x"),
+							uDrop(20, "y"),
+							uDrop(-1, "x"),
+							uDrop(0, "y"),
+							"t",
+						),
+					)),
+			),
+			want: uConstr(
+				intList(cat([]int{0}, seq(4, 10))...),
+				intList(cat([]int{9}, seq(4, 10))...),
+				intList(
+					seq(5, 10)...),
+				intList(),
+				intList(cat([]int{0}, seq(4, 10))...),
+				intList(cat([]int{9}, seq(4, 10))...),
+				intList(seq(1, 10)...),
+			),
 		},
 		{
 			name: "data list chains via unListData",
-			prog: uLet("d", "[(builtin unListData) "+dataList(seq(1, 12)...)+"]",
+			prog: uLet(
+				"d",
+				"[(builtin unListData) "+dataList(seq(1, 12)...)+"]",
 				uLet("a", uCons(uIData("(con integer 50)"), "d"),
-					uLet("b", uCons(uIData("(con integer 60)"), "d"),
-						uConstr(uListData("a"), uListData("b"), uListData(uCons(uIData("(con integer 70)"), "a")),
-							"[(builtin constrData) (con integer 3) b]")))),
-			want: uConstr(dataList(cat([]int{50}, seq(1, 12))...), dataList(cat([]int{60}, seq(1, 12))...),
+					uLet(
+						"b",
+						uCons(uIData("(con integer 60)"), "d"),
+						uConstr(
+							uListData("a"),
+							uListData("b"),
+							uListData(uCons(uIData("(con integer 70)"), "a")),
+							"[(builtin constrData) (con integer 3) b]",
+						),
+					)),
+			),
+			want: uConstr(
+				dataList(cat([]int{50}, seq(1, 12))...),
+				dataList(cat([]int{60}, seq(1, 12))...),
 				dataList(cat([]int{70, 50}, seq(1, 12))...),
-				"(con data (Constr 3 ["+dataItems(cat([]int{60}, seq(1, 12))...)+"]))"),
+				"(con data (Constr 3 ["+dataItems(
+					cat([]int{60}, seq(1, 12))...)+"]))",
+			),
 		},
 		{
 			name: "list of lists with shared inner lists",
-			prog: uLet("t", t10d, uLet("a", uCons(uIData("(con integer 100)"), "t"),
-				uLet("b", uCons(uIData("(con integer 200)"), "t"),
-					uLet("o", uCons("a", uCons("b", uCons("t", "(con (list (list data)) [])"))),
-						uConstr("o", uListData(uHead(uTail("o"))), uListData(uHead("o"))))))),
+			prog: uLet(
+				"t",
+				t10d,
+				uLet("a", uCons(uIData("(con integer 100)"), "t"),
+					uLet(
+						"b",
+						uCons(uIData("(con integer 200)"), "t"),
+						uLet(
+							"o",
+							uCons(
+								"a",
+								uCons(
+									"b",
+									uCons("t", "(con (list (list data)) [])"),
+								),
+							),
+							uConstr(
+								"o",
+								uListData(uHead(uTail("o"))),
+								uListData(uHead("o")),
+							),
+						),
+					)),
+			),
 			want: uConstr(
-				"(con (list (list data)) [["+dataItems(cat([]int{100}, seq(1, 10))...)+"], ["+
-					dataItems(cat([]int{200}, seq(1, 10))...)+"], ["+dataItems(seq(1, 10)...)+"]])",
-				dataList(cat([]int{200}, seq(1, 10))...), dataList(cat([]int{100}, seq(1, 10))...)),
+				"(con (list (list data)) [["+dataItems(
+					cat([]int{100}, seq(1, 10))...)+"], ["+
+					dataItems(
+						cat([]int{200}, seq(1, 10))...)+"], ["+dataItems(
+					seq(1, 10)...)+"]])",
+				dataList(
+					cat([]int{200}, seq(1, 10))...),
+				dataList(cat([]int{100}, seq(1, 10))...),
+			),
 		},
 		{
 			name:  "case on cons cells",
 			proto: 11,
 			prog: func() string {
 				// sum via case: case l of [] -> 0; h:t -> h + sum t
-				sum := fmt.Sprintf("[%s (lam self (lam l (case l (lam h (lam tl [(builtin addInteger) h [self tl]])) (con integer 0))))]", uplcFix)
-				return uLet("sum", sum, uLet("t", t10, uLet("a", uCons("(con integer 100)", "t"),
-					uLet("b", uCons("(con integer 1000)", "t"),
-						uConstr("[sum a]", "[sum b]", "[sum t]", "[sum "+uCons("(con integer 7)", "b")+"]")))))
+				sum := fmt.Sprintf(
+					"[%s (lam self (lam l (case l (lam h (lam tl [(builtin addInteger) h [self tl]])) (con integer 0))))]",
+					uplcFix,
+				)
+				return uLet(
+					"sum",
+					sum,
+					uLet("t", t10, uLet("a", uCons("(con integer 100)", "t"),
+						uLet(
+							"b",
+							uCons("(con integer 1000)", "t"),
+							uConstr(
+								"[sum a]",
+								"[sum b]",
+								"[sum t]",
+								"[sum "+uCons("(con integer 7)", "b")+"]",
+							),
+						))),
+				)
 			}(),
-			want: uConstr("(con integer 155)", "(con integer 1055)", "(con integer 55)", "(con integer 1062)"),
+			want: uConstr(
+				"(con integer 155)",
+				"(con integer 1055)",
+				"(con integer 55)",
+				"(con integer 1062)",
+			),
 		},
 		{
 			name: "mapData of interleaved pair chains",
 			prog: func() string {
-				loop := uLoop([]string{"a", "b"}, uIte(uIsZero("k"),
+				loop := uLoop([]string{"a", "b"}, uIte(
+					uIsZero("k"),
 					uConstr("[(builtin mapData) a]", "[(builtin mapData) b]"),
-					fmt.Sprintf("[self %s b %s]", uSub1("k"), uCons(uPairData("k"), "a"))))
-				return fmt.Sprintf("[%s (con integer 4) %s [(builtin mkNilPairData) (con unit ())]]", loop, uNilPair)
+					fmt.Sprintf(
+						"[self %s b %s]",
+						uSub1("k"),
+						uCons(uPairData("k"), "a"),
+					),
+				))
+				return fmt.Sprintf(
+					"[%s (con integer 4) %s [(builtin mkNilPairData) (con unit ())]]",
+					loop,
+					uNilPair,
+				)
 			}(),
-			want: uConstr("(con data (Map [(I 2, I 2), (I 4, I 4)]))", "(con data (Map [(I 1, I 1), (I 3, I 3)]))"),
+			want: uConstr(
+				"(con data (Map [(I 2, I 2), (I 4, I 4)]))",
+				"(con data (Map [(I 1, I 1), (I 3, I 3)]))",
+			),
 		},
 	}
 	for _, tc := range tests {
@@ -252,19 +405,42 @@ func parseDeBruijn(t testing.TB, prog string) *syn.Program[syn.DeBruijn] {
 // tail, branches off old tails, and returns the lists and their listData.
 func listShareWorkload(n int) string {
 	lit := dataList(seq(1, 16)...)
-	loop := uLoop([]string{"a", "b", "c"}, uIte(uIsZero("k"),
-		uConstr("a", "b", "c", uListData("a"), uListData("b"), uListData(uCons(uIData("(con integer -1)"), "c"))),
+	loop := uLoop([]string{"a", "b", "c"}, uIte(
+		uIsZero("k"),
+		uConstr(
+			"a",
+			"b",
+			"c",
+			uListData("a"),
+			uListData("b"),
+			uListData(uCons(uIData("(con integer -1)"), "c")),
+		),
 		fmt.Sprintf("[self %s b c %s]", uSub1("k"), uCons(uIData("k"), uIte(
 			"[(builtin equalsInteger) [(builtin modInteger) k (con integer 5)] (con integer 0)]",
-			uTail("a"), "a")))))
+			uTail("a"),
+			"a",
+		))),
+	))
 	d := "[(builtin unListData) " + lit + "]"
-	return uProgram(fmt.Sprintf("[%s %s %s %s %s]", loop, uInt(n), d, d, uCons(uIData("(con integer 0)"), d)))
+	return uProgram(
+		fmt.Sprintf(
+			"[%s %s %s %s %s]",
+			loop,
+			uInt(n),
+			d,
+			d,
+			uCons(uIData("(con integer 0)"), d),
+		),
+	)
 }
 
 func TestListSharingMachineReuse(t *testing.T) {
 	progA := parseDeBruijn(t, listShareWorkload(200))
 	progB := parseDeBruijn(t, listShareWorkload(333))
-	ec := cek.NewDefaultEvalContext(lang.LanguageVersionV3, cek.ProtoVersion{Major: 10})
+	ec := cek.NewDefaultEvalContext(
+		lang.LanguageVersionV3,
+		cek.ProtoVersion{Major: 10},
+	)
 	m := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ec)
 	m.ExBudget = cek.ExBudget{Cpu: 1 << 50, Mem: 1 << 50}
 
@@ -279,14 +455,18 @@ func TestListSharingMachineReuse(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got := syn.PrettyTerm[syn.DeBruijn](resA); got != prettyA {
-			t.Fatal("result of an earlier run changed after the machine was reused")
+			t.Fatal(
+				"result of an earlier run changed after the machine was reused",
+			)
 		}
 		resA2, err := m.Run(progA.Term)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if got := syn.PrettyTerm[syn.DeBruijn](resA2); got != prettyA {
-			t.Fatal("re-running a program on a reused machine changed its result")
+			t.Fatal(
+				"re-running a program on a reused machine changed its result",
+			)
 		}
 		if m.ExBudget != remainingA {
 			t.Fatalf("re-run budget %+v, first run %+v", m.ExBudget, remainingA)
@@ -309,7 +489,10 @@ func TestListSharingMachineReuse(t *testing.T) {
 // Run with -race: a write into shared literal storage is a data race.
 func TestListSharingConcurrentMachines(t *testing.T) {
 	prog := parseDeBruijn(t, listShareWorkload(300))
-	ec := cek.NewDefaultEvalContext(lang.LanguageVersionV3, cek.ProtoVersion{Major: 10})
+	ec := cek.NewDefaultEvalContext(
+		lang.LanguageVersionV3,
+		cek.ProtoVersion{Major: 10},
+	)
 	ref := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ec)
 	ref.ExBudget = cek.ExBudget{Cpu: 1 << 50, Mem: 1 << 50}
 	refRes, err := ref.Run(prog.Term)
@@ -334,7 +517,8 @@ func TestListSharingConcurrentMachines(t *testing.T) {
 					errs <- err
 					return
 				}
-				if syn.PrettyTerm[syn.DeBruijn](res) != want || m.ExBudget != wantBudget {
+				if syn.PrettyTerm[syn.DeBruijn](res) != want ||
+					m.ExBudget != wantBudget {
 					errs <- fmt.Errorf("goroutine %d run %d: result or budget differs", g, i)
 					return
 				}
@@ -398,7 +582,10 @@ func (w runWork) minus(o runWork) runWork {
 // evalWork evaluates prog on a metered machine with evalResult's budget.
 func evalWork(t *testing.T, prog string, proto uint) runWork {
 	t.Helper()
-	pc := syn.ProgramContext{LedgerLanguage: lang.LanguageVersionV3, ProtocolMajor: proto}
+	pc := syn.ProgramContext{
+		LedgerLanguage: lang.LanguageVersionV3,
+		ProtocolMajor:  proto,
+	}
 	named, err := syn.ParseWithContext(prog, pc)
 	if err != nil {
 		t.Fatal(err)
@@ -407,7 +594,10 @@ func evalWork(t *testing.T, prog string, proto uint) runWork {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ec := cek.NewDefaultEvalContext(lang.LanguageVersionV3, cek.ProtoVersion{Major: proto})
+	ec := cek.NewDefaultEvalContext(
+		lang.LanguageVersionV3,
+		cek.ProtoVersion{Major: proto},
+	)
 	m := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ec)
 	m.EnableMetrics()
 	m.ExBudget = cek.ExBudget{Cpu: 1 << 40, Mem: 1 << 40}
@@ -426,12 +616,18 @@ func evalWork(t *testing.T, prog string, proto uint) runWork {
 // equivalent literal list, with the same budget consumed.
 func TestListSharingErrorsMatchContiguous(t *testing.T) {
 	// Built list [1,2,3] (cons cells over a literal tail) vs literal.
-	built := uCons("(con integer 1)", uCons("(con integer 2)", uCons("(con integer 3)", uNilInt)))
+	built := uCons(
+		"(con integer 1)",
+		uCons("(con integer 2)", uCons("(con integer 3)", uNilInt)),
+	)
 	branch := uLet("t", uBuild(12, uNilInt, uIdent),
 		uLet("a", uCons("(con integer 1)", "t"), uCons("(con integer 2)", "t")))
 	lit := intList(1, 2, 3)
 	litBranch := intList(cat([]int{2}, seq(1, 12))...)
-	builtD := uCons(uIData("(con integer 1)"), "[(builtin mkNilData) (con unit ())]")
+	builtD := uCons(
+		uIData("(con integer 1)"),
+		"[(builtin mkNilData) (con unit ())]",
+	)
 	litD := "[(builtin unListData) " + dataList(1) + "]"
 	tests := []struct {
 		name  string
@@ -485,10 +681,20 @@ func TestListSharingErrorsMatchContiguous(t *testing.T) {
 				r1, e1, work1 := run(pair[0])
 				r2, e2, work2 := run(pair[1])
 				if e1 != e2 || r1 != r2 {
-					t.Fatalf("built list: %s %q; literal list: %s %q", e1, r1, e2, r2)
+					t.Fatalf(
+						"built list: %s %q; literal list: %s %q",
+						e1,
+						r1,
+						e2,
+						r2,
+					)
 				}
 				if work1 != work2 {
-					t.Fatalf("work on built list %+v, on literal %+v", work1, work2)
+					t.Fatalf(
+						"work on built list %+v, on literal %+v",
+						work1,
+						work2,
+					)
 				}
 			}
 		})

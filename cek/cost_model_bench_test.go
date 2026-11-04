@@ -88,7 +88,11 @@ func BenchmarkNewEvalContext(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
-				ctx, err := NewEvalContext(tc.version, tc.protoVersion, tc.params)
+				ctx, err := NewEvalContext(
+					tc.version,
+					tc.protoVersion,
+					tc.params,
+				)
 				if err != nil {
 					b.Fatalf("NewEvalContext: %v", err)
 				}
@@ -131,7 +135,11 @@ func BenchmarkNewEvalContextAndEvaluate(b *testing.B) {
 
 	b.ReportAllocs()
 	for b.Loop() {
-		ctx, err := NewEvalContext(lang.LanguageVersionV3, protoVersion, realPreviewV3CostModelParams)
+		ctx, err := NewEvalContext(
+			lang.LanguageVersionV3,
+			protoVersion,
+			realPreviewV3CostModelParams,
+		)
 		if err != nil {
 			b.Fatalf("NewEvalContext: %v", err)
 		}
@@ -153,7 +161,11 @@ func BenchmarkNewEvalContextAndEvaluate(b *testing.B) {
 func BenchmarkEvaluateOnly(b *testing.B) {
 	protoVersion := ProtoVersion{Major: 10}
 	term := mustBenchmarkTerm(b, buildLambdaChainProgram(16))
-	ctx, err := NewEvalContext(lang.LanguageVersionV3, protoVersion, realPreviewV3CostModelParams)
+	ctx, err := NewEvalContext(
+		lang.LanguageVersionV3,
+		protoVersion,
+		realPreviewV3CostModelParams,
+	)
 	if err != nil {
 		b.Fatalf("NewEvalContext: %v", err)
 	}

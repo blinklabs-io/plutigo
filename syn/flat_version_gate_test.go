@@ -42,9 +42,19 @@ func TestDecodeRejectsConstrAndCaseBeforeVersion110(t *testing.T) {
 			}
 			_, err = Decode[DeBruijn](encoded)
 			if wantErr != (err != nil) {
-				t.Fatalf("%s %s: Decode error = %v, want error %t", name, version, err, wantErr)
+				t.Fatalf(
+					"%s %s: Decode error = %v, want error %t",
+					name,
+					version,
+					err,
+					wantErr,
+				)
 			}
-			if wantErr && !strings.Contains(err.Error(), name+" is not available in UPLC version 1.0.0") {
+			if wantErr &&
+				!strings.Contains(
+					err.Error(),
+					name+" is not available in UPLC version 1.0.0",
+				) {
 				t.Fatalf("%s %s: error = %v", name, version, err)
 			}
 		}

@@ -735,8 +735,13 @@ func TestExpModIntegerCostOverflowSaturates(t *testing.T) {
 	}
 	// Like the reference's SatInt arithmetic, the overflowing CPU cost
 	// saturates, and like the reference the overdrawing charge is deducted.
-	if budgetErr.Requested.Cpu != math.MaxInt64 || budgetErr.Available != originalBudget {
-		t.Fatalf("budget error = %+v, want a saturated CPU charge from %+v", budgetErr, originalBudget)
+	if budgetErr.Requested.Cpu != math.MaxInt64 ||
+		budgetErr.Available != originalBudget {
+		t.Fatalf(
+			"budget error = %+v, want a saturated CPU charge from %+v",
+			budgetErr,
+			originalBudget,
+		)
 	}
 	if want := originalBudget.Sub(&budgetErr.Requested); m.ExBudget != want {
 		t.Fatalf("remaining budget = %+v, want %+v", m.ExBudget, want)
