@@ -85,6 +85,7 @@ func TestNormalizeSharedDecodedEncodings(t *testing.T) {
 		{"definite constr", "d8798101", false},
 		{"empty constr", "d87980", true},
 		{"definite map", "a10102", true},
+		{"definite list key", "a182010201", false},
 		{"indefinite map", "bf0102ff", false},
 		{"empty indefinite map", "bfff", false},
 		{"canonical nested", "d8799f9f01ffa1029f03ffff", true},
@@ -137,6 +138,12 @@ func TestNormalizeSharedValue(t *testing.T) {
 		t.Fatal("NewMapDefIndef did not return *Map")
 	}
 	requireNormalizeSharedMatches(t, &Value{Inner: indefInner}, false)
+	indefTokens := NewMapDefIndef(true, [][2]PlutusData{{NewByteString([]byte("T")), NewInteger(big.NewInt(5))}})
+	nestedInner, ok := NewMap([][2]PlutusData{{policy, indefTokens}}).(*Map)
+	if !ok {
+		t.Fatal("NewMap did not return *Map")
+	}
+	requireNormalizeSharedMatches(t, &Value{Inner: nestedInner}, false)
 }
 
 // randomData builds a tree of every node kind with every encoding choice.
