@@ -51,3 +51,111 @@ package data
 func Normalize(pd PlutusData) PlutusData {
 	return copyData(pd, true)
 }
+
+// NormalizeShared returns pd itself when pd is already in the form Normalize
+// produces, and Normalize(pd) otherwise. Either way the result encodes to the
+// bytes Normalize(pd) encodes to and holds every container as a pointer, as
+// Normalize's result does.
+//
+// A node is in that form when it is held as a pointer and its encoding flag
+// is unset or already selects the package default for that node: indefinite
+// length for a non-empty Constr or List, definite for a Map. An empty Constr
+// or List encodes definite whatever its flag. Most on-chain data is encoded
+// that way, so for it NormalizeShared allocates nothing.
+//
+// The result may share nodes with pd, so callers must treat both as
+// read-only. Callers that need a value independent of pd use Normalize.
+//
+// NormalizeShared does not recurse, so it handles values of any nesting
+// depth.
+func NormalizeShared(pd PlutusData) PlutusData {
+	if isNormalized(pd) {
+		return pd
+	}
+	return Normalize(pd)
+}
+
+// normalizeFrame is a container whose children have not all been visited.
+// Exactly one of items and pairs is set; i indexes the flattened children.
+type normalizeFrame struct {
+	items []PlutusData
+	pairs [][2]PlutusData
+	i     int
+}
+
+func (f *normalizeFrame) next() (PlutusData, bool) {
+	if f.pairs != nil {
+		if f.i >= 2*len(f.pairs) {
+			return nil, false
+		}
+		child := f.pairs[f.i/2][f.i%2]
+		f.i++
+		return child, true
+	}
+	if f.i >= len(f.items) {
+		return nil, false
+	}
+	child := f.items[f.i]
+	f.i++
+	return child, true
+}
+
+// isNormalized reports whether every node of pd is already in the form
+// Normalize produces. It keeps one frame per level of nesting rather than one
+// entry per pending child, so it allocates only when the nesting is deeper
+// than 32 levels, however wide the containers are.
+func isNormalized(pd PlutusData) bool {
+	var buf [32]normalizeFrame
+	stack := buf[:0]
+	node := pd
+	for {
+		switch v := node.(type) {
+		case *Constr:
+			if v != nil {
+				if len(v.Fields) > 0 && v.useIndef != nil && !*v.useIndef {
+					return false
+				}
+				stack = append(stack, normalizeFrame{items: v.Fields})
+			}
+		case *List:
+			if v != nil {
+				if len(v.Items) > 0 && v.useIndef != nil && !*v.useIndef {
+					return false
+				}
+				stack = append(stack, normalizeFrame{items: v.Items})
+			}
+		case *Map:
+			if v != nil {
+				if !mapIsNormalized(v) {
+					return false
+				}
+				stack = append(stack, normalizeFrame{pairs: v.Pairs})
+			}
+		case *Value:
+			if v != nil && v.Inner != nil {
+				if !mapIsNormalized(v.Inner) {
+					return false
+				}
+				stack = append(stack, normalizeFrame{pairs: v.Inner.Pairs})
+			}
+		case Constr, List, Map, Value:
+			// Normalize returns containers as pointers.
+			return false
+		}
+		for {
+			if len(stack) == 0 {
+				return true
+			}
+			child, ok := stack[len(stack)-1].next()
+			if ok {
+				node = child
+				break
+			}
+			stack = stack[:len(stack)-1]
+		}
+	}
+}
+
+func mapIsNormalized(m *Map) bool {
+	return m.useIndef == nil || !*m.useIndef
+}
