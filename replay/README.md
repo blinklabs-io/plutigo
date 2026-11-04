@@ -88,6 +88,37 @@ go test ./replay -run TestMainnetCorpusParity -v
 go test ./replay -run '^$' -bench BenchmarkMainnetCorpus -benchmem
 ```
 
+## Recent mainnet corpus
+
+`testdata/mainnet-2026-11-03-1.json.gz` and `-2.json.gz` hold 1360 validator
+evaluations: 32 PlutusV1, 962 PlutusV2 and 366 PlutusV3. They are every
+redeemer of 522 Plutus transactions from 150 consecutive mainnet blocks,
+ending at block 14154148 (epoch 665), split into two files to stay under
+the per-corpus case limit. `LoadFile` decompresses `.gz` corpora.
+
+They were collected as follows:
+
+1. Koios supplied each block's transactions, and the raw CBOR of every
+   transaction with redeemers and of every transaction that produced one of
+   its spent, reference or collateral inputs.
+2. Dingo validated each transaction's scripts under Conway rules with the
+   epoch 665 cost models and protocol version 11.0. The FLAT program and the
+   ledger-ordered `Data` arguments of every redeemer are the ones Dingo, via
+   gouroboros, passed to plutigo, so the script contexts are a ledger's, not
+   a reconstruction.
+3. Reference ExUnits came from cardano-node through Koios' Ogmios
+   `evaluateTransaction`, with the spent inputs supplied as additional
+   UTxO. Ten of the 532 transactions are absent because that endpoint
+   rejected their requests.
+
+`budget_limit` is the epoch's transaction execution-unit limit. Run the
+parity regression and throughput benchmark with:
+
+```sh
+go test ./replay -run TestRecentMainnetCorpusParity -v
+go test ./replay -run '^$' -bench BenchmarkRecentMainnetCorpus -benchmem
+```
+
 ## Run
 
 ```sh
