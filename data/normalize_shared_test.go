@@ -261,3 +261,19 @@ func BenchmarkNormalizeShared(b *testing.B) {
 		}
 	})
 }
+
+func TestNormalizeSharedWideContainersDoNotAllocate(t *testing.T) {
+	items := make([]PlutusData, 1000)
+	pairs := make([][2]PlutusData, 1000)
+	for i := range items {
+		items[i] = NewInteger(big.NewInt(int64(i)))
+		pairs[i] = [2]PlutusData{items[i], items[i]}
+	}
+	wide := NewList(NewConstr(0, items...), NewMap(pairs))
+	if got := NormalizeShared(wide); got != PlutusData(wide) {
+		t.Fatal("expected wide normalized value to be returned as is")
+	}
+	if n := testing.AllocsPerRun(10, func() { _ = NormalizeShared(wide) }); n != 0 {
+		t.Fatalf("NormalizeShared allocated %v times on a wide normalized value", n)
+	}
+}
