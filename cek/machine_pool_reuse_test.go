@@ -447,3 +447,23 @@ func TestValueElemRetentionIgnoresSkippedChunkTails(t *testing.T) {
 		t.Fatalf("retained slots %d, want %d from requested count", got, want)
 	}
 }
+
+func TestValueArenaRetentionBudgetRotatesAcrossResets(t *testing.T) {
+	m := pooledTestMachine()
+	const slotsPerArena = 100_000
+	retained := false
+	for range valueArenaCount {
+		for arena := range valueArenaCount {
+			growValueArena(m, arena, slotsPerArena)
+		}
+		m.updateValueArenaRetentions()
+		m.lazyPrepareValueArenas()
+		if len(m.builtinArgChunks) > 0 {
+			retained = true
+			break
+		}
+	}
+	if !retained {
+		t.Fatal("last arena never retained chunks under a saturated budget")
+	}
+}

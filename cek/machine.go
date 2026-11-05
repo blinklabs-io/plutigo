@@ -195,6 +195,7 @@ type Machine[T syn.Eval] struct {
 	hasRun             bool
 
 	valueArenaRetentions [valueArenaCount]valueArenaRetention
+	valueArenaResetStart int
 	// budgetSet records a SetExBudget call since the last run.
 	budgetSet bool
 	// skipDischarge is set by RunScriptContext: the final value is only
@@ -1226,121 +1227,158 @@ func (m *Machine[T]) updateValueArenaRetentions() {
 	)
 }
 
+// resetRetainedValueArenas spends the shared retention budget in an order that
+// rotates every reset. A fixed order lets earlier arenas keep sticky chunks and
+// starve the arenas the previous run used most.
 func (m *Machine[T]) resetRetainedValueArenas(lazy bool) {
 	retainBytes := valueArenaRetainBytes
-	resetRetainedValueArena(
-		&m.constrChunks,
-		&m.constrChunkPos,
-		&m.valueArenaRetentions[valueArenaConstr],
-		&retainBytes,
-		lazy,
-	)
-	resetRetainedValueArena(
-		&m.delayChunks,
-		&m.delayChunkPos,
-		&m.valueArenaRetentions[valueArenaDelay],
-		&retainBytes,
-		lazy,
-	)
-	resetRetainedValueArena(
-		&m.lambdaChunks,
-		&m.lambdaChunkPos,
-		&m.valueArenaRetentions[valueArenaLambda],
-		&retainBytes,
-		lazy,
-	)
-	resetRetainedValueArena(
-		&m.constantChunks,
-		&m.constantChunkPos,
-		&m.valueArenaRetentions[valueArenaConstant],
-		&retainBytes,
-		lazy,
-	)
-	resetRetainedValueArena(
-		&m.dataChunks,
-		&m.dataChunkPos,
-		&m.valueArenaRetentions[valueArenaData],
-		&retainBytes,
-		lazy,
-	)
-	resetRetainedValueArena(
-		&m.integerChunks,
-		&m.integerChunkPos,
-		&m.valueArenaRetentions[valueArenaInteger],
-		&retainBytes,
-		lazy,
-	)
-	resetRetainedValueArena(
-		&m.byteStringChunks,
-		&m.byteStringChunkPos,
-		&m.valueArenaRetentions[valueArenaByteString],
-		&retainBytes,
-		lazy,
-	)
-	resetRetainedValueArena(
-		&m.protoListChunks,
-		&m.protoListChunkPos,
-		&m.valueArenaRetentions[valueArenaProtoList],
-		&retainBytes,
-		lazy,
-	)
-	resetRetainedValueArena(
-		&m.protoPairChunks,
-		&m.protoPairChunkPos,
-		&m.valueArenaRetentions[valueArenaProtoPair],
-		&retainBytes,
-		lazy,
-	)
-	resetRetainedValueArena(
-		&m.dataValueChunks,
-		&m.dataValueChunkPos,
-		&m.valueArenaRetentions[valueArenaDataValue],
-		&retainBytes,
-		lazy,
-	)
-	resetRetainedValueArena(
-		&m.dataListValueChunks,
-		&m.dataListValueChunkPos,
-		&m.valueArenaRetentions[valueArenaDataListValue],
-		&retainBytes,
-		lazy,
-	)
-	resetRetainedValueArena(
-		&m.dataMapValueChunks,
-		&m.dataMapValueChunkPos,
-		&m.valueArenaRetentions[valueArenaDataMapValue],
-		&retainBytes,
-		lazy,
-	)
-	resetRetainedValueArena(
-		&m.pairValueChunks,
-		&m.pairValueChunkPos,
-		&m.valueArenaRetentions[valueArenaPairValue],
-		&retainBytes,
-		lazy,
-	)
-	resetRetainedValueArena(
-		&m.valueElemChunks,
-		&m.valueElemChunkPos,
-		&m.valueArenaRetentions[valueArenaElem],
-		&retainBytes,
-		lazy,
-	)
+	start := m.valueArenaResetStart
+	for i := range valueArenaCount {
+		m.resetRetainedValueArenaAt(
+			(start+i)%valueArenaCount,
+			&retainBytes,
+			lazy,
+		)
+	}
+	m.valueArenaResetStart = (start + 1) % valueArenaCount
 	m.valueElemSlotsUsed = 0
-	resetRetainedValueArena(
-		&m.builtinChunks,
-		&m.builtinChunkPos,
-		&m.valueArenaRetentions[valueArenaBuiltin],
-		&retainBytes,
-		lazy,
-	)
-	resetRetainedValueArena(
-		&m.builtinArgChunks,
-		&m.builtinArgChunkPos,
-		&m.valueArenaRetentions[valueArenaBuiltinArg],
-		&retainBytes,
-		lazy,
-	)
+}
+
+func (m *Machine[T]) resetRetainedValueArenaAt(
+	arena int,
+	retainBytes *int,
+	lazy bool,
+) {
+	switch arena {
+	case valueArenaConstr:
+		resetRetainedValueArena(
+			&m.constrChunks,
+			&m.constrChunkPos,
+			&m.valueArenaRetentions[valueArenaConstr],
+			retainBytes,
+			lazy,
+		)
+	case valueArenaDelay:
+		resetRetainedValueArena(
+			&m.delayChunks,
+			&m.delayChunkPos,
+			&m.valueArenaRetentions[valueArenaDelay],
+			retainBytes,
+			lazy,
+		)
+	case valueArenaLambda:
+		resetRetainedValueArena(
+			&m.lambdaChunks,
+			&m.lambdaChunkPos,
+			&m.valueArenaRetentions[valueArenaLambda],
+			retainBytes,
+			lazy,
+		)
+	case valueArenaConstant:
+		resetRetainedValueArena(
+			&m.constantChunks,
+			&m.constantChunkPos,
+			&m.valueArenaRetentions[valueArenaConstant],
+			retainBytes,
+			lazy,
+		)
+	case valueArenaData:
+		resetRetainedValueArena(
+			&m.dataChunks,
+			&m.dataChunkPos,
+			&m.valueArenaRetentions[valueArenaData],
+			retainBytes,
+			lazy,
+		)
+	case valueArenaInteger:
+		resetRetainedValueArena(
+			&m.integerChunks,
+			&m.integerChunkPos,
+			&m.valueArenaRetentions[valueArenaInteger],
+			retainBytes,
+			lazy,
+		)
+	case valueArenaByteString:
+		resetRetainedValueArena(
+			&m.byteStringChunks,
+			&m.byteStringChunkPos,
+			&m.valueArenaRetentions[valueArenaByteString],
+			retainBytes,
+			lazy,
+		)
+	case valueArenaProtoList:
+		resetRetainedValueArena(
+			&m.protoListChunks,
+			&m.protoListChunkPos,
+			&m.valueArenaRetentions[valueArenaProtoList],
+			retainBytes,
+			lazy,
+		)
+	case valueArenaProtoPair:
+		resetRetainedValueArena(
+			&m.protoPairChunks,
+			&m.protoPairChunkPos,
+			&m.valueArenaRetentions[valueArenaProtoPair],
+			retainBytes,
+			lazy,
+		)
+	case valueArenaDataValue:
+		resetRetainedValueArena(
+			&m.dataValueChunks,
+			&m.dataValueChunkPos,
+			&m.valueArenaRetentions[valueArenaDataValue],
+			retainBytes,
+			lazy,
+		)
+	case valueArenaDataListValue:
+		resetRetainedValueArena(
+			&m.dataListValueChunks,
+			&m.dataListValueChunkPos,
+			&m.valueArenaRetentions[valueArenaDataListValue],
+			retainBytes,
+			lazy,
+		)
+	case valueArenaDataMapValue:
+		resetRetainedValueArena(
+			&m.dataMapValueChunks,
+			&m.dataMapValueChunkPos,
+			&m.valueArenaRetentions[valueArenaDataMapValue],
+			retainBytes,
+			lazy,
+		)
+	case valueArenaPairValue:
+		resetRetainedValueArena(
+			&m.pairValueChunks,
+			&m.pairValueChunkPos,
+			&m.valueArenaRetentions[valueArenaPairValue],
+			retainBytes,
+			lazy,
+		)
+	case valueArenaElem:
+		resetRetainedValueArena(
+			&m.valueElemChunks,
+			&m.valueElemChunkPos,
+			&m.valueArenaRetentions[valueArenaElem],
+			retainBytes,
+			lazy,
+		)
+	case valueArenaBuiltin:
+		resetRetainedValueArena(
+			&m.builtinChunks,
+			&m.builtinChunkPos,
+			&m.valueArenaRetentions[valueArenaBuiltin],
+			retainBytes,
+			lazy,
+		)
+	case valueArenaBuiltinArg:
+		resetRetainedValueArena(
+			&m.builtinArgChunks,
+			&m.builtinArgChunkPos,
+			&m.valueArenaRetentions[valueArenaBuiltinArg],
+			retainBytes,
+			lazy,
+		)
+	}
 }
 
 func (m *Machine[T]) dropValueArenas() {
