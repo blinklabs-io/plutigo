@@ -315,6 +315,8 @@ func growValueArena(m *Machine[syn.DeBruijn], arena, slots int) {
 			m.allocBuiltin(0, 0, 1, nil)
 		case valueArenaBuiltinArg:
 			m.extendBuiltinArgs(nil, nil)
+		default:
+			panic("unhandled value arena")
 		}
 	}
 }
