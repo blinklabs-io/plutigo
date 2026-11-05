@@ -173,7 +173,6 @@ type Machine[T syn.Eval] struct {
 	builtinChunkPos        int
 	builtinArgChunks       [][]BuiltinArgs[T]
 	builtinArgChunkPos     int
-	valueArenaChunkSize    int
 	envChunks              [][]Env[T]
 	envActiveChunk         []Env[T]
 	envActiveChunkIdx      int
@@ -184,8 +183,11 @@ type Machine[T syn.Eval] struct {
 	lastRunRemaining       ExBudget
 	hasRun                 bool
 
-	// valueArenaSmallerRuns counts consecutive runs that would have fit a
-	// smaller value arena chunk size; see nextRetainedValueArenaChunkSize.
+	// valueRetainChunks is how many chunks each value arena keeps between
+	// runs; see nextValueRetainChunks.
+	valueRetainChunks int
+	// valueArenaSmallerRuns counts consecutive runs that would have fit fewer
+	// retained value arena chunks; see nextValueRetainChunks.
 	valueArenaSmallerRuns int
 	// budgetSet records a SetExBudget call since the last run.
 	budgetSet bool
@@ -198,14 +200,16 @@ type Machine[T syn.Eval] struct {
 }
 
 const (
-	envChunkSize          = 2048
-	envFirstChunkSize     = 128
-	envChunkGrowthSteps   = 4 // envFirstChunkSize << envChunkGrowthSteps == envChunkSize
-	envRetainChunkCap     = 64
-	valueColdChunkSize    = 512
-	valueMaxChunkSize     = 262144
-	valueElemChunkSize    = 1024
-	valueRetainChunkCap   = 8
+	envChunkSize        = 2048
+	envFirstChunkSize   = 128
+	envChunkGrowthSteps = 4 // envFirstChunkSize << envChunkGrowthSteps == envChunkSize
+	envRetainChunkCap   = 64
+	valueColdChunkSize  = 512
+	valueElemChunkSize  = 1024
+	valueRetainChunkCap = 8
+	// valueMaxRetainChunks bounds the chunks each value arena keeps between
+	// runs, at 2Mi slots.
+	valueMaxRetainChunks  = 4096
 	int64ConstantCacheCap = 4096
 )
 
@@ -351,8 +355,7 @@ func (m *Machine[T]) getFrameCases() *FrameCases[T] {
 }
 
 // allocArenaSlot allocates one slot of S from a chunked arena.
-// chunkSize must be a positive power of two; the value-arena chunk sizes
-// returned by nextValueArenaChunkSize satisfy this. We use its shift and mask
+// chunkSize must be a positive power of two, as valueColdChunkSize is. We use its shift and mask
 // to compute the chunk index and in-chunk offset without division or modulo.
 func allocArenaSlot[S any](chunks *[][]S, pos *int, chunkSize int) *S {
 	if chunkSize <= 0 {
@@ -486,32 +489,25 @@ func lazyPrepareArenaChunks[S any](
 	*pos = 0
 }
 
-func nextValueArenaChunkSize(used int) int {
-	if used <= valueColdChunkSize {
-		return valueColdChunkSize
-	}
-	chunkSize := valueColdChunkSize
-	for chunkSize < used && chunkSize < valueMaxChunkSize {
-		if chunkSize > valueMaxChunkSize/2 {
-			return valueMaxChunkSize
-		}
-		chunkSize *= 2
-	}
-	return chunkSize
+// valueRetainChunksFor returns how many value arena chunks a run that used
+// used slots in its fullest arena needs, within the retention bounds.
+func valueRetainChunksFor(used int) int {
+	chunks := (used + valueColdChunkSize - 1) / valueColdChunkSize
+	return min(max(chunks, valueRetainChunkCap), valueMaxRetainChunks)
 }
 
-// valueArenaShrinkRuns is how many consecutive runs must fit a smaller value
-// arena chunk size before a machine shrinks to it.
+// valueArenaShrinkRuns is how many consecutive runs must fit fewer retained
+// value arena chunks before a machine releases the extra ones.
 const valueArenaShrinkRuns = 16
 
-// nextRetainedValueArenaChunkSize picks the chunk size for a machine's next
-// run from the size this run used and the size this run would have needed.
-// Changing the size drops the value arenas, so a pooled machine that runs
-// scripts of different sizes in turn would otherwise drop and reallocate them
-// on nearly every run. It grows at once but shrinks only after
+// nextValueRetainChunks picks how many chunks each value arena keeps for the
+// machine's next run from the count this run kept and the count it needed.
+// Chunks have one size, so a pooled machine running scripts of different
+// sizes in turn keeps the chunks it already has and allocates only the ones a
+// larger script adds. The count grows at once but shrinks only after
 // valueArenaShrinkRuns consecutive smaller runs, which still releases the
 // memory of a machine that ran one large script.
-func (m *Machine[T]) nextRetainedValueArenaChunkSize(current, needed int) int {
+func (m *Machine[T]) nextValueRetainChunks(current, needed int) int {
 	if needed >= current {
 		m.valueArenaSmallerRuns = 0
 		return needed
@@ -522,6 +518,11 @@ func (m *Machine[T]) nextRetainedValueArenaChunkSize(current, needed int) int {
 	}
 	m.valueArenaSmallerRuns = 0
 	return needed
+}
+
+// retainedValueChunks is the per-arena chunk count resets keep.
+func (m *Machine[T]) retainedValueChunks() int {
+	return max(m.valueRetainChunks, valueRetainChunkCap)
 }
 
 func (m *Machine[T]) valueArenaHighWatermark() int {
@@ -544,52 +545,52 @@ func (m *Machine[T]) valueArenaHighWatermark() int {
 }
 
 func (m *Machine[T]) allocDelay(term *syn.Delay[T], env *Env[T]) *Delay[T] {
-	delay := allocArenaSlot(&m.delayChunks, &m.delayChunkPos, m.valueArenaChunkSize)
+	delay := allocArenaSlot(&m.delayChunks, &m.delayChunkPos, valueColdChunkSize)
 	delay.AST = term
 	delay.Env = env
 	return delay
 }
 
 func (m *Machine[T]) allocConstr(tag uint64, fields []Value[T]) *Constr[T] {
-	constr := allocArenaSlot(&m.constrChunks, &m.constrChunkPos, m.valueArenaChunkSize)
+	constr := allocArenaSlot(&m.constrChunks, &m.constrChunkPos, valueColdChunkSize)
 	constr.Tag = tag
 	constr.Fields = fields
 	return constr
 }
 
 func (m *Machine[T]) allocLambda(term *syn.Lambda[T], env *Env[T]) *Lambda[T] {
-	lambda := allocArenaSlot(&m.lambdaChunks, &m.lambdaChunkPos, m.valueArenaChunkSize)
+	lambda := allocArenaSlot(&m.lambdaChunks, &m.lambdaChunkPos, valueColdChunkSize)
 	lambda.AST = term
 	lambda.Env = env
 	return lambda
 }
 
 func (m *Machine[T]) allocConstant(con syn.IConstant) *Constant {
-	constant := allocArenaSlot(&m.constantChunks, &m.constantChunkPos, m.valueArenaChunkSize)
+	constant := allocArenaSlot(&m.constantChunks, &m.constantChunkPos, valueColdChunkSize)
 	constant.Constant = con
 	return constant
 }
 
 func (m *Machine[T]) allocDataConstant(inner data.PlutusData) *syn.Data {
-	dataConstant := allocArenaSlot(&m.dataChunks, &m.dataChunkPos, m.valueArenaChunkSize)
+	dataConstant := allocArenaSlot(&m.dataChunks, &m.dataChunkPos, valueColdChunkSize)
 	dataConstant.Inner = inner
 	return dataConstant
 }
 
 func (m *Machine[T]) allocIntegerConstant(inner *big.Int) *syn.Integer {
-	integerConstant := allocArenaSlot(&m.integerChunks, &m.integerChunkPos, m.valueArenaChunkSize)
+	integerConstant := allocArenaSlot(&m.integerChunks, &m.integerChunkPos, valueColdChunkSize)
 	integerConstant.SetInner(inner)
 	return integerConstant
 }
 
 func (m *Machine[T]) allocByteStringConstant(inner []byte) *syn.ByteString {
-	byteStringConstant := allocArenaSlot(&m.byteStringChunks, &m.byteStringChunkPos, m.valueArenaChunkSize)
+	byteStringConstant := allocArenaSlot(&m.byteStringChunks, &m.byteStringChunkPos, valueColdChunkSize)
 	byteStringConstant.Inner = inner
 	return byteStringConstant
 }
 
 func (m *Machine[T]) allocProtoListConstant(typ syn.Typ, list []syn.IConstant) *syn.ProtoList {
-	listConstant := allocArenaSlot(&m.protoListChunks, &m.protoListChunkPos, m.valueArenaChunkSize)
+	listConstant := allocArenaSlot(&m.protoListChunks, &m.protoListChunkPos, valueColdChunkSize)
 	listConstant.LTyp = typ
 	listConstant.List = list
 	return listConstant
@@ -601,7 +602,7 @@ func (m *Machine[T]) allocProtoPairConstant(
 	first syn.IConstant,
 	second syn.IConstant,
 ) *syn.ProtoPair {
-	pairConstant := allocArenaSlot(&m.protoPairChunks, &m.protoPairChunkPos, m.valueArenaChunkSize)
+	pairConstant := allocArenaSlot(&m.protoPairChunks, &m.protoPairChunkPos, valueColdChunkSize)
 	pairConstant.FstType = firstType
 	pairConstant.SndType = secondType
 	pairConstant.First = first
@@ -612,13 +613,13 @@ func (m *Machine[T]) allocProtoPairConstant(
 func (m *Machine[T]) allocDataListValue(
 	items []data.PlutusData,
 ) *dataListValue[T] {
-	listValue := allocArenaSlot(&m.dataListValueChunks, &m.dataListValueChunkPos, m.valueArenaChunkSize)
+	listValue := allocArenaSlot(&m.dataListValueChunks, &m.dataListValueChunkPos, valueColdChunkSize)
 	listValue.items = items
 	return listValue
 }
 
 func (m *Machine[T]) allocDataValue(item data.PlutusData) *dataValue[T] {
-	dataVal := allocArenaSlot(&m.dataValueChunks, &m.dataValueChunkPos, m.valueArenaChunkSize)
+	dataVal := allocArenaSlot(&m.dataValueChunks, &m.dataValueChunkPos, valueColdChunkSize)
 	dataVal.item = item
 	return dataVal
 }
@@ -626,7 +627,7 @@ func (m *Machine[T]) allocDataValue(item data.PlutusData) *dataValue[T] {
 func (m *Machine[T]) allocDataMapValue(
 	items [][2]data.PlutusData,
 ) *dataMapValue[T] {
-	listValue := allocArenaSlot(&m.dataMapValueChunks, &m.dataMapValueChunkPos, m.valueArenaChunkSize)
+	listValue := allocArenaSlot(&m.dataMapValueChunks, &m.dataMapValueChunkPos, valueColdChunkSize)
 	listValue.items = items
 	return listValue
 }
@@ -662,7 +663,7 @@ func (m *Machine[T]) allocPairValue(
 	first Value[T],
 	second Value[T],
 ) *pairValue[T] {
-	pair := allocArenaSlot(&m.pairValueChunks, &m.pairValueChunkPos, m.valueArenaChunkSize)
+	pair := allocArenaSlot(&m.pairValueChunks, &m.pairValueChunkPos, valueColdChunkSize)
 	pair.first = first
 	pair.second = second
 	return pair
@@ -681,7 +682,7 @@ func (m *Machine[T]) extendBuiltinArgs(
 	next *BuiltinArgs[T],
 	data Value[T],
 ) *BuiltinArgs[T] {
-	args := allocArenaSlot(&m.builtinArgChunks, &m.builtinArgChunkPos, m.valueArenaChunkSize)
+	args := allocArenaSlot(&m.builtinArgChunks, &m.builtinArgChunkPos, valueColdChunkSize)
 	args.data = data
 	args.next = next
 	return args
@@ -696,7 +697,7 @@ func (m *Machine[T]) allocBuiltin(
 	if argCount == 0 && args == nil && forces < 3 {
 		return m.builtinNoArgValues[fn][forces]
 	}
-	builtinValue := allocArenaSlot(&m.builtinChunks, &m.builtinChunkPos, m.valueArenaChunkSize)
+	builtinValue := allocArenaSlot(&m.builtinChunks, &m.builtinChunkPos, valueColdChunkSize)
 	builtinValue.Func = fn
 	builtinValue.forceCount = uint8(fn.ForceCount())
 	builtinValue.Forces = forces
@@ -838,7 +839,6 @@ func NewMachine[T syn.Eval](
 		builtinChunkPos:       0,
 		builtinArgChunks:      make([][]BuiltinArgs[T], 0, 8),
 		builtinArgChunkPos:    0,
-		valueArenaChunkSize:   valueColdChunkSize,
 		envChunks:             make([][]Env[T], 0, 8),
 		envChunkPos:           0,
 		budgetTemplate:        DefaultExBudget,
@@ -985,42 +985,42 @@ func (m *Machine[T]) dropEnvArena() {
 
 func (m *Machine[T]) resetValueArenas() {
 	m.resetUnConstrDataCache()
-	resetArenaChunks(&m.constrChunks, &m.constrChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.delayChunks, &m.delayChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.lambdaChunks, &m.lambdaChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.constantChunks, &m.constantChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.dataChunks, &m.dataChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.integerChunks, &m.integerChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.byteStringChunks, &m.byteStringChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.protoListChunks, &m.protoListChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.protoPairChunks, &m.protoPairChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.dataValueChunks, &m.dataValueChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.dataListValueChunks, &m.dataListValueChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.dataMapValueChunks, &m.dataMapValueChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.pairValueChunks, &m.pairValueChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.valueElemChunks, &m.valueElemChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.builtinChunks, &m.builtinChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.builtinArgChunks, &m.builtinArgChunkPos, valueRetainChunkCap)
+	resetArenaChunks(&m.constrChunks, &m.constrChunkPos, m.retainedValueChunks())
+	resetArenaChunks(&m.delayChunks, &m.delayChunkPos, m.retainedValueChunks())
+	resetArenaChunks(&m.lambdaChunks, &m.lambdaChunkPos, m.retainedValueChunks())
+	resetArenaChunks(&m.constantChunks, &m.constantChunkPos, m.retainedValueChunks())
+	resetArenaChunks(&m.dataChunks, &m.dataChunkPos, m.retainedValueChunks())
+	resetArenaChunks(&m.integerChunks, &m.integerChunkPos, m.retainedValueChunks())
+	resetArenaChunks(&m.byteStringChunks, &m.byteStringChunkPos, m.retainedValueChunks())
+	resetArenaChunks(&m.protoListChunks, &m.protoListChunkPos, m.retainedValueChunks())
+	resetArenaChunks(&m.protoPairChunks, &m.protoPairChunkPos, m.retainedValueChunks())
+	resetArenaChunks(&m.dataValueChunks, &m.dataValueChunkPos, m.retainedValueChunks())
+	resetArenaChunks(&m.dataListValueChunks, &m.dataListValueChunkPos, m.retainedValueChunks())
+	resetArenaChunks(&m.dataMapValueChunks, &m.dataMapValueChunkPos, m.retainedValueChunks())
+	resetArenaChunks(&m.pairValueChunks, &m.pairValueChunkPos, m.retainedValueChunks())
+	resetArenaChunks(&m.valueElemChunks, &m.valueElemChunkPos, m.retainedValueChunks())
+	resetArenaChunks(&m.builtinChunks, &m.builtinChunkPos, m.retainedValueChunks())
+	resetArenaChunks(&m.builtinArgChunks, &m.builtinArgChunkPos, m.retainedValueChunks())
 }
 
 func (m *Machine[T]) lazyPrepareValueArenas() {
 	m.resetUnConstrDataCache()
-	lazyPrepareArenaChunks(&m.constrChunks, &m.constrChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.delayChunks, &m.delayChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.lambdaChunks, &m.lambdaChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.constantChunks, &m.constantChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.dataChunks, &m.dataChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.integerChunks, &m.integerChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.byteStringChunks, &m.byteStringChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.protoListChunks, &m.protoListChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.protoPairChunks, &m.protoPairChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.dataValueChunks, &m.dataValueChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.dataListValueChunks, &m.dataListValueChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.dataMapValueChunks, &m.dataMapValueChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.pairValueChunks, &m.pairValueChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.valueElemChunks, &m.valueElemChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.builtinChunks, &m.builtinChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.builtinArgChunks, &m.builtinArgChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(&m.constrChunks, &m.constrChunkPos, m.retainedValueChunks())
+	lazyPrepareArenaChunks(&m.delayChunks, &m.delayChunkPos, m.retainedValueChunks())
+	lazyPrepareArenaChunks(&m.lambdaChunks, &m.lambdaChunkPos, m.retainedValueChunks())
+	lazyPrepareArenaChunks(&m.constantChunks, &m.constantChunkPos, m.retainedValueChunks())
+	lazyPrepareArenaChunks(&m.dataChunks, &m.dataChunkPos, m.retainedValueChunks())
+	lazyPrepareArenaChunks(&m.integerChunks, &m.integerChunkPos, m.retainedValueChunks())
+	lazyPrepareArenaChunks(&m.byteStringChunks, &m.byteStringChunkPos, m.retainedValueChunks())
+	lazyPrepareArenaChunks(&m.protoListChunks, &m.protoListChunkPos, m.retainedValueChunks())
+	lazyPrepareArenaChunks(&m.protoPairChunks, &m.protoPairChunkPos, m.retainedValueChunks())
+	lazyPrepareArenaChunks(&m.dataValueChunks, &m.dataValueChunkPos, m.retainedValueChunks())
+	lazyPrepareArenaChunks(&m.dataListValueChunks, &m.dataListValueChunkPos, m.retainedValueChunks())
+	lazyPrepareArenaChunks(&m.dataMapValueChunks, &m.dataMapValueChunkPos, m.retainedValueChunks())
+	lazyPrepareArenaChunks(&m.pairValueChunks, &m.pairValueChunkPos, m.retainedValueChunks())
+	lazyPrepareArenaChunks(&m.valueElemChunks, &m.valueElemChunkPos, m.retainedValueChunks())
+	lazyPrepareArenaChunks(&m.builtinChunks, &m.builtinChunkPos, m.retainedValueChunks())
+	lazyPrepareArenaChunks(&m.builtinArgChunks, &m.builtinArgChunkPos, m.retainedValueChunks())
 }
 
 func (m *Machine[T]) dropValueArenas() {
@@ -1363,9 +1363,6 @@ func (m *Machine[T]) runContext(
 	}
 	firstRun := !m.hasRun
 	if m.hasRun {
-		if m.valueArenaChunkSize <= 0 {
-			m.valueArenaChunkSize = valueColdChunkSize
-		}
 		if m.budgetSet || m.ExBudget != m.lastRunRemaining {
 			m.budgetTemplate = m.ExBudget
 		} else {
@@ -1374,11 +1371,10 @@ func (m *Machine[T]) runContext(
 		m.budgetSet = false
 		m.resetFrameStack()
 	} else {
-		m.valueArenaChunkSize = valueColdChunkSize
 		m.budgetTemplate = m.ExBudget
 		m.budgetSet = false
 	}
-	runValueArenaChunkSize := m.valueArenaChunkSize
+	runRetainChunks := m.retainedValueChunks()
 	m.Logs = m.Logs[:0]
 	if m.metrics != nil {
 		*m.metrics = Metrics{}
@@ -1389,24 +1385,19 @@ func (m *Machine[T]) runContext(
 		if m.metrics != nil {
 			m.metrics.MaxStackDepth = m.frameStackUsed
 		}
-		nextChunkSize := m.nextRetainedValueArenaChunkSize(
-			runValueArenaChunkSize,
-			nextValueArenaChunkSize(m.valueArenaHighWatermark()),
+		nextRetainChunks := m.nextValueRetainChunks(
+			runRetainChunks,
+			valueRetainChunksFor(m.valueArenaHighWatermark()),
 		)
 		m.lastRunEnvHighWatermark = m.envChunkPos
 		m.lastRunRemaining = m.ExBudget
 		m.hasRun = true
 		m.listShare.reset()
 		m.resetFrameStack()
-		m.valueArenaChunkSize = nextChunkSize
+		m.valueRetainChunks = nextRetainChunks
 		if firstRun {
 			m.dropValueArenas()
 			m.dropEnvArena()
-			return
-		}
-		if nextChunkSize != runValueArenaChunkSize {
-			m.dropValueArenas()
-			m.lazyPrepareEnvArena()
 			return
 		}
 		m.lazyPrepareValueArenas()

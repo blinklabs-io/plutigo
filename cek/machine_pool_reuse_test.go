@@ -115,7 +115,7 @@ func TestPooledMachineKeepsArenasAcrossScripts(t *testing.T) {
 }
 
 // TestValueArenaShrinksAfterSmallerRuns checks that a machine keeps a larger
-// value arena chunk size through fewer than valueArenaShrinkRuns smaller runs
+// retained value arena chunk count through fewer than valueArenaShrinkRuns smaller runs
 // and shrinks once that many follow in a row.
 func TestValueArenaShrinksAfterSmallerRuns(t *testing.T) {
 	small := pooledTestProgram(t, "guardrail-sorted-small")
@@ -129,16 +129,16 @@ func TestValueArenaShrinksAfterSmallerRuns(t *testing.T) {
 	}
 	run(large)
 	run(large)
-	grown := m.valueArenaChunkSize
+	grown := m.valueRetainChunks
 	run(small)
 	for i := 1; i < valueArenaShrinkRuns; i++ {
-		if m.valueArenaChunkSize != grown {
-			t.Fatalf("after %d smaller runs the chunk size is %d, want %d", i, m.valueArenaChunkSize, grown)
+		if m.valueRetainChunks != grown {
+			t.Fatalf("after %d smaller runs the retained chunk count is %d, want %d", i, m.valueRetainChunks, grown)
 		}
 		run(small)
 	}
-	if m.valueArenaChunkSize >= grown {
-		t.Errorf("after %d smaller runs the chunk size is still %d", valueArenaShrinkRuns, m.valueArenaChunkSize)
+	if m.valueRetainChunks >= grown {
+		t.Errorf("after %d smaller runs the retained chunk count is still %d", valueArenaShrinkRuns, m.valueRetainChunks)
 	}
 }
 
@@ -157,21 +157,46 @@ func TestValueArenaShrinkCountRestartsAfterLargerRun(t *testing.T) {
 	}
 	run(large)
 	run(large)
-	grown := m.valueArenaChunkSize
+	grown := m.valueRetainChunks
 	for range valueArenaShrinkRuns / 2 {
 		run(small)
 	}
 	run(large)
 	for i := 1; i < valueArenaShrinkRuns; i++ {
 		run(small)
-		if m.valueArenaChunkSize != grown {
-			t.Fatalf("after %d smaller runs following a larger run the chunk size is %d, want %d",
-				i, m.valueArenaChunkSize, grown)
+		if m.valueRetainChunks != grown {
+			t.Fatalf("after %d smaller runs following a larger run the retained chunk count is %d, want %d",
+				i, m.valueRetainChunks, grown)
 		}
 	}
 	run(small)
-	if m.valueArenaChunkSize >= grown {
-		t.Errorf("after %d smaller runs following a larger run the chunk size is still %d",
-			valueArenaShrinkRuns, m.valueArenaChunkSize)
+	if m.valueRetainChunks >= grown {
+		t.Errorf("after %d smaller runs following a larger run the retained chunk count is still %d",
+			valueArenaShrinkRuns, m.valueRetainChunks)
+	}
+}
+
+// TestValueArenaKeepsChunksWhenGrowing checks that a warm machine moving to a
+// larger script keeps the value arena chunks it already holds and only adds
+// the ones the larger script needs.
+func TestValueArenaKeepsChunksWhenGrowing(t *testing.T) {
+	small := pooledTestProgram(t, "guardrail-sorted-small")
+	large := pooledTestProgram(t, "stablecoin_1-5")
+	m := pooledTestMachine()
+	run := func(p *PreparedProgram) {
+		m.SetExBudget(DefaultExBudget)
+		if _, err := RunPreparedScriptContext(context.Background(), m, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run(small)
+	run(small)
+	if len(m.constantChunks) == 0 {
+		t.Fatal("small script left no constant chunks")
+	}
+	kept := &m.constantChunks[0][0]
+	run(large)
+	if len(m.constantChunks) == 0 || &m.constantChunks[0][0] != kept {
+		t.Fatal("growing to a larger script dropped the constant arena's chunks")
 	}
 }

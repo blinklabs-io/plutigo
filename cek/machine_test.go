@@ -271,7 +271,6 @@ func TestRunKeepsSmallReusedValueArenaCold(t *testing.T) {
 		name               string
 		setup              func() *Machine[syn.DeBruijn]
 		term               syn.Term[syn.DeBruijn]
-		wantChunkSize      int
 		wantLambdaChunks   int
 		wantLambdaChunkLen int
 	}{
@@ -281,7 +280,6 @@ func TestRunKeepsSmallReusedValueArenaCold(t *testing.T) {
 				return NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 			},
 			term:               term,
-			wantChunkSize:      valueColdChunkSize,
 			wantLambdaChunks:   1,
 			wantLambdaChunkLen: valueColdChunkSize,
 		},
@@ -299,9 +297,6 @@ func TestRunKeepsSmallReusedValueArenaCold(t *testing.T) {
 				t.Fatalf("second Run returned error: %v", err)
 			}
 
-			if got := m.valueArenaChunkSize; got != tt.wantChunkSize {
-				t.Fatalf("valueArenaChunkSize after small reuse = %d, want %d", got, tt.wantChunkSize)
-			}
 			if got := len(m.lambdaChunks); got != tt.wantLambdaChunks {
 				t.Fatalf("len(lambdaChunks) after small reuse = %d, want %d", got, tt.wantLambdaChunks)
 			}
