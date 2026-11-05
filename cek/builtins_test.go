@@ -378,6 +378,47 @@ func TestDivideIntegerBuiltin(t *testing.T) {
 	}
 }
 
+// TestDivideIntegerBuiltinFloorsLargeOperands checks divideInteger's floor
+// semantics on operands beyond int64, where it takes the big.Int path: the
+// quotient q of a by b satisfies q*b <= a < (q+1)*b for b > 0 and
+// q*b >= a > (q+1)*b for b < 0, and the arguments are left unchanged.
+func TestDivideIntegerBuiltinFloorsLargeOperands(t *testing.T) {
+	big1, _ := new(big.Int).SetString("123456789012345678901234567890123", 10)
+	big2, _ := new(big.Int).SetString("98765432109876543210987", 10)
+	exact := new(big.Int).Mul(big2, big.NewInt(1_000_003))
+	values := []*big.Int{big1, big2, exact, big.NewInt(7), big.NewInt(3)}
+	for _, a := range values {
+		for _, b := range values {
+			for _, signs := range [][2]int64{{1, 1}, {1, -1}, {-1, 1}, {-1, -1}} {
+				left := new(big.Int).Mul(a, big.NewInt(signs[0]))
+				right := new(big.Int).Mul(b, big.NewInt(signs[1]))
+				if left.IsInt64() && right.IsInt64() {
+					continue
+				}
+				leftCopy, rightCopy := new(big.Int).Set(left), new(big.Int).Set(right)
+				m := newTestMachine()
+				fn := newTestBuiltin(builtin.DivideInteger)
+				fn = fn.ApplyArg(&Constant{&syn.Integer{Inner: left}})
+				fn = fn.ApplyArg(&Constant{&syn.Integer{Inner: right}})
+				q := expectInteger(t, expectConstant(t, evalBuiltin(t, m, fn))).Inner
+
+				low := new(big.Int).Mul(q, right)
+				high := new(big.Int).Add(low, right)
+				ok := low.Cmp(left) <= 0 && left.Cmp(high) < 0
+				if right.Sign() < 0 {
+					ok = low.Cmp(left) >= 0 && left.Cmp(high) > 0
+				}
+				if !ok {
+					t.Fatalf("divideInteger(%v, %v) = %v, not the floor", left, right, q)
+				}
+				if left.Cmp(leftCopy) != 0 || right.Cmp(rightCopy) != 0 {
+					t.Fatalf("divideInteger modified its arguments")
+				}
+			}
+		}
+	}
+}
+
 func TestDivideIntegerByZero(t *testing.T) {
 	m := newTestMachine()
 	b := newTestBuiltin(builtin.DivideInteger)

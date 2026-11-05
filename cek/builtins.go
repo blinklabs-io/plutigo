@@ -293,6 +293,9 @@ func integerMetadata(i *big.Int) string {
 	return fmt.Sprintf("sign=%d, bit length=%d", i.Sign(), i.BitLen())
 }
 
+// bigIntOne is read-only.
+var bigIntOne = big.NewInt(1)
+
 func (m *Machine[T]) evalBinaryIntegerBuiltin(
 	fn builtin.DefaultFunction,
 	leftVal Value[T],
@@ -387,12 +390,13 @@ func (m *Machine[T]) evalBinaryIntegerBuiltin(
 			}
 		}
 
+		// One truncated division yields both parts; Quo and Rem would each
+		// divide in full.
 		var quotient big.Int
 		var remainder big.Int
-		quotient.Quo(arg1.value, arg2.value)
-		remainder.Rem(arg1.value, arg2.value)
+		quotient.QuoRem(arg1.value, arg2.value, &remainder)
 		if remainder.Sign() != 0 && arg1.value.Sign() != arg2.value.Sign() {
-			quotient.Sub(&quotient, big.NewInt(1))
+			quotient.Sub(&quotient, bigIntOne)
 		}
 		return m.allocConstant(m.allocIntegerConstant(&quotient)), true, nil
 	case builtin.QuotientInteger:
