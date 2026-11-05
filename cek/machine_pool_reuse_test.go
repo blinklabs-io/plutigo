@@ -270,12 +270,21 @@ func TestValueArenaKeepsChunksWhenGrowing(t *testing.T) {
 	}
 	run(small)
 	run(small)
-	if len(m.constantChunks) == 0 {
-		t.Fatal("small script left no constant chunks")
+	if len(m.lambdaChunks) == 0 {
+		t.Fatal("small script left no lambda chunks")
 	}
-	kept := &m.constantChunks[0][0]
+	kept := make([]*Lambda[syn.DeBruijn], len(m.lambdaChunks))
+	for i := range m.lambdaChunks {
+		kept[i] = &m.lambdaChunks[i][0]
+	}
 	run(large)
-	if len(m.constantChunks) == 0 || &m.constantChunks[0][0] != kept {
-		t.Fatal("growing to a larger script dropped the constant arena's chunks")
+	if len(m.lambdaChunks) <= len(kept) {
+		t.Fatalf("larger script did not add lambda chunks: %d, had %d",
+			len(m.lambdaChunks), len(kept))
+	}
+	for i, p := range kept {
+		if &m.lambdaChunks[i][0] != p {
+			t.Fatalf("growing to a larger script replaced lambda chunk %d", i)
+		}
 	}
 }
