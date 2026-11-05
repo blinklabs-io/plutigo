@@ -288,3 +288,24 @@ func TestValueArenaKeepsChunksWhenGrowing(t *testing.T) {
 		}
 	}
 }
+
+func TestValueElemRetentionIgnoresSkippedChunkTails(t *testing.T) {
+	m := pooledTestMachine()
+	// Each 600-slot request does not fit the tail of a 1024-slot chunk, so the
+	// cursor skips 424 slots per chunk while only 600 are requested.
+	for range 8 {
+		m.allocValueElems(600)
+	}
+	if m.valueElemSlotsUsed != 4800 {
+		t.Fatalf("requested slots = %d, want 4800", m.valueElemSlotsUsed)
+	}
+	if m.valueElemChunkPos <= m.valueElemSlotsUsed {
+		t.Fatalf("cursor %d should exceed requested slots %d", m.valueElemChunkPos, m.valueElemSlotsUsed)
+	}
+	var fromRequested valueArenaRetention
+	updateValueArenaRetention(&fromRequested, m.valueElemSlotsUsed, valueElemChunkSize)
+	m.updateValueArenaRetentions()
+	if got, want := m.valueArenaRetentions[valueArenaElem].retainedSlots(), fromRequested.retainedSlots(); got != want {
+		t.Fatalf("retained slots %d, want %d from requested count", got, want)
+	}
+}

@@ -169,19 +169,22 @@ type Machine[T syn.Eval] struct {
 	listShare              listShare
 	valueElemChunks        [][]Value[T]
 	valueElemChunkPos      int
-	builtinChunks          [][]Builtin[T]
-	builtinChunkPos        int
-	builtinArgChunks       [][]BuiltinArgs[T]
-	builtinArgChunkPos     int
-	envChunks              [][]Env[T]
-	envActiveChunk         []Env[T]
-	envActiveChunkIdx      int
-	envActiveOff           int
-	envChunkPos            int
-	envPooled              *pooledEnvChunks[T]
-	budgetTemplate         ExBudget
-	lastRunRemaining       ExBudget
-	hasRun                 bool
+	// valueElemSlotsUsed counts requested slots only; valueElemChunkPos also
+	// advances over skipped chunk tails, which would inflate retention.
+	valueElemSlotsUsed int
+	builtinChunks      [][]Builtin[T]
+	builtinChunkPos    int
+	builtinArgChunks   [][]BuiltinArgs[T]
+	builtinArgChunkPos int
+	envChunks          [][]Env[T]
+	envActiveChunk     []Env[T]
+	envActiveChunkIdx  int
+	envActiveOff       int
+	envChunkPos        int
+	envPooled          *pooledEnvChunks[T]
+	budgetTemplate     ExBudget
+	lastRunRemaining   ExBudget
+	hasRun             bool
 
 	valueArenaRetentions [valueArenaCount]valueArenaRetention
 	// budgetSet records a SetExBudget call since the last run.
@@ -709,6 +712,7 @@ func (m *Machine[T]) allocPairValue(
 }
 
 func (m *Machine[T]) allocValueElems(n int) []Value[T] {
+	m.valueElemSlotsUsed += n
 	return allocArenaSlice(
 		&m.valueElemChunks,
 		&m.valueElemChunkPos,
@@ -1046,7 +1050,7 @@ func (m *Machine[T]) updateValueArenaRetentions() {
 	updateValueArenaRetention(&m.valueArenaRetentions[valueArenaDataListValue], m.dataListValueChunkPos, valueColdChunkSize)
 	updateValueArenaRetention(&m.valueArenaRetentions[valueArenaDataMapValue], m.dataMapValueChunkPos, valueColdChunkSize)
 	updateValueArenaRetention(&m.valueArenaRetentions[valueArenaPairValue], m.pairValueChunkPos, valueColdChunkSize)
-	updateValueArenaRetention(&m.valueArenaRetentions[valueArenaElem], m.valueElemChunkPos, valueElemChunkSize)
+	updateValueArenaRetention(&m.valueArenaRetentions[valueArenaElem], m.valueElemSlotsUsed, valueElemChunkSize)
 	updateValueArenaRetention(&m.valueArenaRetentions[valueArenaBuiltin], m.builtinChunkPos, valueColdChunkSize)
 	updateValueArenaRetention(&m.valueArenaRetentions[valueArenaBuiltinArg], m.builtinArgChunkPos, valueColdChunkSize)
 }
@@ -1066,6 +1070,7 @@ func (m *Machine[T]) resetRetainedValueArenas(lazy bool) {
 	resetRetainedValueArena(&m.dataMapValueChunks, &m.dataMapValueChunkPos, &m.valueArenaRetentions[valueArenaDataMapValue], lazy)
 	resetRetainedValueArena(&m.pairValueChunks, &m.pairValueChunkPos, &m.valueArenaRetentions[valueArenaPairValue], lazy)
 	resetRetainedValueArena(&m.valueElemChunks, &m.valueElemChunkPos, &m.valueArenaRetentions[valueArenaElem], lazy)
+	m.valueElemSlotsUsed = 0
 	resetRetainedValueArena(&m.builtinChunks, &m.builtinChunkPos, &m.valueArenaRetentions[valueArenaBuiltin], lazy)
 	resetRetainedValueArena(&m.builtinArgChunks, &m.builtinArgChunkPos, &m.valueArenaRetentions[valueArenaBuiltinArg], lazy)
 }
@@ -1100,6 +1105,7 @@ func (m *Machine[T]) dropValueArenas() {
 	m.pairValueChunkPos = 0
 	m.valueElemChunks = nil
 	m.valueElemChunkPos = 0
+	m.valueElemSlotsUsed = 0
 	m.builtinChunks = nil
 	m.builtinChunkPos = 0
 	m.builtinArgChunks = nil
