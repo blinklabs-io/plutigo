@@ -129,16 +129,16 @@ func TestValueArenaShrinksAfterSmallerRuns(t *testing.T) {
 	}
 	run(large)
 	run(large)
-	grown := m.valueRetainChunks
+	grown := m.valueArenaRetentions[valueArenaLambda].retainedSlots()
 	run(small)
 	for i := 1; i < valueArenaShrinkRuns; i++ {
-		if m.valueRetainChunks != grown {
-			t.Fatalf("after %d smaller runs the retained chunk count is %d, want %d", i, m.valueRetainChunks, grown)
+		if got := m.valueArenaRetentions[valueArenaLambda].retainedSlots(); got != grown {
+			t.Fatalf("after %d smaller runs the retained slot count is %d, want %d", i, got, grown)
 		}
 		run(small)
 	}
-	if m.valueRetainChunks >= grown {
-		t.Errorf("after %d smaller runs the retained chunk count is still %d", valueArenaShrinkRuns, m.valueRetainChunks)
+	if got := m.valueArenaRetentions[valueArenaLambda].retainedSlots(); got >= grown {
+		t.Errorf("after %d smaller runs the retained slot count is still %d", valueArenaShrinkRuns, got)
 	}
 }
 
@@ -157,22 +157,101 @@ func TestValueArenaShrinkCountRestartsAfterLargerRun(t *testing.T) {
 	}
 	run(large)
 	run(large)
-	grown := m.valueRetainChunks
+	grown := m.valueArenaRetentions[valueArenaLambda].retainedSlots()
 	for range valueArenaShrinkRuns / 2 {
 		run(small)
 	}
 	run(large)
 	for i := 1; i < valueArenaShrinkRuns; i++ {
 		run(small)
-		if m.valueRetainChunks != grown {
-			t.Fatalf("after %d smaller runs following a larger run the retained chunk count is %d, want %d",
-				i, m.valueRetainChunks, grown)
+		if got := m.valueArenaRetentions[valueArenaLambda].retainedSlots(); got != grown {
+			t.Fatalf("after %d smaller runs following a larger run the retained slot count is %d, want %d",
+				i, got, grown)
 		}
 	}
 	run(small)
-	if m.valueRetainChunks >= grown {
-		t.Errorf("after %d smaller runs following a larger run the retained chunk count is still %d",
-			valueArenaShrinkRuns, m.valueRetainChunks)
+	if got := m.valueArenaRetentions[valueArenaLambda].retainedSlots(); got >= grown {
+		t.Errorf("after %d smaller runs following a larger run the retained slot count is still %d",
+			valueArenaShrinkRuns, got)
+	}
+}
+
+// TestValueArenasShrinkIndependently checks that continued use of one arena
+// does not keep another arena at its previous high watermark.
+func TestValueArenasShrinkIndependently(t *testing.T) {
+	m := pooledTestMachine()
+	const grownSlots = valueMinRetainSlots + valueColdChunkSize
+	finishRun := func() {
+		m.updateValueArenaRetentions()
+		m.lazyPrepareValueArenas()
+	}
+	fillLambda := func() {
+		for range grownSlots {
+			m.allocLambda(nil, nil)
+		}
+	}
+	fillConstant := func() {
+		for range grownSlots {
+			m.allocConstant(nil)
+		}
+	}
+
+	fillLambda()
+	fillConstant()
+	finishRun()
+	if got := len(m.lambdaChunks); got != 9 {
+		t.Fatalf("lambda arena retained %d chunks after growing, want 9", got)
+	}
+	if got := len(m.constantChunks); got != 9 {
+		t.Fatalf("constant arena retained %d chunks after growing, want 9", got)
+	}
+
+	for range valueArenaShrinkRuns {
+		fillLambda()
+		finishRun()
+	}
+	if got := len(m.lambdaChunks); got != 9 {
+		t.Fatalf("hot lambda arena retained %d chunks, want 9", got)
+	}
+	if got := len(m.constantChunks); got != 8 {
+		t.Fatalf("cold constant arena retained %d chunks, want 8", got)
+	}
+}
+
+func TestValueElemArenaRetentionUsesActualChunkSize(t *testing.T) {
+	m := pooledTestMachine()
+	for range valueMinRetainSlots + 1 {
+		m.allocValueElems(1)
+	}
+	m.updateValueArenaRetentions()
+	m.lazyPrepareValueArenas()
+	if got := len(m.valueElemChunks); got != 5 {
+		t.Fatalf("value element arena retained %d chunks after growing, want 5", got)
+	}
+	for range valueArenaShrinkRuns {
+		m.updateValueArenaRetentions()
+		m.lazyPrepareValueArenas()
+	}
+	if got := len(m.valueElemChunks); got != 4 {
+		t.Fatalf("cold value element arena retained %d chunks, want 4", got)
+	}
+}
+
+func TestOversizedValueElemArenaShrinksAfterSmallerRuns(t *testing.T) {
+	m := pooledTestMachine()
+	m.allocValueElems(5000)
+	m.updateValueArenaRetentions()
+	m.lazyPrepareValueArenas()
+	if got := len(m.valueElemChunks); got != 1 {
+		t.Fatalf("value element arena retained %d oversized chunks, want 1", got)
+	}
+	for range valueArenaShrinkRuns {
+		m.allocValueElems(1)
+		m.updateValueArenaRetentions()
+		m.lazyPrepareValueArenas()
+	}
+	if got := len(m.valueElemChunks); got != 0 {
+		t.Fatalf("cold value element arena retained %d oversized chunks, want 0", got)
 	}
 }
 
