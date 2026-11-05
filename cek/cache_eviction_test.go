@@ -17,6 +17,8 @@ package cek
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"math"
+	"math/big"
 	"sync"
 	"testing"
 
@@ -123,54 +125,9 @@ func TestEd25519VerifyCacheConcurrentAccess(t *testing.T) {
 	wg.Wait()
 }
 
-// TestSharedDynamicIntCacheResetOnFull fills the sharedDynamicInts cache to
-// its limit, then verifies that a subsequent insert is admitted (reset-on-full).
-func TestSharedDynamicIntCacheResetOnFull(t *testing.T) {
-	// Reset the shared dynamic int cache to a known empty state.
-	sharedDynamicIntMu.Lock()
-	sharedDynamicInts = make(map[int64]*Constant, int64ConstantCacheCap)
-	sharedDynamicIntMu.Unlock()
-
-	// Fill the cache using values outside the small-int range.
-	// We start at cachedIntMax+1 to avoid the static cache range.
-	base := int64(cachedIntMax) + 1
-	for i := 0; i < int64ConstantCacheCap; i++ {
-		v := base + int64(i)
-		c := newDynamicIntConstant(v)
-		storeSharedDynamicIntConstant(v, c)
-	}
-
-	// Verify the cache is at capacity.
-	sharedDynamicIntMu.RLock()
-	size := len(sharedDynamicInts)
-	sharedDynamicIntMu.RUnlock()
-	if size != int64ConstantCacheCap {
-		t.Fatalf("expected cache size %d, got %d", int64ConstantCacheCap, size)
-	}
-
-	// A new value beyond the filled range should be admitted after the fix.
-	newVal := base + int64(int64ConstantCacheCap) + 1
-	c := newDynamicIntConstant(newVal)
-	stored := storeSharedDynamicIntConstant(newVal, c)
-	if stored == nil {
-		t.Fatal("new entry was not admitted to sharedDynamicInts after cache was full — reset-on-full fix is missing")
-	}
-
-	// Verify it is now retrievable from the shared cache.
-	got := loadSharedDynamicIntConstant(newVal)
-	if got == nil {
-		t.Fatal("new entry not found in sharedDynamicInts after reset-on-full insert")
-	}
-}
-
-// TestSharedDynamicIntCacheConcurrentAccess exercises sharedDynamicInts under
-// concurrent access to catch data races.
-func TestSharedDynamicIntCacheConcurrentAccess(t *testing.T) {
-	// Reset.
-	sharedDynamicIntMu.Lock()
-	sharedDynamicInts = make(map[int64]*Constant, int64ConstantCacheCap)
-	sharedDynamicIntMu.Unlock()
-
+// TestDynamicIntConstantsConcurrentAccess builds int64 constants outside the
+// static cache on many machines at once, to catch data races.
+func TestDynamicIntConstantsConcurrentAccess(t *testing.T) {
 	const goroutines = 16
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
@@ -189,4 +146,41 @@ func TestSharedDynamicIntCacheConcurrentAccess(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// TestDynamicIntConstantMatchesBigInt checks that the single-allocation int64
+// constant carries the same value, cached int64 and ExMem as a constant
+// built from big.NewInt, across the int64 range, and that constants never
+// share digit storage.
+func TestDynamicIntConstantMatchesBigInt(t *testing.T) {
+	values := []int64{
+		math.MinInt64, math.MinInt64 + 1, -1 << 32, -(1 << 32) + 1, -65,
+		256, 1<<31 - 1, 1 << 31, 1<<32 - 1, 1 << 32, 1 << 62, math.MaxInt64,
+	}
+	var previous *syn.Integer
+	for _, v := range values {
+		got, ok := newDynamicIntConstant(v).Constant.(*syn.Integer)
+		if !ok {
+			t.Fatalf("%d: constant is %T", v, got)
+		}
+		want := &syn.Integer{}
+		want.SetInner(big.NewInt(v))
+		if got.Inner.Cmp(want.Inner) != 0 {
+			t.Fatalf("%d: value %v", v, got.Inner)
+		}
+		cached, isInt64 := got.CachedInt64()
+		if !isInt64 || cached != v {
+			t.Fatalf("%d: cached int64 %d, %v", v, cached, isInt64)
+		}
+		if got.ExMemWords() != want.ExMemWords() {
+			t.Fatalf("%d: ExMem %d, want %d", v, got.ExMemWords(), want.ExMemWords())
+		}
+		if previous != nil && previous.Inner.Cmp(want.Inner) == 0 {
+			t.Fatalf("%d: an earlier constant changed to this value", v)
+		}
+		previous = got
+	}
+	if allocs := testing.AllocsPerRun(100, func() { _ = newDynamicIntConstant(1 << 40) }); allocs != 1 {
+		t.Fatalf("newDynamicIntConstant made %v allocations, want 1", allocs)
+	}
 }

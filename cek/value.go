@@ -19,7 +19,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
-	"sync"
+	"math/bits"
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
@@ -52,8 +52,6 @@ var (
 		Constant: &syn.Unit{},
 	}
 	cachedIntConstants = buildCachedIntConstants()
-	sharedDynamicIntMu sync.RWMutex
-	sharedDynamicInts  map[int64]*Constant
 )
 
 func boolConstant(v bool) *Constant {
@@ -72,40 +70,29 @@ func int64Constant(v int64) *Constant {
 	return newDynamicIntConstant(v)
 }
 
+// dynamicIntConstant holds an int64 constant and everything it points to, so
+// that building one is a single allocation instead of four (the Constant, the
+// syn.Integer, the big.Int and its digits).
+type dynamicIntConstant struct {
+	constant Constant
+	integer  syn.Integer
+	value    big.Int
+	digits   [64 / bits.UintSize]big.Word
+}
+
 func newDynamicIntConstant(v int64) *Constant {
-	integer := &syn.Integer{}
-	integer.SetInner(big.NewInt(v))
-	return &Constant{
-		Constant: integer,
-	}
-}
-
-func loadSharedDynamicIntConstant(v int64) *Constant {
-	sharedDynamicIntMu.RLock()
-	cached := sharedDynamicInts[v]
-	sharedDynamicIntMu.RUnlock()
-	return cached
-}
-
-func storeSharedDynamicIntConstant(v int64, constant *Constant) *Constant {
-	sharedDynamicIntMu.Lock()
-	defer sharedDynamicIntMu.Unlock()
-	if cached := sharedDynamicInts[v]; cached != nil {
-		return cached
-	}
-	if sharedDynamicInts == nil || len(sharedDynamicInts) >= int64ConstantCacheCap {
-		sharedDynamicInts = make(map[int64]*Constant, 64)
-	}
-	sharedDynamicInts[v] = constant
-	return constant
+	d := &dynamicIntConstant{}
+	// SetInt64 writes into the existing capacity, which holds any int64.
+	d.value.SetBits(d.digits[:0])
+	d.value.SetInt64(v)
+	d.integer.SetInner(&d.value)
+	d.constant.Constant = &d.integer
+	return &d.constant
 }
 
 func (m *Machine[T]) int64Constant(v int64) *Constant {
 	if v >= cachedIntMin && v <= cachedIntMax {
 		return cachedIntConstants[v-cachedIntMin]
-	}
-	if cached := loadSharedDynamicIntConstant(v); cached != nil {
-		return cached
 	}
 	if m.dynamicIntConstants != nil {
 		if cached := m.dynamicIntConstants[v]; cached != nil {
@@ -114,9 +101,6 @@ func (m *Machine[T]) int64Constant(v int64) *Constant {
 	}
 
 	constant := newDynamicIntConstant(v)
-	if shared := storeSharedDynamicIntConstant(v, constant); shared != nil {
-		return shared
-	}
 	if m.dynamicIntConstants == nil {
 		m.dynamicIntConstants = make(map[int64]*Constant, 64)
 	}
