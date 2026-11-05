@@ -126,7 +126,7 @@ func TestPooledMachineKeepsArenasAcrossScripts(t *testing.T) {
 }
 
 // TestValueArenaShrinksAfterSmallerRuns checks that a machine keeps a larger
-// value arena chunk size through fewer than valueArenaShrinkRuns smaller runs
+// retained value arena chunk count through fewer than valueArenaShrinkRuns smaller runs
 // and shrinks once that many follow in a row.
 func TestValueArenaShrinksAfterSmallerRuns(t *testing.T) {
 	small := pooledTestProgram(t, "guardrail-sorted-small")
@@ -140,24 +140,24 @@ func TestValueArenaShrinksAfterSmallerRuns(t *testing.T) {
 	}
 	run(large)
 	run(large)
-	grown := m.valueArenaChunkSize
+	grown := m.valueArenaRetentions[valueArenaLambda].retainedSlots()
 	run(small)
 	for i := 1; i < valueArenaShrinkRuns; i++ {
-		if m.valueArenaChunkSize != grown {
+		if got := m.valueArenaRetentions[valueArenaLambda].retainedSlots(); got != grown {
 			t.Fatalf(
-				"after %d smaller runs the chunk size is %d, want %d",
+				"after %d smaller runs the retained slot count is %d, want %d",
 				i,
-				m.valueArenaChunkSize,
+				got,
 				grown,
 			)
 		}
 		run(small)
 	}
-	if m.valueArenaChunkSize >= grown {
+	if got := m.valueArenaRetentions[valueArenaLambda].retainedSlots(); got >= grown {
 		t.Errorf(
-			"after %d smaller runs the chunk size is still %d",
+			"after %d smaller runs the retained slot count is still %d",
 			valueArenaShrinkRuns,
-			m.valueArenaChunkSize,
+			got,
 		)
 	}
 }
@@ -177,28 +177,179 @@ func TestValueArenaShrinkCountRestartsAfterLargerRun(t *testing.T) {
 	}
 	run(large)
 	run(large)
-	grown := m.valueArenaChunkSize
+	grown := m.valueArenaRetentions[valueArenaLambda].retainedSlots()
 	for range valueArenaShrinkRuns / 2 {
 		run(small)
 	}
 	run(large)
 	for i := 1; i < valueArenaShrinkRuns; i++ {
 		run(small)
-		if m.valueArenaChunkSize != grown {
+		if got := m.valueArenaRetentions[valueArenaLambda].retainedSlots(); got != grown {
 			t.Fatalf(
-				"after %d smaller runs following a larger run the chunk size is %d, want %d",
+				"after %d smaller runs following a larger run the retained slot count is %d, want %d",
 				i,
-				m.valueArenaChunkSize,
+				got,
 				grown,
 			)
 		}
 	}
 	run(small)
-	if m.valueArenaChunkSize >= grown {
+	if got := m.valueArenaRetentions[valueArenaLambda].retainedSlots(); got >= grown {
 		t.Errorf(
-			"after %d smaller runs following a larger run the chunk size is still %d",
+			"after %d smaller runs following a larger run the retained slot count is still %d",
 			valueArenaShrinkRuns,
-			m.valueArenaChunkSize,
+			got,
 		)
+	}
+}
+
+// TestValueArenasShrinkIndependently checks that continued use of one arena
+// does not keep another arena at its previous high watermark.
+func TestValueArenasShrinkIndependently(t *testing.T) {
+	m := pooledTestMachine()
+	const grownSlots = valueMinRetainSlots + valueColdChunkSize
+	finishRun := func() {
+		m.updateValueArenaRetentions()
+		m.lazyPrepareValueArenas()
+	}
+	fillLambda := func() {
+		for range grownSlots {
+			m.allocLambda(nil, nil)
+		}
+	}
+	fillConstant := func() {
+		for range grownSlots {
+			m.allocConstant(nil)
+		}
+	}
+
+	fillLambda()
+	fillConstant()
+	finishRun()
+	if got := len(m.lambdaChunks); got != 9 {
+		t.Fatalf("lambda arena retained %d chunks after growing, want 9", got)
+	}
+	if got := len(m.constantChunks); got != 9 {
+		t.Fatalf("constant arena retained %d chunks after growing, want 9", got)
+	}
+
+	for range valueArenaShrinkRuns {
+		fillLambda()
+		finishRun()
+	}
+	if got := len(m.lambdaChunks); got != 9 {
+		t.Fatalf("hot lambda arena retained %d chunks, want 9", got)
+	}
+	if got := len(m.constantChunks); got != 8 {
+		t.Fatalf("cold constant arena retained %d chunks, want 8", got)
+	}
+}
+
+func TestValueElemArenaRetentionUsesActualChunkSize(t *testing.T) {
+	m := pooledTestMachine()
+	for range valueMinRetainSlots + 1 {
+		m.allocValueElems(1)
+	}
+	m.updateValueArenaRetentions()
+	m.lazyPrepareValueArenas()
+	if got := len(m.valueElemChunks); got != 5 {
+		t.Fatalf(
+			"value element arena retained %d chunks after growing, want 5",
+			got,
+		)
+	}
+	for range valueArenaShrinkRuns {
+		m.updateValueArenaRetentions()
+		m.lazyPrepareValueArenas()
+	}
+	if got := len(m.valueElemChunks); got != 4 {
+		t.Fatalf("cold value element arena retained %d chunks, want 4", got)
+	}
+}
+
+func TestOversizedValueElemArenaShrinksAfterSmallerRuns(t *testing.T) {
+	m := pooledTestMachine()
+	m.allocValueElems(5000)
+	m.updateValueArenaRetentions()
+	m.lazyPrepareValueArenas()
+	if got := len(m.valueElemChunks); got != 1 {
+		t.Fatalf(
+			"value element arena retained %d oversized chunks, want 1",
+			got,
+		)
+	}
+	for range valueArenaShrinkRuns {
+		m.allocValueElems(1)
+		m.updateValueArenaRetentions()
+		m.lazyPrepareValueArenas()
+	}
+	if got := len(m.valueElemChunks); got != 0 {
+		t.Fatalf(
+			"cold value element arena retained %d oversized chunks, want 0",
+			got,
+		)
+	}
+}
+
+// TestValueArenaKeepsChunksWhenGrowing checks that a warm machine moving to a
+// larger script keeps the value arena chunks it already holds and only adds
+// the ones the larger script needs.
+func TestValueArenaKeepsChunksWhenGrowing(t *testing.T) {
+	small := pooledTestProgram(t, "guardrail-sorted-small")
+	large := pooledTestProgram(t, "stablecoin_1-5")
+	m := pooledTestMachine()
+	run := func(p *PreparedProgram) {
+		m.SetExBudget(DefaultExBudget)
+		if _, err := RunPreparedScriptContext(context.Background(), m, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run(small)
+	run(small)
+	if len(m.lambdaChunks) == 0 {
+		t.Fatal("small script left no lambda chunks")
+	}
+	kept := make([]*Lambda[syn.DeBruijn], len(m.lambdaChunks))
+	for i := range m.lambdaChunks {
+		kept[i] = &m.lambdaChunks[i][0]
+	}
+	run(large)
+	if len(m.lambdaChunks) <= len(kept) {
+		t.Fatalf("larger script did not add lambda chunks: %d, had %d",
+			len(m.lambdaChunks), len(kept))
+	}
+	for i, p := range kept {
+		if &m.lambdaChunks[i][0] != p {
+			t.Fatalf("growing to a larger script replaced lambda chunk %d", i)
+		}
+	}
+}
+
+func TestValueElemRetentionIgnoresSkippedChunkTails(t *testing.T) {
+	m := pooledTestMachine()
+	// Each 600-slot request does not fit the tail of a 1024-slot chunk, so the
+	// cursor skips 424 slots per chunk while only 600 are requested.
+	for range 8 {
+		m.allocValueElems(600)
+	}
+	if m.valueElemSlotsUsed != 4800 {
+		t.Fatalf("requested slots = %d, want 4800", m.valueElemSlotsUsed)
+	}
+	if m.valueElemChunkPos <= m.valueElemSlotsUsed {
+		t.Fatalf(
+			"cursor %d should exceed requested slots %d",
+			m.valueElemChunkPos,
+			m.valueElemSlotsUsed,
+		)
+	}
+	var fromRequested valueArenaRetention
+	updateValueArenaRetention(
+		&fromRequested,
+		m.valueElemSlotsUsed,
+		valueElemChunkSize,
+	)
+	m.updateValueArenaRetentions()
+	if got, want := m.valueArenaRetentions[valueArenaElem].retainedSlots(), fromRequested.retainedSlots(); got != want {
+		t.Fatalf("retained slots %d, want %d from requested count", got, want)
 	}
 }

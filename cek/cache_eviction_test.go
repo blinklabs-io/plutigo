@@ -72,7 +72,11 @@ func TestEd25519VerifyCacheResetOnFull(t *testing.T) {
 	full := len(target.values)
 	target.Unlock()
 	if full != ed25519VerifyShardLimit {
-		t.Fatalf("expected shard at capacity %d, got %d", ed25519VerifyShardLimit, full)
+		t.Fatalf(
+			"expected shard at capacity %d, got %d",
+			ed25519VerifyShardLimit,
+			full,
+		)
 	}
 
 	// Storing a brand-new key for the now-full shard must still be admitted:
@@ -80,7 +84,9 @@ func TestEd25519VerifyCacheResetOnFull(t *testing.T) {
 	newKey := keys[ed25519VerifyShardLimit]
 	ed25519VerifyCache.store(&newKey, true)
 	if _, cached := ed25519VerifyCache.get(&newKey); !cached {
-		t.Fatal("new entry was not admitted after shard was full — reset-on-full fix is missing")
+		t.Fatal(
+			"new entry was not admitted after shard was full — reset-on-full fix is missing",
+		)
 	}
 }
 
@@ -103,7 +109,11 @@ func TestEd25519VerifyCacheConcurrentAccess(t *testing.T) {
 				// Can't call t.Fatal from goroutine; just return.
 				return
 			}
-			m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+			m := NewMachine[syn.DeBruijn](
+				lang.LanguageVersionV3,
+				0,
+				testEvalContext(),
+			)
 			for i := 0; i < 300; i++ {
 				msg := make([]byte, 8)
 				msg[0] = byte(g)
@@ -138,7 +148,11 @@ func TestDynamicIntConstantsConcurrentAccess(t *testing.T) {
 		g := g
 		go func() {
 			defer wg.Done()
-			m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+			m := NewMachine[syn.DeBruijn](
+				lang.LanguageVersionV3,
+				0,
+				testEvalContext(),
+			)
 			for i := 0; i < 500; i++ {
 				v := base + int64(g*500+i)
 				_ = m.int64Constant(v)
@@ -173,7 +187,12 @@ func TestDynamicIntConstantMatchesBigInt(t *testing.T) {
 			t.Fatalf("%d: cached int64 %d, %v", v, cached, isInt64)
 		}
 		if got.ExMemWords() != want.ExMemWords() {
-			t.Fatalf("%d: ExMem %d, want %d", v, got.ExMemWords(), want.ExMemWords())
+			t.Fatalf(
+				"%d: ExMem %d, want %d",
+				v,
+				got.ExMemWords(),
+				want.ExMemWords(),
+			)
 		}
 		if previous != nil && previous.Inner.Cmp(want.Inner) == 0 {
 			t.Fatalf("%d: an earlier constant changed to this value", v)

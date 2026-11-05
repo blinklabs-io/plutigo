@@ -420,12 +420,20 @@ func TestDivideIntegerBuiltinFloorsLargeOperands(t *testing.T) {
 				if left.IsInt64() && right.IsInt64() {
 					continue
 				}
-				leftCopy, rightCopy := new(big.Int).Set(left), new(big.Int).Set(right)
+				leftCopy, rightCopy := new(
+					big.Int,
+				).Set(left),
+					new(
+						big.Int,
+					).Set(right)
 				m := newTestMachine()
 				fn := newTestBuiltin(builtin.DivideInteger)
 				fn = fn.ApplyArg(&Constant{&syn.Integer{Inner: left}})
 				fn = fn.ApplyArg(&Constant{&syn.Integer{Inner: right}})
-				q := expectInteger(t, expectConstant(t, evalBuiltin(t, m, fn))).Inner
+				q := expectInteger(
+					t,
+					expectConstant(t, evalBuiltin(t, m, fn)),
+				).Inner
 
 				low := new(big.Int).Mul(q, right)
 				high := new(big.Int).Add(low, right)
@@ -434,7 +442,12 @@ func TestDivideIntegerBuiltinFloorsLargeOperands(t *testing.T) {
 					ok = low.Cmp(left) >= 0 && left.Cmp(high) > 0
 				}
 				if !ok {
-					t.Fatalf("divideInteger(%v, %v) = %v, not the floor", left, right, q)
+					t.Fatalf(
+						"divideInteger(%v, %v) = %v, not the floor",
+						left,
+						right,
+						q,
+					)
 				}
 				if left.Cmp(leftCopy) != 0 || right.Cmp(rightCopy) != 0 {
 					t.Fatalf("divideInteger modified its arguments")
@@ -6523,7 +6536,10 @@ func TestMkConsOntoEmptyDataListStartsDataList(t *testing.T) {
 			if !reflect.DeepEqual(list.LTyp, syn.Typ(dataType)) {
 				t.Fatalf("list type %T", list.LTyp)
 			}
-			if want := []syn.IConstant{&syn.Data{Inner: two}, &syn.Data{Inner: one}}; !reflect.DeepEqual(list.List, want) {
+			if want := []syn.IConstant{&syn.Data{Inner: two}, &syn.Data{Inner: one}}; !reflect.DeepEqual(
+				list.List,
+				want,
+			) {
 				t.Fatalf("list = %v, want %v", list.List, want)
 			}
 		}
@@ -6553,8 +6569,14 @@ func TestMkConsOntoEmptyDataListStartsDataList(t *testing.T) {
 			if !ok {
 				t.Fatalf("item is %T, want a pair", list.List[0])
 			}
-			if !reflect.DeepEqual(pair.First, syn.IConstant(&syn.Data{Inner: one})) ||
-				!reflect.DeepEqual(pair.Second, syn.IConstant(&syn.Data{Inner: two})) {
+			if !reflect.DeepEqual(
+				pair.First,
+				syn.IConstant(&syn.Data{Inner: one}),
+			) ||
+				!reflect.DeepEqual(
+					pair.Second,
+					syn.IConstant(&syn.Data{Inner: two}),
+				) {
 				t.Fatalf("pair = (%v, %v)", pair.First, pair.Second)
 			}
 		}
