@@ -953,7 +953,7 @@ func NewMachine[T syn.Eval](
 		Logs:          make([]string, 0),
 
 		argHolder:       newArgHolder[T](),
-		frameStack:      make([]stackFrame[T], 0, 32),
+		frameStack:      make([]stackFrame[T], 0, frameStackInitialCap),
 		frameStackUsed:  0,
 		unbudgetedSteps: [9]uint32{0, 0, 0, 0, 0, 0, 0, 0, 0},
 		unbudgetedTotal: 0,

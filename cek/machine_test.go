@@ -16,6 +16,7 @@ package cek
 
 import (
 	"errors"
+	"math"
 	"math/big"
 	"strings"
 	"testing"
@@ -895,6 +896,49 @@ func TestRunResetsFrameStackAcrossInvocations(t *testing.T) {
 	}
 	if hidden[0].value != nil || hidden[0].env != nil || hidden[0].term != nil {
 		t.Fatalf("frameStack[0] retained stale data: %+v", hidden[0])
+	}
+}
+
+func TestRunCapsRetainedFrameStack(t *testing.T) {
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+	m.ExBudget = ExBudget{Cpu: math.MaxInt64, Mem: math.MaxInt64}
+
+	constant := &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(1)}}
+	var term syn.Term[syn.DeBruijn] = constant
+	for range frameStackRetainCap + 1 {
+		term = &syn.Apply[syn.DeBruijn]{
+			Function: term,
+			Argument: constant,
+		}
+	}
+
+	if _, err := m.Run(term); err == nil {
+		t.Fatal("deep non-functional application returned no error")
+	}
+	if len(m.frameStack) != 0 {
+		t.Fatalf("frameStack len after Run = %d, want 0", len(m.frameStack))
+	}
+	if m.frameStackUsed != 0 {
+		t.Fatalf("frameStackUsed after Run = %d, want 0", m.frameStackUsed)
+	}
+	if cap(m.frameStack) > frameStackRetainCap {
+		t.Fatalf(
+			"frameStack capacity after Run = %d, want at most %d",
+			cap(m.frameStack),
+			frameStackRetainCap,
+		)
+	}
+	for i, frame := range m.frameStack[:cap(m.frameStack)] {
+		if frame.value != nil || frame.builtin != nil || frame.env != nil ||
+			frame.term != nil || frame.fields != nil ||
+			frame.resolvedFields != nil || frame.branches != nil {
+			t.Fatalf("frameStack[%d] retained stale data: %+v", i, frame)
+		}
+	}
+
+	m.ExBudget = ExBudget{Cpu: math.MaxInt64, Mem: math.MaxInt64}
+	if _, err := m.Run(constant); err != nil {
+		t.Fatalf("shallow Run after oversized stack returned error: %v", err)
 	}
 }
 
