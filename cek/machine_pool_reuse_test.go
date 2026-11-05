@@ -16,9 +16,11 @@ package cek
 
 import (
 	"context"
+	"math/big"
 	"os"
 	"runtime"
 	"testing"
+	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
@@ -242,6 +244,96 @@ func TestValueArenasShrinkIndependently(t *testing.T) {
 	}
 	if got := len(m.constantChunks); got != 8 {
 		t.Fatalf("cold constant arena retained %d chunks, want 8", got)
+	}
+}
+
+func retainedArenaBytes[S any](chunks [][]S) int {
+	var slot S
+	retained := cap(chunks) * int(unsafe.Sizeof(chunks))
+	for _, chunk := range chunks {
+		retained += len(chunk) * int(unsafe.Sizeof(slot))
+	}
+	return retained
+}
+
+func retainedValueArenaBytes(m *Machine[syn.DeBruijn]) int {
+	return retainedArenaBytes(m.constrChunks) +
+		retainedArenaBytes(m.delayChunks) +
+		retainedArenaBytes(m.lambdaChunks) +
+		retainedArenaBytes(m.constantChunks) +
+		retainedArenaBytes(m.dataChunks) +
+		retainedArenaBytes(m.integerChunks) +
+		retainedArenaBytes(m.byteStringChunks) +
+		retainedArenaBytes(m.protoListChunks) +
+		retainedArenaBytes(m.protoPairChunks) +
+		retainedArenaBytes(m.dataValueChunks) +
+		retainedArenaBytes(m.dataListValueChunks) +
+		retainedArenaBytes(m.dataMapValueChunks) +
+		retainedArenaBytes(m.pairValueChunks) +
+		retainedArenaBytes(m.valueElemChunks) +
+		retainedArenaBytes(m.builtinChunks) +
+		retainedArenaBytes(m.builtinArgChunks)
+}
+
+func growValueArena(m *Machine[syn.DeBruijn], arena, slots int) {
+	if arena == valueArenaElem {
+		// One oversized chunk verifies that the byte cap accounts for actual
+		// chunk lengths instead of assuming the normal element chunk size.
+		m.allocValueElems(slots)
+		return
+	}
+	var integer big.Int
+	for range slots {
+		switch arena {
+		case valueArenaConstr:
+			m.allocConstr(0, nil)
+		case valueArenaDelay:
+			m.allocDelay(nil, nil)
+		case valueArenaLambda:
+			m.allocLambda(nil, nil)
+		case valueArenaConstant:
+			m.allocConstant(nil)
+		case valueArenaData:
+			m.allocDataConstant(nil)
+		case valueArenaInteger:
+			m.allocIntegerConstant(&integer)
+		case valueArenaByteString:
+			m.allocByteStringConstant(nil)
+		case valueArenaProtoList:
+			m.allocProtoListConstant(nil, nil)
+		case valueArenaProtoPair:
+			m.allocProtoPairConstant(nil, nil, nil, nil)
+		case valueArenaDataValue:
+			m.allocDataValue(nil)
+		case valueArenaDataListValue:
+			m.allocDataListValue(nil)
+		case valueArenaDataMapValue:
+			m.allocDataMapValue(nil)
+		case valueArenaPairValue:
+			m.allocPairValue(nil, nil)
+		case valueArenaBuiltin:
+			m.allocBuiltin(0, 0, 1, nil)
+		case valueArenaBuiltinArg:
+			m.extendBuiltinArgs(nil, nil)
+		}
+	}
+}
+
+func TestValueArenaAggregateRetentionIsBounded(t *testing.T) {
+	m := pooledTestMachine()
+	const slotsPerArena = 100_000
+	for arena := range valueArenaCount {
+		growValueArena(m, arena, slotsPerArena)
+		m.updateValueArenaRetentions()
+		m.lazyPrepareValueArenas()
+		if got := retainedValueArenaBytes(m); got > valueArenaRetainBytes {
+			t.Fatalf(
+				"after arena %d retained %d bytes, want at most %d",
+				arena,
+				got,
+				valueArenaRetainBytes,
+			)
+		}
 	}
 }
 
