@@ -227,6 +227,7 @@ func pLam(
 ) probeTerm {
 	return func(w *flatWriter) { w.uint(2, 4); t(w) }
 }
+
 func pApp(f, a probeTerm) probeTerm {
 	return func(w *flatWriter) { w.uint(3, 4); f(w); a(w) }
 }
@@ -269,6 +270,7 @@ func pBytes(
 ) probeTerm {
 	return pCon(1, func(w *flatWriter) { w.bytestring(b) })
 }
+
 func pData(cbor []byte) probeTerm {
 	return pCon(8, func(w *flatWriter) { w.bytestring(cbor) })
 }
