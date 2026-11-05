@@ -6093,6 +6093,9 @@ func TestMkConsOntoEmptyDataListStartsDataList(t *testing.T) {
 			if err != nil {
 				t.Fatalf("mkCons: %v", err)
 			}
+			if _, ok := val.(*consDataList[syn.DeBruijn]); !ok {
+				t.Fatalf("got %T, want a data list", val)
+			}
 			list := expectMaterializedProtoList(t, val)
 			if !reflect.DeepEqual(list.LTyp, syn.Typ(dataType)) {
 				t.Fatalf("list type %T", list.LTyp)
@@ -6145,6 +6148,22 @@ func TestMkConsOntoEmptyDataListStartsDataList(t *testing.T) {
 		_, err = cons(m, mixed, emptyOf(pairType))
 		if err == nil {
 			t.Fatal("mkCons accepted a head of the wrong type")
+		}
+		mistyped := &Constant{&syn.ProtoPair{
+			FstType: &syn.TInteger{}, SndType: &syn.TData{},
+			First: &syn.Data{Inner: one}, Second: &syn.Data{Inner: two},
+		}}
+		if _, err = cons(m, mistyped, emptyOf(pairType)); err == nil {
+			t.Fatal("mkCons accepted a pair whose declared types are not data")
+		}
+		started, err := cons(m, m.allocDataValue(one), emptyOf(dataType))
+		if err != nil {
+			t.Fatalf("mkCons: %v", err)
+		}
+		_, err = cons(m, integer, started)
+		var typeErr *TypeError
+		if !errors.As(err, &typeErr) {
+			t.Fatalf("got %v, want a TypeError", err)
 		}
 	})
 }

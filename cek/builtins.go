@@ -955,7 +955,9 @@ func isDataPairHead[T syn.Eval](value Value[T]) bool {
 		}
 		_, first := pair.First.(*syn.Data)
 		_, second := pair.Second.(*syn.Data)
-		return first && second
+		return first && second &&
+			syn.EqualType(pair.FstType, sharedDataType) &&
+			syn.EqualType(pair.SndType, sharedDataType)
 	}
 	return false
 }
