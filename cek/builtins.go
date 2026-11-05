@@ -844,6 +844,20 @@ func (m *Machine[T]) mkConsFast(
 		isData, dataTail = true, tail.items
 	case *consDataList[T]:
 		isData, dataCell = true, tail.cell
+	case *Constant:
+		// A data list or map is usually built by consing onto an empty
+		// list constant. Starting it as a data list here keeps every later
+		// cons on the data path instead of wrapping each head as a constant.
+		if list, ok := tail.Constant.(*syn.ProtoList); ok && len(list.List) == 0 {
+			switch typ := list.LTyp.(type) {
+			case *syn.TData:
+				isData = isDataHead[T](leftVal)
+			case *syn.TPair:
+				_, first := typ.First.(*syn.TData)
+				_, second := typ.Second.(*syn.TData)
+				isMap = first && second && isDataPairHead[T](leftVal)
+			}
+		}
 	}
 	if isMap {
 		if err := m.CostTwo(&fn, valueExMem[T](leftVal), valueExMem[T](rightVal)); err != nil {
@@ -913,6 +927,37 @@ func (m *Machine[T]) mkConsFast(
 	a := newConstListAlloc[T](typ)
 	consOntoSlice(&a.c, head.Constant, tail.List)
 	return &a.v, true, nil
+}
+
+// isDataHead reports whether value is a data value, so consing it onto a
+// list of data cannot fail on its type.
+func isDataHead[T syn.Eval](value Value[T]) bool {
+	switch v := value.(type) {
+	case *dataValue[T]:
+		return true
+	case *Constant:
+		_, ok := v.Constant.(*syn.Data)
+		return ok
+	}
+	return false
+}
+
+// isDataPairHead reports whether value is a pair of data values, so consing
+// it onto a list of data pairs cannot fail on its type.
+func isDataPairHead[T syn.Eval](value Value[T]) bool {
+	switch v := value.(type) {
+	case *pairValue[T]:
+		return isDataHead[T](v.first) && isDataHead[T](v.second)
+	case *Constant:
+		pair, ok := v.Constant.(*syn.ProtoPair)
+		if !ok {
+			return false
+		}
+		_, first := pair.First.(*syn.Data)
+		_, second := pair.Second.(*syn.Data)
+		return first && second
+	}
+	return false
 }
 
 // unwrapConsHead is unwrapConstant for the mkCons head, converting data

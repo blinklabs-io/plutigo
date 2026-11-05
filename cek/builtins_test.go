@@ -6057,3 +6057,94 @@ func TestVerifySchnorrSecp256k1SignatureRange(t *testing.T) {
 		})
 	}
 }
+
+// TestMkConsOntoEmptyDataListStartsDataList checks that consing data onto an
+// empty list(data) or list(pair data data) constant produces the data-list
+// representation, whose later conses stay on the data path, with the same
+// materialized result as before, and that heads of the wrong type still
+// fail.
+func TestMkConsOntoEmptyDataListStartsDataList(t *testing.T) {
+	dataType := &syn.TData{}
+	pairType := &syn.TPair{First: &syn.TData{}, Second: &syn.TData{}}
+	emptyOf := func(typ syn.Typ) *Constant {
+		return &Constant{&syn.ProtoList{LTyp: typ, List: []syn.IConstant{}}}
+	}
+	one := &data.Integer{Inner: big.NewInt(1)}
+	two := &data.Integer{Inner: big.NewInt(2)}
+	cons := func(m *Machine[syn.DeBruijn], head, tail Value[syn.DeBruijn]) (Value[syn.DeBruijn], error) {
+		b := newTestBuiltin(builtin.MkCons).ApplyArg(head).ApplyArg(tail)
+		return evalBuiltinWithError(t, m, b)
+	}
+
+	t.Run("data", func(t *testing.T) {
+		m := newTestMachine()
+		for _, head := range []Value[syn.DeBruijn]{
+			m.allocDataValue(one),
+			&Constant{&syn.Data{Inner: one}},
+		} {
+			val, err := cons(m, head, emptyOf(dataType))
+			if err != nil {
+				t.Fatalf("mkCons: %v", err)
+			}
+			if _, ok := val.(*consDataList[syn.DeBruijn]); !ok {
+				t.Fatalf("got %T, want a data list", val)
+			}
+			val, err = cons(m, m.allocDataValue(two), val)
+			if err != nil {
+				t.Fatalf("mkCons: %v", err)
+			}
+			list := expectMaterializedProtoList(t, val)
+			if !reflect.DeepEqual(list.LTyp, syn.Typ(dataType)) {
+				t.Fatalf("list type %T", list.LTyp)
+			}
+			if want := []syn.IConstant{&syn.Data{Inner: two}, &syn.Data{Inner: one}}; !reflect.DeepEqual(list.List, want) {
+				t.Fatalf("list = %v, want %v", list.List, want)
+			}
+		}
+	})
+
+	t.Run("map", func(t *testing.T) {
+		m := newTestMachine()
+		for _, head := range []Value[syn.DeBruijn]{
+			m.allocPairValue(m.allocDataValue(one), m.allocDataValue(two)),
+			&Constant{&syn.ProtoPair{
+				FstType: &syn.TData{}, SndType: &syn.TData{},
+				First: &syn.Data{Inner: one}, Second: &syn.Data{Inner: two},
+			}},
+		} {
+			val, err := cons(m, head, emptyOf(pairType))
+			if err != nil {
+				t.Fatalf("mkCons: %v", err)
+			}
+			if _, ok := val.(*consDataMap[syn.DeBruijn]); !ok {
+				t.Fatalf("got %T, want a data map", val)
+			}
+			list := expectMaterializedProtoList(t, val)
+			if len(list.List) != 1 {
+				t.Fatalf("list has %d items, want 1", len(list.List))
+			}
+			pair, ok := list.List[0].(*syn.ProtoPair)
+			if !ok {
+				t.Fatalf("item is %T, want a pair", list.List[0])
+			}
+			if !reflect.DeepEqual(pair.First, syn.IConstant(&syn.Data{Inner: one})) ||
+				!reflect.DeepEqual(pair.Second, syn.IConstant(&syn.Data{Inner: two})) {
+				t.Fatalf("pair = (%v, %v)", pair.First, pair.Second)
+			}
+		}
+	})
+
+	t.Run("wrong head type", func(t *testing.T) {
+		m := newTestMachine()
+		integer := &Constant{&syn.Integer{Inner: big.NewInt(1)}}
+		_, err := cons(m, integer, emptyOf(dataType))
+		if err == nil {
+			t.Fatal("mkCons accepted a head of the wrong type")
+		}
+		mixed := m.allocPairValue(m.allocDataValue(one), integer)
+		_, err = cons(m, mixed, emptyOf(pairType))
+		if err == nil {
+			t.Fatal("mkCons accepted a head of the wrong type")
+		}
+	})
+}
