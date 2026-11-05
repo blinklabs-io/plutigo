@@ -72,7 +72,11 @@ func TestRecentMainnetCorpusParity(t *testing.T) {
 		}
 	}
 	if total != recentMainnetCorpusCases {
-		t.Fatalf("recent mainnet corpus has %d cases, want %d", total, recentMainnetCorpusCases)
+		t.Fatalf(
+			"recent mainnet corpus has %d cases, want %d",
+			total,
+			recentMainnetCorpusCases,
+		)
 	}
 }
 
@@ -91,7 +95,11 @@ func BenchmarkRecentMainnetCorpus(b *testing.B) {
 				b.Fatalf("Run() failed: %v", err)
 			}
 			if report.Summary.Passed != report.Summary.Total {
-				b.Fatalf("parity passed %d/%d cases", report.Summary.Passed, report.Summary.Total)
+				b.Fatalf(
+					"parity passed %d/%d cases",
+					report.Summary.Passed,
+					report.Summary.Total,
+				)
 			}
 		}
 	}

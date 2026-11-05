@@ -106,7 +106,11 @@ func TestEncodeNestedLengthForms(t *testing.T) {
 		},
 		{
 			"indefinite constr holding indefinite map holding empty list",
-			NewConstrDefIndef(true, 1, NewMapDefIndef(true, [][2]PlutusData{{one, NewList()}})),
+			NewConstrDefIndef(
+				true,
+				1,
+				NewMapDefIndef(true, [][2]PlutusData{{one, NewList()}}),
+			),
 			"d87a9fbf0180ffff",
 		},
 		{
@@ -115,8 +119,16 @@ func TestEncodeNestedLengthForms(t *testing.T) {
 			"d86682" + "18c8" + "8101",
 		},
 		{"constr in the extended tag range", NewConstr(7), "d905008" + "0"},
-		{"definite map needs a one byte length", NewMap(pairs), "b818" + strings.Repeat("0101", 24)},
-		{"definite list needs a two byte length", NewListDefIndef(false, items...), "990100" + strings.Repeat("01", 256)},
+		{
+			"definite map needs a one byte length",
+			NewMap(pairs),
+			"b818" + strings.Repeat("0101", 24),
+		},
+		{
+			"definite list needs a two byte length",
+			NewListDefIndef(false, items...),
+			"990100" + strings.Repeat("01", 256),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

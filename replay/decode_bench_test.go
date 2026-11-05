@@ -83,7 +83,9 @@ func TestMainnetDecodedProgramsAreReusable(t *testing.T) {
 			results := make([]CaseResult, runs)
 			var wg sync.WaitGroup
 			for r := range runs {
-				wg.Go(func() { results[r] = runDecodedCase(ctx, replayCase, decoded[i]) })
+				wg.Go(
+					func() { results[r] = runDecodedCase(ctx, replayCase, decoded[i]) },
+				)
 			}
 			wg.Wait()
 			for r, result := range results {

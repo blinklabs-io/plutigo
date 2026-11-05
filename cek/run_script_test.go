@@ -31,7 +31,11 @@ import (
 // script whose result is a closure that captures a chain of n closures, each
 // referring to the previous one twice: cheap to build (O(n) steps) but
 // 2^n nodes once discharged into a term.
-func exponentialClosureScript(t *testing.T, n int, args int) syn.Term[syn.DeBruijn] {
+func exponentialClosureScript(
+	t *testing.T,
+	n int,
+	args int,
+) syn.Term[syn.DeBruijn] {
 	t.Helper()
 	body := "(lam y y)"
 	for range n {
@@ -47,7 +51,11 @@ func unitScript(t *testing.T, args int) syn.Term[syn.DeBruijn] {
 
 // scriptTakingArgs parses body wrapped in args lambdas that ignore their
 // arguments.
-func scriptTakingArgs(t *testing.T, body string, args int) syn.Term[syn.DeBruijn] {
+func scriptTakingArgs(
+	t *testing.T,
+	body string,
+	args int,
+) syn.Term[syn.DeBruijn] {
 	t.Helper()
 	for i := range args {
 		body = "(lam arg" + string(rune('a'+i)) + " " + body + ")"
@@ -78,12 +86,18 @@ func TestRunScriptContextDoesNotDischarge(t *testing.T) {
 		lang.LanguageVersionV2,
 		lang.LanguageVersionV3,
 	} {
-		evalCtx := cek.NewDefaultEvalContext(language, cek.ProtoVersion{Major: 10})
+		evalCtx := cek.NewDefaultEvalContext(
+			language,
+			cek.ProtoVersion{Major: 10},
+		)
 		term := exponentialClosureScript(t, 40, len(ctxArgs))
 
 		m := cek.NewMachine[syn.DeBruijn](language, 0, evalCtx)
 		start := m.ExBudget
-		isUnit, err := m.RunScriptContext(context.Background(), term, ctxArgs...)
+		isUnit, err := m.RunScriptContext(
+			context.Background(),
+			term,
+			ctxArgs...)
 		if err != nil {
 			t.Fatalf("%v: RunScriptContext: %v", language, err)
 		}
@@ -94,13 +108,26 @@ func TestRunScriptContextDoesNotDischarge(t *testing.T) {
 
 		// Run evaluates identically, then fails to discharge the result.
 		m2 := cek.NewMachine[syn.DeBruijn](language, 0, evalCtx)
-		_, err = m2.RunContextWithTrustedDataArguments(context.Background(), term, ctxArgs...)
+		_, err = m2.RunContextWithTrustedDataArguments(
+			context.Background(),
+			term,
+			ctxArgs...)
 		var budgetErr *cek.BudgetError
-		if !errors.As(err, &budgetErr) || budgetErr.Code != cek.ErrCodeResultTooLarge {
-			t.Fatalf("%v: Run error = %v, want ErrCodeResultTooLarge", language, err)
+		if !errors.As(err, &budgetErr) ||
+			budgetErr.Code != cek.ErrCodeResultTooLarge {
+			t.Fatalf(
+				"%v: Run error = %v, want ErrCodeResultTooLarge",
+				language,
+				err,
+			)
 		}
 		if got := start.Sub(&m2.ExBudget); got != consumed {
-			t.Fatalf("%v: Run consumed %+v, RunScriptContext %+v", language, got, consumed)
+			t.Fatalf(
+				"%v: Run consumed %+v, RunScriptContext %+v",
+				language,
+				got,
+				consumed,
+			)
 		}
 
 		// A small chain discharges: both methods agree on the budget.
@@ -110,7 +137,10 @@ func TestRunScriptContextDoesNotDischarge(t *testing.T) {
 			t.Fatalf("%v: small RunScriptContext: %v", language, err)
 		}
 		m4 := cek.NewMachine[syn.DeBruijn](language, 0, evalCtx)
-		result, err := m4.RunContextWithTrustedDataArguments(context.Background(), small, ctxArgs...)
+		result, err := m4.RunContextWithTrustedDataArguments(
+			context.Background(),
+			small,
+			ctxArgs...)
 		if err != nil {
 			t.Fatalf("%v: small Run: %v", language, err)
 		}
@@ -119,21 +149,37 @@ func TestRunScriptContextDoesNotDischarge(t *testing.T) {
 			t.Fatalf("%v: small result has %d lambdas", language, got)
 		}
 		if m3.ExBudget != m4.ExBudget {
-			t.Fatalf("%v: budgets differ: %+v vs %+v", language, m3.ExBudget, m4.ExBudget)
+			t.Fatalf(
+				"%v: budgets differ: %+v vs %+v",
+				language,
+				m3.ExBudget,
+				m4.ExBudget,
+			)
 		}
 	}
 }
 
 func TestRunScriptContextReportsUnit(t *testing.T) {
-	evalCtx := cek.NewDefaultEvalContext(lang.LanguageVersionV3, cek.ProtoVersion{Major: 10})
+	evalCtx := cek.NewDefaultEvalContext(
+		lang.LanguageVersionV3,
+		cek.ProtoVersion{Major: 10},
+	)
 	arg := data.NewConstr(0)
 	m := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, evalCtx)
-	isUnit, err := m.RunScriptContext(context.Background(), unitScript(t, 1), arg)
+	isUnit, err := m.RunScriptContext(
+		context.Background(),
+		unitScript(t, 1),
+		arg,
+	)
 	if err != nil || !isUnit {
 		t.Fatalf("unit script: isUnit=%v err=%v", isUnit, err)
 	}
 	// The machine is reusable and Run discharges again afterwards.
-	result, err := m.RunContextWithTrustedDataArguments(context.Background(), unitScript(t, 1), arg)
+	result, err := m.RunContextWithTrustedDataArguments(
+		context.Background(),
+		unitScript(t, 1),
+		arg,
+	)
 	if err != nil {
 		t.Fatalf("Run after RunScriptContext: %v", err)
 	}

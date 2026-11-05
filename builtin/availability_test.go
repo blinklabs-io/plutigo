@@ -113,7 +113,12 @@ func TestBatch7BuiltinsRemainUnavailableAtEveryProtocolVersion(t *testing.T) {
 		for _, version := range []PlutusVersion{PlutusV1, PlutusV2, PlutusV3, PlutusV4} {
 			for _, protocolVersion := range []uint{0, 5, 11, 12} {
 				if fn.IsAvailableInWithProto(version, protocolVersion) {
-					t.Fatalf("%s is available in Plutus V%d at protocol version %d", fn, version, protocolVersion)
+					t.Fatalf(
+						"%s is available in Plutus V%d at protocol version %d",
+						fn,
+						version,
+						protocolVersion,
+					)
 				}
 			}
 		}
@@ -136,8 +141,20 @@ func TestBuiltinAvailabilityWithProto(t *testing.T) {
 
 		// Plutus V2 receives batch 3 at PV8 and batch 4b at PV10.
 		{"batch 2 in V2 at PV7", SerialiseData, PlutusV2, 7, true},
-		{"batch 3 in V2 at PV7", VerifyEcdsaSecp256k1Signature, PlutusV2, 7, false},
-		{"batch 3 in V2 at PV8", VerifyEcdsaSecp256k1Signature, PlutusV2, 8, true},
+		{
+			"batch 3 in V2 at PV7",
+			VerifyEcdsaSecp256k1Signature,
+			PlutusV2,
+			7,
+			false,
+		},
+		{
+			"batch 3 in V2 at PV8",
+			VerifyEcdsaSecp256k1Signature,
+			PlutusV2,
+			8,
+			true,
+		},
 		{"batch 4b in V2 at PV9", IntegerToByteString, PlutusV2, 9, false},
 		{"batch 4b in V2 at PV10", IntegerToByteString, PlutusV2, 10, true},
 		{"batch 4a in V2 at PV10", Bls12_381_G1_Add, PlutusV2, 10, false},

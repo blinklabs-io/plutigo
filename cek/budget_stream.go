@@ -230,7 +230,10 @@ type quadraticChunks struct {
 func (c *quadraticChunks) term(x int64) int64 {
 	a, b := c.c2, c.c1
 	return satAdd(
-		satAdd(satMul(satMul(satMul(2, a), x), c.running), satMul(satMul(a, x), x)),
+		satAdd(
+			satMul(satMul(satMul(2, a), x), c.running),
+			satMul(satMul(a, x), x),
+		),
 		satMul(b, x),
 	)
 }
@@ -255,13 +258,19 @@ func (c *quadraticChunks) next() (int64, bool) {
 func scaleLinearly(intercept, slope int64, src costChunks) costChunks {
 	return newAddChunks(
 		&singleChunk{value: intercept},
-		&mapChunks{src: src, f: func(x int64) int64 { return satMul(slope, x) }},
+		&mapChunks{
+			src: src,
+			f:   func(x int64) int64 { return satMul(slope, x) },
+		},
 	)
 }
 
 // oneArgumentChunks returns the reference's cost stream for a one-argument
 // costing function, or false when the model is not one the reference streams.
-func oneArgumentChunks(model OneArgument, x func() costChunks) (costChunks, bool) {
+func oneArgumentChunks(
+	model OneArgument,
+	x func() costChunks,
+) (costChunks, bool) {
 	switch mdl := model.(type) {
 	case *ConstantCost:
 		return &singleChunk{value: mdl.c}, true

@@ -54,7 +54,11 @@ func TestRunRecoversPanicAndMachineIsReusable(t *testing.T) {
 	}
 	for name, run := range runners {
 		t.Run(name, func(t *testing.T) {
-			m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+			m := NewMachine[syn.DeBruijn](
+				lang.LanguageVersionV3,
+				0,
+				testEvalContext(),
+			)
 			good := m.builtins
 			// Private copy of the dispatch table with a panicking builtin.
 			bad := *good

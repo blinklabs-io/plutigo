@@ -23,13 +23,20 @@ import (
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
-func runFlatHex(t *testing.T, input string, proto uint) (string, ExBudget, error) {
+func runFlatHex(
+	t *testing.T,
+	input string,
+	proto uint,
+) (string, ExBudget, error) {
 	t.Helper()
 	b, err := hex.DecodeString(input)
 	if err != nil {
 		t.Fatalf("bad hex: %v", err)
 	}
-	ctx := syn.ProgramContext{LedgerLanguage: lang.LanguageVersionV3, ProtocolMajor: proto}
+	ctx := syn.ProgramContext{
+		LedgerLanguage: lang.LanguageVersionV3,
+		ProtocolMajor:  proto,
+	}
 	program, err := syn.DecodeDeBruijnWithContext(b, ctx)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
@@ -37,7 +44,10 @@ func runFlatHex(t *testing.T, input string, proto uint) (string, ExBudget, error
 	m := NewMachine[syn.DeBruijn](
 		lang.LanguageVersionV3,
 		0,
-		NewDefaultEvalContext(lang.LanguageVersionV3, ProtoVersion{Major: proto}),
+		NewDefaultEvalContext(
+			lang.LanguageVersionV3,
+			ProtoVersion{Major: proto},
+		),
 	)
 	start := ExBudget{Cpu: math.MaxInt64, Mem: math.MaxInt64}
 	m.ExBudget = start
@@ -67,9 +77,19 @@ func TestSerialiseDataIsCanonical(t *testing.T) {
 		{"(List [])", "#80"},
 		{"(Constr 0 [])", "#d87980"},
 	} {
-		got, err := runTextProgram(t, "(program 1.0.0 [(builtin serialiseData) (con data "+tc.data+")])", 10)
+		got, err := runTextProgram(
+			t,
+			"(program 1.0.0 [(builtin serialiseData) (con data "+tc.data+")])",
+			10,
+		)
 		if err != nil || got != "(con bytestring "+tc.want+")" {
-			t.Fatalf("serialiseData %s = %s, %v; want %s", tc.data, got, err, tc.want)
+			t.Fatalf(
+				"serialiseData %s = %s, %v; want %s",
+				tc.data,
+				got,
+				err,
+				tc.want,
+			)
 		}
 	}
 }

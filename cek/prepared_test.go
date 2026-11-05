@@ -42,7 +42,10 @@ func TestPreparedNodeGroundTruth(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			pc := syn.ProgramContext{LedgerLanguage: lv, ProtocolMajor: gt.Protocol}
+			pc := syn.ProgramContext{
+				LedgerLanguage: lv,
+				ProtocolMajor:  gt.Protocol,
+			}
 			got, ex := "ok", cek.ExBudget{}
 			prepared, err := cek.PrepareProgram(flat, pc)
 			switch {
@@ -51,7 +54,11 @@ func TestPreparedNodeGroundTruth(t *testing.T) {
 			case syn.ValidateTermVersionForExecution(prepared.Version(), pc) != nil:
 				got = "phase2-fail"
 			default:
-				ec, err := cek.NewEvalContext(lv, cek.ProtoVersion{Major: gt.Protocol}, gt.CostModels[ln])
+				ec, err := cek.NewEvalContext(
+					lv,
+					cek.ProtoVersion{Major: gt.Protocol},
+					gt.CostModels[ln],
+				)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -62,7 +69,11 @@ func TestPreparedNodeGroundTruth(t *testing.T) {
 				args := ledgerArgs(sc.Lang, sc.Purpose)
 				m := cek.NewMachine[syn.DeBruijn](lv, 0, ec)
 				m.ExBudget = budget
-				isUnit, runErr := cek.RunPreparedScriptContext(context.Background(), m, prepared, args...)
+				isUnit, runErr := cek.RunPreparedScriptContext(
+					context.Background(),
+					m,
+					prepared,
+					args...)
 				ex = budget.Sub(&m.ExBudget)
 				if runErr != nil || (sc.Lang == "V3" && !isUnit) {
 					got = "phase2-fail"
@@ -74,19 +85,35 @@ func TestPreparedNodeGroundTruth(t *testing.T) {
 				}
 				ref := cek.NewMachine[syn.DeBruijn](lv, 0, ec)
 				ref.ExBudget = budget
-				refUnit, refErr := ref.RunScriptContext(context.Background(), prog.Term, args...)
-				if refUnit != isUnit || (refErr == nil) != (runErr == nil) || ref.ExBudget != m.ExBudget {
-					t.Fatalf("prepared run (unit %t, err %v, budget %+v) differs from RunScriptContext (unit %t, err %v, budget %+v)",
-						isUnit, runErr, m.ExBudget, refUnit, refErr, ref.ExBudget)
+				refUnit, refErr := ref.RunScriptContext(
+					context.Background(),
+					prog.Term,
+					args...)
+				if refUnit != isUnit || (refErr == nil) != (runErr == nil) ||
+					ref.ExBudget != m.ExBudget {
+					t.Fatalf(
+						"prepared run (unit %t, err %v, budget %+v) differs from RunScriptContext (unit %t, err %v, budget %+v)",
+						isUnit,
+						runErr,
+						m.ExBudget,
+						refUnit,
+						refErr,
+						ref.ExBudget,
+					)
 				}
 				if refErr != nil && runErr.Error() != refErr.Error() {
-					t.Fatalf("prepared error %q differs from RunScriptContext error %q", runErr, refErr)
+					t.Fatalf(
+						"prepared error %q differs from RunScriptContext error %q",
+						runErr,
+						refErr,
+					)
 				}
 			}
 			if got != sc.Outcome {
 				t.Fatalf("outcome %s, node %s", got, sc.Outcome)
 			}
-			if sc.Outcome == "ok" && sc.ExUnits != nil && ex != sc.ExUnits.budget() {
+			if sc.Outcome == "ok" && sc.ExUnits != nil &&
+				ex != sc.ExUnits.budget() {
 				t.Fatalf("exunits mem=%d steps=%d, node mem=%d steps=%d",
 					ex.Mem, ex.Cpu, sc.ExUnits.Mem, sc.ExUnits.Steps)
 			}
@@ -98,7 +125,10 @@ func TestPreparedNodeGroundTruth(t *testing.T) {
 // out-of-budget failure, its exact remaining budget, for a prepared program
 // run twice on each machine configuration.
 func TestPreparedNodeBudgetFailures(t *testing.T) {
-	fx := loadNodeFixture[nodeBudgetFailures](t, "node_budget_failures_pv11.json.gz")
+	fx := loadNodeFixture[nodeBudgetFailures](
+		t,
+		"node_budget_failures_pv11.json.gz",
+	)
 	for _, sc := range fx.Cases {
 		t.Run(sc.ID, func(t *testing.T) {
 			lv, ln := groundTruthLang(t, sc.Lang)
@@ -106,12 +136,19 @@ func TestPreparedNodeBudgetFailures(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			pc := syn.ProgramContext{LedgerLanguage: lv, ProtocolMajor: fx.Protocol}
+			pc := syn.ProgramContext{
+				LedgerLanguage: lv,
+				ProtocolMajor:  fx.Protocol,
+			}
 			prepared, err := cek.PrepareProgram(flat, pc)
 			if err != nil {
 				t.Fatal(err)
 			}
-			ec, err := cek.NewEvalContext(lv, cek.ProtoVersion{Major: fx.Protocol}, fx.CostModels[ln])
+			ec, err := cek.NewEvalContext(
+				lv,
+				cek.ProtoVersion{Major: fx.Protocol},
+				fx.CostModels[ln],
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -121,8 +158,19 @@ func TestPreparedNodeBudgetFailures(t *testing.T) {
 				m := cek.NewMachine[syn.DeBruijn](lv, slippage, ec)
 				for run := range 2 {
 					m.ExBudget = budget
-					isUnit, err := cek.RunPreparedScriptContext(context.Background(), m, prepared, args...)
-					checkNodeBudgetCase(t, fmt.Sprintf("slippage %d run %d", slippage, run), &sc, isUnit, err, m)
+					isUnit, err := cek.RunPreparedScriptContext(
+						context.Background(),
+						m,
+						prepared,
+						args...)
+					checkNodeBudgetCase(
+						t,
+						fmt.Sprintf("slippage %d run %d", slippage, run),
+						&sc,
+						isUnit,
+						err,
+						m,
+					)
 				}
 			}
 		})
@@ -139,8 +187,11 @@ func openCaseBranchProgram(t *testing.T) []byte {
 	program := &syn.Program[syn.DeBruijn]{
 		Version: lang.LanguageVersion{1, 1, 0},
 		Term: &syn.Case[syn.DeBruijn]{
-			Constr:   &syn.Constr[syn.DeBruijn]{Tag: 0},
-			Branches: []syn.Term[syn.DeBruijn]{unit, &syn.Var[syn.DeBruijn]{Name: 7}},
+			Constr: &syn.Constr[syn.DeBruijn]{Tag: 0},
+			Branches: []syn.Term[syn.DeBruijn]{
+				unit,
+				&syn.Var[syn.DeBruijn]{Name: 7},
+			},
 		},
 	}
 	flat, err := syn.Encode(program)
@@ -166,7 +217,10 @@ func TestPreparedScopeModes(t *testing.T) {
 		{"prepare PV12, run PV12", 12, 12},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			pc := syn.ProgramContext{LedgerLanguage: lang.LanguageVersionV3, ProtocolMajor: tc.prepareMajor}
+			pc := syn.ProgramContext{
+				LedgerLanguage: lang.LanguageVersionV3,
+				ProtocolMajor:  tc.prepareMajor,
+			}
 			prepared, err := cek.PrepareProgram(flat, pc)
 			if err != nil {
 				t.Fatal(err)
@@ -175,29 +229,55 @@ func TestPreparedScopeModes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			ec := cek.NewDefaultEvalContext(lang.LanguageVersionV3, cek.ProtoVersion{Major: tc.machineMajor})
+			ec := cek.NewDefaultEvalContext(
+				lang.LanguageVersionV3,
+				cek.ProtoVersion{Major: tc.machineMajor},
+			)
 			budget := cek.ExBudget{Mem: 1_000_000, Cpu: 1_000_000_000}
 
 			m := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ec)
 			m.ExBudget = budget
-			gotUnit, gotErr := cek.RunPreparedScriptContext(context.Background(), m, prepared)
+			gotUnit, gotErr := cek.RunPreparedScriptContext(
+				context.Background(),
+				m,
+				prepared,
+			)
 
 			ref := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ec)
 			ref.ExBudget = budget
-			wantUnit, wantErr := ref.RunScriptContext(context.Background(), prog.Term)
+			wantUnit, wantErr := ref.RunScriptContext(
+				context.Background(),
+				prog.Term,
+			)
 
 			wantFail := tc.machineMajor >= 12
 			if (wantErr != nil) != wantFail {
-				t.Fatalf("RunScriptContext error %v, want failure %t", wantErr, wantFail)
+				t.Fatalf(
+					"RunScriptContext error %v, want failure %t",
+					wantErr,
+					wantFail,
+				)
 			}
-			if gotUnit != wantUnit || (gotErr == nil) != (wantErr == nil) || m.ExBudget != ref.ExBudget {
-				t.Fatalf("prepared (unit %t, err %v, budget %+v), RunScriptContext (unit %t, err %v, budget %+v)",
-					gotUnit, gotErr, m.ExBudget, wantUnit, wantErr, ref.ExBudget)
+			if gotUnit != wantUnit || (gotErr == nil) != (wantErr == nil) ||
+				m.ExBudget != ref.ExBudget {
+				t.Fatalf(
+					"prepared (unit %t, err %v, budget %+v), RunScriptContext (unit %t, err %v, budget %+v)",
+					gotUnit,
+					gotErr,
+					m.ExBudget,
+					wantUnit,
+					wantErr,
+					ref.ExBudget,
+				)
 			}
 			if wantErr != nil {
 				var typeErr *cek.TypeError
-				if !errors.As(gotErr, &typeErr) || typeErr.Code != cek.ErrCodeOpenTerm {
-					t.Fatalf("prepared error %v, want open-term TypeError", gotErr)
+				if !errors.As(gotErr, &typeErr) ||
+					typeErr.Code != cek.ErrCodeOpenTerm {
+					t.Fatalf(
+						"prepared error %v, want open-term TypeError",
+						gotErr,
+					)
 				}
 			}
 		})
@@ -226,7 +306,11 @@ func TestPreparedConcurrentUse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ec, err := cek.NewEvalContext(lv, cek.ProtoVersion{Major: gt.Protocol}, gt.CostModels[ln])
+	ec, err := cek.NewEvalContext(
+		lv,
+		cek.ProtoVersion{Major: gt.Protocol},
+		gt.CostModels[ln],
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,13 +335,21 @@ func TestPreparedConcurrentUse(t *testing.T) {
 	wg.Wait()
 	for i := range results {
 		if results[i] != results[0] {
-			t.Fatalf("goroutine %d remaining budget %+v, goroutine 0 %+v", i, results[i], results[0])
+			t.Fatalf(
+				"goroutine %d remaining budget %+v, goroutine 0 %+v",
+				i,
+				results[i],
+				results[0],
+			)
 		}
 	}
 }
 
 func TestPreparedRequiredArguments(t *testing.T) {
-	ec := cek.NewDefaultEvalContext(lang.LanguageVersionV3, cek.ProtoVersion{Major: 11})
+	ec := cek.NewDefaultEvalContext(
+		lang.LanguageVersionV3,
+		cek.ProtoVersion{Major: 11},
+	)
 	m := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ec)
 	if _, err := cek.RunPreparedScriptContext(context.Background(), nil, &cek.PreparedProgram{}); err == nil {
 		t.Fatal("nil machine accepted")
@@ -265,7 +357,10 @@ func TestPreparedRequiredArguments(t *testing.T) {
 	if _, err := cek.RunPreparedScriptContext(context.Background(), m, nil); err == nil {
 		t.Fatal("nil program accepted")
 	}
-	pc := syn.ProgramContext{LedgerLanguage: lang.LanguageVersionV3, ProtocolMajor: 11}
+	pc := syn.ProgramContext{
+		LedgerLanguage: lang.LanguageVersionV3,
+		ProtocolMajor:  11,
+	}
 	prepared, err := cek.PrepareProgram(openCaseBranchProgram(t), pc)
 	if err != nil {
 		t.Fatal(err)
@@ -279,7 +374,10 @@ func TestPreparedRequiredArguments(t *testing.T) {
 }
 
 func TestPrepareDecodedProgramRequiresProgram(t *testing.T) {
-	pc := syn.ProgramContext{LedgerLanguage: lang.LanguageVersionV3, ProtocolMajor: 11}
+	pc := syn.ProgramContext{
+		LedgerLanguage: lang.LanguageVersionV3,
+		ProtocolMajor:  11,
+	}
 	if _, err := cek.PrepareDecodedProgram(nil, pc); err == nil {
 		t.Fatal("nil program accepted")
 	}
@@ -317,31 +415,55 @@ func TestPreparedArgumentChainLimits(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			term := tc.term()
-			pc := syn.ProgramContext{LedgerLanguage: lang.LanguageVersionV3, ProtocolMajor: 11}
+			pc := syn.ProgramContext{
+				LedgerLanguage: lang.LanguageVersionV3,
+				ProtocolMajor:  11,
+			}
 			prepared, err := cek.PrepareDecodedProgram(
-				&syn.Program[syn.DeBruijn]{Version: lang.LanguageVersion{1, 1, 0}, Term: term},
+				&syn.Program[syn.DeBruijn]{
+					Version: lang.LanguageVersion{1, 1, 0},
+					Term:    term,
+				},
 				pc,
 			)
 			if err != nil {
 				t.Fatal(err)
 			}
-			ec := cek.NewDefaultEvalContext(lang.LanguageVersionV3, cek.ProtoVersion{Major: 11})
+			ec := cek.NewDefaultEvalContext(
+				lang.LanguageVersionV3,
+				cek.ProtoVersion{Major: 11},
+			)
 			budget := cek.ExBudget{Mem: 1_000_000, Cpu: 1_000_000_000}
 			args := []data.PlutusData{data.NewInteger(big.NewInt(1))}
 
 			ref := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ec)
 			ref.ExBudget = budget
-			_, wantErr := ref.RunScriptContext(context.Background(), term, args...)
+			_, wantErr := ref.RunScriptContext(
+				context.Background(),
+				term,
+				args...)
 			if wantErr == nil {
-				t.Fatal("RunScriptContext accepted a term over the structure limit")
+				t.Fatal(
+					"RunScriptContext accepted a term over the structure limit",
+				)
 			}
 
 			m := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ec)
 			m.ExBudget = budget
-			_, gotErr := cek.RunPreparedScriptContext(context.Background(), m, prepared, args...)
-			if gotErr == nil || gotErr.Error() != wantErr.Error() || m.ExBudget != ref.ExBudget {
-				t.Fatalf("prepared (err %v, budget %+v), RunScriptContext (err %v, budget %+v)",
-					gotErr, m.ExBudget, wantErr, ref.ExBudget)
+			_, gotErr := cek.RunPreparedScriptContext(
+				context.Background(),
+				m,
+				prepared,
+				args...)
+			if gotErr == nil || gotErr.Error() != wantErr.Error() ||
+				m.ExBudget != ref.ExBudget {
+				t.Fatalf(
+					"prepared (err %v, budget %+v), RunScriptContext (err %v, budget %+v)",
+					gotErr,
+					m.ExBudget,
+					wantErr,
+					ref.ExBudget,
+				)
 			}
 		})
 	}

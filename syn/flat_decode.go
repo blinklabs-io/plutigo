@@ -112,7 +112,9 @@ func decodeDeBruijn(bytes []byte) (*Program[DeBruijn], error) {
 // same decoder; after that their contents are unspecified. Copy or re-decode
 // a program that must outlive the next call. A DeBruijnDecoder is not safe for
 // concurrent use.
-func (d *DeBruijnDecoder) DecodeBorrowed(bytes []byte) (*Program[DeBruijn], error) {
+func (d *DeBruijnDecoder) DecodeBorrowed(
+	bytes []byte,
+) (*Program[DeBruijn], error) {
 	return d.decodeBorrowed(bytes, false, false)
 }
 
@@ -166,7 +168,11 @@ type DeBruijnScopeError struct {
 }
 
 func (e *DeBruijnScopeError) Error() string {
-	return fmt.Sprintf("open term: DeBruijn index %d at scope %d", e.Index, e.Scope)
+	return fmt.Sprintf(
+		"open term: DeBruijn index %d at scope %d",
+		e.Index,
+		e.Scope,
+	)
 }
 
 // Decode decodes a FLAT program. Unlike DecodeBorrowed, the returned program
@@ -181,11 +187,17 @@ func Decode[T Binder](bytes []byte) (*Program[T], error) {
 	return decodeProgram[T](bytes, nil)
 }
 
-func decodeWithContext[T Binder](bytes []byte, context ProgramContext) (*Program[T], error) {
+func decodeWithContext[T Binder](
+	bytes []byte,
+	context ProgramContext,
+) (*Program[T], error) {
 	return decodeProgram[T](bytes, &context)
 }
 
-func decodeProgram[T Binder](bytes []byte, context *ProgramContext) (*Program[T], error) {
+func decodeProgram[T Binder](
+	bytes []byte,
+	context *ProgramContext,
+) (*Program[T], error) {
 	var zero T
 	if _, ok := any(zero).(DeBruijn); ok {
 		d := newDecoder(bytes)
@@ -460,7 +472,10 @@ func decodeTermDeBruijnWithArena(
 	}
 }
 
-func decodeTermWithArena[T Binder](d *decoder, arena *termArena[T]) (Term[T], error) {
+func decodeTermWithArena[T Binder](
+	d *decoder,
+	arena *termArena[T],
+) (Term[T], error) {
 	if err := d.enter(); err != nil {
 		return nil, err
 	}
@@ -1108,7 +1123,10 @@ func (a *termArena[T]) allocLambda(name T, body Term[T]) *Lambda[T] {
 	return lambda
 }
 
-func (a *termArena[T]) allocApply(function Term[T], argument Term[T]) *Apply[T] {
+func (a *termArena[T]) allocApply(
+	function Term[T],
+	argument Term[T],
+) *Apply[T] {
 	apply := a.applies.alloc()
 	apply.Function = function
 	apply.Argument = argument
@@ -1319,7 +1337,10 @@ func (a *constantArena) allocProtoList(typ Typ, items []IConstant) *ProtoList {
 	return value
 }
 
-func (a *constantArena) allocProtoArray(typ Typ, items []IConstant) *ProtoArray {
+func (a *constantArena) allocProtoArray(
+	typ Typ,
+	items []IConstant,
+) *ProtoArray {
 	value := a.protoArrays.alloc()
 	value.ATyp = typ
 	value.Array = items
@@ -1519,7 +1540,10 @@ func DecodeConstant(d *decoder) (IConstant, error) {
 	return decodeConstantValue(d, typ)
 }
 
-func decodeConstantWithArena(d *decoder, arena *constantArena) (IConstant, error) {
+func decodeConstantWithArena(
+	d *decoder,
+	arena *constantArena,
+) (IConstant, error) {
 	var tags constantTagSeq
 	err := decodeConstantTags(d, &tags)
 	if err != nil {
@@ -1849,11 +1873,17 @@ func validateValueEntries(entries []IConstant) error {
 	for policyIndex, entry := range entries {
 		policy, ok := entry.(*ProtoPair)
 		if !ok || policy == nil {
-			return fmt.Errorf("value policy entry %d is not a pair", policyIndex)
+			return fmt.Errorf(
+				"value policy entry %d is not a pair",
+				policyIndex,
+			)
 		}
 		policyID, ok := policy.First.(*ByteString)
 		if !ok || policyID == nil {
-			return fmt.Errorf("value policy entry %d has a non-bytestring key", policyIndex)
+			return fmt.Errorf(
+				"value policy entry %d has a non-bytestring key",
+				policyIndex,
+			)
 		}
 		if err := data.CheckValueKey("policy", policyIndex, policyID.Inner, prevPolicy); err != nil {
 			return err
@@ -1861,7 +1891,10 @@ func validateValueEntries(entries []IConstant) error {
 		prevPolicy = policyID.Inner
 		tokens, ok := policy.Second.(*ProtoList)
 		if !ok || tokens == nil {
-			return fmt.Errorf("value policy entry %d has a non-list payload", policyIndex)
+			return fmt.Errorf(
+				"value policy entry %d has a non-list payload",
+				policyIndex,
+			)
 		}
 		if err := data.CheckValueTokenCount(policyIndex, len(tokens.List)); err != nil {
 			return err
@@ -1870,11 +1903,19 @@ func validateValueEntries(entries []IConstant) error {
 		for tokenIndex, entry := range tokens.List {
 			token, ok := entry.(*ProtoPair)
 			if !ok || token == nil {
-				return fmt.Errorf("value token entry %d:%d is not a pair", policyIndex, tokenIndex)
+				return fmt.Errorf(
+					"value token entry %d:%d is not a pair",
+					policyIndex,
+					tokenIndex,
+				)
 			}
 			tokenID, ok := token.First.(*ByteString)
 			if !ok || tokenID == nil {
-				return fmt.Errorf("value token entry %d:%d has a non-bytestring key", policyIndex, tokenIndex)
+				return fmt.Errorf(
+					"value token entry %d:%d has a non-bytestring key",
+					policyIndex,
+					tokenIndex,
+				)
 			}
 			if err := data.CheckValueKey("token", tokenIndex, tokenID.Inner, prevToken); err != nil {
 				return err
@@ -1882,7 +1923,11 @@ func validateValueEntries(entries []IConstant) error {
 			prevToken = tokenID.Inner
 			quantity, ok := token.Second.(*Integer)
 			if !ok || quantity == nil || quantity.Inner == nil {
-				return fmt.Errorf("value token entry %d:%d has a non-integer quantity", policyIndex, tokenIndex)
+				return fmt.Errorf(
+					"value token entry %d:%d has a non-integer quantity",
+					policyIndex,
+					tokenIndex,
+				)
 			}
 			if err := data.CheckValueQuantity(policyIndex, tokenIndex, quantity.Inner); err != nil {
 				return err
@@ -2022,11 +2067,21 @@ func decodeConstantTypeAt(
 			if idx >= tags.len() || tags.at(idx) != ProtoPairThreeTag {
 				return nil, idx, false, errors.New("unknown type tag")
 			}
-			first, next, firstZero, err := decodeConstantTypeAt(tags, idx+1, arena, d)
+			first, next, firstZero, err := decodeConstantTypeAt(
+				tags,
+				idx+1,
+				arena,
+				d,
+			)
 			if err != nil {
 				return nil, next, false, err
 			}
-			second, next, secondZero, err := decodeConstantTypeAt(tags, next, arena, d)
+			second, next, secondZero, err := decodeConstantTypeAt(
+				tags,
+				next,
+				arena,
+				d,
+			)
 			if err != nil {
 				return nil, next, false, err
 			}
@@ -2169,8 +2224,13 @@ type decoder struct {
 }
 
 func (d *decoder) checkConstrCaseVersion(term string) error {
-	if d.versionKnown && (d.version[0] < 1 || d.version[0] == 1 && d.version[1] < 1) {
-		return fmt.Errorf("%s is not available in UPLC version %s", term, formatVersion(d.version))
+	if d.versionKnown &&
+		(d.version[0] < 1 || d.version[0] == 1 && d.version[1] < 1) {
+		return fmt.Errorf(
+			"%s is not available in UPLC version %s",
+			term,
+			formatVersion(d.version),
+		)
 	}
 	return nil
 }
@@ -2738,7 +2798,9 @@ func (d *decoder) bigWordSmall() (uint64, *big.Int, error) {
 // fast path is returned as small with nil words; a larger one is returned as
 // little-endian words accumulated into scratch, which the caller must copy
 // before reusing scratch.
-func (d *decoder) bigWordSmallInto(scratch []big.Word) (uint64, []big.Word, error) {
+func (d *decoder) bigWordSmallInto(
+	scratch []big.Word,
+) (uint64, []big.Word, error) {
 	accumulator := bigWordAccumulator{scratch: scratch}
 
 	if d.usedBits == 0 {

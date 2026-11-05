@@ -31,17 +31,31 @@ func TestHexLiteralDecoding(t *testing.T) {
 		{"empty", "#", TokenByteString, []byte{}},
 		{"mixed case", "#aBcD01", TokenByteString, []byte{0xab, 0xcd, 0x01}},
 		{"point", "0xFF00", TokenPoint, []byte{0xff, 0x00}},
-		{"large", "#" + strings.Repeat("ab", 4<<20), TokenByteString, bytes.Repeat([]byte{0xab}, 4<<20)},
+		{
+			"large",
+			"#" + strings.Repeat("ab", 4<<20),
+			TokenByteString,
+			bytes.Repeat([]byte{0xab}, 4<<20),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tok := NewLexer(tt.input).NextToken()
 			if tok.Type != tt.typ {
-				t.Fatalf("type = %v, want %v (%s)", tok.Type, tt.typ, tok.Literal)
+				t.Fatalf(
+					"type = %v, want %v (%s)",
+					tok.Type,
+					tt.typ,
+					tok.Literal,
+				)
 			}
 			got, ok := tok.Value.([]byte)
 			if !ok || !bytes.Equal(got, tt.want) {
-				t.Fatalf("value of %d bytes differs from want of %d bytes", len(got), len(tt.want))
+				t.Fatalf(
+					"value of %d bytes differs from want of %d bytes",
+					len(got),
+					len(tt.want),
+				)
 			}
 		})
 	}
@@ -64,7 +78,11 @@ func TestIntegerDigitCap(t *testing.T) {
 		}
 		err, _ := tok.Value.(error)
 		if !errors.Is(err, ErrIntegerTooLong) {
-			t.Fatalf("%q: value = %v, want ErrIntegerTooLong", prefix, tok.Value)
+			t.Fatalf(
+				"%q: value = %v, want ErrIntegerTooLong",
+				prefix,
+				tok.Value,
+			)
 		}
 	}
 }

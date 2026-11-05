@@ -79,7 +79,10 @@ func TestIntegerLiteralTooLongTypedError(t *testing.T) {
 			t.Errorf("%s: err = %v, want ErrIntegerTooLong", name, err)
 		}
 	}
-	ok := "(program 1.0.0 (con integer " + strings.Repeat("7", lex.MaxIntegerDigits) + "))"
+	ok := "(program 1.0.0 (con integer " + strings.Repeat(
+		"7",
+		lex.MaxIntegerDigits,
+	) + "))"
 	if _, err := Parse(ok); err != nil {
 		t.Errorf("at-limit literal rejected: %v", err)
 	}

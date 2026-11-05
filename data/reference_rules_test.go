@@ -81,7 +81,13 @@ func checkDecodersAccept(t *testing.T, name, input string, accept bool) {
 	_, arenaErr := NewDecoder().Decode(b)
 	for decoder, err := range map[string]error{"package": pkgErr, "arena": arenaErr} {
 		if (err == nil) != accept {
-			t.Errorf("%s (%s): error = %v, want accept %v", name, decoder, err, accept)
+			t.Errorf(
+				"%s (%s): error = %v, want accept %v",
+				name,
+				decoder,
+				err,
+				accept,
+			)
 		}
 	}
 }
@@ -121,7 +127,13 @@ func TestDecodePrefixIgnoresTrailingBytes(t *testing.T) {
 			t.Fatalf("%s: %v, %v", tt.input, pkgErr, arenaErr)
 		}
 		if !got.Equal(tt.want) || !gotArena.Equal(tt.want) {
-			t.Fatalf("%s: got %v / %v, want %v", tt.input, got, gotArena, tt.want)
+			t.Fatalf(
+				"%s: got %v / %v, want %v",
+				tt.input,
+				got,
+				gotArena,
+				tt.want,
+			)
 		}
 	}
 }

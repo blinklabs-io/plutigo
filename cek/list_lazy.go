@@ -180,7 +180,11 @@ func (l *consConstList[T]) lazyCaseHead(m *Machine[T]) Value[T] {
 	return m.allocConstant(l.cell.head)
 }
 
-func (l *consConstList[T]) rest(m *Machine[T], cell *consCell[syn.IConstant], base []syn.IConstant) Value[T] {
+func (l *consConstList[T]) rest(
+	m *Machine[T],
+	cell *consCell[syn.IConstant],
+	base []syn.IConstant,
+) Value[T] {
 	if cell != nil {
 		return &consConstList[T]{typ: l.typ, cell: cell}
 	}
@@ -233,7 +237,11 @@ func (l *consDataList[T]) lazyCaseHead(m *Machine[T]) Value[T] {
 	return m.allocDataValue(l.cell.head)
 }
 
-func (l *consDataList[T]) rest(m *Machine[T], cell *consCell[data.PlutusData], base []data.PlutusData) Value[T] {
+func (l *consDataList[T]) rest(
+	m *Machine[T],
+	cell *consCell[data.PlutusData],
+	base []data.PlutusData,
+) Value[T] {
 	if cell != nil {
 		return &consDataList[T]{cell: cell}
 	}
@@ -271,7 +279,13 @@ func (*consDataMap[T]) isValue() {}
 func (l *consDataMap[T]) toExMem() ExMem {
 	acc := ExMem(NilCost)
 	l.cell.each(func(item [2]data.PlutusData) {
-		acc += ExMem(PairCost) + dataExMem(item[0])() + dataExMem(item[1])() + ConsCost
+		acc += ExMem(
+			PairCost,
+		) + dataExMem(
+			item[0],
+		)() + dataExMem(
+			item[1],
+		)() + ConsCost
 	})
 	return acc
 }
@@ -286,7 +300,11 @@ func (l *consDataMap[T]) lazyCaseHead(m *Machine[T]) Value[T] {
 	return m.allocDataPairValue(l.cell.head[0], l.cell.head[1])
 }
 
-func (l *consDataMap[T]) rest(m *Machine[T], cell *consCell[[2]data.PlutusData], base [][2]data.PlutusData) Value[T] {
+func (l *consDataMap[T]) rest(
+	m *Machine[T],
+	cell *consCell[[2]data.PlutusData],
+	base [][2]data.PlutusData,
+) Value[T] {
 	if cell != nil {
 		return &consDataMap[T]{cell: cell}
 	}

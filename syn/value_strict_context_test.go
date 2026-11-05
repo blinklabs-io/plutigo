@@ -36,8 +36,10 @@ func rawValueEntries(policies ...[2]any) []IConstant {
 		}
 		out = append(out, &ProtoPair{
 			FstType: &TByteString{},
-			SndType: &TList{Typ: &TPair{First: &TByteString{}, Second: &TInteger{}}},
-			First:   &ByteString{Inner: p[0].([]byte)},
+			SndType: &TList{
+				Typ: &TPair{First: &TByteString{}, Second: &TInteger{}},
+			},
+			First: &ByteString{Inner: p[0].([]byte)},
 			Second: &ProtoList{
 				LTyp: &TPair{First: &TByteString{}, Second: &TInteger{}},
 				List: tokens,
@@ -84,10 +86,25 @@ func TestPublicDecodePathsRejectNonCanonicalValue(t *testing.T) {
 		name    string
 		entries []IConstant
 	}{
-		{"duplicate token", rawValueEntries([2]any{aa, [][2]any{{bb, one}, {bb, one}}})},
-		{"duplicate policy", rawValueEntries([2]any{aa, tok(bb, one)}, [2]any{aa, tok([]byte{0xcc}, one)})},
-		{"policies out of order", rawValueEntries([2]any{bb, tok(aa, one)}, [2]any{aa, tok(aa, one)})},
-		{"tokens out of order", rawValueEntries([2]any{aa, [][2]any{{bb, one}, {aa, one}}})},
+		{
+			"duplicate token",
+			rawValueEntries([2]any{aa, [][2]any{{bb, one}, {bb, one}}}),
+		},
+		{
+			"duplicate policy",
+			rawValueEntries(
+				[2]any{aa, tok(bb, one)},
+				[2]any{aa, tok([]byte{0xcc}, one)},
+			),
+		},
+		{
+			"policies out of order",
+			rawValueEntries([2]any{bb, tok(aa, one)}, [2]any{aa, tok(aa, one)}),
+		},
+		{
+			"tokens out of order",
+			rawValueEntries([2]any{aa, [][2]any{{bb, one}, {aa, one}}}),
+		},
 		{"empty token map", rawValueEntries([2]any{aa, [][2]any(nil)})},
 		{"zero quantity", rawValueEntries([2]any{aa, tok(bb, big.NewInt(0))})},
 		{"policy key too long", rawValueEntries([2]any{long, tok(bb, one)})},
@@ -95,7 +112,10 @@ func TestPublicDecodePathsRejectNonCanonicalValue(t *testing.T) {
 		{"quantity above range", rawValueEntries([2]any{aa, tok(bb, pastMax)})},
 		{"quantity below range", rawValueEntries([2]any{aa, tok(bb, pastMin)})},
 	}
-	ctx := ProgramContext{LedgerLanguage: lang.LanguageVersionV3, ProtocolMajor: 11}
+	ctx := ProgramContext{
+		LedgerLanguage: lang.LanguageVersionV3,
+		ProtocolMajor:  11,
+	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -140,7 +160,10 @@ func TestParseWithContextRejectsNonCanonicalValue(t *testing.T) {
 	t.Parallel()
 	long := strings.Repeat("01", 33)
 	pastMax := new(big.Int).Lsh(big.NewInt(1), 127).String()
-	pastMin := "-" + new(big.Int).Add(new(big.Int).Lsh(big.NewInt(1), 127), big.NewInt(1)).String()
+	pastMin := "-" + new(
+		big.Int,
+	).Add(new(big.Int).Lsh(big.NewInt(1), 127), big.NewInt(1)).
+		String()
 	tests := map[string]string{
 		"duplicate token":       `[(#aa, [(#01, 1), (#01, 2)])]`,
 		"duplicate policy":      `[(#aa, [(#01, 1)]), (#aa, [(#02, 1)])]`,
@@ -153,7 +176,10 @@ func TestParseWithContextRejectsNonCanonicalValue(t *testing.T) {
 		"quantity above range":  `[(#aa, [(#bb, ` + pastMax + `)])]`,
 		"quantity below range":  `[(#aa, [(#bb, ` + pastMin + `)])]`,
 	}
-	ctx := ProgramContext{LedgerLanguage: lang.LanguageVersionV3, ProtocolMajor: 11}
+	ctx := ProgramContext{
+		LedgerLanguage: lang.LanguageVersionV3,
+		ProtocolMajor:  11,
+	}
 	for name, text := range tests {
 		src := valuePrograms["con"](text)
 		t.Run(name, func(t *testing.T) {

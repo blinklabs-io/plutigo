@@ -193,9 +193,19 @@ func appendPlutusDataJSON(buf *bytes.Buffer, pd PlutusData) error {
 					if index%2 == 1 {
 						part = "value"
 					}
-					return fmt.Errorf("failed to marshal Map %s %d: %w", part, index/2, err)
+					return fmt.Errorf(
+						"failed to marshal Map %s %d: %w",
+						part,
+						index/2,
+						err,
+					)
 				}
-				return fmt.Errorf("failed to marshal %s %d: %w", top.label, index, err)
+				return fmt.Errorf(
+					"failed to marshal %s %d: %w",
+					top.label,
+					index,
+					err,
+				)
 			}
 			return err
 		}
@@ -314,7 +324,10 @@ func openConstrJSON(buf *bytes.Buffer, c *Constr) *jsonFrame {
 	buf.WriteString(`{"constructor":`)
 	buf.WriteString(constrTagString(c.Tag))
 	buf.WriteString(`,"fields":[`)
-	return &jsonFrame{children: childFrame{items: c.Fields}, label: "Constr field"}
+	return &jsonFrame{
+		children: childFrame{items: c.Fields},
+		label:    "Constr field",
+	}
 }
 
 const (
@@ -705,7 +718,9 @@ func (p *deepJSONParser) parseValue(key uint32) (uint32, error) {
 	case '{':
 		p.pos++
 		p.skipSpace()
-		idx := p.tree.add(jsonValue{kind: jsonKindObject, start: start, key: key})
+		idx := p.tree.add(
+			jsonValue{kind: jsonKindObject, start: start, key: key},
+		)
 		if p.consume('}') {
 			p.tree.node(idx).end = uint32(p.pos)
 			return idx, nil
@@ -746,7 +761,9 @@ func (p *deepJSONParser) parseValue(key uint32) (uint32, error) {
 	case '[':
 		p.pos++
 		p.skipSpace()
-		idx := p.tree.add(jsonValue{kind: jsonKindArray, start: start, key: key})
+		idx := p.tree.add(
+			jsonValue{kind: jsonKindArray, start: start, key: key},
+		)
 		if p.consume(']') {
 			p.tree.node(idx).end = uint32(p.pos)
 			return idx, nil
@@ -776,7 +793,14 @@ func (p *deepJSONParser) parseValue(key uint32) (uint32, error) {
 		if _, _, err := p.scanString(); err != nil {
 			return 0, err
 		}
-		return p.tree.add(jsonValue{kind: jsonKindString, start: start, end: uint32(p.pos), key: key}), nil
+		return p.tree.add(
+			jsonValue{
+				kind:  jsonKindString,
+				start: start,
+				end:   uint32(p.pos),
+				key:   key,
+			},
+		), nil
 	case 't':
 		return p.parseLiteral("true", jsonKindBool, start, key)
 	case 'f':
@@ -784,13 +808,24 @@ func (p *deepJSONParser) parseValue(key uint32) (uint32, error) {
 	case 'n':
 		return p.parseLiteral("null", jsonKindNull, start, key)
 	default:
-		if p.data[p.pos] == '-' || p.data[p.pos] >= '0' && p.data[p.pos] <= '9' {
+		if p.data[p.pos] == '-' ||
+			p.data[p.pos] >= '0' && p.data[p.pos] <= '9' {
 			if err := p.parseNumber(); err != nil {
 				return 0, err
 			}
-			return p.tree.add(jsonValue{kind: jsonKindNumber, start: start, end: uint32(p.pos), key: key}), nil
+			return p.tree.add(
+				jsonValue{
+					kind:  jsonKindNumber,
+					start: start,
+					end:   uint32(p.pos),
+					key:   key,
+				},
+			), nil
 		}
-		return 0, fmt.Errorf("invalid character %s looking for beginning of value", jsonQuoteChar(p.data[p.pos]))
+		return 0, fmt.Errorf(
+			"invalid character %s looking for beginning of value",
+			jsonQuoteChar(p.data[p.pos]),
+		)
 	}
 }
 
@@ -885,7 +920,10 @@ func (p *deepJSONParser) skipEscape() error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("invalid character %s in string escape code", jsonQuoteChar(c))
+		return fmt.Errorf(
+			"invalid character %s in string escape code",
+			jsonQuoteChar(c),
+		)
 	}
 }
 
@@ -928,7 +966,11 @@ func (p *deepJSONParser) requireDigits(context string) error {
 		return io.ErrUnexpectedEOF
 	}
 	if !isJSONDigit(p.data[p.pos]) {
-		return fmt.Errorf("invalid character %s %s", jsonQuoteChar(p.data[p.pos]), context)
+		return fmt.Errorf(
+			"invalid character %s %s",
+			jsonQuoteChar(p.data[p.pos]),
+			context,
+		)
 	}
 	for p.pos < len(p.data) && isJSONDigit(p.data[p.pos]) {
 		p.pos++
@@ -938,7 +980,11 @@ func (p *deepJSONParser) requireDigits(context string) error {
 
 func isJSONDigit(c byte) bool { return c >= '0' && c <= '9' }
 
-func (p *deepJSONParser) parseLiteral(literal string, kind jsonValueKind, start, key uint32) (uint32, error) {
+func (p *deepJSONParser) parseLiteral(
+	literal string,
+	kind jsonValueKind,
+	start, key uint32,
+) (uint32, error) {
 	for i := range len(literal) {
 		if p.pos == len(p.data) {
 			return 0, io.ErrUnexpectedEOF
@@ -953,7 +999,9 @@ func (p *deepJSONParser) parseLiteral(literal string, kind jsonValueKind, start,
 		}
 		p.pos++
 	}
-	return p.tree.add(jsonValue{kind: kind, start: start, end: uint32(p.pos), key: key}), nil
+	return p.tree.add(
+		jsonValue{kind: kind, start: start, end: uint32(p.pos), key: key},
+	), nil
 }
 
 func (p *deepJSONParser) consume(expected byte) bool {
@@ -1069,7 +1117,8 @@ type jsonObjectMembers struct {
 
 func (m *jsonObjectMembers) scan(t *jsonTree, v jsonValue) {
 	for c := v.first; c != 0; c = t.node(c).next {
-		if key := t.node(c).key; key >= jsonKeyInt && key <= jsonKeyConstructor {
+		if key := t.node(c).key; key >= jsonKeyInt &&
+			key <= jsonKeyConstructor {
 			m.last[key-jsonKeyInt] = c
 		}
 	}
@@ -1184,7 +1233,12 @@ func decodePlutusDataJSONValue(
 	member := *t.node(members.last[members.key-jsonKeyInt])
 	switch members.key {
 	case jsonKeyInt:
-		n, err := parseJSONBigInt(data, member, st, "failed to unmarshal Integer value")
+		n, err := parseJSONBigInt(
+			data,
+			member,
+			st,
+			"failed to unmarshal Integer value",
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -1202,7 +1256,13 @@ func decodePlutusDataJSONValue(
 		if member.kind == jsonKindNull {
 			return nil, errors.New("null \"list\" value in List JSON")
 		}
-		items, err := decodePlutusDataJSONArray(data, t, member, st, "List item")
+		items, err := decodePlutusDataJSONArray(
+			data,
+			t,
+			member,
+			st,
+			"List item",
+		)
 		if err != nil {
 			return nil, wrapJSONError(err, "failed to unmarshal List value")
 		}
@@ -1229,7 +1289,12 @@ func decodePlutusDataJSONConstr(
 	v, tagValue jsonValue,
 	st *jsonDecodeState,
 ) (PlutusData, error) {
-	tag, err := parseJSONBigInt(data, tagValue, st, "failed to unmarshal Constr constructor tag")
+	tag, err := parseJSONBigInt(
+		data,
+		tagValue,
+		st,
+		"failed to unmarshal Constr constructor tag",
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1244,7 +1309,13 @@ func decodePlutusDataJSONConstr(
 	if fieldsVal.kind == jsonKindNull {
 		return nil, errors.New("null \"fields\" value in Constr JSON")
 	}
-	fields, err := decodePlutusDataJSONArray(data, t, fieldsVal, st, "Constr field")
+	fields, err := decodePlutusDataJSONArray(
+		data,
+		t,
+		fieldsVal,
+		st,
+		"Constr field",
+	)
 	if err != nil {
 		return nil, wrapJSONError(err, "failed to unmarshal Constr fields")
 	}
@@ -1271,7 +1342,10 @@ func decodeJSONHexString(data []byte, v jsonValue) ([]byte, error) {
 			dst := make([]byte, hex.DecodedLen(len(body)))
 			n, err := hex.Decode(dst, body)
 			if err != nil {
-				return nil, fmt.Errorf("invalid hex in ByteString JSON: %w", err)
+				return nil, fmt.Errorf(
+					"invalid hex in ByteString JSON: %w",
+					err,
+				)
 			}
 			return dst[:n], nil
 		}
@@ -1309,7 +1383,10 @@ func decodePlutusDataJSONArray(
 		}
 		pd, err := decodePlutusDataJSONValue(data, t, *t.node(c), st, true)
 		if err != nil {
-			return nil, wrapJSONError(err, fmt.Sprintf("failed to unmarshal %s %d", itemLabel, i))
+			return nil, wrapJSONError(
+				err,
+				fmt.Sprintf("failed to unmarshal %s %d", itemLabel, i),
+			)
 		}
 		items = append(items, pd)
 		i++
@@ -1386,11 +1463,17 @@ func decodePlutusDataJSONMapPair(
 
 	k, err := decodePlutusDataJSONValue(data, t, kVal, st, true)
 	if err != nil {
-		return pair, wrapJSONError(err, fmt.Sprintf("failed to unmarshal Map key %d", index))
+		return pair, wrapJSONError(
+			err,
+			fmt.Sprintf("failed to unmarshal Map key %d", index),
+		)
 	}
 	val, err := decodePlutusDataJSONValue(data, t, vVal, st, true)
 	if err != nil {
-		return pair, wrapJSONError(err, fmt.Sprintf("failed to unmarshal Map value %d", index))
+		return pair, wrapJSONError(
+			err,
+			fmt.Sprintf("failed to unmarshal Map value %d", index),
+		)
 	}
 	return [2]PlutusData{k, val}, nil
 }

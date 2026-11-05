@@ -75,7 +75,11 @@ func writePlutusDataString(sb *strings.Builder, pd PlutusData) {
 
 // writeStringShallow writes pd, or for a container its opening text, and
 // pushes the frames that render the rest of it.
-func writeStringShallow(sb *strings.Builder, pd PlutusData, stack []stringFrame) []stringFrame {
+func writeStringShallow(
+	sb *strings.Builder,
+	pd PlutusData,
+	stack []stringFrame,
+) []stringFrame {
 	switch v := pd.(type) {
 	case nil:
 	case *List:
@@ -126,24 +130,53 @@ func writeStringShallow(sb *strings.Builder, pd PlutusData, stack []stringFrame)
 	return stack
 }
 
-func openListString(sb *strings.Builder, l *List, stack []stringFrame) []stringFrame {
+func openListString(
+	sb *strings.Builder,
+	l *List,
+	stack []stringFrame,
+) []stringFrame {
 	sb.WriteString("List[")
-	return append(stack, stringFrame{children: childFrame{items: l.Items}, closer: "]"})
+	return append(
+		stack,
+		stringFrame{children: childFrame{items: l.Items}, closer: "]"},
+	)
 }
 
-func openMapString(sb *strings.Builder, m *Map, stack []stringFrame) []stringFrame {
+func openMapString(
+	sb *strings.Builder,
+	m *Map,
+	stack []stringFrame,
+) []stringFrame {
 	sb.WriteString("Map[")
-	return append(stack, stringFrame{children: childFrame{pairs: m.Pairs}, isMap: true, closer: "]"})
+	return append(
+		stack,
+		stringFrame{
+			children: childFrame{pairs: m.Pairs},
+			isMap:    true,
+			closer:   "]",
+		},
+	)
 }
 
-func openConstrString(sb *strings.Builder, c *Constr, stack []stringFrame) []stringFrame {
+func openConstrString(
+	sb *strings.Builder,
+	c *Constr,
+	stack []stringFrame,
+) []stringFrame {
 	sb.WriteString("Constr{tag: ")
 	sb.WriteString(constrTagString(c.Tag))
 	sb.WriteString(", fields: [")
-	return append(stack, stringFrame{children: childFrame{items: c.Fields}, closer: "]}"})
+	return append(
+		stack,
+		stringFrame{children: childFrame{items: c.Fields}, closer: "]}"},
+	)
 }
 
-func openValueString(sb *strings.Builder, v *Value, stack []stringFrame) []stringFrame {
+func openValueString(
+	sb *strings.Builder,
+	v *Value,
+	stack []stringFrame,
+) []stringFrame {
 	sb.WriteString("Value{")
 	if v.Inner == nil {
 		sb.WriteString("<nil>}")

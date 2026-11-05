@@ -59,9 +59,16 @@ type PreparedProgram struct {
 // It does not apply the execution-time version gate: ledger callers must
 // still call [syn.ValidateTermVersionForExecution] with [PreparedProgram.Version]
 // before evaluating the program.
-func PrepareProgram(flat []byte, context syn.ProgramContext) (*PreparedProgram, error) {
+func PrepareProgram(
+	flat []byte,
+	context syn.ProgramContext,
+) (*PreparedProgram, error) {
 	fullScope := fullScopeCheckFor(context.ProtocolMajor)
-	program, info, err := syn.DecodeDeBruijnWithContextInfo(flat, context, fullScope)
+	program, info, err := syn.DecodeDeBruijnWithContextInfo(
+		flat,
+		context,
+		fullScope,
+	)
 	if err != nil {
 		return nil, err
 	}

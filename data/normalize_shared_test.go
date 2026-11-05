@@ -25,7 +25,11 @@ import (
 // requireNormalizeSharedMatches checks that NormalizeShared(pd) encodes to
 // Normalize(pd)'s bytes, holds no container in value form, and is pd itself
 // exactly when pd was already normalized.
-func requireNormalizeSharedMatches(t *testing.T, pd PlutusData, wantShared bool) {
+func requireNormalizeSharedMatches(
+	t *testing.T,
+	pd PlutusData,
+	wantShared bool,
+) {
 	t.Helper()
 	want, err := Encode(Normalize(pd))
 	if err != nil {
@@ -123,7 +127,11 @@ func TestNormalizeSharedValueFormContainers(t *testing.T) {
 
 func TestNormalizeSharedValue(t *testing.T) {
 	policy := NewByteString(bytes.Repeat([]byte{0xaa}, 28))
-	tokens := NewMap([][2]PlutusData{{NewByteString([]byte("T")), NewInteger(big.NewInt(5))}})
+	tokens := NewMap(
+		[][2]PlutusData{
+			{NewByteString([]byte("T")), NewInteger(big.NewInt(5))},
+		},
+	)
 	inner, ok := NewMap([][2]PlutusData{{policy, tokens}}).(*Map)
 	if !ok {
 		t.Fatal("NewMap did not return *Map")
@@ -138,7 +146,12 @@ func TestNormalizeSharedValue(t *testing.T) {
 		t.Fatal("NewMapDefIndef did not return *Map")
 	}
 	requireNormalizeSharedMatches(t, &Value{Inner: indefInner}, false)
-	indefTokens := NewMapDefIndef(true, [][2]PlutusData{{NewByteString([]byte("T")), NewInteger(big.NewInt(5))}})
+	indefTokens := NewMapDefIndef(
+		true,
+		[][2]PlutusData{
+			{NewByteString([]byte("T")), NewInteger(big.NewInt(5))},
+		},
+	)
 	nestedInner, ok := NewMap([][2]PlutusData{{policy, indefTokens}}).(*Map)
 	if !ok {
 		t.Fatal("NewMap did not return *Map")
@@ -165,7 +178,10 @@ func randomData(rng *rand.Rand, depth int) PlutusData {
 	}
 	switch rng.Intn(7) {
 	case 0:
-		return NewConstrDefIndef(rng.Intn(2) == 0, uint64(rng.Intn(10)), children()...)
+		return NewConstrDefIndef(
+			rng.Intn(2) == 0,
+			uint64(rng.Intn(10)),
+			children()...)
 	case 1:
 		return NewConstr(uint64(rng.Intn(10)), children()...)
 	case 2:
@@ -215,7 +231,10 @@ func TestNormalizeSharedMatchesNormalizeOnRandomData(t *testing.T) {
 		}
 	}
 	if shared == 0 || shared == 5000 {
-		t.Fatalf("%d of 5000 random values shared; the corpus must mix both", shared)
+		t.Fatalf(
+			"%d of 5000 random values shared; the corpus must mix both",
+			shared,
+		)
 	}
 }
 
@@ -243,7 +262,10 @@ func BenchmarkNormalizeShared(b *testing.B) {
 			NewInteger(big.NewInt(int64(i)*1_000_003)),
 			NewMap([][2]PlutusData{
 				{NewByteString([]byte("a")), NewInteger(big.NewInt(1))},
-				{NewByteString([]byte("b")), NewList(NewInteger(big.NewInt(2)))},
+				{
+					NewByteString([]byte("b")),
+					NewList(NewInteger(big.NewInt(2))),
+				},
 			}),
 		)
 	}
@@ -281,6 +303,9 @@ func TestNormalizeSharedWideContainersDoNotAllocate(t *testing.T) {
 		t.Fatal("expected wide normalized value to be returned as is")
 	}
 	if n := testing.AllocsPerRun(10, func() { _ = NormalizeShared(wide) }); n != 0 {
-		t.Fatalf("NormalizeShared allocated %v times on a wide normalized value", n)
+		t.Fatalf(
+			"NormalizeShared allocated %v times on a wide normalized value",
+			n,
+		)
 	}
 }

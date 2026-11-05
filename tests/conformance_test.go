@@ -315,7 +315,9 @@ func decodeConformanceProgram(
 		// The reference reader scope-checks a program it decodes. Decoding
 		// alone must accept an open term, since a stored reference script can
 		// be one; only evaluating it is refused.
-		return program, conformanceParseFailure, conformanceCheckClosed(program.Term)
+		return program, conformanceParseFailure, conformanceCheckClosed(
+			program.Term,
+		)
 	}
 
 	program, err := syn.Parse(string(contents))
@@ -384,7 +386,8 @@ func runConformanceCase(testCase conformanceCase) error {
 		testCase.inputPath,
 	)
 	// Casing on Data is available only for UPLC 1.2.0 programs from Dijkstra.
-	if program.Version[0] > 1 || program.Version[0] == 1 && program.Version[1] >= 2 {
+	if program.Version[0] > 1 ||
+		program.Version[0] == 1 && program.Version[1] >= 2 {
 		protocolVersion = max(protocolVersion, 12)
 	}
 	initialBudget := cek.ExBudget{
@@ -413,7 +416,9 @@ func runConformanceCase(testCase conformanceCase) error {
 		return fmt.Errorf("expected evaluation failure, evaluation succeeded")
 	}
 	if budgetFailure == conformanceEvaluationFailure {
-		return fmt.Errorf("budget expects evaluation failure, evaluation succeeded")
+		return fmt.Errorf(
+			"budget expects evaluation failure, evaluation succeeded",
+		)
 	}
 
 	if testCase.format == conformanceFlat {

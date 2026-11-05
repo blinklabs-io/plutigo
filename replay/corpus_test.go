@@ -73,7 +73,11 @@ func TestCorpusValidateRejectsMalformedEncodedPayloads(t *testing.T) {
 			}
 			_, err = Load(context.Background(), bytes.NewReader(encoded))
 			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
-				t.Fatalf("Load(context.Background(), ) error = %v, want %q", err, tt.wantError)
+				t.Fatalf(
+					"Load(context.Background(), ) error = %v, want %q",
+					err,
+					tt.wantError,
+				)
 			}
 		})
 	}

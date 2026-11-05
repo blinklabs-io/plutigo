@@ -71,15 +71,28 @@ func dataShape(t *testing.T, shape string, n int) (raw, canonical []byte) {
 		case k < 1<<8:
 			return []byte{major<<5 | 24, byte(k)}
 		case k < 1<<16:
-			return binary.BigEndian.AppendUint16([]byte{major<<5 | 25}, uint16(k))
+			return binary.BigEndian.AppendUint16(
+				[]byte{major<<5 | 25},
+				uint16(k),
+			)
 		default:
-			return binary.BigEndian.AppendUint32([]byte{major<<5 | 26}, uint32(k))
+			return binary.BigEndian.AppendUint32(
+				[]byte{major<<5 | 26},
+				uint32(k),
+			)
 		}
 	}
 	zero := []byte{0}
 	switch shape {
 	case "deepL":
-		return cat(rep([]byte{0x81}, n), zero), cat(rep([]byte{0x9f}, n), zero, rep([]byte{0xff}, n))
+		return cat(
+				rep([]byte{0x81}, n),
+				zero,
+			), cat(
+				rep([]byte{0x9f}, n),
+				zero,
+				rep([]byte{0xff}, n),
+			)
 	case "deepLI":
 		b := cat(rep([]byte{0x9f}, n), zero, rep([]byte{0xff}, n))
 		return b, b
@@ -90,9 +103,23 @@ func dataShape(t *testing.T, shape string, n int) (raw, canonical []byte) {
 		b := cat(rep([]byte{0xa1, 0x00}, n), zero)
 		return b, b
 	case "deepMI":
-		return cat(rep([]byte{0xbf, 0x00}, n), zero, rep([]byte{0xff}, n)), cat(rep([]byte{0xa1, 0x00}, n), zero)
+		return cat(
+				rep([]byte{0xbf, 0x00}, n),
+				zero,
+				rep([]byte{0xff}, n),
+			), cat(
+				rep([]byte{0xa1, 0x00}, n),
+				zero,
+			)
 	case "wideL":
-		return cat(head(4, n), rep(zero, n)), cat([]byte{0x9f}, rep(zero, n), []byte{0xff})
+		return cat(
+				head(4, n),
+				rep(zero, n),
+			), cat(
+				[]byte{0x9f},
+				rep(zero, n),
+				[]byte{0xff},
+			)
 	case "wideLI":
 		b := cat([]byte{0x9f}, rep(zero, n), []byte{0xff})
 		return b, b
@@ -100,9 +127,24 @@ func dataShape(t *testing.T, shape string, n int) (raw, canonical []byte) {
 		b := cat(head(5, n), rep([]byte{0, 0}, n))
 		return b, b
 	case "wideMI":
-		return cat([]byte{0xbf}, rep([]byte{0, 0}, n), []byte{0xff}), cat(head(5, n), rep([]byte{0, 0}, n))
+		return cat(
+				[]byte{0xbf},
+				rep([]byte{0, 0}, n),
+				[]byte{0xff},
+			), cat(
+				head(5, n),
+				rep([]byte{0, 0}, n),
+			)
 	case "wideC":
-		return cat([]byte{0xd8, 0x79}, head(4, n), rep(zero, n)), cat([]byte{0xd8, 0x79, 0x9f}, rep(zero, n), []byte{0xff})
+		return cat(
+				[]byte{0xd8, 0x79},
+				head(4, n),
+				rep(zero, n),
+			), cat(
+				[]byte{0xd8, 0x79, 0x9f},
+				rep(zero, n),
+				[]byte{0xff},
+			)
 	}
 	t.Fatalf("unknown shape %q", shape)
 	return nil, nil
@@ -173,13 +215,30 @@ type probeTerm func(w *flatWriter)
 func pVar(i int64) probeTerm {
 	return func(w *flatWriter) { w.uint(0, 4); w.natural(big.NewInt(i)) }
 }
-func pDelay(t probeTerm) probeTerm { return func(w *flatWriter) { w.uint(1, 4); t(w) } }
-func pLam(t probeTerm) probeTerm   { return func(w *flatWriter) { w.uint(2, 4); t(w) } }
+
+func pDelay(
+	t probeTerm,
+) probeTerm {
+	return func(w *flatWriter) { w.uint(1, 4); t(w) }
+}
+
+func pLam(
+	t probeTerm,
+) probeTerm {
+	return func(w *flatWriter) { w.uint(2, 4); t(w) }
+}
+
 func pApp(f, a probeTerm) probeTerm {
 	return func(w *flatWriter) { w.uint(3, 4); f(w); a(w) }
 }
-func pForce(t probeTerm) probeTerm { return func(w *flatWriter) { w.uint(5, 4); t(w) } }
-func pErr() probeTerm              { return func(w *flatWriter) { w.uint(6, 4) } }
+
+func pForce(
+	t probeTerm,
+) probeTerm {
+	return func(w *flatWriter) { w.uint(5, 4); t(w) }
+}
+
+func pErr() probeTerm { return func(w *flatWriter) { w.uint(6, 4) } }
 func pBuiltin(tag uint64) probeTerm {
 	return func(w *flatWriter) { w.uint(7, 4); w.uint(tag, 7) }
 }
@@ -205,7 +264,13 @@ func pInt(n int64) probeTerm {
 		w.natural(z)
 	})
 }
-func pBytes(b []byte) probeTerm { return pCon(1, func(w *flatWriter) { w.bytestring(b) }) }
+
+func pBytes(
+	b []byte,
+) probeTerm {
+	return pCon(1, func(w *flatWriter) { w.bytestring(b) })
+}
+
 func pData(cbor []byte) probeTerm {
 	return pCon(8, func(w *flatWriter) { w.bytestring(cbor) })
 }
@@ -224,7 +289,12 @@ const (
 func pAssertAll(conds ...probeTerm) probeTerm {
 	t := pUnit()
 	for _, cond := range slices.Backward(conds) {
-		t = pForce(pApp(pApp(pApp(pForce(pBuiltin(tagIfThenElse)), cond), pDelay(t)), pDelay(pErr())))
+		t = pForce(
+			pApp(
+				pApp(pApp(pForce(pBuiltin(tagIfThenElse)), cond), pDelay(t)),
+				pDelay(pErr()),
+			),
+		)
 	}
 	return t
 }
@@ -240,22 +310,53 @@ func probeProgram(t *testing.T, body string, raw, canonical []byte) []byte {
 	case "ign":
 		term = pLam(pApp(pLam(pUnit()), d))
 	case "eq":
-		term = pLam(pApp(pLam(pAssertAll(pApp(pApp(pBuiltin(tagEqualsData), pVar(1)), pVar(1)))), d))
+		term = pLam(
+			pApp(
+				pLam(
+					pAssertAll(
+						pApp(pApp(pBuiltin(tagEqualsData), pVar(1)), pVar(1)),
+					),
+				),
+				d,
+			),
+		)
 	case "serlen":
-		term = pLam(pApp(pLam(pAssertAll(pApp(pApp(pBuiltin(tagEqualsInteger),
-			pApp(pBuiltin(tagLengthOfByteString), pVar(1))), pInt(int64(len(canonical)))))),
+		term = pLam(pApp(pLam(pAssertAll(pApp(pApp(
+			pBuiltin(tagEqualsInteger),
+			pApp(
+				pBuiltin(tagLengthOfByteString),
+				pVar(1),
+			),
+		), pInt(int64(len(canonical)))))),
 			pApp(pBuiltin(tagSerialiseData), d)))
 	case "ser":
 		l := len(canonical)
 		k := min(64, l)
 		slice := func(start int) probeTerm {
-			return pApp(pApp(pBuiltin(tagEqualsByteString),
-				pApp(pApp(pApp(pBuiltin(tagSliceByteString), pInt(int64(start))), pInt(int64(k))), pVar(1))),
+			return pApp(pApp(
+				pBuiltin(tagEqualsByteString),
+				pApp(
+					pApp(
+						pApp(pBuiltin(tagSliceByteString), pInt(int64(start))),
+						pInt(int64(k)),
+					),
+					pVar(1),
+				),
+			),
 				pBytes(canonical[start:start+k]))
 		}
 		term = pLam(pApp(pLam(pAssertAll(
-			pApp(pApp(pBuiltin(tagEqualsInteger), pApp(pBuiltin(tagLengthOfByteString), pVar(1))), pInt(int64(l))),
-			slice(0), slice(l/2), slice(l-k))),
+			pApp(
+				pApp(
+					pBuiltin(tagEqualsInteger),
+					pApp(pBuiltin(tagLengthOfByteString), pVar(1)),
+				),
+				pInt(int64(l)),
+			),
+			slice(0),
+			slice(l/2),
+			slice(l-k),
+		)),
 			pApp(pBuiltin(tagSerialiseData), d)))
 	case "retV2":
 		term = pLam(pLam(d))
@@ -292,29 +393,47 @@ func TestNodeDataLimits(t *testing.T) {
 				raw, canonical := dataShape(t, sc.Shape, sc.N)
 				flat = probeProgram(t, sc.Body, raw, canonical)
 			}
-			if sum := sha256.Sum256(flat); hex.EncodeToString(sum[:]) != sc.FlatSHA256 {
+			if sum := sha256.Sum256(flat); hex.EncodeToString(
+				sum[:],
+			) != sc.FlatSHA256 {
 				t.Fatalf("regenerated script differs from the one the node ran")
 			}
 			lv, ln := groundTruthLang(t, sc.Lang)
-			pc := syn.ProgramContext{LedgerLanguage: lv, ProtocolMajor: gt.Protocol}
+			pc := syn.ProgramContext{
+				LedgerLanguage: lv,
+				ProtocolMajor:  gt.Protocol,
+			}
 			prog, err := syn.DecodeDeBruijnWithContext(flat, pc)
 			if err != nil {
 				t.Fatalf("decode: %v", err)
 			}
-			ec, err := cek.NewEvalContext(lv, cek.ProtoVersion{Major: gt.Protocol}, gt.CostModels[ln])
+			ec, err := cek.NewEvalContext(
+				lv,
+				cek.ProtoVersion{Major: gt.Protocol},
+				gt.CostModels[ln],
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
 			m := cek.NewMachine[syn.DeBruijn](lv, 0, ec)
 			m.ExBudget = nodeTxBudget
-			isUnit, err := m.RunScriptContext(context.Background(), prog.Term, ledgerArgs(sc.Lang, "")...)
+			isUnit, err := m.RunScriptContext(
+				context.Background(),
+				prog.Term,
+				ledgerArgs(sc.Lang, "")...)
 			ex := nodeTxBudget.Sub(&m.ExBudget)
 			got := "ok"
 			if err != nil || (sc.Lang == "V3" && !isUnit) {
 				got = "phase2-fail"
 			}
 			if got != sc.Outcome {
-				t.Fatalf("outcome %s (%v), node %s (%s)", got, err, sc.Outcome, sc.Note)
+				t.Fatalf(
+					"outcome %s (%v), node %s (%s)",
+					got,
+					err,
+					sc.Outcome,
+					sc.Note,
+				)
 			}
 			if sc.ExUnits != nil && ex != sc.ExUnits.budget() {
 				t.Fatalf("exunits mem=%d steps=%d, node mem=%d steps=%d",
@@ -337,7 +456,10 @@ const (
 // equalsData and serialiseData walk Data with an explicit stack, so an
 // accidental per-level recursion crashes the test binary instead of passing.
 func TestDeepDataStackSafety(t *testing.T) {
-	ec := cek.NewDefaultEvalContext(lang.LanguageVersionV3, cek.ProtoVersion{Major: 11})
+	ec := cek.NewDefaultEvalContext(
+		lang.LanguageVersionV3,
+		cek.ProtoVersion{Major: 11},
+	)
 	for _, shape := range []string{"deepL", "deepC", "deepM"} {
 		for _, body := range []string{"eq", "serlen"} {
 			t.Run(shape+"-"+body, func(t *testing.T) {
@@ -346,17 +468,28 @@ func TestDeepDataStackSafety(t *testing.T) {
 				var err error
 				withMaxStack(deepDataMaxStack, func() {
 					var prog *syn.Program[syn.DeBruijn]
-					prog, err = syn.DecodeDeBruijnWithContext(flat, syn.ProgramContext{
-						LedgerLanguage: lang.LanguageVersionV3,
-						ProtocolMajor:  11,
-					})
+					prog, err = syn.DecodeDeBruijnWithContext(
+						flat,
+						syn.ProgramContext{
+							LedgerLanguage: lang.LanguageVersionV3,
+							ProtocolMajor:  11,
+						},
+					)
 					if err != nil {
 						return
 					}
-					m := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ec)
+					m := cek.NewMachine[syn.DeBruijn](
+						lang.LanguageVersionV3,
+						0,
+						ec,
+					)
 					m.ExBudget = nodeTxBudget
 					var isUnit bool
-					isUnit, err = m.RunScriptContext(context.Background(), prog.Term, data.NewConstr(0))
+					isUnit, err = m.RunScriptContext(
+						context.Background(),
+						prog.Term,
+						data.NewConstr(0),
+					)
 					if err == nil && !isUnit {
 						err = errors.New("result is not unit")
 					}
@@ -387,7 +520,10 @@ func withMaxStack(limit int, f func()) {
 // rejects a hand-built Data constant whose children are shared: a graph no
 // decoder produces, which a tree walk could take exponential time over.
 func TestSharedDataConstantRejected(t *testing.T) {
-	ec := cek.NewDefaultEvalContext(lang.LanguageVersionV3, cek.ProtoVersion{Major: 11})
+	ec := cek.NewDefaultEvalContext(
+		lang.LanguageVersionV3,
+		cek.ProtoVersion{Major: 11},
+	)
 	// Each level holds its child twice: 2^40 tree nodes in 40 values.
 	var shared data.PlutusData = data.NewInteger(big.NewInt(0))
 	for range 40 {
@@ -396,7 +532,9 @@ func TestSharedDataConstantRejected(t *testing.T) {
 	m := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ec)
 	m.ExBudget = nodeTxBudget
 	term := &syn.Apply[syn.DeBruijn]{
-		Function: &syn.Lambda[syn.DeBruijn]{Body: &syn.Constant{Con: &syn.Unit{}}},
+		Function: &syn.Lambda[syn.DeBruijn]{
+			Body: &syn.Constant{Con: &syn.Unit{}},
+		},
 		Argument: &syn.Constant{Con: &syn.Data{Inner: shared}},
 	}
 	if _, err := m.Run(term); err == nil {

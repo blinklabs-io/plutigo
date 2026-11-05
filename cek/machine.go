@@ -42,10 +42,18 @@ var sharedBuiltinTable = newBuiltins[syn.DeBruijn]()
 var (
 	// Builtin application and forcing never mutate their input; they return a
 	// machine-owned value or another prototype. These values are safe to share.
-	sharedBuiltinNoArgValuesV10 = newBuiltinNoArgValues[syn.DeBruijn](lang.LanguageVersionV1)
-	sharedBuiltinNoArgValuesV20 = newBuiltinNoArgValues[syn.DeBruijn](lang.LanguageVersionV2)
-	sharedBuiltinNoArgValuesV30 = newBuiltinNoArgValues[syn.DeBruijn](lang.LanguageVersionV3)
-	sharedBuiltinNoArgValuesV40 = newBuiltinNoArgValues[syn.DeBruijn](lang.LanguageVersionV4)
+	sharedBuiltinNoArgValuesV10 = newBuiltinNoArgValues[syn.DeBruijn](
+		lang.LanguageVersionV1,
+	)
+	sharedBuiltinNoArgValuesV20 = newBuiltinNoArgValues[syn.DeBruijn](
+		lang.LanguageVersionV2,
+	)
+	sharedBuiltinNoArgValuesV30 = newBuiltinNoArgValues[syn.DeBruijn](
+		lang.LanguageVersionV3,
+	)
+	sharedBuiltinNoArgValuesV40 = newBuiltinNoArgValues[syn.DeBruijn](
+		lang.LanguageVersionV4,
+	)
 )
 
 // Machine is only instantiated with syn.DeBruijn in this codebase. These
@@ -544,52 +552,87 @@ func (m *Machine[T]) valueArenaHighWatermark() int {
 }
 
 func (m *Machine[T]) allocDelay(term *syn.Delay[T], env *Env[T]) *Delay[T] {
-	delay := allocArenaSlot(&m.delayChunks, &m.delayChunkPos, m.valueArenaChunkSize)
+	delay := allocArenaSlot(
+		&m.delayChunks,
+		&m.delayChunkPos,
+		m.valueArenaChunkSize,
+	)
 	delay.AST = term
 	delay.Env = env
 	return delay
 }
 
 func (m *Machine[T]) allocConstr(tag uint64, fields []Value[T]) *Constr[T] {
-	constr := allocArenaSlot(&m.constrChunks, &m.constrChunkPos, m.valueArenaChunkSize)
+	constr := allocArenaSlot(
+		&m.constrChunks,
+		&m.constrChunkPos,
+		m.valueArenaChunkSize,
+	)
 	constr.Tag = tag
 	constr.Fields = fields
 	return constr
 }
 
 func (m *Machine[T]) allocLambda(term *syn.Lambda[T], env *Env[T]) *Lambda[T] {
-	lambda := allocArenaSlot(&m.lambdaChunks, &m.lambdaChunkPos, m.valueArenaChunkSize)
+	lambda := allocArenaSlot(
+		&m.lambdaChunks,
+		&m.lambdaChunkPos,
+		m.valueArenaChunkSize,
+	)
 	lambda.AST = term
 	lambda.Env = env
 	return lambda
 }
 
 func (m *Machine[T]) allocConstant(con syn.IConstant) *Constant {
-	constant := allocArenaSlot(&m.constantChunks, &m.constantChunkPos, m.valueArenaChunkSize)
+	constant := allocArenaSlot(
+		&m.constantChunks,
+		&m.constantChunkPos,
+		m.valueArenaChunkSize,
+	)
 	constant.Constant = con
 	return constant
 }
 
 func (m *Machine[T]) allocDataConstant(inner data.PlutusData) *syn.Data {
-	dataConstant := allocArenaSlot(&m.dataChunks, &m.dataChunkPos, m.valueArenaChunkSize)
+	dataConstant := allocArenaSlot(
+		&m.dataChunks,
+		&m.dataChunkPos,
+		m.valueArenaChunkSize,
+	)
 	dataConstant.Inner = inner
 	return dataConstant
 }
 
 func (m *Machine[T]) allocIntegerConstant(inner *big.Int) *syn.Integer {
-	integerConstant := allocArenaSlot(&m.integerChunks, &m.integerChunkPos, m.valueArenaChunkSize)
+	integerConstant := allocArenaSlot(
+		&m.integerChunks,
+		&m.integerChunkPos,
+		m.valueArenaChunkSize,
+	)
 	integerConstant.SetInner(inner)
 	return integerConstant
 }
 
 func (m *Machine[T]) allocByteStringConstant(inner []byte) *syn.ByteString {
-	byteStringConstant := allocArenaSlot(&m.byteStringChunks, &m.byteStringChunkPos, m.valueArenaChunkSize)
+	byteStringConstant := allocArenaSlot(
+		&m.byteStringChunks,
+		&m.byteStringChunkPos,
+		m.valueArenaChunkSize,
+	)
 	byteStringConstant.Inner = inner
 	return byteStringConstant
 }
 
-func (m *Machine[T]) allocProtoListConstant(typ syn.Typ, list []syn.IConstant) *syn.ProtoList {
-	listConstant := allocArenaSlot(&m.protoListChunks, &m.protoListChunkPos, m.valueArenaChunkSize)
+func (m *Machine[T]) allocProtoListConstant(
+	typ syn.Typ,
+	list []syn.IConstant,
+) *syn.ProtoList {
+	listConstant := allocArenaSlot(
+		&m.protoListChunks,
+		&m.protoListChunkPos,
+		m.valueArenaChunkSize,
+	)
 	listConstant.LTyp = typ
 	listConstant.List = list
 	return listConstant
@@ -601,7 +644,11 @@ func (m *Machine[T]) allocProtoPairConstant(
 	first syn.IConstant,
 	second syn.IConstant,
 ) *syn.ProtoPair {
-	pairConstant := allocArenaSlot(&m.protoPairChunks, &m.protoPairChunkPos, m.valueArenaChunkSize)
+	pairConstant := allocArenaSlot(
+		&m.protoPairChunks,
+		&m.protoPairChunkPos,
+		m.valueArenaChunkSize,
+	)
 	pairConstant.FstType = firstType
 	pairConstant.SndType = secondType
 	pairConstant.First = first
@@ -612,13 +659,21 @@ func (m *Machine[T]) allocProtoPairConstant(
 func (m *Machine[T]) allocDataListValue(
 	items []data.PlutusData,
 ) *dataListValue[T] {
-	listValue := allocArenaSlot(&m.dataListValueChunks, &m.dataListValueChunkPos, m.valueArenaChunkSize)
+	listValue := allocArenaSlot(
+		&m.dataListValueChunks,
+		&m.dataListValueChunkPos,
+		m.valueArenaChunkSize,
+	)
 	listValue.items = items
 	return listValue
 }
 
 func (m *Machine[T]) allocDataValue(item data.PlutusData) *dataValue[T] {
-	dataVal := allocArenaSlot(&m.dataValueChunks, &m.dataValueChunkPos, m.valueArenaChunkSize)
+	dataVal := allocArenaSlot(
+		&m.dataValueChunks,
+		&m.dataValueChunkPos,
+		m.valueArenaChunkSize,
+	)
 	dataVal.item = item
 	return dataVal
 }
@@ -626,7 +681,11 @@ func (m *Machine[T]) allocDataValue(item data.PlutusData) *dataValue[T] {
 func (m *Machine[T]) allocDataMapValue(
 	items [][2]data.PlutusData,
 ) *dataMapValue[T] {
-	listValue := allocArenaSlot(&m.dataMapValueChunks, &m.dataMapValueChunkPos, m.valueArenaChunkSize)
+	listValue := allocArenaSlot(
+		&m.dataMapValueChunks,
+		&m.dataMapValueChunkPos,
+		m.valueArenaChunkSize,
+	)
 	listValue.items = items
 	return listValue
 }
@@ -662,7 +721,11 @@ func (m *Machine[T]) allocPairValue(
 	first Value[T],
 	second Value[T],
 ) *pairValue[T] {
-	pair := allocArenaSlot(&m.pairValueChunks, &m.pairValueChunkPos, m.valueArenaChunkSize)
+	pair := allocArenaSlot(
+		&m.pairValueChunks,
+		&m.pairValueChunkPos,
+		m.valueArenaChunkSize,
+	)
 	pair.first = first
 	pair.second = second
 	return pair
@@ -681,7 +744,11 @@ func (m *Machine[T]) extendBuiltinArgs(
 	next *BuiltinArgs[T],
 	data Value[T],
 ) *BuiltinArgs[T] {
-	args := allocArenaSlot(&m.builtinArgChunks, &m.builtinArgChunkPos, m.valueArenaChunkSize)
+	args := allocArenaSlot(
+		&m.builtinArgChunks,
+		&m.builtinArgChunkPos,
+		m.valueArenaChunkSize,
+	)
 	args.data = data
 	args.next = next
 	return args
@@ -696,7 +763,11 @@ func (m *Machine[T]) allocBuiltin(
 	if argCount == 0 && args == nil && forces < 3 {
 		return m.builtinNoArgValues[fn][forces]
 	}
-	builtinValue := allocArenaSlot(&m.builtinChunks, &m.builtinChunkPos, m.valueArenaChunkSize)
+	builtinValue := allocArenaSlot(
+		&m.builtinChunks,
+		&m.builtinChunkPos,
+		m.valueArenaChunkSize,
+	)
 	builtinValue.Func = fn
 	builtinValue.forceCount = uint8(fn.ForceCount())
 	builtinValue.Forces = forces
@@ -706,7 +777,9 @@ func (m *Machine[T]) allocBuiltin(
 	return builtinValue
 }
 
-func newBuiltinNoArgValues[T syn.Eval](version lang.LanguageVersion) *[builtin.TotalBuiltinCount][3]*Builtin[T] {
+func newBuiltinNoArgValues[T syn.Eval](
+	version lang.LanguageVersion,
+) *[builtin.TotalBuiltinCount][3]*Builtin[T] {
 	values := new([builtin.TotalBuiltinCount][3]*Builtin[T])
 	for fn := builtin.DefaultFunction(0); fn < builtin.TotalBuiltinCount; fn++ {
 		for forces := uint(0); forces < 3; forces++ {
@@ -791,14 +864,17 @@ func NewMachine[T syn.Eval](
 		builtins:           chooseBuiltins[T](version, evalContext.ProtoMajor),
 		builtinNoArgValues: getSharedBuiltinNoArgValues[T](version),
 		costCaches:         evalContext.CostModel.builtinCostCaches(),
-		available:          chooseAvailableBuiltins(version, evalContext.ProtoMajor),
-		slippage:           slippage,
-		stepBatchFits:      stepBatchFits(stepCosts, slippage),
-		version:            version,
-		semantics:          evalContext.SemanticsVariant,
-		protoMajor:         evalContext.ProtoMajor,
-		ExBudget:           DefaultExBudget,
-		Logs:               make([]string, 0),
+		available: chooseAvailableBuiltins(
+			version,
+			evalContext.ProtoMajor,
+		),
+		slippage:      slippage,
+		stepBatchFits: stepBatchFits(stepCosts, slippage),
+		version:       version,
+		semantics:     evalContext.SemanticsVariant,
+		protoMajor:    evalContext.ProtoMajor,
+		ExBudget:      DefaultExBudget,
+		Logs:          make([]string, 0),
 
 		argHolder:       newArgHolder[T](),
 		frameStack:      make([]stackFrame[T], 0, 32),
@@ -988,39 +1064,139 @@ func (m *Machine[T]) resetValueArenas() {
 	resetArenaChunks(&m.constrChunks, &m.constrChunkPos, valueRetainChunkCap)
 	resetArenaChunks(&m.delayChunks, &m.delayChunkPos, valueRetainChunkCap)
 	resetArenaChunks(&m.lambdaChunks, &m.lambdaChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.constantChunks, &m.constantChunkPos, valueRetainChunkCap)
+	resetArenaChunks(
+		&m.constantChunks,
+		&m.constantChunkPos,
+		valueRetainChunkCap,
+	)
 	resetArenaChunks(&m.dataChunks, &m.dataChunkPos, valueRetainChunkCap)
 	resetArenaChunks(&m.integerChunks, &m.integerChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.byteStringChunks, &m.byteStringChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.protoListChunks, &m.protoListChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.protoPairChunks, &m.protoPairChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.dataValueChunks, &m.dataValueChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.dataListValueChunks, &m.dataListValueChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.dataMapValueChunks, &m.dataMapValueChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.pairValueChunks, &m.pairValueChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.valueElemChunks, &m.valueElemChunkPos, valueRetainChunkCap)
+	resetArenaChunks(
+		&m.byteStringChunks,
+		&m.byteStringChunkPos,
+		valueRetainChunkCap,
+	)
+	resetArenaChunks(
+		&m.protoListChunks,
+		&m.protoListChunkPos,
+		valueRetainChunkCap,
+	)
+	resetArenaChunks(
+		&m.protoPairChunks,
+		&m.protoPairChunkPos,
+		valueRetainChunkCap,
+	)
+	resetArenaChunks(
+		&m.dataValueChunks,
+		&m.dataValueChunkPos,
+		valueRetainChunkCap,
+	)
+	resetArenaChunks(
+		&m.dataListValueChunks,
+		&m.dataListValueChunkPos,
+		valueRetainChunkCap,
+	)
+	resetArenaChunks(
+		&m.dataMapValueChunks,
+		&m.dataMapValueChunkPos,
+		valueRetainChunkCap,
+	)
+	resetArenaChunks(
+		&m.pairValueChunks,
+		&m.pairValueChunkPos,
+		valueRetainChunkCap,
+	)
+	resetArenaChunks(
+		&m.valueElemChunks,
+		&m.valueElemChunkPos,
+		valueRetainChunkCap,
+	)
 	resetArenaChunks(&m.builtinChunks, &m.builtinChunkPos, valueRetainChunkCap)
-	resetArenaChunks(&m.builtinArgChunks, &m.builtinArgChunkPos, valueRetainChunkCap)
+	resetArenaChunks(
+		&m.builtinArgChunks,
+		&m.builtinArgChunkPos,
+		valueRetainChunkCap,
+	)
 }
 
 func (m *Machine[T]) lazyPrepareValueArenas() {
 	m.resetUnConstrDataCache()
-	lazyPrepareArenaChunks(&m.constrChunks, &m.constrChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.delayChunks, &m.delayChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.lambdaChunks, &m.lambdaChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.constantChunks, &m.constantChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(
+		&m.constrChunks,
+		&m.constrChunkPos,
+		valueRetainChunkCap,
+	)
+	lazyPrepareArenaChunks(
+		&m.delayChunks,
+		&m.delayChunkPos,
+		valueRetainChunkCap,
+	)
+	lazyPrepareArenaChunks(
+		&m.lambdaChunks,
+		&m.lambdaChunkPos,
+		valueRetainChunkCap,
+	)
+	lazyPrepareArenaChunks(
+		&m.constantChunks,
+		&m.constantChunkPos,
+		valueRetainChunkCap,
+	)
 	lazyPrepareArenaChunks(&m.dataChunks, &m.dataChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.integerChunks, &m.integerChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.byteStringChunks, &m.byteStringChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.protoListChunks, &m.protoListChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.protoPairChunks, &m.protoPairChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.dataValueChunks, &m.dataValueChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.dataListValueChunks, &m.dataListValueChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.dataMapValueChunks, &m.dataMapValueChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.pairValueChunks, &m.pairValueChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.valueElemChunks, &m.valueElemChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.builtinChunks, &m.builtinChunkPos, valueRetainChunkCap)
-	lazyPrepareArenaChunks(&m.builtinArgChunks, &m.builtinArgChunkPos, valueRetainChunkCap)
+	lazyPrepareArenaChunks(
+		&m.integerChunks,
+		&m.integerChunkPos,
+		valueRetainChunkCap,
+	)
+	lazyPrepareArenaChunks(
+		&m.byteStringChunks,
+		&m.byteStringChunkPos,
+		valueRetainChunkCap,
+	)
+	lazyPrepareArenaChunks(
+		&m.protoListChunks,
+		&m.protoListChunkPos,
+		valueRetainChunkCap,
+	)
+	lazyPrepareArenaChunks(
+		&m.protoPairChunks,
+		&m.protoPairChunkPos,
+		valueRetainChunkCap,
+	)
+	lazyPrepareArenaChunks(
+		&m.dataValueChunks,
+		&m.dataValueChunkPos,
+		valueRetainChunkCap,
+	)
+	lazyPrepareArenaChunks(
+		&m.dataListValueChunks,
+		&m.dataListValueChunkPos,
+		valueRetainChunkCap,
+	)
+	lazyPrepareArenaChunks(
+		&m.dataMapValueChunks,
+		&m.dataMapValueChunkPos,
+		valueRetainChunkCap,
+	)
+	lazyPrepareArenaChunks(
+		&m.pairValueChunks,
+		&m.pairValueChunkPos,
+		valueRetainChunkCap,
+	)
+	lazyPrepareArenaChunks(
+		&m.valueElemChunks,
+		&m.valueElemChunkPos,
+		valueRetainChunkCap,
+	)
+	lazyPrepareArenaChunks(
+		&m.builtinChunks,
+		&m.builtinChunkPos,
+		valueRetainChunkCap,
+	)
+	lazyPrepareArenaChunks(
+		&m.builtinArgChunks,
+		&m.builtinArgChunkPos,
+		valueRetainChunkCap,
+	)
 }
 
 func (m *Machine[T]) dropValueArenas() {
@@ -1190,7 +1366,10 @@ func RunFlat(
 	if err != nil {
 		var scopeErr *syn.DeBruijnScopeError
 		if errors.As(err, &scopeErr) {
-			return nil, &TypeError{Code: ErrCodeOpenTerm, Message: scopeErr.Error()}
+			return nil, &TypeError{
+				Code:    ErrCodeOpenTerm,
+				Message: scopeErr.Error(),
+			}
 		}
 		return nil, err
 	}
@@ -1248,7 +1427,10 @@ func (m *Machine[T]) runWithTrustedDataArguments(
 	arguments []data.PlutusData,
 ) (syn.Term[T], error) {
 	if len(arguments) > (maxDischargeWork-1)/3 {
-		return nil, malformedASTError("too many trusted data arguments: %d", len(arguments))
+		return nil, malformedASTError(
+			"too many trusted data arguments: %d",
+			len(arguments),
+		)
 	}
 	var trustedData map[*syn.Data]struct{}
 	if !skipTermValidation {
@@ -1420,7 +1602,8 @@ func (m *Machine[T]) runContext(
 	}
 	// The De Bruijn loop charges steps exactly as runStack does; it only
 	// skips the metrics counters, so a metered machine runs runStack.
-	if dbTerm, ok := any(term).(syn.Term[syn.DeBruijn]); ok && m.metrics == nil {
+	if dbTerm, ok := any(term).(syn.Term[syn.DeBruijn]); ok &&
+		m.metrics == nil {
 		dbMachine := (*Machine[syn.DeBruijn])(unsafe.Pointer(m))
 		steps := newStepCounter(m.slippage)
 		dbResult, err := runStackDeBruijn(

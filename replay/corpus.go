@@ -116,7 +116,10 @@ func (l Language) Version() (lang.LanguageVersion, error) {
 	case PlutusV4:
 		return lang.LanguageVersionV4, nil
 	default:
-		return lang.LanguageVersion{}, fmt.Errorf("unsupported Plutus language %q", l)
+		return lang.LanguageVersion{}, fmt.Errorf(
+			"unsupported Plutus language %q",
+			l,
+		)
 	}
 }
 
@@ -243,12 +246,18 @@ func load(
 		limitedReader,
 	); err != nil {
 		if limitedReader.exceeded {
-			return nil, fmt.Errorf("decode replay corpus: %w", errCorpusJSONTooLarge)
+			return nil, fmt.Errorf(
+				"decode replay corpus: %w",
+				errCorpusJSONTooLarge,
+			)
 		}
 		return nil, fmt.Errorf("decode replay corpus: %w", err)
 	}
 	if limitedReader.exceeded {
-		return nil, fmt.Errorf("decode replay corpus: %w", errCorpusJSONTooLarge)
+		return nil, fmt.Errorf(
+			"decode replay corpus: %w",
+			errCorpusJSONTooLarge,
+		)
 	}
 
 	var trailing any
@@ -401,7 +410,10 @@ func decodeCorpusCases(
 			return fmt.Errorf("case %d: %w", caseIndex, err)
 		}
 		if !complete {
-			limitedReader.startCase(limits.caseJSONBytes-prefixBytes, prefixBytes > 0)
+			limitedReader.startCase(
+				limits.caseJSONBytes-prefixBytes,
+				prefixBytes > 0,
+			)
 		}
 		var rawCase json.RawMessage
 		decodeErr := decoder.Decode(&rawCase)
@@ -432,7 +444,11 @@ func decodeCorpusCases(
 			return fmt.Errorf("case %d: %w", caseIndex, err)
 		}
 		if _, exists := ids[replayCase.ID]; exists {
-			return fmt.Errorf("case %d: duplicate id %q", caseIndex, replayCase.ID)
+			return fmt.Errorf(
+				"case %d: duplicate id %q",
+				caseIndex,
+				replayCase.ID,
+			)
 		}
 		decoded, err := replayCase.decode(ctx, decodedBytes, limits)
 		if err != nil {
@@ -748,7 +764,10 @@ func boundedHexSize(name, value string, limit int) (int, error) {
 
 func addDecodedBytes(total *int64, amount, limit int64) error {
 	if amount < 0 || amount > limit-*total {
-		return fmt.Errorf("replay corpus decoded data exceeds byte limit %d", limit)
+		return fmt.Errorf(
+			"replay corpus decoded data exceeds byte limit %d",
+			limit,
+		)
 	}
 	*total += amount
 	return nil
@@ -904,7 +923,9 @@ func (c *Case) decodeChecked(ctx context.Context) (decodedCase, error) {
 		return decodedCase{}, errors.New("transaction redeemer is required")
 	}
 	if c.ProtocolVersion.Major == 0 {
-		return decodedCase{}, errors.New("protocol major version must be positive")
+		return decodedCase{}, errors.New(
+			"protocol major version must be positive",
+		)
 	}
 	languageVersion, err := c.Language.Version()
 	if err != nil {
@@ -935,7 +956,10 @@ func (c *Case) decodeChecked(ctx context.Context) (decodedCase, error) {
 	// version legality gate must be checked separately here, before this
 	// program is ever handed to the machine.
 	if err := syn.ValidateTermVersionForExecution(program.Version, programContext); err != nil {
-		return decodedCase{}, fmt.Errorf("validate term version for execution: %w", err)
+		return decodedCase{}, fmt.Errorf(
+			"validate term version for execution: %w",
+			err,
+		)
 	}
 	arguments := make([]data.PlutusData, 0, len(c.ArgumentsCBORHex))
 	for i, arg := range c.ArgumentsCBORHex {
@@ -1044,7 +1068,9 @@ type byteLimitReader struct {
 	caseStarted     bool
 }
 
-var errCorpusCaseJSONTooLarge = errors.New("replay corpus case exceeds byte limit")
+var errCorpusCaseJSONTooLarge = errors.New(
+	"replay corpus case exceeds byte limit",
+)
 
 func (r *byteLimitReader) startCase(remaining int, started bool) {
 	r.caseRemaining = int64(remaining)

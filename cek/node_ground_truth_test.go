@@ -135,7 +135,10 @@ func TestNodeGroundTruth(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			pc := syn.ProgramContext{LedgerLanguage: lv, ProtocolMajor: gt.Protocol}
+			pc := syn.ProgramContext{
+				LedgerLanguage: lv,
+				ProtocolMajor:  gt.Protocol,
+			}
 			got, ex := "ok", cek.ExBudget{}
 			prog, err := syn.DecodeDeBruijnWithContext(flat, pc)
 			switch {
@@ -144,7 +147,11 @@ func TestNodeGroundTruth(t *testing.T) {
 			case syn.ValidateTermVersionForExecution(prog.Version, pc) != nil:
 				got = "phase2-fail"
 			default:
-				ec, err := cek.NewEvalContext(lv, cek.ProtoVersion{Major: gt.Protocol}, gt.CostModels[ln])
+				ec, err := cek.NewEvalContext(
+					lv,
+					cek.ProtoVersion{Major: gt.Protocol},
+					gt.CostModels[ln],
+				)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -154,7 +161,10 @@ func TestNodeGroundTruth(t *testing.T) {
 				}
 				m := cek.NewMachine[syn.DeBruijn](lv, 0, ec)
 				m.ExBudget = budget
-				isUnit, err := m.RunScriptContext(context.Background(), prog.Term, ledgerArgs(sc.Lang, sc.Purpose)...)
+				isUnit, err := m.RunScriptContext(
+					context.Background(),
+					prog.Term,
+					ledgerArgs(sc.Lang, sc.Purpose)...)
 				ex = budget.Sub(&m.ExBudget)
 				if err != nil || (sc.Lang == "V3" && !isUnit) {
 					got = "phase2-fail"
@@ -163,7 +173,8 @@ func TestNodeGroundTruth(t *testing.T) {
 			if got != sc.Outcome {
 				t.Fatalf("outcome %s, node %s", got, sc.Outcome)
 			}
-			if sc.Outcome == "ok" && sc.ExUnits != nil && ex != sc.ExUnits.budget() {
+			if sc.Outcome == "ok" && sc.ExUnits != nil &&
+				ex != sc.ExUnits.budget() {
 				t.Fatalf("exunits mem=%d steps=%d, node mem=%d steps=%d",
 					ex.Mem, ex.Cpu, sc.ExUnits.Mem, sc.ExUnits.Steps)
 			}
@@ -183,12 +194,19 @@ func TestNodeGroundTruthSerialiseData(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			pc := syn.ProgramContext{LedgerLanguage: lang.LanguageVersionV3, ProtocolMajor: gt.Protocol}
+			pc := syn.ProgramContext{
+				LedgerLanguage: lang.LanguageVersionV3,
+				ProtocolMajor:  gt.Protocol,
+			}
 			prog, err := syn.DecodeDeBruijnWithContext(flat, pc)
 			if err != nil {
 				t.Fatal(err)
 			}
-			ec, err := cek.NewEvalContext(lang.LanguageVersionV3, cek.ProtoVersion{Major: gt.Protocol}, gt.CostModels["PlutusV3"])
+			ec, err := cek.NewEvalContext(
+				lang.LanguageVersionV3,
+				cek.ProtoVersion{Major: gt.Protocol},
+				gt.CostModels["PlutusV3"],
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -196,13 +214,17 @@ func TestNodeGroundTruthSerialiseData(t *testing.T) {
 			m.ExBudget = nodeTxBudget
 			term := &syn.Apply[syn.DeBruijn]{
 				Function: prog.Term,
-				Argument: &syn.Constant{Con: &syn.Data{Inner: data.NewConstr(0)}},
+				Argument: &syn.Constant{
+					Con: &syn.Data{Inner: data.NewConstr(0)},
+				},
 			}
 			res, err := m.Run(term)
 			if err != nil {
 				t.Fatal(err)
 			}
-			match := groundTruthBytes.FindStringSubmatch(syn.PrettyTerm[syn.DeBruijn](res))
+			match := groundTruthBytes.FindStringSubmatch(
+				syn.PrettyTerm[syn.DeBruijn](res),
+			)
 			if match == nil || match[1] != sc.Bytes {
 				t.Fatalf("serialiseData = %v, node %s", match, sc.Bytes)
 			}

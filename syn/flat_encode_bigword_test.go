@@ -136,9 +136,14 @@ func checkBigWordMatchesReference(t *testing.T, v *big.Int, offset int) {
 		got.currentByte != want.currentByte {
 		t.Fatalf(
 			"bigWord(%s) at bit offset %d = % x (+%d bits %08b), want % x (+%d bits %08b)",
-			v, offset,
-			got.buffer, got.usedBits, got.currentByte,
-			want.buffer, want.usedBits, want.currentByte,
+			v,
+			offset,
+			got.buffer,
+			got.usedBits,
+			got.currentByte,
+			want.buffer,
+			want.usedBits,
+			want.currentByte,
 		)
 	}
 }
@@ -172,7 +177,10 @@ func TestBigWordLargeValueAllocations(t *testing.T) {
 		newEncoder().bigWord(v)
 	})
 	if allocs > 100 {
-		t.Fatalf("bigWord allocated %.0f times for a 1,000,000-bit value", allocs)
+		t.Fatalf(
+			"bigWord allocated %.0f times for a 1,000,000-bit value",
+			allocs,
+		)
 	}
 }
 

@@ -42,7 +42,11 @@ func TestDecodeWithContextPreservesAndValidatesProgramVersion(t *testing.T) {
 		t.Fatalf("DecodeWithContext() failed: %v", err)
 	}
 	if decoded.Version != program.Version {
-		t.Fatalf("decoded version = %v, want %v", decoded.Version, program.Version)
+		t.Fatalf(
+			"decoded version = %v, want %v",
+			decoded.Version,
+			program.Version,
+		)
 	}
 
 	// Decode-time well-formedness no longer whitelists specific UPLC term
@@ -63,10 +67,17 @@ func TestDecodeWithContextPreservesAndValidatesProgramVersion(t *testing.T) {
 		ProtocolMajor:  9,
 	})
 	if err != nil {
-		t.Fatalf("DecodeWithContext() with non-whitelisted version failed: %v, want success", err)
+		t.Fatalf(
+			"DecodeWithContext() with non-whitelisted version failed: %v, want success",
+			err,
+		)
 	}
 	if decoded.Version != program.Version {
-		t.Fatalf("decoded version = %v, want %v", decoded.Version, program.Version)
+		t.Fatalf(
+			"decoded version = %v, want %v",
+			decoded.Version,
+			program.Version,
+		)
 	}
 }
 
@@ -142,7 +153,11 @@ func TestValidateProgramUsesLedgerLanguageAndProtocol(t *testing.T) {
 				return
 			}
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-				t.Fatalf("ValidateProgram() error = %v, want %q", err, tt.wantErr)
+				t.Fatalf(
+					"ValidateProgram() error = %v, want %q",
+					err,
+					tt.wantErr,
+				)
 			}
 		})
 	}
@@ -156,20 +171,86 @@ func TestValidateProgramVersionMatrix(t *testing.T) {
 		version  lang.LanguageVersion
 		wantErr  bool
 	}{
-		{"V1 at Alonzo with PLC 1.0", lang.LanguageVersionV1, 5, uplcVersion100, false},
-		{"V1 at zero protocol", lang.LanguageVersionV1, 0, uplcVersion100, true},
+		{
+			"V1 at Alonzo with PLC 1.0",
+			lang.LanguageVersionV1,
+			5,
+			uplcVersion100,
+			false,
+		},
+		{
+			"V1 at zero protocol",
+			lang.LanguageVersionV1,
+			0,
+			uplcVersion100,
+			true,
+		},
 		// Decoding (phase 1) no longer rejects PLC 1.1 pre-van-Rossem for
 		// V1/V2: that gate is execution-only. See
 		// TestValidateTermVersionForExecutionMatrix.
-		{"V1 before van Rossem with PLC 1.1 decodes", lang.LanguageVersionV1, 10, uplcVersion110, false},
-		{"V1 at van Rossem with PLC 1.1", lang.LanguageVersionV1, 11, uplcVersion110, false},
-		{"V2 at Vasil with PLC 1.0", lang.LanguageVersionV2, 7, uplcVersion100, false},
-		{"V2 before van Rossem with PLC 1.1 decodes", lang.LanguageVersionV2, 10, uplcVersion110, false},
-		{"V2 at van Rossem with PLC 1.1", lang.LanguageVersionV2, 11, uplcVersion110, false},
-		{"V3 at Chang with PLC 1.0", lang.LanguageVersionV3, 9, uplcVersion100, false},
-		{"V3 at Chang with PLC 1.1", lang.LanguageVersionV3, 9, uplcVersion110, false},
-		{"V4 before Dijkstra", lang.LanguageVersionV4, 11, uplcVersion100, true},
-		{"V4 at Dijkstra with PLC 1.1", lang.LanguageVersionV4, 12, uplcVersion110, false},
+		{
+			"V1 before van Rossem with PLC 1.1 decodes",
+			lang.LanguageVersionV1,
+			10,
+			uplcVersion110,
+			false,
+		},
+		{
+			"V1 at van Rossem with PLC 1.1",
+			lang.LanguageVersionV1,
+			11,
+			uplcVersion110,
+			false,
+		},
+		{
+			"V2 at Vasil with PLC 1.0",
+			lang.LanguageVersionV2,
+			7,
+			uplcVersion100,
+			false,
+		},
+		{
+			"V2 before van Rossem with PLC 1.1 decodes",
+			lang.LanguageVersionV2,
+			10,
+			uplcVersion110,
+			false,
+		},
+		{
+			"V2 at van Rossem with PLC 1.1",
+			lang.LanguageVersionV2,
+			11,
+			uplcVersion110,
+			false,
+		},
+		{
+			"V3 at Chang with PLC 1.0",
+			lang.LanguageVersionV3,
+			9,
+			uplcVersion100,
+			false,
+		},
+		{
+			"V3 at Chang with PLC 1.1",
+			lang.LanguageVersionV3,
+			9,
+			uplcVersion110,
+			false,
+		},
+		{
+			"V4 before Dijkstra",
+			lang.LanguageVersionV4,
+			11,
+			uplcVersion100,
+			true,
+		},
+		{
+			"V4 at Dijkstra with PLC 1.1",
+			lang.LanguageVersionV4,
+			12,
+			uplcVersion110,
+			false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -182,7 +263,11 @@ func TestValidateProgramVersionMatrix(t *testing.T) {
 				ProtocolMajor:  tt.protocol,
 			})
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("ValidateProgram() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf(
+					"ValidateProgram() error = %v, wantErr %v",
+					err,
+					tt.wantErr,
+				)
 			}
 		})
 	}
@@ -203,14 +288,62 @@ func TestValidateTermVersionForExecutionMatrix(t *testing.T) {
 		version  lang.LanguageVersion
 		wantErr  bool
 	}{
-		{"V1 before van Rossem with PLC 1.1 is rejected", lang.LanguageVersionV1, 10, uplcVersion110, true},
-		{"V1 at van Rossem with PLC 1.1 is accepted", lang.LanguageVersionV1, 11, uplcVersion110, false},
-		{"V1 with PLC 1.0 is unaffected", lang.LanguageVersionV1, 10, uplcVersion100, false},
-		{"V2 before van Rossem with PLC 1.1 is rejected", lang.LanguageVersionV2, 10, uplcVersion110, true},
-		{"V2 at van Rossem with PLC 1.1 is accepted", lang.LanguageVersionV2, 11, uplcVersion110, false},
-		{"V3 with PLC 1.1 before protocol 11 is unaffected", lang.LanguageVersionV3, 9, uplcVersion110, false},
-		{"V3 with PLC 1.1 at protocol 11 is unaffected", lang.LanguageVersionV3, 11, uplcVersion110, false},
-		{"V4 with PLC 1.1 is unaffected", lang.LanguageVersionV4, 12, uplcVersion110, false},
+		{
+			"V1 before van Rossem with PLC 1.1 is rejected",
+			lang.LanguageVersionV1,
+			10,
+			uplcVersion110,
+			true,
+		},
+		{
+			"V1 at van Rossem with PLC 1.1 is accepted",
+			lang.LanguageVersionV1,
+			11,
+			uplcVersion110,
+			false,
+		},
+		{
+			"V1 with PLC 1.0 is unaffected",
+			lang.LanguageVersionV1,
+			10,
+			uplcVersion100,
+			false,
+		},
+		{
+			"V2 before van Rossem with PLC 1.1 is rejected",
+			lang.LanguageVersionV2,
+			10,
+			uplcVersion110,
+			true,
+		},
+		{
+			"V2 at van Rossem with PLC 1.1 is accepted",
+			lang.LanguageVersionV2,
+			11,
+			uplcVersion110,
+			false,
+		},
+		{
+			"V3 with PLC 1.1 before protocol 11 is unaffected",
+			lang.LanguageVersionV3,
+			9,
+			uplcVersion110,
+			false,
+		},
+		{
+			"V3 with PLC 1.1 at protocol 11 is unaffected",
+			lang.LanguageVersionV3,
+			11,
+			uplcVersion110,
+			false,
+		},
+		{
+			"V4 with PLC 1.1 is unaffected",
+			lang.LanguageVersionV4,
+			12,
+			uplcVersion110,
+			false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -222,10 +355,18 @@ func TestValidateTermVersionForExecutionMatrix(t *testing.T) {
 				ProtocolMajor:  tt.protocol,
 			})
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("ValidateTermVersionForExecution() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf(
+					"ValidateTermVersionForExecution() error = %v, wantErr %v",
+					err,
+					tt.wantErr,
+				)
 			}
-			if tt.wantErr && (err == nil || !strings.Contains(err.Error(), "UPLC version 1.1.0 is not available")) {
-				t.Fatalf("ValidateTermVersionForExecution() error = %v, want UPLC-version-not-available error", err)
+			if tt.wantErr &&
+				(err == nil || !strings.Contains(err.Error(), "UPLC version 1.1.0 is not available")) {
+				t.Fatalf(
+					"ValidateTermVersionForExecution() error = %v, want UPLC-version-not-available error",
+					err,
+				)
 			}
 		})
 	}
@@ -258,14 +399,24 @@ func TestDecodeWithContextAcceptsPreVanRossemV2TermVersion110(t *testing.T) {
 
 	decoded, err := DecodeWithContext[DeBruijn](encoded, context)
 	if err != nil {
-		t.Fatalf("DecodeWithContext() failed: %v, want success (phase-1 decode must not apply the execution-only van Rossem gate)", err)
+		t.Fatalf(
+			"DecodeWithContext() failed: %v, want success (phase-1 decode must not apply the execution-only van Rossem gate)",
+			err,
+		)
 	}
 	if decoded.Version != uplcVersion110 {
-		t.Fatalf("decoded version = %v, want %v", decoded.Version, uplcVersion110)
+		t.Fatalf(
+			"decoded version = %v, want %v",
+			decoded.Version,
+			uplcVersion110,
+		)
 	}
 
 	if err := ValidateTermVersionForExecution(decoded.Version, context); err == nil {
-		t.Fatalf("ValidateTermVersionForExecution() succeeded, want rejection below protocol %d", builtin.VanRossemProtoVersion)
+		t.Fatalf(
+			"ValidateTermVersionForExecution() succeeded, want rejection below protocol %d",
+			builtin.VanRossemProtoVersion,
+		)
 	} else if !strings.Contains(err.Error(), "UPLC version 1.1.0 is not available") {
 		t.Fatalf("ValidateTermVersionForExecution() error = %v, want UPLC-version-not-available error", err)
 	}
@@ -278,7 +429,10 @@ func TestDecodeWithContextAcceptsPreVanRossemV2TermVersion110(t *testing.T) {
 		t.Fatalf("DecodeWithContext() at van Rossem failed: %v", err)
 	}
 	if err := ValidateTermVersionForExecution(uplcVersion110, atVanRossem); err != nil {
-		t.Fatalf("ValidateTermVersionForExecution() at van Rossem failed: %v", err)
+		t.Fatalf(
+			"ValidateTermVersionForExecution() at van Rossem failed: %v",
+			err,
+		)
 	}
 }
 
@@ -300,8 +454,15 @@ func TestDecodeWithContextRejectsDeadBranchBuiltin(t *testing.T) {
 		LedgerLanguage: lang.LanguageVersionV1,
 		ProtocolMajor:  10,
 	})
-	if err == nil || !strings.Contains(err.Error(), "builtin serialiseData is not available") {
-		t.Fatalf("DecodeWithContext() error = %v, want dead-branch builtin error", err)
+	if err == nil ||
+		!strings.Contains(
+			err.Error(),
+			"builtin serialiseData is not available",
+		) {
+		t.Fatalf(
+			"DecodeWithContext() error = %v, want dead-branch builtin error",
+			err,
+		)
 	}
 }
 
@@ -319,7 +480,10 @@ func TestDecodeWithContextRejectsSyntaxBeforeProgramVersion(t *testing.T) {
 		ProtocolMajor:  9,
 	})
 	if err == nil || !strings.Contains(err.Error(), "constr is not available") {
-		t.Fatalf("DecodeWithContext() error = %v, want unavailable-syntax error", err)
+		t.Fatalf(
+			"DecodeWithContext() error = %v, want unavailable-syntax error",
+			err,
+		)
 	}
 }
 
@@ -331,7 +495,8 @@ func TestParseWithContextRejectsUnavailableSyntaxAndBuiltin(t *testing.T) {
 			ProtocolMajor:  9,
 		},
 	)
-	if err == nil || !strings.Contains(err.Error(), "constr can't be used before 1.1.0") {
+	if err == nil ||
+		!strings.Contains(err.Error(), "constr can't be used before 1.1.0") {
 		t.Fatalf("ParseWithContext() syntax error = %v", err)
 	}
 
@@ -342,7 +507,11 @@ func TestParseWithContextRejectsUnavailableSyntaxAndBuiltin(t *testing.T) {
 			ProtocolMajor:  10,
 		},
 	)
-	if err == nil || !strings.Contains(err.Error(), "builtin serialiseData is not available") {
+	if err == nil ||
+		!strings.Contains(
+			err.Error(),
+			"builtin serialiseData is not available",
+		) {
 		t.Fatalf("ParseWithContext() builtin error = %v", err)
 	}
 }
@@ -428,7 +597,10 @@ func TestContextualValidationConstrFieldLimit(t *testing.T) {
 					name:    "DecodeWithContext generic",
 					decodes: true,
 					run: func() (int, error) {
-						decoded, err := DecodeWithContext[Name](encoded, context)
+						decoded, err := DecodeWithContext[Name](
+							encoded,
+							context,
+						)
 						if err != nil {
 							return 0, err
 						}
@@ -443,7 +615,10 @@ func TestContextualValidationConstrFieldLimit(t *testing.T) {
 					name:    "DecodeDeBruijnWithContext",
 					decodes: true,
 					run: func() (int, error) {
-						decoded, err := DecodeDeBruijnWithContext(encoded, context)
+						decoded, err := DecodeDeBruijnWithContext(
+							encoded,
+							context,
+						)
 						if err != nil {
 							return 0, err
 						}
@@ -473,7 +648,11 @@ func TestContextualValidationConstrFieldLimit(t *testing.T) {
 						t.Fatalf("unexpected error: %v", err)
 					}
 					if gotFields != tt.fieldCount {
-						t.Fatalf("decoded field count = %d, want %d", gotFields, tt.fieldCount)
+						t.Fatalf(
+							"decoded field count = %d, want %d",
+							gotFields,
+							tt.fieldCount,
+						)
 					}
 				})
 			}
@@ -521,10 +700,13 @@ func TestDecodeAcceptsRealNeverExecutedReferenceScriptVersion(t *testing.T) {
 		t.Run(fmt.Sprintf("protocol %d", protocolMajor), func(t *testing.T) {
 			t.Parallel()
 
-			decoded, err := DecodeDeBruijnWithContext(flatProgram, ProgramContext{
-				LedgerLanguage: lang.LanguageVersionV2,
-				ProtocolMajor:  protocolMajor,
-			})
+			decoded, err := DecodeDeBruijnWithContext(
+				flatProgram,
+				ProgramContext{
+					LedgerLanguage: lang.LanguageVersionV2,
+					ProtocolMajor:  protocolMajor,
+				},
+			)
 			if err != nil {
 				t.Fatalf(
 					"DecodeDeBruijnWithContext() failed: %v, want success (a real reference script must decode regardless of its UPLC term version)",
@@ -532,7 +714,11 @@ func TestDecodeAcceptsRealNeverExecutedReferenceScriptVersion(t *testing.T) {
 				)
 			}
 			if decoded.Version != realPreviewReferenceScriptVersion {
-				t.Fatalf("decoded version = %v, want %v", decoded.Version, realPreviewReferenceScriptVersion)
+				t.Fatalf(
+					"decoded version = %v, want %v",
+					decoded.Version,
+					realPreviewReferenceScriptVersion,
+				)
 			}
 		})
 	}
@@ -543,15 +729,24 @@ func TestDecodeAcceptsRealNeverExecutedReferenceScriptVersion(t *testing.T) {
 // still applies before a script is actually run: no longer being rejected
 // at decode time must not make this real reference script's UPLC term
 // version universally executable.
-func TestValidateTermVersionForExecutionRejectsRealReferenceScriptVersion(t *testing.T) {
+func TestValidateTermVersionForExecutionRejectsRealReferenceScriptVersion(
+	t *testing.T,
+) {
 	t.Parallel()
 
-	err := ValidateTermVersionForExecution(realPreviewReferenceScriptVersion, ProgramContext{
-		LedgerLanguage: lang.LanguageVersionV2,
-		ProtocolMajor:  9,
-	})
-	if err == nil || !strings.Contains(err.Error(), "unsupported UPLC program version") {
-		t.Fatalf("ValidateTermVersionForExecution() error = %v, want unsupported-version error", err)
+	err := ValidateTermVersionForExecution(
+		realPreviewReferenceScriptVersion,
+		ProgramContext{
+			LedgerLanguage: lang.LanguageVersionV2,
+			ProtocolMajor:  9,
+		},
+	)
+	if err == nil ||
+		!strings.Contains(err.Error(), "unsupported UPLC program version") {
+		t.Fatalf(
+			"ValidateTermVersionForExecution() error = %v, want unsupported-version error",
+			err,
+		)
 	}
 }
 
@@ -569,12 +764,32 @@ func TestSupportsConstructorsIsLexicographicallyAtLeast110(t *testing.T) {
 		version lang.LanguageVersion
 		wantErr bool
 	}{
-		{"below 1.1.0 does not support constructors", lang.LanguageVersion{1, 0, 0}, true},
+		{
+			"below 1.1.0 does not support constructors",
+			lang.LanguageVersion{1, 0, 0},
+			true,
+		},
 		// A larger patch component must not outrank a smaller minor one.
-		{"below 1.1.0 with a higher patch does not support constructors", lang.LanguageVersion{1, 0, 9}, true},
-		{"exactly 1.1.0 supports constructors", lang.LanguageVersion{1, 1, 0}, false},
-		{"above 1.1.0 by patch supports constructors", lang.LanguageVersion{1, 1, 1}, false},
-		{"above 1.1.0 (the real #414 version) supports constructors", realPreviewReferenceScriptVersion, false},
+		{
+			"below 1.1.0 with a higher patch does not support constructors",
+			lang.LanguageVersion{1, 0, 9},
+			true,
+		},
+		{
+			"exactly 1.1.0 supports constructors",
+			lang.LanguageVersion{1, 1, 0},
+			false,
+		},
+		{
+			"above 1.1.0 by patch supports constructors",
+			lang.LanguageVersion{1, 1, 1},
+			false,
+		},
+		{
+			"above 1.1.0 (the real #414 version) supports constructors",
+			realPreviewReferenceScriptVersion,
+			false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -589,8 +804,12 @@ func TestSupportsConstructorsIsLexicographicallyAtLeast110(t *testing.T) {
 				ProtocolMajor:  9,
 			})
 			if tt.wantErr {
-				if err == nil || !strings.Contains(err.Error(), "constr is not available") {
-					t.Fatalf("ValidateProgram() error = %v, want constr-not-available error", err)
+				if err == nil ||
+					!strings.Contains(err.Error(), "constr is not available") {
+					t.Fatalf(
+						"ValidateProgram() error = %v, want constr-not-available error",
+						err,
+					)
 				}
 				return
 			}
@@ -618,7 +837,9 @@ func TestDecodeDeBruijnForExecutionAppliesExecutionGates(t *testing.T) {
 	}
 	encode := func(t *testing.T, version lang.LanguageVersion) []byte {
 		t.Helper()
-		encoded, err := Encode(&Program[DeBruijn]{Version: version, Term: &Error{}})
+		encoded, err := Encode(
+			&Program[DeBruijn]{Version: version, Term: &Error{}},
+		)
 		if err != nil {
 			t.Fatalf("Encode() failed: %v", err)
 		}
@@ -633,27 +854,39 @@ func TestDecodeDeBruijnForExecutionAppliesExecutionGates(t *testing.T) {
 		wantVers lang.LanguageVersion
 	}{
 		{
-			name:     "executable term version passes",
-			program:  encode(t, uplcVersion100),
-			context:  ProgramContext{LedgerLanguage: lang.LanguageVersionV2, ProtocolMajor: 9},
+			name:    "executable term version passes",
+			program: encode(t, uplcVersion100),
+			context: ProgramContext{
+				LedgerLanguage: lang.LanguageVersionV2,
+				ProtocolMajor:  9,
+			},
 			wantVers: uplcVersion100,
 		},
 		{
 			name:    "term version outside the executable set is rejected",
 			program: referenceScript,
-			context: ProgramContext{LedgerLanguage: lang.LanguageVersionV2, ProtocolMajor: 9},
+			context: ProgramContext{
+				LedgerLanguage: lang.LanguageVersionV2,
+				ProtocolMajor:  9,
+			},
 			wantErr: "unsupported UPLC program version",
 		},
 		{
 			name:    "van Rossem gate still applies",
 			program: encode(t, uplcVersion110),
-			context: ProgramContext{LedgerLanguage: lang.LanguageVersionV2, ProtocolMajor: 10},
+			context: ProgramContext{
+				LedgerLanguage: lang.LanguageVersionV2,
+				ProtocolMajor:  10,
+			},
 			wantErr: "UPLC version 1.1.0 is not available",
 		},
 		{
-			name:     "van Rossem gate opens at its protocol version",
-			program:  encode(t, uplcVersion110),
-			context:  ProgramContext{LedgerLanguage: lang.LanguageVersionV2, ProtocolMajor: 11},
+			name:    "van Rossem gate opens at its protocol version",
+			program: encode(t, uplcVersion110),
+			context: ProgramContext{
+				LedgerLanguage: lang.LanguageVersionV2,
+				ProtocolMajor:  11,
+			},
 			wantVers: uplcVersion110,
 		},
 	}
@@ -665,16 +898,26 @@ func TestDecodeDeBruijnForExecutionAppliesExecutionGates(t *testing.T) {
 			// Whatever the execution path decides, the well-formedness path
 			// must accept these bytes: the gates below are phase-2 only.
 			if _, err := DecodeDeBruijnWithContext(tt.program, tt.context); err != nil {
-				t.Fatalf("DecodeDeBruijnWithContext() failed: %v, want success", err)
+				t.Fatalf(
+					"DecodeDeBruijnWithContext() failed: %v, want success",
+					err,
+				)
 			}
 
 			program, err := DecodeDeBruijnForExecution(tt.program, tt.context)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-					t.Fatalf("DecodeDeBruijnForExecution() error = %v, want error containing %q", err, tt.wantErr)
+					t.Fatalf(
+						"DecodeDeBruijnForExecution() error = %v, want error containing %q",
+						err,
+						tt.wantErr,
+					)
 				}
 				if program != nil {
-					t.Fatalf("DecodeDeBruijnForExecution() program = %v, want nil on error", program)
+					t.Fatalf(
+						"DecodeDeBruijnForExecution() program = %v, want nil on error",
+						program,
+					)
 				}
 				return
 			}
@@ -682,7 +925,11 @@ func TestDecodeDeBruijnForExecutionAppliesExecutionGates(t *testing.T) {
 				t.Fatalf("DecodeDeBruijnForExecution() failed: %v", err)
 			}
 			if program.Version != tt.wantVers {
-				t.Fatalf("decoded version = %v, want %v", program.Version, tt.wantVers)
+				t.Fatalf(
+					"decoded version = %v, want %v",
+					program.Version,
+					tt.wantVers,
+				)
 			}
 		})
 	}

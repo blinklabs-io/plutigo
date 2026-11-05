@@ -23,11 +23,18 @@ import (
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
-func callMultiIndexArray(t *testing.T, array, indices []syn.IConstant) (Value[syn.DeBruijn], error) {
+func callMultiIndexArray(
+	t *testing.T,
+	array, indices []syn.IConstant,
+) (Value[syn.DeBruijn], error) {
 	t.Helper()
 	b := newTestBuiltin(builtin.Builtins["multiIndexArray"])
-	b = b.ApplyArg(&Constant{&syn.ProtoArray{ATyp: &syn.TInteger{}, Array: array}})
-	b = b.ApplyArg(&Constant{&syn.ProtoList{LTyp: &syn.TInteger{}, List: indices}})
+	b = b.ApplyArg(
+		&Constant{&syn.ProtoArray{ATyp: &syn.TInteger{}, Array: array}},
+	)
+	b = b.ApplyArg(
+		&Constant{&syn.ProtoList{LTyp: &syn.TInteger{}, List: indices}},
+	)
 	return multiIndexArray(newTestMachineV4(), b)
 }
 
@@ -71,7 +78,10 @@ func TestMultiIndexArrayReferenceVectors(t *testing.T) {
 
 	result, ok := expectConstant(t, value).Constant.(*syn.ProtoList)
 	if !ok {
-		t.Fatalf("result type = %T, want *syn.ProtoList", expectConstant(t, value).Constant)
+		t.Fatalf(
+			"result type = %T, want *syn.ProtoList",
+			expectConstant(t, value).Constant,
+		)
 	}
 	want := []int64{30, 10, 10, 20}
 	if len(result.List) != len(want) {
@@ -83,7 +93,12 @@ func TestMultiIndexArrayReferenceVectors(t *testing.T) {
 			t.Fatalf("result[%d] has type %T, want integer", i, got)
 		}
 		if gotInt.Inner.Int64() != want[i] {
-			t.Errorf("result[%d] = %d, want %d", i, gotInt.Inner.Int64(), want[i])
+			t.Errorf(
+				"result[%d] = %d, want %d",
+				i,
+				gotInt.Inner.Int64(),
+				want[i],
+			)
 		}
 	}
 }
@@ -117,10 +132,17 @@ func TestMultiIndexArrayRejectsMoreThanMaximumIndices(t *testing.T) {
 		t.Fatalf("error type = %T, want *BuiltinError", err)
 	}
 	if builtinErr.Code != ErrCodeOutOfBounds {
-		t.Fatalf("error code = %v, want %v", builtinErr.Code, ErrCodeOutOfBounds)
+		t.Fatalf(
+			"error code = %v, want %v",
+			builtinErr.Code,
+			ErrCodeOutOfBounds,
+		)
 	}
 	if builtinErr.Message != "too many indices (maximum is 1024)" {
-		t.Fatalf("error message = %q, want maximum-index error", builtinErr.Message)
+		t.Fatalf(
+			"error message = %q, want maximum-index error",
+			builtinErr.Message,
+		)
 	}
 }
 
@@ -146,10 +168,17 @@ func TestMultiIndexArrayAcceptsMaximumIndices(t *testing.T) {
 	}
 	result, ok := expectConstant(t, value).Constant.(*syn.ProtoList)
 	if !ok {
-		t.Fatalf("result type = %T, want *syn.ProtoList", expectConstant(t, value).Constant)
+		t.Fatalf(
+			"result type = %T, want *syn.ProtoList",
+			expectConstant(t, value).Constant,
+		)
 	}
 	if len(result.List) != multiIndexArrayMaximumIndexCount {
-		t.Fatalf("result length = %d, want %d", len(result.List), multiIndexArrayMaximumIndexCount)
+		t.Fatalf(
+			"result length = %d, want %d",
+			len(result.List),
+			multiIndexArrayMaximumIndexCount,
+		)
 	}
 }
 
@@ -161,9 +190,24 @@ func TestMultiIndexArrayRejectsInvalidIndices(t *testing.T) {
 		code    ErrorCode
 		message string
 	}{
-		{"negative", &syn.Integer{Inner: big.NewInt(-1)}, ErrCodeOutOfBounds, "negative index"},
-		{"overflow", &syn.Integer{Inner: twoTo64}, ErrCodeOverflow, "index too large"},
-		{"out of bounds", &syn.Integer{Inner: big.NewInt(1)}, ErrCodeOutOfBounds, "index 1 out of bounds for array of length 1"},
+		{
+			"negative",
+			&syn.Integer{Inner: big.NewInt(-1)},
+			ErrCodeOutOfBounds,
+			"negative index",
+		},
+		{
+			"overflow",
+			&syn.Integer{Inner: twoTo64},
+			ErrCodeOverflow,
+			"index too large",
+		},
+		{
+			"out of bounds",
+			&syn.Integer{Inner: big.NewInt(1)},
+			ErrCodeOutOfBounds,
+			"index 1 out of bounds for array of length 1",
+		},
 		{"wrong type", &syn.ByteString{}, ErrCodeTypeMismatch, "type mismatch"},
 	}
 	for _, tt := range tests {
@@ -181,7 +225,13 @@ func TestMultiIndexArrayRejectsInvalidIndices(t *testing.T) {
 					t.Fatalf("error type = %T, want *TypeError", err)
 				}
 				if typeErr.Code != tt.code || typeErr.Message != tt.message {
-					t.Fatalf("error = (%v, %q), want (%v, %q)", typeErr.Code, typeErr.Message, tt.code, tt.message)
+					t.Fatalf(
+						"error = (%v, %q), want (%v, %q)",
+						typeErr.Code,
+						typeErr.Message,
+						tt.code,
+						tt.message,
+					)
 				}
 				return
 			}
@@ -190,7 +240,13 @@ func TestMultiIndexArrayRejectsInvalidIndices(t *testing.T) {
 				t.Fatalf("error type = %T, want *BuiltinError", err)
 			}
 			if builtinErr.Code != tt.code || builtinErr.Message != tt.message {
-				t.Fatalf("error = (%v, %q), want (%v, %q)", builtinErr.Code, builtinErr.Message, tt.code, tt.message)
+				t.Fatalf(
+					"error = (%v, %q), want (%v, %q)",
+					builtinErr.Code,
+					builtinErr.Message,
+					tt.code,
+					tt.message,
+				)
 			}
 		})
 	}
@@ -236,12 +292,20 @@ func TestV4CostModelParameters(t *testing.T) {
 	params["policies-cpu-arguments-slope"] = 13220
 	params["policies-memory-arguments-intercept"] = 4
 	params["policies-memory-arguments-slope"] = 3
-	costModel, err := costModelFromMap(lang.LanguageVersionV4, SemanticsVariantE, params)
+	costModel, err := costModelFromMap(
+		lang.LanguageVersionV4,
+		SemanticsVariantE,
+		params,
+	)
 	if err != nil {
 		t.Fatalf("V4 cost model parameters were not mapped: %v", err)
 	}
-	if got := costModel.builtinCosts[builtin.Policies].cpu.(*LinearInX); got.intercept != 930912 || got.slope != 13220 {
-		t.Fatalf("policies CPU model = %+v, want intercept=930912 slope=13220", got)
+	if got := costModel.builtinCosts[builtin.Policies].cpu.(*LinearInX); got.intercept != 930912 ||
+		got.slope != 13220 {
+		t.Fatalf(
+			"policies CPU model = %+v, want intercept=930912 slope=13220",
+			got,
+		)
 	}
 	if got := costModel.builtinCosts[builtin.AssetCount].cpu.(*ConstantCost).c; got != 129043 {
 		t.Fatalf("assetCount CPU cost = %d, want 129043", got)
@@ -277,8 +341,13 @@ func TestV4CostModelLoadsCompleteParameterList(t *testing.T) {
 		t.Fatalf("full V4 cost model was rejected: %v", err)
 	}
 	multiIndexArrayCosts := context.CostModel.builtinCosts[builtin.MultiIndexArray]
-	if got := multiIndexArrayCosts.cpu.(*QuadraticInYModel); got.coeff0 != 326163 || got.coeff1 != 12304 || got.coeff2 != 2 {
-		t.Fatalf("multiIndexArray CPU model = %+v, want coefficients (326163, 12304, 2)", got)
+	if got := multiIndexArrayCosts.cpu.(*QuadraticInYModel); got.coeff0 != 326163 ||
+		got.coeff1 != 12304 ||
+		got.coeff2 != 2 {
+		t.Fatalf(
+			"multiIndexArray CPU model = %+v, want coefficients (326163, 12304, 2)",
+			got,
+		)
 	}
 	assetCountCosts := context.CostModel.builtinCosts[builtin.AssetCount]
 	if got := assetCountCosts.cpu.(*ConstantCost).c; got != 129043 {
@@ -288,18 +357,26 @@ func TestV4CostModelLoadsCompleteParameterList(t *testing.T) {
 		t.Fatalf("assetCount memory cost = %d, want 10", got)
 	}
 	policiesCosts := context.CostModel.builtinCosts[builtin.Policies]
-	if got := policiesCosts.cpu.(*LinearInX); got.intercept != 930912 || got.slope != 13220 {
+	if got := policiesCosts.cpu.(*LinearInX); got.intercept != 930912 ||
+		got.slope != 13220 {
 		t.Fatalf("policies CPU model = %+v, want (930912, 13220)", got)
 	}
-	if got := policiesCosts.mem.(*LinearInX); got.intercept != 4 || got.slope != 3 {
+	if got := policiesCosts.mem.(*LinearInX); got.intercept != 4 ||
+		got.slope != 3 {
 		t.Fatalf("policies memory model = %+v, want (4, 3)", got)
 	}
 }
 
 func TestMultiIndexArrayIsUnavailableWithoutProtocolVersion(t *testing.T) {
-	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV4, 0, testEvalContext())
+	machine := NewMachine[syn.DeBruijn](
+		lang.LanguageVersionV4,
+		0,
+		testEvalContext(),
+	)
 	if machine.builtins[builtin.MultiIndexArray] != nil {
-		t.Fatal("multiIndexArray is available without an activating protocol version")
+		t.Fatal(
+			"multiIndexArray is available without an activating protocol version",
+		)
 	}
 }
 
@@ -321,7 +398,10 @@ func testValueEntry(policy string, tokenNames ...string) syn.IConstant {
 		}},
 		First: &syn.ByteString{Inner: []byte(policy)},
 		Second: &syn.ProtoList{
-			LTyp: &syn.TPair{First: &syn.TByteString{}, Second: &syn.TInteger{}},
+			LTyp: &syn.TPair{
+				First:  &syn.TByteString{},
+				Second: &syn.TInteger{},
+			},
 			List: tokens,
 		},
 	}
@@ -346,7 +426,10 @@ func TestPoliciesAndAssetCountMatchValueSemantics(t *testing.T) {
 	}
 	policyList, ok := expectConstant(t, policyValue).Constant.(*syn.ProtoList)
 	if !ok {
-		t.Fatalf("policies result type = %T, want *syn.ProtoList", expectConstant(t, policyValue).Constant)
+		t.Fatalf(
+			"policies result type = %T, want *syn.ProtoList",
+			expectConstant(t, policyValue).Constant,
+		)
 	}
 	if len(policyList.List) != 2 {
 		t.Fatalf("policies result length = %d, want 2", len(policyList.List))
@@ -354,10 +437,19 @@ func TestPoliciesAndAssetCountMatchValueSemantics(t *testing.T) {
 	for i, want := range []string{"alpha", "zeta"} {
 		got, ok := policyList.List[i].(*syn.ByteString)
 		if !ok {
-			t.Fatalf("policies result[%d] type = %T, want *syn.ByteString", i, policyList.List[i])
+			t.Fatalf(
+				"policies result[%d] type = %T, want *syn.ByteString",
+				i,
+				policyList.List[i],
+			)
 		}
 		if string(got.Inner) != want {
-			t.Fatalf("policies result[%d] = %q, want %q", i, string(got.Inner), want)
+			t.Fatalf(
+				"policies result[%d] = %q, want %q",
+				i,
+				string(got.Inner),
+				want,
+			)
 		}
 	}
 

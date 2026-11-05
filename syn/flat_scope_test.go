@@ -58,19 +58,28 @@ func TestDecodeBorrowedWithScopeCheck(t *testing.T) {
 		},
 		{
 			name: "open variable in case under NoCaseConstr",
-			term: &Case[DeBruijn]{Constr: freeVar(1), Branches: []Term[DeBruijn]{freeVar(2)}},
+			term: &Case[DeBruijn]{
+				Constr:   freeVar(1),
+				Branches: []Term[DeBruijn]{freeVar(2)},
+			},
 		},
 		{
-			name:       "open variable in case under Full",
-			term:       &Case[DeBruijn]{Constr: freeVar(1), Branches: []Term[DeBruijn]{freeVar(2)}},
+			name: "open variable in case under Full",
+			term: &Case[DeBruijn]{
+				Constr:   freeVar(1),
+				Branches: []Term[DeBruijn]{freeVar(2)},
+			},
 			full:       true,
 			wantIndex:  2,
 			wantScope:  0,
 			wantScoped: true,
 		},
 		{
-			name:       "last decoded free variable matches validator order",
-			term:       &Apply[DeBruijn]{Function: freeVar(2), Argument: freeVar(1)},
+			name: "last decoded free variable matches validator order",
+			term: &Apply[DeBruijn]{
+				Function: freeVar(2),
+				Argument: freeVar(1),
+			},
 			wantIndex:  1,
 			wantScope:  0,
 			wantScoped: true,
@@ -90,16 +99,28 @@ func TestDecodeBorrowedWithScopeCheck(t *testing.T) {
 			_, err = decoder.DecodeBorrowedWithScopeCheck(flat, tt.full)
 			if !tt.wantScoped {
 				if err != nil {
-					t.Fatalf("DecodeBorrowedWithScopeCheck() error = %v, want nil", err)
+					t.Fatalf(
+						"DecodeBorrowedWithScopeCheck() error = %v, want nil",
+						err,
+					)
 				}
 				return
 			}
 			var scopeErr *DeBruijnScopeError
 			if !errors.As(err, &scopeErr) {
-				t.Fatalf("DecodeBorrowedWithScopeCheck() error = %v, want DeBruijnScopeError", err)
+				t.Fatalf(
+					"DecodeBorrowedWithScopeCheck() error = %v, want DeBruijnScopeError",
+					err,
+				)
 			}
-			if scopeErr.Index != tt.wantIndex || scopeErr.Scope != tt.wantScope {
-				t.Fatalf("scope error = %+v, want index %d at scope %d", scopeErr, tt.wantIndex, tt.wantScope)
+			if scopeErr.Index != tt.wantIndex ||
+				scopeErr.Scope != tt.wantScope {
+				t.Fatalf(
+					"scope error = %+v, want index %d at scope %d",
+					scopeErr,
+					tt.wantIndex,
+					tt.wantScope,
+				)
 			}
 		})
 	}
@@ -115,8 +136,12 @@ func TestDecodeBorrowedWithScopeCheckKeepsDecodeErrorPrecedence(t *testing.T) {
 	}
 	flat = append(flat, 0)
 	_, err = NewDeBruijnDecoder().DecodeBorrowedWithScopeCheck(flat, true)
-	if err == nil || err.Error() != "trailing bytes after program: 1 byte(s) not consumed" {
-		t.Fatalf("DecodeBorrowedWithScopeCheck() error = %v, want trailing-byte error", err)
+	if err == nil ||
+		err.Error() != "trailing bytes after program: 1 byte(s) not consumed" {
+		t.Fatalf(
+			"DecodeBorrowedWithScopeCheck() error = %v, want trailing-byte error",
+			err,
+		)
 	}
 }
 
@@ -157,21 +182,27 @@ func TestDecodeBorrowedFailureClearsPreviousDecode(t *testing.T) {
 	for _, chunk := range decoder.arena.applies.chunks {
 		for _, apply := range chunk {
 			if apply.Function != nil || apply.Argument != nil {
-				t.Fatal("failed decode retained an Apply from the previous decode")
+				t.Fatal(
+					"failed decode retained an Apply from the previous decode",
+				)
 			}
 		}
 	}
 	for _, chunk := range decoder.arena.termLists.chunks {
 		for _, term := range chunk {
 			if term != nil {
-				t.Fatal("failed decode retained a term list from the previous decode")
+				t.Fatal(
+					"failed decode retained a term list from the previous decode",
+				)
 			}
 		}
 	}
 	for _, chunk := range decoder.consts.byteStrings.chunks {
 		for _, byteString := range chunk {
 			if byteString.Inner != nil {
-				t.Fatal("failed decode retained a byte string from the previous decode")
+				t.Fatal(
+					"failed decode retained a byte string from the previous decode",
+				)
 			}
 		}
 	}

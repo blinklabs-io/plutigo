@@ -47,9 +47,12 @@ var (
 	sharedIntegerType  = &syn.TInteger{}
 	sharedDataType     = &syn.TData{}
 	sharedListDataType = &syn.TList{Typ: sharedDataType}
-	sharedPairDataType = &syn.TPair{First: sharedDataType, Second: sharedDataType}
-	blsScalarModulus   = blsfr.Modulus()
-	blsMSMScalarLimit  = new(big.Int).Lsh(big.NewInt(1), 4095)
+	sharedPairDataType = &syn.TPair{
+		First:  sharedDataType,
+		Second: sharedDataType,
+	}
+	blsScalarModulus  = blsfr.Modulus()
+	blsMSMScalarLimit = new(big.Int).Lsh(big.NewInt(1), 4095)
 )
 
 // normalizeBLSScalar maps an arbitrary UPLC integer into the BLS12-381 scalar
@@ -69,7 +72,10 @@ func validBLSMSMScalar(scalar *big.Int) bool {
 // checkBLSScalarMulBound fails a G1 or G2 scalarMul whose scalar is outside
 // the signed 4096-bit range: from van Rossem the reference bounds it like
 // multiScalarMul (BLS12_381.G1/G2.scalarMulE), failing after costing.
-func (m *Machine[T]) checkBLSScalarMulBound(fn builtin.DefaultFunction, scalar *big.Int) error {
+func (m *Machine[T]) checkBLSScalarMulBound(
+	fn builtin.DefaultFunction,
+	scalar *big.Int,
+) error {
 	if (m.semantics == SemanticsVariantD || m.semantics == SemanticsVariantE) &&
 		!validBLSMSMScalar(scalar) {
 		return &BuiltinError{
@@ -138,7 +144,10 @@ var ed25519VerifyCache = newEd25519VerifyCacheStore()
 func newEd25519VerifyCacheStore() *ed25519VerifyCacheStore {
 	cache := &ed25519VerifyCacheStore{}
 	for i := range cache.shards {
-		cache.shards[i].values = make(map[ed25519VerifyCacheKey]bool, ed25519VerifyShardLimit)
+		cache.shards[i].values = make(
+			map[ed25519VerifyCacheKey]bool,
+			ed25519VerifyShardLimit,
+		)
 	}
 	return cache
 }
@@ -164,20 +173,29 @@ func (c *ed25519VerifyCacheStore) get(key *ed25519VerifyCacheKey) (bool, bool) {
 	return value, ok
 }
 
-func (c *ed25519VerifyCacheStore) store(key *ed25519VerifyCacheKey, value bool) {
+func (c *ed25519VerifyCacheStore) store(
+	key *ed25519VerifyCacheKey,
+	value bool,
+) {
 	shard := c.shard(key)
 	shard.Lock()
-	if _, ok := shard.values[*key]; !ok && len(shard.values) >= ed25519VerifyShardLimit {
+	if _, ok := shard.values[*key]; !ok &&
+		len(shard.values) >= ed25519VerifyShardLimit {
 		// Reset-on-full: clear the shard rather than permanently refusing new
 		// admissions once it reaches capacity. This mirrors the cache-wide
 		// reset-on-full behavior introduced in #327, applied per shard.
-		shard.values = make(map[ed25519VerifyCacheKey]bool, ed25519VerifyShardLimit)
+		shard.values = make(
+			map[ed25519VerifyCacheKey]bool,
+			ed25519VerifyShardLimit,
+		)
 	}
 	shard.values[*key] = value
 	shard.Unlock()
 }
 
-func (c *ed25519VerifyCacheStore) shard(key *ed25519VerifyCacheKey) *ed25519VerifyCacheShard {
+func (c *ed25519VerifyCacheStore) shard(
+	key *ed25519VerifyCacheKey,
+) *ed25519VerifyCacheShard {
 	hash := binary.LittleEndian.Uint64(key.publicKey[:8])
 	hash ^= bits.RotateLeft64(binary.LittleEndian.Uint64(key.signature[:8]), 21)
 	hash ^= bits.RotateLeft64(
@@ -544,7 +562,10 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 					Message: "headList on an empty list",
 				}
 			}
-			return m.allocDataPairValue(dataMap.items[0][0], dataMap.items[0][1]), true, nil
+			return m.allocDataPairValue(
+				dataMap.items[0][0],
+				dataMap.items[0][1],
+			), true, nil
 		}
 		if lazy, ok := arg.(lazyListValue[T]); ok {
 			if err := m.CostOne(&fn, valueExMem[T](arg)); err != nil {
@@ -620,7 +641,9 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 				Message: "tailList on an empty list",
 			}
 		}
-		return m.allocConstant(m.allocProtoListConstant(list.LTyp, list.List[1:])), true, nil
+		return m.allocConstant(
+			m.allocProtoListConstant(list.LTyp, list.List[1:]),
+		), true, nil
 	case builtin.NullList:
 		if v, ok := arg.(*dataListValue[T]); ok {
 			if err := m.CostOne(&fn, valueExMem[T](v)); err != nil {
@@ -735,7 +758,9 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 				Message: "data is not a bytearray",
 			}
 		}
-		return m.allocConstant(m.allocByteStringConstant(bytesData.Inner)), true, nil
+		return m.allocConstant(
+			m.allocByteStringConstant(bytesData.Inner),
+		), true, nil
 	default:
 		// Builtins handled above have no bounded unary arguments. Keep this
 		// check for builtins that continue through the generic evaluation path.
@@ -974,14 +999,25 @@ func (m *Machine[T]) unwrapConsHead(value Value[T]) (*Constant, error) {
 		return v, nil
 	}
 	budget := dischargeWorkBudget{remaining: maxDischargeWork}
-	c, ok, err := materializeConstantValueShared[T](value, 0, maxDischargeDepth, &budget, &m.listShare)
+	c, ok, err := materializeConstantValueShared[T](
+		value,
+		0,
+		maxDischargeDepth,
+		&budget,
+		&m.listShare,
+	)
 	if err != nil {
 		return nil, err
 	}
 	if ok {
 		return &Constant{Constant: c}, nil
 	}
-	return nil, &TypeError{Code: ErrCodeTypeMismatch, Expected: "Constant", Got: fmt.Sprintf("%T", value), Message: "type mismatch"}
+	return nil, &TypeError{
+		Code:     ErrCodeTypeMismatch,
+		Expected: "Constant",
+		Got:      fmt.Sprintf("%T", value),
+		Message:  "type mismatch",
+	}
 }
 
 func (m *Machine[T]) evalTernaryBuiltinFast(
@@ -1052,7 +1088,11 @@ func (m *Machine[T]) evalTernaryBuiltinFast(
 
 func addInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	value, _, err := m.evalBinaryIntegerBuiltin(
+		b.Func,
+		m.argHolder[0],
+		m.argHolder[1],
+	)
 	return value, err
 }
 
@@ -1061,7 +1101,11 @@ func subtractInteger[T syn.Eval](
 	b *Builtin[T],
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	value, _, err := m.evalBinaryIntegerBuiltin(
+		b.Func,
+		m.argHolder[0],
+		m.argHolder[1],
+	)
 	return value, err
 }
 
@@ -1070,13 +1114,21 @@ func multiplyInteger[T syn.Eval](
 	b *Builtin[T],
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	value, _, err := m.evalBinaryIntegerBuiltin(
+		b.Func,
+		m.argHolder[0],
+		m.argHolder[1],
+	)
 	return value, err
 }
 
 func divideInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	value, _, err := m.evalBinaryIntegerBuiltin(
+		b.Func,
+		m.argHolder[0],
+		m.argHolder[1],
+	)
 	return value, err
 }
 
@@ -1085,7 +1137,11 @@ func quotientInteger[T syn.Eval](
 	b *Builtin[T],
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	value, _, err := m.evalBinaryIntegerBuiltin(
+		b.Func,
+		m.argHolder[0],
+		m.argHolder[1],
+	)
 	return value, err
 }
 
@@ -1094,19 +1150,31 @@ func remainderInteger[T syn.Eval](
 	b *Builtin[T],
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	value, _, err := m.evalBinaryIntegerBuiltin(
+		b.Func,
+		m.argHolder[0],
+		m.argHolder[1],
+	)
 	return value, err
 }
 
 func modInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	value, _, err := m.evalBinaryIntegerBuiltin(
+		b.Func,
+		m.argHolder[0],
+		m.argHolder[1],
+	)
 	return value, err
 }
 
 func equalsInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	value, _, err := m.evalBinaryIntegerBuiltin(
+		b.Func,
+		m.argHolder[0],
+		m.argHolder[1],
+	)
 	return value, err
 }
 
@@ -1115,7 +1183,11 @@ func lessThanInteger[T syn.Eval](
 	b *Builtin[T],
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	value, _, err := m.evalBinaryIntegerBuiltin(
+		b.Func,
+		m.argHolder[0],
+		m.argHolder[1],
+	)
 	return value, err
 }
 
@@ -1124,7 +1196,11 @@ func lessThanEqualsInteger[T syn.Eval](
 	b *Builtin[T],
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-	value, _, err := m.evalBinaryIntegerBuiltin(b.Func, m.argHolder[0], m.argHolder[1])
+	value, _, err := m.evalBinaryIntegerBuiltin(
+		b.Func,
+		m.argHolder[0],
+		m.argHolder[1],
+	)
 	return value, err
 }
 
@@ -1374,7 +1450,11 @@ func equalsByteString[T syn.Eval](
 	b *Builtin[T],
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-	value, _, err := m.evalBinaryBuiltinFast(b.Func, m.argHolder[0], m.argHolder[1])
+	value, _, err := m.evalBinaryBuiltinFast(
+		b.Func,
+		m.argHolder[0],
+		m.argHolder[1],
+	)
 	return value, err
 }
 
@@ -1383,7 +1463,11 @@ func lessThanByteString[T syn.Eval](
 	b *Builtin[T],
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-	value, _, err := m.evalBinaryBuiltinFast(b.Func, m.argHolder[0], m.argHolder[1])
+	value, _, err := m.evalBinaryBuiltinFast(
+		b.Func,
+		m.argHolder[0],
+		m.argHolder[1],
+	)
 	return value, err
 }
 
@@ -1392,7 +1476,11 @@ func lessThanEqualsByteString[T syn.Eval](
 	b *Builtin[T],
 ) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-	value, _, err := m.evalBinaryBuiltinFast(b.Func, m.argHolder[0], m.argHolder[1])
+	value, _, err := m.evalBinaryBuiltinFast(
+		b.Func,
+		m.argHolder[0],
+		m.argHolder[1],
+	)
 	return value, err
 }
 
@@ -1949,7 +2037,11 @@ func appendString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	arg1ExMem, arg2ExMem := stringExMem(arg1), stringExMem(arg2)
 	if m.semantics == SemanticsVariantD || m.semantics == SemanticsVariantE {
-		arg1ExMem, arg2ExMem = textByteLengthExMem(arg1), textByteLengthExMem(arg2)
+		arg1ExMem, arg2ExMem = textByteLengthExMem(
+			arg1,
+		), textByteLengthExMem(
+			arg2,
+		)
 	}
 	err = m.CostTwo(&b.Func, arg1ExMem, arg2ExMem)
 	if err != nil {
@@ -1983,7 +2075,11 @@ func equalsString[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	// Charge budget for string comparison
 	arg1ExMem, arg2ExMem := stringExMem(arg1), stringExMem(arg2)
 	if m.semantics == SemanticsVariantD || m.semantics == SemanticsVariantE {
-		arg1ExMem, arg2ExMem = textByteLengthExMem(arg1), textByteLengthExMem(arg2)
+		arg1ExMem, arg2ExMem = textByteLengthExMem(
+			arg1,
+		), textByteLengthExMem(
+			arg2,
+		)
 	}
 	err = m.CostTwo(&b.Func, arg1ExMem, arg2ExMem)
 	if err != nil {
@@ -2079,13 +2175,21 @@ func ifThenElse[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 func chooseUnit[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-	value, _, err := m.evalBinaryBuiltinFast(b.Func, m.argHolder[0], m.argHolder[1])
+	value, _, err := m.evalBinaryBuiltinFast(
+		b.Func,
+		m.argHolder[0],
+		m.argHolder[1],
+	)
 	return value, err
 }
 
 func trace[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-	value, _, err := m.evalBinaryBuiltinFast(b.Func, m.argHolder[0], m.argHolder[1])
+	value, _, err := m.evalBinaryBuiltinFast(
+		b.Func,
+		m.argHolder[0],
+		m.argHolder[1],
+	)
 	return value, err
 }
 
@@ -2119,7 +2223,11 @@ func chooseList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 func mkCons[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
-	value, _, err := m.evalBinaryBuiltinFast(b.Func, m.argHolder[0], m.argHolder[1])
+	value, _, err := m.evalBinaryBuiltinFast(
+		b.Func,
+		m.argHolder[0],
+		m.argHolder[1],
+	)
 	return value, err
 }
 
@@ -2221,10 +2329,14 @@ func validateConstrTag(
 // flattenListArg returns the contiguous equivalent of a list argument and,
 // for a list built by mkCons with constant elements, the buffer holding its
 // elements, on which conversions are memoised.
-func flattenListArg[T syn.Eval](value Value[T]) (Value[T], *frontBuf[syn.IConstant]) {
+func flattenListArg[T syn.Eval](
+	value Value[T],
+) (Value[T], *frontBuf[syn.IConstant]) {
 	if list, ok := value.(*consConstList[T]); ok {
 		flat, buf := list.cell.flatten()
-		return &Constant{Constant: &syn.ProtoList{LTyp: list.typ, List: flat}}, buf
+		return &Constant{
+			Constant: &syn.ProtoList{LTyp: list.typ, List: flat},
+		}, buf
 	}
 	return flattenLazyList[T](value), nil
 }
@@ -2319,7 +2431,12 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	dataList, err := convertList(&m.listShare.toData, owner, arg2.List, constrDataElem)
+	dataList, err := convertList(
+		&m.listShare.toData,
+		owner,
+		arg2.List,
+		constrDataElem,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -2364,7 +2481,12 @@ func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	dataList, err := convertList(&m.listShare.toPairs, owner, arg1.List, mapDataElem)
+	dataList, err := convertList(
+		&m.listShare.toPairs,
+		owner,
+		arg1.List,
+		mapDataElem,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -2398,7 +2520,12 @@ func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	dataList, err := convertList(&m.listShare.toData, owner, arg1.List, listDataElem)
+	dataList, err := convertList(
+		&m.listShare.toData,
+		owner,
+		arg1.List,
+		listDataElem,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -4029,7 +4156,9 @@ func replicateByte[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
 			Builtin: "replicateByte",
-			Message: "byte value out of bounds (" + integerMetadata(byteVal) + "; want 0-255)",
+			Message: "byte value out of bounds (" + integerMetadata(
+				byteVal,
+			) + "; want 0-255)",
 		}
 	}
 	byteUint := byte(byteVal.Int64())
@@ -4398,11 +4527,15 @@ func expModInteger[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
 			Builtin: "expModInteger",
-			Message: fmt.Sprintf("0^negative exponent (%s) is undefined", integerMetadata(e)),
+			Message: fmt.Sprintf(
+				"0^negative exponent (%s) is undefined",
+				integerMetadata(e),
+			),
 		}
 	}
 
-	if !inSignedBitRange(bb, expModBoundBits) || !inSignedBitRange(e, expModBoundBits) {
+	if !inSignedBitRange(bb, expModBoundBits) ||
+		!inSignedBitRange(e, expModBoundBits) {
 		return nil, &BuiltinError{
 			Code:    ErrCodeInvalidArgument,
 			Builtin: "expModInteger",
@@ -4487,7 +4620,9 @@ func (m *Machine[T]) costDropList(
 	}
 	memModel, ok := model.mem.(TwoArgument)
 	if !ok {
-		return internalError("dropList memory costing is not a two-argument model")
+		return internalError(
+			"dropList memory costing is not a two-argument model",
+		)
 	}
 	absN := int64(math.MaxInt64)
 	if nVal.IsInt64() && nVal.Int64() != math.MinInt64 {
@@ -4711,7 +4846,11 @@ func indexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, &BuiltinError{
 			Code:    ErrCodeOutOfBounds,
 			Builtin: "indexArray",
-			Message: fmt.Sprintf("index %d out of bounds for array of length %d", i, len(items)),
+			Message: fmt.Sprintf(
+				"index %d out of bounds for array of length %d",
+				i,
+				len(items),
+			),
 		}
 	}
 
@@ -4720,7 +4859,10 @@ func indexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 const multiIndexArrayMaximumIndexCount = 1024
 
-func multiIndexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+func multiIndexArray[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 	// Args: (con (array t) arr) (con (list integer) indices)
 	arrayType, items, err := unwrapArray[T](m.argHolder[0])
@@ -4746,7 +4888,10 @@ func multiIndexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error)
 			return nil, &BuiltinError{
 				Code:    ErrCodeOutOfBounds,
 				Builtin: "multiIndexArray",
-				Message: fmt.Sprintf("too many indices (maximum is %d)", multiIndexArrayMaximumIndexCount),
+				Message: fmt.Sprintf(
+					"too many indices (maximum is %d)",
+					multiIndexArrayMaximumIndexCount,
+				),
 			}
 		}
 
@@ -4779,7 +4924,11 @@ func multiIndexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error)
 			return nil, &BuiltinError{
 				Code:    ErrCodeOutOfBounds,
 				Builtin: "multiIndexArray",
-				Message: fmt.Sprintf("index %d out of bounds for array of length %d", index64, len(items)),
+				Message: fmt.Sprintf(
+					"index %d out of bounds for array of length %d",
+					index64,
+					len(items),
+				),
 			}
 		}
 		result = append(result, items[int(index64)])
@@ -4840,7 +4989,9 @@ func policies[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	for i, policyID := range policyIDs {
 		result[i] = &syn.ByteString{Inner: policyID}
 	}
-	return &Constant{&syn.ProtoList{LTyp: &syn.TByteString{}, List: result}}, nil
+	return &Constant{
+		&syn.ProtoList{LTyp: &syn.TByteString{}, List: result},
+	}, nil
 }
 
 func assetCount[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {

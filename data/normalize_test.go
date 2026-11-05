@@ -109,12 +109,17 @@ func TestNormalizeResetsDefiniteLengthEncoding(t *testing.T) {
 			if got := mustEncodeHex(t, decoded); got != tc.wire {
 				t.Fatalf(
 					"precondition failed: decode/encode round-trip = %s, want the original %s",
-					got, tc.wire,
+					got,
+					tc.wire,
 				)
 			}
 
 			if got := mustEncodeHex(t, Normalize(decoded)); got != tc.wantNormal {
-				t.Errorf("Normalize round-trip = %s, want %s", got, tc.wantNormal)
+				t.Errorf(
+					"Normalize round-trip = %s, want %s",
+					got,
+					tc.wantNormal,
+				)
 			}
 		})
 	}
@@ -155,7 +160,11 @@ func TestNormalizeDoesNotMutateInput(t *testing.T) {
 	normalized := Normalize(decoded)
 
 	if got := mustEncodeHex(t, decoded); got != definite {
-		t.Errorf("input mutated by Normalize: re-encodes to %s, want %s", got, definite)
+		t.Errorf(
+			"input mutated by Normalize: re-encodes to %s, want %s",
+			got,
+			definite,
+		)
 	}
 	if normalized == decoded {
 		t.Error("Normalize returned the same pointer; it must return a copy")
@@ -178,7 +187,10 @@ func TestNormalizeCopiesConstrTag(t *testing.T) {
 
 	normalized.Tag.SetInt64(9)
 	if original.Tag.Int64() != 3 {
-		t.Errorf("mutating the normalized tag changed the original to %d, want 3", original.Tag.Int64())
+		t.Errorf(
+			"mutating the normalized tag changed the original to %d, want 3",
+			original.Tag.Int64(),
+		)
 	}
 }
 
@@ -215,12 +227,20 @@ func TestNormalizeTypedNilContainers(t *testing.T) {
 			func() {
 				defer func() {
 					if recovered := recover(); recovered != nil {
-						t.Errorf("Normalize(typed-nil %s) panicked: %v", tc.name, recovered)
+						t.Errorf(
+							"Normalize(typed-nil %s) panicked: %v",
+							tc.name,
+							recovered,
+						)
 					}
 				}()
 
 				if got := Normalize(tc.input); got != tc.input {
-					t.Errorf("Normalize(typed-nil %s) = %v, want the original typed nil", tc.name, got)
+					t.Errorf(
+						"Normalize(typed-nil %s) = %v, want the original typed nil",
+						tc.name,
+						got,
+					)
 				}
 			}()
 		})
@@ -241,7 +261,10 @@ func TestNormalizeLeafPassthrough(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := Normalize(tc.input); got != tc.input {
-				t.Errorf("Normalize(%s) returned a copy; leaves should pass through", tc.name)
+				t.Errorf(
+					"Normalize(%s) returned a copy; leaves should pass through",
+					tc.name,
+				)
 			}
 		})
 	}

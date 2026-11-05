@@ -72,7 +72,11 @@ func TestCaseOnDataSelectsBranchByConstrTag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("case on Data: %v", err)
 	}
-	want, err := runTextProgram(t, `(program 1.2.0 (con (list data) [I 42, B #abcd]))`, 12)
+	want, err := runTextProgram(
+		t,
+		`(program 1.2.0 (con (list data) [I 42, B #abcd]))`,
+		12,
+	)
 	if err != nil {
 		t.Fatalf("evaluate expected result: %v", err)
 	}
@@ -101,10 +105,15 @@ func TestCaseOnDataIsUnavailableBeforeDijkstra(t *testing.T) {
 		(case (con data (Constr 0 [])) (lam fields (con integer 42))))`
 	_, err := runTextProgram(t, src, 11)
 	var scriptErr *ScriptError
-	if !errors.As(err, &scriptErr) || scriptErr.Code != ErrCodeCaseOnBuiltinUnavailable {
-		t.Fatalf("case on Data at protocol 11: error = %v, want unavailable", err)
+	if !errors.As(err, &scriptErr) ||
+		scriptErr.Code != ErrCodeCaseOnBuiltinUnavailable {
+		t.Fatalf(
+			"case on Data at protocol 11: error = %v, want unavailable",
+			err,
+		)
 	}
-	if got, err := runTextProgram(t, src, 12); err != nil || got != "(con integer 42)" {
+	if got, err := runTextProgram(t, src, 12); err != nil ||
+		got != "(con integer 42)" {
 		t.Fatalf("case on Data at protocol 12 = %q, %v", got, err)
 	}
 }
@@ -123,9 +132,11 @@ func TestRunRejectsOpenTermsEvenWhenUnreached(t *testing.T) {
 			&syn.Var[syn.DeBruijn]{Name: 1},
 		},
 	}
-	unevaluatedField := &syn.Delay[syn.DeBruijn]{Term: &syn.Constr[syn.DeBruijn]{
-		Fields: []syn.Term[syn.DeBruijn]{&syn.Var[syn.DeBruijn]{Name: 7}},
-	}}
+	unevaluatedField := &syn.Delay[syn.DeBruijn]{
+		Term: &syn.Constr[syn.DeBruijn]{
+			Fields: []syn.Term[syn.DeBruijn]{&syn.Var[syn.DeBruijn]{Name: 7}},
+		},
+	}
 	takenBranch := &syn.Case[syn.DeBruijn]{
 		Constr: &syn.Constant{Con: &syn.Bool{Inner: true}},
 		Branches: []syn.Term[syn.DeBruijn]{
@@ -141,10 +152,34 @@ func TestRunRejectsOpenTermsEvenWhenUnreached(t *testing.T) {
 		// failsAt11 is true when the free variable is evaluated.
 		failsAt11 bool
 	}{
-		{"unused free variable", &syn.Lambda[syn.DeBruijn]{Body: &syn.Var[syn.DeBruijn]{Name: 2}}, true, true, true},
-		{"index zero", &syn.Lambda[syn.DeBruijn]{Body: &syn.Var[syn.DeBruijn]{Name: 0}}, true, true, true},
-		{"free variable in an untaken branch", untakenBranch, false, true, false},
-		{"free variable in an unevaluated constr field", unevaluatedField, false, true, false},
+		{
+			"unused free variable",
+			&syn.Lambda[syn.DeBruijn]{Body: &syn.Var[syn.DeBruijn]{Name: 2}},
+			true,
+			true,
+			true,
+		},
+		{
+			"index zero",
+			&syn.Lambda[syn.DeBruijn]{Body: &syn.Var[syn.DeBruijn]{Name: 0}},
+			true,
+			true,
+			true,
+		},
+		{
+			"free variable in an untaken branch",
+			untakenBranch,
+			false,
+			true,
+			false,
+		},
+		{
+			"free variable in an unevaluated constr field",
+			unevaluatedField,
+			false,
+			true,
+			false,
+		},
 		{"free variable in a taken branch", takenBranch, false, true, true},
 	}
 	for _, tc := range tests {
@@ -152,7 +187,10 @@ func TestRunRejectsOpenTermsEvenWhenUnreached(t *testing.T) {
 			machine := NewMachine[syn.DeBruijn](
 				lang.LanguageVersionV3,
 				200,
-				NewDefaultEvalContext(lang.LanguageVersionV3, ProtoVersion{Major: proto}),
+				NewDefaultEvalContext(
+					lang.LanguageVersionV3,
+					ProtoVersion{Major: proto},
+				),
 			)
 			machine.ExBudget = ExBudget{Cpu: math.MaxInt64, Mem: math.MaxInt64}
 			_, err := machine.Run(tc.term)
@@ -165,11 +203,25 @@ func TestRunRejectsOpenTermsEvenWhenUnreached(t *testing.T) {
 				typeErr.Code == ErrCodeOpenTerm
 			switch {
 			case wantFail && !isOpen:
-				t.Fatalf("%s at protocol %d: error = %v, want an open term error", tc.name, proto, err)
+				t.Fatalf(
+					"%s at protocol %d: error = %v, want an open term error",
+					tc.name,
+					proto,
+					err,
+				)
 			case !wantFail && err != nil:
-				t.Fatalf("%s at protocol %d: error = %v, want success", tc.name, proto, err)
+				t.Fatalf(
+					"%s at protocol %d: error = %v, want success",
+					tc.name,
+					proto,
+					err,
+				)
 			case wantOpen && err == nil:
-				t.Fatalf("%s at protocol %d: succeeded, want rejection", tc.name, proto)
+				t.Fatalf(
+					"%s at protocol %d: succeeded, want rejection",
+					tc.name,
+					proto,
+				)
 			}
 		}
 	}

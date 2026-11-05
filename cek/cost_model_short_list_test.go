@@ -124,7 +124,11 @@ func TestEmptyCostModelListExhaustsBudgetImmediately(t *testing.T) {
 		t.Fatal("empty parameter list: Run succeeded, want a budget error")
 	}
 	if !IsBudgetError(err) {
-		t.Fatalf("empty parameter list: got %T (%v), want a budget error", err, err)
+		t.Fatalf(
+			"empty parameter list: got %T (%v), want a budget error",
+			err,
+			err,
+		)
 	}
 }
 
@@ -158,7 +162,13 @@ func TestShortCostModelListMatchesMaxBoundPaddedList(t *testing.T) {
 					// Over-length: the surplus value must be ignored, so the
 					// expected model is the one built from the full list.
 					over := append(append([]int64{}, full...), 7)
-					assertCostModelsEqual(t, tc.version, tc.semantics, over, full)
+					assertCostModelsEqual(
+						t,
+						tc.version,
+						tc.semantics,
+						over,
+						full,
+					)
 					continue
 				}
 				short := full[:n]
@@ -166,7 +176,13 @@ func TestShortCostModelListMatchesMaxBoundPaddedList(t *testing.T) {
 				for range len(names) - n {
 					padded = append(padded, math.MaxInt64)
 				}
-				assertCostModelsEqual(t, tc.version, tc.semantics, short, padded)
+				assertCostModelsEqual(
+					t,
+					tc.version,
+					tc.semantics,
+					short,
+					padded,
+				)
 			}
 		})
 	}

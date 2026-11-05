@@ -66,7 +66,10 @@ type diffHarness struct {
 }
 
 func pairData(id int64) [2]data.PlutusData {
-	return [2]data.PlutusData{data.NewInteger(big.NewInt(id)), data.NewInteger(big.NewInt(id + 1))}
+	return [2]data.PlutusData{
+		data.NewInteger(big.NewInt(id)),
+		data.NewInteger(big.NewInt(id + 1)),
+	}
 }
 
 func dataConst(id int64) *syn.Data {
@@ -171,7 +174,10 @@ func valueID(t *testing.T, v Value[syn.DeBruijn]) int64 {
 	}
 }
 
-func (h *diffHarness) call(fn builtin.DefaultFunction, args ...Value[syn.DeBruijn]) (Value[syn.DeBruijn], ExBudget) {
+func (h *diffHarness) call(
+	fn builtin.DefaultFunction,
+	args ...Value[syn.DeBruijn],
+) (Value[syn.DeBruijn], ExBudget) {
 	h.t.Helper()
 	b := newTestBuiltin(fn)
 	for _, a := range args {
@@ -194,9 +200,17 @@ func (h *diffHarness) callBoth(
 ) Value[syn.DeBruijn] {
 	h.t.Helper()
 	v1, c1 := h.call(fn, append(slices.Clone(pre), list)...)
-	_, c2 := h.call(fn, append(slices.Clone(pre), flattenLazyList[syn.DeBruijn](list))...)
+	_, c2 := h.call(
+		fn,
+		append(slices.Clone(pre), flattenLazyList[syn.DeBruijn](list))...)
 	if c1 != c2 {
-		h.t.Fatalf("%s on %T charged %+v, contiguous form charged %+v", fn, list, c1, c2)
+		h.t.Fatalf(
+			"%s on %T charged %+v, contiguous form charged %+v",
+			fn,
+			list,
+			c1,
+			c2,
+		)
 	}
 	return v1
 }
@@ -245,11 +259,20 @@ func (h *diffHarness) foreign(kind listKind, n int) {
 	var v Value[syn.DeBruijn]
 	switch kind {
 	case kInt:
-		v = constList(&syn.TInteger{}, func(id int64) syn.IConstant { return &syn.Integer{Inner: big.NewInt(id)} })
+		v = constList(
+			&syn.TInteger{},
+			func(id int64) syn.IConstant { return &syn.Integer{Inner: big.NewInt(id)} },
+		)
 	case kDataC:
-		v = constList(sharedDataType, func(id int64) syn.IConstant { return dataConst(id) })
+		v = constList(
+			sharedDataType,
+			func(id int64) syn.IConstant { return dataConst(id) },
+		)
 	case kPairC:
-		v = constList(sharedPairDataType, func(id int64) syn.IConstant { return pairConst(id) })
+		v = constList(
+			sharedPairDataType,
+			func(id int64) syn.IConstant { return pairConst(id) },
+		)
 	case kDataL:
 		l := make([]data.PlutusData, n)
 		for i, id := range ids {
@@ -280,7 +303,11 @@ func (h *diffHarness) checkExMem(l modelList) {
 	}
 }
 
-func (h *diffHarness) snapshot(items []data.PlutusData, pairs [][2]data.PlutusData, want []int64) {
+func (h *diffHarness) snapshot(
+	items []data.PlutusData,
+	pairs [][2]data.PlutusData,
+	want []int64,
+) {
 	h.snapData = append(h.snapData, items)
 	h.snapPairs = append(h.snapPairs, pairs)
 	h.snapWant = append(h.snapWant, slices.Clone(want))
@@ -324,7 +351,11 @@ func (h *diffHarness) step() {
 func (h *diffHarness) stepCons(src modelList) {
 	h.nextID += 2
 	id := h.nextID
-	v := h.callBoth(builtin.MkCons, []Value[syn.DeBruijn]{h.headFor(src.kind, id)}, src.value)
+	v := h.callBoth(
+		builtin.MkCons,
+		[]Value[syn.DeBruijn]{h.headFor(src.kind, id)},
+		src.value,
+	)
 	h.add(src.kind, v, append([]int64{id}, src.elems...))
 }
 
@@ -338,7 +369,11 @@ func (h *diffHarness) stepTail(src modelList) {
 
 func (h *diffHarness) stepDrop(src modelList) {
 	k := h.rng.IntN(len(src.elems) + 3)
-	v := h.callBoth(builtin.DropList, []Value[syn.DeBruijn]{int64Constant(int64(k))}, src.value)
+	v := h.callBoth(
+		builtin.DropList,
+		[]Value[syn.DeBruijn]{int64Constant(int64(k))},
+		src.value,
+	)
 	h.add(src.kind, v, slices.Clone(src.elems[min(k, len(src.elems)):]))
 }
 
@@ -351,7 +386,12 @@ func (h *diffHarness) stepInspect(src modelList) {
 	}
 	a, b := int64Constant(1), int64Constant(2)
 	v1, c1 := h.call(builtin.ChooseList, src.value, a, b)
-	_, c2 := h.call(builtin.ChooseList, flattenLazyList[syn.DeBruijn](src.value), a, b)
+	_, c2 := h.call(
+		builtin.ChooseList,
+		flattenLazyList[syn.DeBruijn](src.value),
+		a,
+		b,
+	)
 	if c1 != c2 || (v1 == a) != (len(src.elems) == 0) {
 		t.Fatalf("chooseList mismatch")
 	}
@@ -382,7 +422,10 @@ func (h *diffHarness) stepConvert(src modelList) {
 			items = d.Fields
 		}
 		h.snapshot(items, nil, src.elems)
-		back, _ := h.call(builtin.UnListData, h.m.allocDataValue(data.NewList(items...)))
+		back, _ := h.call(
+			builtin.UnListData,
+			h.m.allocDataValue(data.NewList(items...)),
+		)
 		h.add(kDataL, back, slices.Clone(src.elems))
 		if fn == builtin.ListData {
 			back2, _ := h.call(builtin.UnListData, v)
@@ -412,7 +455,9 @@ func (h *diffHarness) stepNest(src modelList) {
 		elemTyp = sharedPairDataType
 		kind = kPairC
 	}
-	nilOuter := &Constant{&syn.ProtoList{LTyp: &syn.TList{Typ: elemTyp}, List: nil}}
+	nilOuter := &Constant{
+		&syn.ProtoList{LTyp: &syn.TList{Typ: elemTyp}, List: nil},
+	}
 	outer, _ := h.call(builtin.MkCons, src.value, nilOuter)
 	inner, _ := h.call(builtin.HeadList, outer)
 	if got := readList(h.t, inner); !slices.Equal(got, src.elems) {
@@ -423,7 +468,10 @@ func (h *diffHarness) stepNest(src modelList) {
 
 // stepFlatten flattens the list (which memoises its cells) and checks it.
 func (h *diffHarness) stepFlatten(src modelList) {
-	if got := readList(h.t, flattenLazyList[syn.DeBruijn](src.value)); !slices.Equal(got, src.elems) {
+	if got := readList(h.t, flattenLazyList[syn.DeBruijn](src.value)); !slices.Equal(
+		got,
+		src.elems,
+	) {
 		h.t.Fatalf("flattened = %v, want %v", got, src.elems)
 	}
 	h.checkExMem(src)
@@ -433,7 +481,13 @@ func (h *diffHarness) verifyAll() {
 	t := h.t
 	for i, l := range h.lists {
 		if got := readList(t, l.value); !slices.Equal(got, l.elems) {
-			t.Fatalf("list %d (%v) changed: %v, want %v", i, l.kind, got, l.elems)
+			t.Fatalf(
+				"list %d (%v) changed: %v, want %v",
+				i,
+				l.kind,
+				got,
+				l.elems,
+			)
 		}
 	}
 	for i := range h.snapWant {
@@ -445,7 +499,12 @@ func (h *diffHarness) verifyAll() {
 			got = append(got, pairID(t, p))
 		}
 		if !slices.Equal(got, h.snapWant[i]) {
-			t.Fatalf("converted slice %d changed: %v, want %v", i, got, h.snapWant[i])
+			t.Fatalf(
+				"converted slice %d changed: %v, want %v",
+				i,
+				got,
+				h.snapWant[i],
+			)
 		}
 	}
 }
@@ -453,10 +512,17 @@ func (h *diffHarness) verifyAll() {
 func TestListSharingDifferential(t *testing.T) {
 	for seed := range uint64(24) {
 		t.Run(fmt.Sprint(seed), func(t *testing.T) {
-			ec := NewDefaultEvalContext(lang.LanguageVersionV3, ProtoVersion{Major: 11})
+			ec := NewDefaultEvalContext(
+				lang.LanguageVersionV3,
+				ProtoVersion{Major: 11},
+			)
 			m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ec)
 			m.ExBudget = ExBudget{Cpu: 1 << 62, Mem: 1 << 62}
-			h := &diffHarness{t: t, m: m, rng: rand.New(rand.NewPCG(seed, 0x5eed))}
+			h := &diffHarness{
+				t:   t,
+				m:   m,
+				rng: rand.New(rand.NewPCG(seed, 0x5eed)),
+			}
 			for k := range kindCount {
 				h.foreign(k, 0)
 				h.foreign(k, 3)
@@ -467,7 +533,10 @@ func TestListSharingDifferential(t *testing.T) {
 			}
 			h.verifyAll()
 			for _, l := range h.lists {
-				if got := readList(t, flattenLazyList[syn.DeBruijn](l.value)); !slices.Equal(got, l.elems) {
+				if got := readList(t, flattenLazyList[syn.DeBruijn](l.value)); !slices.Equal(
+					got,
+					l.elems,
+				) {
 					t.Fatalf("flattened %v = %v, want %v", l.kind, got, l.elems)
 				}
 				h.checkExMem(l)

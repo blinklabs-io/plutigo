@@ -40,7 +40,12 @@ func cloneTwoArgument(model TwoArgument) TwoArgument {
 	}
 	cloned, ok := model.cloneArguments().(TwoArgument)
 	if !ok {
-		panic(fmt.Sprintf("cost model clone returned %T, want TwoArgument", model))
+		panic(
+			fmt.Sprintf(
+				"cost model clone returned %T, want TwoArgument",
+				model,
+			),
+		)
 	}
 	return cloned
 }

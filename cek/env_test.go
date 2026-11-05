@@ -40,7 +40,11 @@ func envValueInt(t *testing.T, value Value[syn.DeBruijn]) int64 {
 func TestEnvLookupEveryIndexEveryDepth(t *testing.T) {
 	const maxDepth = 1100
 
-	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+	machine := NewMachine[syn.DeBruijn](
+		lang.LanguageVersionV3,
+		0,
+		testEvalContext(),
+	)
 	var arenaEnv, heapEnv *Env[syn.DeBruijn]
 	for depth := 1; depth <= maxDepth; depth++ {
 		value := int64Constant(int64(depth))
@@ -51,18 +55,40 @@ func TestEnvLookupEveryIndexEveryDepth(t *testing.T) {
 				want := int64(depth - idx + 1)
 				got, ok := lookupEnv(env, idx)
 				if !ok || envValueInt(t, got) != want {
-					t.Fatalf("depth %d: lookupEnv(%d) = %v, %v; want %d", depth, idx, got, ok, want)
+					t.Fatalf(
+						"depth %d: lookupEnv(%d) = %v, %v; want %d",
+						depth,
+						idx,
+						got,
+						ok,
+						want,
+					)
 				}
 				got, ok = lookupEnvDeBruijn(env, idx)
 				if !ok || envValueInt(t, got) != want {
-					t.Fatalf("depth %d: lookupEnvDeBruijn(%d) = %v, %v; want %d", depth, idx, got, ok, want)
+					t.Fatalf(
+						"depth %d: lookupEnvDeBruijn(%d) = %v, %v; want %d",
+						depth,
+						idx,
+						got,
+						ok,
+						want,
+					)
 				}
 			}
 			if _, ok := lookupEnv(env, depth+1); ok {
-				t.Fatalf("depth %d: lookupEnv(%d) succeeded beyond depth", depth, depth+1)
+				t.Fatalf(
+					"depth %d: lookupEnv(%d) succeeded beyond depth",
+					depth,
+					depth+1,
+				)
 			}
 			if _, ok := lookupEnvDeBruijn(env, depth+1); ok {
-				t.Fatalf("depth %d: lookupEnvDeBruijn(%d) succeeded beyond depth", depth, depth+1)
+				t.Fatalf(
+					"depth %d: lookupEnvDeBruijn(%d) succeeded beyond depth",
+					depth,
+					depth+1,
+				)
 			}
 		}
 	}
@@ -99,11 +125,22 @@ func TestEnvLookupMixedLiteralAndIndexedNodes(t *testing.T) {
 			got, ok := tc.env.Lookup(idx)
 			want := int64(tc.depth - idx + 1)
 			if !ok || envValueInt(t, got) != want {
-				t.Fatalf("%s: Lookup(%d) = %v, %v; want %d", tc.name, idx, got, ok, want)
+				t.Fatalf(
+					"%s: Lookup(%d) = %v, %v; want %d",
+					tc.name,
+					idx,
+					got,
+					ok,
+					want,
+				)
 			}
 		}
 		if _, ok := tc.env.Lookup(tc.depth + 1); ok {
-			t.Fatalf("%s: Lookup(%d) succeeded beyond depth", tc.name, tc.depth+1)
+			t.Fatalf(
+				"%s: Lookup(%d) succeeded beyond depth",
+				tc.name,
+				tc.depth+1,
+			)
 		}
 	}
 }
@@ -112,14 +149,22 @@ func TestEnvLookupMixedLiteralAndIndexedNodes(t *testing.T) {
 // evaluation that used them, or a later Machine would read stale bindings and
 // the pool would pin the old graph.
 func TestReleasedEnvChunksAreCleared(t *testing.T) {
-	released := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+	released := NewMachine[syn.DeBruijn](
+		lang.LanguageVersionV3,
+		0,
+		testEvalContext(),
+	)
 	var env *Env[syn.DeBruijn]
 	for i := range envFirstChunkSize * 8 {
 		env = released.extendEnv(env, int64Constant(int64(i)))
 	}
 	released.dropEnvArena()
 
-	reused := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+	reused := NewMachine[syn.DeBruijn](
+		lang.LanguageVersionV3,
+		0,
+		testEvalContext(),
+	)
 	reused.takePooledEnvChunks()
 	if len(reused.envChunks) == 0 {
 		t.Skip("envChunkPool was emptied by a GC cycle")
@@ -127,7 +172,12 @@ func TestReleasedEnvChunksAreCleared(t *testing.T) {
 	for ci, chunk := range reused.envChunks {
 		for si, slot := range chunk {
 			if slot != (Env[syn.DeBruijn]{}) {
-				t.Fatalf("pooled envChunks[%d][%d] = %+v, want zero", ci, si, slot)
+				t.Fatalf(
+					"pooled envChunks[%d][%d] = %+v, want zero",
+					ci,
+					si,
+					slot,
+				)
 			}
 		}
 	}

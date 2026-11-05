@@ -151,7 +151,15 @@ func TestEd25519VerifyStrictDifferential(t *testing.T) {
 		_, _ = rand.Read(msg)
 		sig := ed25519.Sign(priv, msg)
 		if !ed25519VerifyStrict(pub, msg, sig) ||
-			ed25519VerifyStrict(pub, msg, sig) != ed25519.Verify(pub, msg, sig) {
+			ed25519VerifyStrict(
+				pub,
+				msg,
+				sig,
+			) != ed25519.Verify(
+				pub,
+				msg,
+				sig,
+			) {
 			t.Fatalf("mismatch on valid signature %d", i)
 		}
 		bad := append([]byte{}, sig...)

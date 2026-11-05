@@ -60,13 +60,22 @@ func TestParseAllocationScalesLinearly(t *testing.T) {
 		src          func(n int) string
 	}{
 		{"hex bytestring", 4000, 16000, func(n int) string {
-			return "(program 1.0.0 (con bytestring #" + strings.Repeat("ab", n) + "))"
+			return "(program 1.0.0 (con bytestring #" + strings.Repeat(
+				"ab",
+				n,
+			) + "))"
 		}},
 		{"string", 4000, 16000, func(n int) string {
-			return `(program 1.0.0 (con string "` + strings.Repeat("a", 2*n) + `"))`
+			return `(program 1.0.0 (con string "` + strings.Repeat(
+				"a",
+				2*n,
+			) + `"))`
 		}},
 		{"string with escapes", 4000, 16000, func(n int) string {
-			return `(program 1.0.0 (con string "` + strings.Repeat(`a\n`, n) + `"))`
+			return `(program 1.0.0 (con string "` + strings.Repeat(
+				`a\n`,
+				n,
+			) + `"))`
 		}},
 		{"nested pair", 1000, 4000, nestedPair},
 	}
@@ -85,7 +94,13 @@ func TestParseAllocationScalesLinearly(t *testing.T) {
 			if largeBytes > smallBytes*maxScalingRatio {
 				t.Fatalf(
 					"parsing %d bytes allocated %d, but %d bytes allocated %d: more than %dx for 4x the input",
-					len(largeSrc), largeBytes, len(smallSrc), smallBytes, maxScalingRatio,
+					len(
+						largeSrc,
+					),
+					largeBytes,
+					len(smallSrc),
+					smallBytes,
+					maxScalingRatio,
 				)
 			}
 		})

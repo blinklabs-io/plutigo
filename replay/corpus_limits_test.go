@@ -73,7 +73,9 @@ func TestLoadEnforcesPreprocessingLimits(t *testing.T) {
 		{
 			name: "FLAT program bytes",
 			mutate: func(corpus *Corpus, limits *corpusDecodeLimits) {
-				decodedLength := hex.DecodedLen(len(corpus.Cases[0].FlatProgramHex))
+				decodedLength := hex.DecodedLen(
+					len(corpus.Cases[0].FlatProgramHex),
+				)
 				limits.flatProgramBytes = decodedLength - 1
 			},
 			wantError: "flat program exceeds decoded byte limit",
@@ -132,7 +134,11 @@ func TestLoadEnforcesPreprocessingLimits(t *testing.T) {
 				t.Fatalf("json.Marshal() failed: %v", err)
 			}
 
-			_, err = load(context.Background(), bytes.NewReader(encoded), limits)
+			_, err = load(
+				context.Background(),
+				bytes.NewReader(encoded),
+				limits,
+			)
 			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
 				t.Fatalf("load() error = %v, want %q", err, tt.wantError)
 			}
@@ -177,15 +183,24 @@ func TestLoadStopsReadingOversizedCaseAtCaseLimit(t *testing.T) {
 
 	limits := defaultCorpusDecodeLimits
 	limits.caseJSONBytes = 4096
-	encoded := []byte(`{"schema_version":1,"network":"mainnet","reference":{},"cases":[{"metadata":"` +
-		strings.Repeat("x", 1<<20) + `"}]}`)
+	encoded := []byte(
+		`{"schema_version":1,"network":"mainnet","reference":{},"cases":[{"metadata":"` +
+			strings.Repeat(
+				"x",
+				1<<20,
+			) + `"}]}`,
+	)
 	reader := &countingReader{r: bytes.NewReader(encoded)}
 	_, err := load(context.Background(), reader, limits)
 	if err == nil || !strings.Contains(err.Error(), "exceeds JSON byte limit") {
 		t.Fatalf("load() error = %v, want per-case byte limit error", err)
 	}
 	if reader.n > int64(limits.caseJSONBytes+1024) {
-		t.Fatalf("read %d bytes before rejecting case; want at most %d", reader.n, limits.caseJSONBytes+1024)
+		t.Fatalf(
+			"read %d bytes before rejecting case; want at most %d",
+			reader.n,
+			limits.caseJSONBytes+1024,
+		)
 	}
 }
 
@@ -220,7 +235,12 @@ func TestLoadDoesNotChargeLeadingWhitespaceToCaseLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal(corpus) failed: %v", err)
 	}
-	encoded = bytes.Replace(encoded, []byte(`"cases":[`), []byte(`"cases":[`+strings.Repeat(" ", 1024)), 1)
+	encoded = bytes.Replace(
+		encoded,
+		[]byte(`"cases":[`),
+		[]byte(`"cases":[`+strings.Repeat(" ", 1024)),
+		1,
+	)
 	limits := defaultCorpusDecodeLimits
 	limits.caseJSONBytes = len(caseJSON)
 	if _, err := load(context.Background(), bytes.NewReader(encoded), limits); err != nil {
@@ -228,7 +248,9 @@ func TestLoadDoesNotChargeLeadingWhitespaceToCaseLimit(t *testing.T) {
 	}
 }
 
-func TestByteLimitReaderDoesNotChargeLeadingWhitespaceToCaseLimit(t *testing.T) {
+func TestByteLimitReaderDoesNotChargeLeadingWhitespaceToCaseLimit(
+	t *testing.T,
+) {
 	t.Parallel()
 
 	const object = `{"a":1}`
@@ -302,7 +324,9 @@ func TestLoadedCorpusCachesValidMutation(t *testing.T) {
 		t.Fatalf("second validateCases() failed: %v", err)
 	}
 	if second[0].program != first[0].program {
-		t.Fatal("validateCases() did not cache the successfully decoded mutation")
+		t.Fatal(
+			"validateCases() did not cache the successfully decoded mutation",
+		)
 	}
 }
 
@@ -312,12 +336,22 @@ func TestCaseBoundsCancelsDuringPreprocessing(t *testing.T) {
 	replayCase := successfulCase(t)
 	ctx := &cancelAfterErrCalls{limit: 1, done: make(chan struct{})}
 	var decodedBytes int64
-	err := replayCase.validateBounds(ctx, &decodedBytes, defaultCorpusDecodeLimits)
+	err := replayCase.validateBounds(
+		ctx,
+		&decodedBytes,
+		defaultCorpusDecodeLimits,
+	)
 	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("validateBounds() error = %v, want cancellation during argument validation", err)
+		t.Fatalf(
+			"validateBounds() error = %v, want cancellation during argument validation",
+			err,
+		)
 	}
 	if got := ctx.calls.Load(); got != 1 {
-		t.Fatalf("context checked %d times, want cancellation at the first argument", got)
+		t.Fatalf(
+			"context checked %d times, want cancellation at the first argument",
+			got,
+		)
 	}
 }
 

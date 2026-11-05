@@ -192,14 +192,23 @@ func newOwnedValue(entries []IConstant) *Value {
 
 func checkValueKeyLength(kind string, index int, key []byte) error {
 	if len(key) > data.MaxValueKeyLength {
-		return fmt.Errorf("Value %s %d key exceeds %d bytes", kind, index, data.MaxValueKeyLength)
+		return fmt.Errorf(
+			"Value %s %d key exceeds %d bytes",
+			kind,
+			index,
+			data.MaxValueKeyLength,
+		)
 	}
 	return nil
 }
 
 func checkValueQuantityRange(policy, token int, quantity *big.Int) error {
 	if quantity == nil {
-		return fmt.Errorf("Value policy %d token %d quantity must be an integer", policy, token)
+		return fmt.Errorf(
+			"Value policy %d token %d quantity must be an integer",
+			policy,
+			token,
+		)
 	}
 	if quantity.Sign() == 0 {
 		return nil
@@ -249,18 +258,27 @@ func normalizeValueEntriesWithArena(
 	for policyIndex, entry := range entries {
 		policy, ok := entry.(*ProtoPair)
 		if !ok || policy == nil {
-			return nil, fmt.Errorf("value policy entry %d is not a pair", policyIndex)
+			return nil, fmt.Errorf(
+				"value policy entry %d is not a pair",
+				policyIndex,
+			)
 		}
 		policyID, ok := policy.First.(*ByteString)
 		if !ok || policyID == nil {
-			return nil, fmt.Errorf("value policy entry %d has a non-bytestring key", policyIndex)
+			return nil, fmt.Errorf(
+				"value policy entry %d has a non-bytestring key",
+				policyIndex,
+			)
 		}
 		if err := checkValueKeyLength("policy", policyIndex, policyID.Inner); err != nil {
 			return nil, err
 		}
 		tokens, ok := policy.Second.(*ProtoList)
 		if !ok || tokens == nil {
-			return nil, fmt.Errorf("value policy entry %d has a non-list payload", policyIndex)
+			return nil, fmt.Errorf(
+				"value policy entry %d has a non-list payload",
+				policyIndex,
+			)
 		}
 
 		policyKey := string(policyID.Inner)
@@ -274,18 +292,30 @@ func normalizeValueEntriesWithArena(
 		for tokenIndex, entry := range tokens.List {
 			token, ok := entry.(*ProtoPair)
 			if !ok || token == nil {
-				return nil, fmt.Errorf("value token entry %d:%d is not a pair", policyIndex, tokenIndex)
+				return nil, fmt.Errorf(
+					"value token entry %d:%d is not a pair",
+					policyIndex,
+					tokenIndex,
+				)
 			}
 			tokenID, ok := token.First.(*ByteString)
 			if !ok || tokenID == nil {
-				return nil, fmt.Errorf("value token entry %d:%d has a non-bytestring key", policyIndex, tokenIndex)
+				return nil, fmt.Errorf(
+					"value token entry %d:%d has a non-bytestring key",
+					policyIndex,
+					tokenIndex,
+				)
 			}
 			if err := checkValueKeyLength("token", tokenIndex, tokenID.Inner); err != nil {
 				return nil, err
 			}
 			quantity, ok := token.Second.(*Integer)
 			if !ok || quantity == nil || quantity.Inner == nil {
-				return nil, fmt.Errorf("value token entry %d:%d has a non-integer quantity", policyIndex, tokenIndex)
+				return nil, fmt.Errorf(
+					"value token entry %d:%d has a non-integer quantity",
+					policyIndex,
+					tokenIndex,
+				)
 			}
 			if err := checkValueQuantityRange(policyIndex, tokenIndex, quantity.Inner); err != nil {
 				return nil, err

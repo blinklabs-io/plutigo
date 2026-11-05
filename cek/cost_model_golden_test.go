@@ -94,10 +94,16 @@ func synthCostModelParams(names []string) []int64 {
 func dumpCostModel(cm CostModel) string {
 	var sb strings.Builder
 
-	fmt.Fprintf(&sb, "machineCosts: %s\n", dumpReflectValue(reflect.ValueOf(cm.machineCosts)))
+	fmt.Fprintf(
+		&sb,
+		"machineCosts: %s\n",
+		dumpReflectValue(reflect.ValueOf(cm.machineCosts)),
+	)
 
 	for i := range cm.builtinCosts {
-		name := builtin.DefaultFunction(i).String() //nolint:gosec // i is a valid array index
+		name := builtin.DefaultFunction(i).
+			String()
+			//nolint:gosec // i is a valid array index
 		cf := cm.builtinCosts[i]
 		if cf == nil {
 			fmt.Fprintf(&sb, "builtin[%3d] %-40s <nil>\n", i, name)
@@ -147,7 +153,11 @@ func dumpReflectValue(v reflect.Value) string {
 		return sb.String()
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return fmt.Sprintf("%d", v.Int())
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+	case reflect.Uint,
+		reflect.Uint8,
+		reflect.Uint16,
+		reflect.Uint32,
+		reflect.Uint64:
 		return fmt.Sprintf("%d", v.Uint())
 	case reflect.Bool:
 		return fmt.Sprintf("%t", v.Bool())
@@ -167,7 +177,11 @@ func TestCostModelFieldMappingGolden(t *testing.T) {
 	for _, tc := range costModelFieldMappingCases {
 		names := lang.GetParamNamesForVersion(tc.version)
 		if len(names) == 0 {
-			t.Fatalf("%s: no parameter names for version %v", tc.name, tc.version)
+			t.Fatalf(
+				"%s: no parameter names for version %v",
+				tc.name,
+				tc.version,
+			)
 		}
 		params := synthCostModelParams(names)
 
@@ -212,7 +226,10 @@ func TestCostModelFieldMappingGolden(t *testing.T) {
 		if err := os.WriteFile(costModelGoldenPath, []byte(got.String()), 0o600); err != nil {
 			t.Fatalf("write golden file %s: %v", costModelGoldenPath, err)
 		}
-		t.Skipf("regenerated %s; re-run without -update-golden to verify", costModelGoldenPath)
+		t.Skipf(
+			"regenerated %s; re-run without -update-golden to verify",
+			costModelGoldenPath,
+		)
 	}
 
 	want, err := os.ReadFile(costModelGoldenPath)

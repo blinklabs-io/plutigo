@@ -37,7 +37,10 @@ func TestParsePlutusValueCanonicalForm(t *testing.T) {
 	maxQty := new(big.Int).Sub(qtyLimit, big.NewInt(1)).String()
 	minQty := new(big.Int).Neg(qtyLimit).String()
 	pastMax := qtyLimit.String()
-	pastMin := new(big.Int).Sub(new(big.Int).Neg(qtyLimit), big.NewInt(1)).String()
+	pastMin := new(
+		big.Int,
+	).Sub(new(big.Int).Neg(qtyLimit), big.NewInt(1)).
+		String()
 
 	valid := map[string]string{
 		"max quantity": `[(#aa, [(#bb, ` + maxQty + `)])]`,
@@ -113,19 +116,38 @@ func TestNewValueRejectsOutOfRangeMergedQuantity(t *testing.T) {
 	min := new(big.Int).Neg(limit)
 	tests := map[string][]IConstant{
 		"overflow": {
-			valueEntryForTest([]byte{0xaa}, valueTokenForTest([]byte{0xbb}, max)),
-			valueEntryForTest([]byte{0xaa}, valueTokenForTest([]byte{0xbb}, big.NewInt(1))),
+			valueEntryForTest(
+				[]byte{0xaa},
+				valueTokenForTest([]byte{0xbb}, max),
+			),
+			valueEntryForTest(
+				[]byte{0xaa},
+				valueTokenForTest([]byte{0xbb}, big.NewInt(1)),
+			),
 		},
 		"underflow": {
-			valueEntryForTest([]byte{0xaa}, valueTokenForTest([]byte{0xbb}, min)),
-			valueEntryForTest([]byte{0xaa}, valueTokenForTest([]byte{0xbb}, big.NewInt(-1))),
+			valueEntryForTest(
+				[]byte{0xaa},
+				valueTokenForTest([]byte{0xbb}, min),
+			),
+			valueEntryForTest(
+				[]byte{0xaa},
+				valueTokenForTest([]byte{0xbb}, big.NewInt(-1)),
+			),
 		},
 	}
 	for name, entries := range tests {
 		t.Run(name, func(t *testing.T) {
 			_, err := NewValue(entries)
-			if err == nil || !strings.Contains(err.Error(), "quantity out of signed 128-bit range") {
-				t.Fatalf("NewValue error = %v, want merged quantity range error", err)
+			if err == nil ||
+				!strings.Contains(
+					err.Error(),
+					"quantity out of signed 128-bit range",
+				) {
+				t.Fatalf(
+					"NewValue error = %v, want merged quantity range error",
+					err,
+				)
 			}
 		})
 	}
@@ -194,10 +216,17 @@ func TestDecodeValueConstantNormalizes(t *testing.T) {
 			}
 			if gotPretty, wantPretty := valuePrettyForTest(got), valueTextPrettyForTest(t,
 				`[(#aa, [(#02, 3)]), (#bb, [(#02, 2)])]`); gotPretty != wantPretty {
-				t.Fatalf("decoded Value normalized to %q, want %q", gotPretty, wantPretty)
+				t.Fatalf(
+					"decoded Value normalized to %q, want %q",
+					gotPretty,
+					wantPretty,
+				)
 			}
 			if name == "arena" && arena.protoPairs.used() != 11 {
-				t.Fatalf("arena allocated %d pairs, want 11 including normalized entries", arena.protoPairs.used())
+				t.Fatalf(
+					"arena allocated %d pairs, want 11 including normalized entries",
+					arena.protoPairs.used(),
+				)
 			}
 		})
 	}
@@ -222,7 +251,10 @@ func TestNormalizeValueEntriesWithArenaClearsReusedZeroQuantity(t *testing.T) {
 		t.Fatalf("normalize zero Value after arena reuse: %v", err)
 	}
 	if len(normalized) != 0 {
-		t.Fatalf("zero Value normalized to %s, want empty Value", valuePrettyForTest(newOwnedValue(normalized)))
+		t.Fatalf(
+			"zero Value normalized to %s, want empty Value",
+			valuePrettyForTest(newOwnedValue(normalized)),
+		)
 	}
 }
 
@@ -231,7 +263,10 @@ func valueEntryForTest(policyID []byte, tokens ...IConstant) IConstant {
 		FstType: valueEntryType.First,
 		SndType: valueEntryType.Second,
 		First:   &ByteString{Inner: policyID},
-		Second:  &ProtoList{LTyp: valueEntryType.Second.(*TList).Typ, List: tokens},
+		Second: &ProtoList{
+			LTyp: valueEntryType.Second.(*TList).Typ,
+			List: tokens,
+		},
 	}
 }
 
@@ -286,23 +321,43 @@ func TestParseValueRejectsInvalidPrefix(t *testing.T) {
 	long := strings.Repeat("01", 33)
 	limit := new(big.Int).Lsh(big.NewInt(1), 127).String()
 	invalid := map[string]struct{ text, errorText string }{
-		"policy key":       {`[(#` + long + `, [(#bb, 1)]), malformed]`, "key exceeds"},
-		"token key":        {`[(#aa, [(#` + long + `, 1), malformed])]`, "key exceeds"},
-		"quantity":         {`[(#aa, [(#bb, ` + limit + `), malformed])]`, "quantity out of signed 128-bit range"},
-		"zero quantity":    {`[(#aa, [(#bb, 0), malformed])]`, "zero quantity"},
-		"duplicate policy": {`[(#aa, [(#bb, 1)]), (#aa, malformed)]`, "policy keys must be strictly ascending"},
-		"duplicate token":  {`[(#aa, [(#bb, 1), (#bb, malformed)])]`, "token keys must be strictly ascending"},
-		"empty tokens":     {`[(#aa, []), malformed]`, "empty token map"},
+		"policy key": {
+			`[(#` + long + `, [(#bb, 1)]), malformed]`,
+			"key exceeds",
+		},
+		"token key": {
+			`[(#aa, [(#` + long + `, 1), malformed])]`,
+			"key exceeds",
+		},
+		"quantity": {
+			`[(#aa, [(#bb, ` + limit + `), malformed])]`,
+			"quantity out of signed 128-bit range",
+		},
+		"zero quantity": {`[(#aa, [(#bb, 0), malformed])]`, "zero quantity"},
+		"duplicate policy": {
+			`[(#aa, [(#bb, 1)]), (#aa, malformed)]`,
+			"policy keys must be strictly ascending",
+		},
+		"duplicate token": {
+			`[(#aa, [(#bb, 1), (#bb, malformed)])]`,
+			"token keys must be strictly ascending",
+		},
+		"empty tokens": {`[(#aa, []), malformed]`, "empty token map"},
 	}
 	for form, program := range valuePrograms {
 		for name, tc := range invalid {
-			if form == "con" && name != "policy key" && name != "token key" && name != "quantity" {
+			if form == "con" && name != "policy key" && name != "token key" &&
+				name != "quantity" {
 				continue
 			}
 			t.Run(form+"/"+name, func(t *testing.T) {
 				_, err := Parse(program(tc.text))
 				if err == nil || !strings.Contains(err.Error(), tc.errorText) {
-					t.Fatalf("Parse error = %v, want prefix validation error %q before malformed suffix", err, tc.errorText)
+					t.Fatalf(
+						"Parse error = %v, want prefix validation error %q before malformed suffix",
+						err,
+						tc.errorText,
+					)
 				}
 			})
 		}
@@ -315,7 +370,9 @@ func TestValueValidationAllocationBound(t *testing.T) {
 		entries[i] = &ProtoPair{
 			First: &ByteString{Inner: []byte{byte(i >> 8), byte(i)}},
 			Second: &ProtoList{List: []IConstant{&ProtoPair{
-				First: &ByteString{Inner: []byte{1}}, Second: newInteger(big.NewInt(1)),
+				First: &ByteString{
+					Inner: []byte{1},
+				}, Second: newInteger(big.NewInt(1)),
 			}}},
 		}
 	}
@@ -325,6 +382,9 @@ func TestValueValidationAllocationBound(t *testing.T) {
 		}
 	})
 	if allocs > 1 {
-		t.Fatalf("validating 1024 policies allocated %.0f objects, want at most 1", allocs)
+		t.Fatalf(
+			"validating 1024 policies allocated %.0f objects, want at most 1",
+			allocs,
+		)
 	}
 }

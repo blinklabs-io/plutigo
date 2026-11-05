@@ -188,7 +188,11 @@ func BenchmarkBuiltinIntegerOps(b *testing.B) {
 		b.Run(bench.name, func(b *testing.B) {
 			b.ReportAllocs()
 
-			machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+			machine := NewMachine[syn.DeBruijn](
+				lang.LanguageVersionV3,
+				0,
+				testEvalContext(),
+			)
 			builtinValue := &Builtin[syn.DeBruijn]{
 				Func: bench.fn,
 			}
@@ -351,7 +355,9 @@ func addTerms(left, right syn.Term[syn.Name]) syn.Term[syn.Name] {
 func buildDischargeValue(depth int) Value[syn.DeBruijn] {
 	env := buildBenchmarkEnv(depth)
 
-	body := syn.Term[syn.DeBruijn](&syn.Var[syn.DeBruijn]{Name: syn.DeBruijn(2)})
+	body := syn.Term[syn.DeBruijn](
+		&syn.Var[syn.DeBruijn]{Name: syn.DeBruijn(2)},
+	)
 	for i := 3; i <= depth+1; i++ {
 		body = &syn.Apply[syn.DeBruijn]{
 			Function: &syn.Apply[syn.DeBruijn]{
@@ -362,7 +368,9 @@ func buildDischargeValue(depth int) Value[syn.DeBruijn] {
 		}
 	}
 
-	bodyDelay := syn.Term[syn.DeBruijn](&syn.Var[syn.DeBruijn]{Name: syn.DeBruijn(1)})
+	bodyDelay := syn.Term[syn.DeBruijn](
+		&syn.Var[syn.DeBruijn]{Name: syn.DeBruijn(1)},
+	)
 	for i := 2; i <= depth; i++ {
 		bodyDelay = &syn.Apply[syn.DeBruijn]{
 			Function: &syn.Apply[syn.DeBruijn]{

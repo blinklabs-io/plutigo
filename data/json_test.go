@@ -186,7 +186,11 @@ func TestPlutusDataJSONConstr(t *testing.T) {
 		},
 		{
 			name: "large tag",
-			data: NewConstr(999, NewInteger(big.NewInt(6)), NewInteger(big.NewInt(7))),
+			data: NewConstr(
+				999,
+				NewInteger(big.NewInt(6)),
+				NewInteger(big.NewInt(7)),
+			),
 			json: `{"constructor":999,"fields":[{"int":6},{"int":7}]}`,
 		},
 		{
@@ -222,7 +226,11 @@ func TestPlutusDataJSONConstr(t *testing.T) {
 				t.Fatalf("Constr.UnmarshalJSON error: %v", err)
 			}
 			if !tt.data.Equal(&direct) {
-				t.Errorf("Constr.UnmarshalJSON: got %v, want %v", &direct, tt.data)
+				t.Errorf(
+					"Constr.UnmarshalJSON: got %v, want %v",
+					&direct,
+					tt.data,
+				)
 			}
 		})
 	}
@@ -273,8 +281,15 @@ func TestPlutusDataJSONRoundTrip(t *testing.T) {
 			NewConstr(0,
 				NewMap([][2]PlutusData{
 					{
-						NewConstr(0, NewInteger(big.NewInt(0)), NewInteger(big.NewInt(406))),
-						NewConstr(0, NewInteger(big.NewInt(1725522262478821201))),
+						NewConstr(
+							0,
+							NewInteger(big.NewInt(0)),
+							NewInteger(big.NewInt(406)),
+						),
+						NewConstr(
+							0,
+							NewInteger(big.NewInt(1725522262478821201)),
+						),
 					},
 				}),
 			),
@@ -283,11 +298,18 @@ func TestPlutusDataJSONRoundTrip(t *testing.T) {
 			"map with nested list keys",
 			NewMap([][2]PlutusData{
 				{
-					NewList(NewInteger(big.NewInt(1)), NewInteger(big.NewInt(2))),
+					NewList(
+						NewInteger(big.NewInt(1)),
+						NewInteger(big.NewInt(2)),
+					),
 					NewMap([][2]PlutusData{
 						{
 							NewList(NewByteString(nil)),
-							NewConstr(0, NewInteger(big.NewInt(2)), NewInteger(big.NewInt(1))),
+							NewConstr(
+								0,
+								NewInteger(big.NewInt(2)),
+								NewInteger(big.NewInt(1)),
+							),
 						},
 					}),
 				},
@@ -308,8 +330,12 @@ func TestPlutusDataJSONRoundTrip(t *testing.T) {
 			}
 
 			if !tt.data.Equal(w2.Data) {
-				t.Errorf("round-trip failed:\n  original: %v\n  got:      %v\n  json:     %s",
-					tt.data, w2.Data, jsonBytes)
+				t.Errorf(
+					"round-trip failed:\n  original: %v\n  got:      %v\n  json:     %s",
+					tt.data,
+					w2.Data,
+					jsonBytes,
+				)
 			}
 		})
 	}
@@ -332,8 +358,12 @@ func TestEncodeDecodeJSON(t *testing.T) {
 	}
 
 	if !original.Equal(decoded) {
-		t.Errorf("round-trip failed:\n  original: %v\n  decoded:  %v\n  json:     %s",
-			original, decoded, encoded)
+		t.Errorf(
+			"round-trip failed:\n  original: %v\n  decoded:  %v\n  json:     %s",
+			original,
+			decoded,
+			encoded,
+		)
 	}
 }
 
@@ -352,7 +382,10 @@ func TestPlutusDataJSONUnmarshalErrors(t *testing.T) {
 		{"constr missing fields", `{"constructor":0}`},
 		{"ambiguous int and bytes", `{"int":1,"bytes":"ab"}`},
 		{"ambiguous int and list", `{"int":1,"list":[]}`},
-		{"ambiguous int and constructor", `{"int":1,"constructor":0,"fields":[]}`},
+		{
+			"ambiguous int and constructor",
+			`{"int":1,"constructor":0,"fields":[]}`,
+		},
 		{"ambiguous bytes and map", `{"bytes":"ab","map":[]}`},
 		{"null list", `{"list":null}`},
 		{"null map", `{"map":null}`},

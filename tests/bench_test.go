@@ -52,144 +52,167 @@ func BenchmarkFlatFilesEvalFresh(b *testing.B) {
 }
 
 func benchFlatFiles(b *testing.B, includeDecode, includeEval bool) {
-	forEachBenchFile(b, func(b *testing.B, benchmarkName string, content []byte) {
-		var decodedProgram *syn.Program[syn.DeBruijn]
-		if !includeDecode || includeEval {
-			var err error
-			decodedProgram, err = syn.Decode[syn.DeBruijn](content)
-			if err != nil {
-				b.Fatalf("decode error: %v", err)
+	forEachBenchFile(
+		b,
+		func(b *testing.B, benchmarkName string, content []byte) {
+			var decodedProgram *syn.Program[syn.DeBruijn]
+			if !includeDecode || includeEval {
+				var err error
+				decodedProgram, err = syn.Decode[syn.DeBruijn](content)
+				if err != nil {
+					b.Fatalf("decode error: %v", err)
+				}
 			}
-		}
 
-		var (
-			programVersion lang.LanguageVersion
-			evalContext    *cek.EvalContext
-		)
-		if includeEval {
-			programVersion = benchmarkProgramVersion(b, decodedProgram)
-			evalContext = benchmarkEvalContext(programVersion)
-		}
-
-		// Register a sub-benchmark for this file.
-		b.Run(benchmarkName, func(b *testing.B) {
-			var machine *cek.Machine[syn.DeBruijn]
-			var decoder *syn.DeBruijnDecoder
+			var (
+				programVersion lang.LanguageVersion
+				evalContext    *cek.EvalContext
+			)
 			if includeEval {
-				// Reuse one machine per file so eval benchmarks measure steady-state
-				// execution, while decode benchmarks still decode inside the loop.
-				machine = cek.NewMachine[syn.DeBruijn](
-					programVersion,
-					0,
-					evalContext,
-				)
-			}
-			if includeDecode {
-				decoder = syn.NewDeBruijnDecoder()
-			}
-			if includeDecode && includeEval {
-				verifyMachine := cek.NewMachine[syn.DeBruijn](
-					programVersion,
-					0,
-					evalContext,
-				)
-				want, wantErr := verifyMachine.Run(decodedProgram.Term)
-				verifyFlatMachine := cek.NewMachine[syn.DeBruijn](
-					programVersion,
-					0,
-					evalContext,
-				)
-				got, gotErr := cek.RunFlat(
-					verifyFlatMachine,
-					syn.NewDeBruijnDecoder(),
-					content,
-				)
-				if (wantErr == nil) != (gotErr == nil) {
-					b.Fatalf("Run/RunFlat errors differ: Run %v, RunFlat %v", wantErr, gotErr)
-				}
-				if wantErr != nil && wantErr.Error() != gotErr.Error() {
-					b.Fatalf("Run error %q differs from RunFlat error %q", wantErr, gotErr)
-				}
-				if wantErr == nil && syn.PrettyTerm[syn.DeBruijn](want) != syn.PrettyTerm[syn.DeBruijn](got) {
-					b.Fatalf("Run and RunFlat returned different terms")
-				}
-				if verifyMachine.ExBudget != verifyFlatMachine.ExBudget {
-					b.Fatalf("Run remaining budget %+v differs from RunFlat remaining budget %+v", verifyMachine.ExBudget, verifyFlatMachine.ExBudget)
-				}
+				programVersion = benchmarkProgramVersion(b, decodedProgram)
+				evalContext = benchmarkEvalContext(programVersion)
 			}
 
-			for b.Loop() {
-				program := decodedProgram
-				if includeDecode {
-					if includeEval {
-						_, err := cek.RunFlat(machine, decoder, content)
-						if err != nil {
-							b.Fatalf("eval error: %v", err)
-						}
-						continue
-					}
-					var decodeErr error
-					program, decodeErr = decoder.DecodeBorrowed(content)
-					if decodeErr != nil {
-						b.Fatalf("decode error: %v", decodeErr)
-					}
-				}
-
+			// Register a sub-benchmark for this file.
+			b.Run(benchmarkName, func(b *testing.B) {
+				var machine *cek.Machine[syn.DeBruijn]
+				var decoder *syn.DeBruijnDecoder
 				if includeEval {
-					// Use an eval context with protocol major 200 so benchmark
-					// coverage includes every builtin without availability gating.
-					_, err := machine.Run(program.Term)
-					if err != nil {
-						b.Fatalf("eval error: %v", err)
-					}
-				}
-			}
-		})
-	})
-}
-
-func benchFlatFilesFresh(b *testing.B, includeDecode, includeEval bool) {
-	forEachBenchFile(b, func(b *testing.B, benchmarkName string, content []byte) {
-		var (
-			decodedProgram *syn.Program[syn.DeBruijn]
-			programVersion lang.LanguageVersion
-			evalContext    *cek.EvalContext
-		)
-		if includeEval {
-			var err error
-			decodedProgram, err = syn.Decode[syn.DeBruijn](content)
-			if err != nil {
-				b.Fatalf("decode error: %v", err)
-			}
-			programVersion = benchmarkProgramVersion(b, decodedProgram)
-			evalContext = benchmarkEvalContext(programVersion)
-		}
-
-		b.Run(benchmarkName, func(b *testing.B) {
-			for b.Loop() {
-				program := decodedProgram
-				if includeDecode {
-					var decodeErr error
-					program, decodeErr = syn.Decode[syn.DeBruijn](content)
-					if decodeErr != nil {
-						b.Fatalf("decode error: %v", decodeErr)
-					}
-				}
-
-				if includeEval {
-					machine := cek.NewMachine[syn.DeBruijn](
+					// Reuse one machine per file so eval benchmarks measure steady-state
+					// execution, while decode benchmarks still decode inside the loop.
+					machine = cek.NewMachine[syn.DeBruijn](
 						programVersion,
 						0,
 						evalContext,
 					)
-					_, err := machine.Run(program.Term)
-					if err != nil {
-						b.Fatalf("eval error: %v", err)
+				}
+				if includeDecode {
+					decoder = syn.NewDeBruijnDecoder()
+				}
+				if includeDecode && includeEval {
+					verifyMachine := cek.NewMachine[syn.DeBruijn](
+						programVersion,
+						0,
+						evalContext,
+					)
+					want, wantErr := verifyMachine.Run(decodedProgram.Term)
+					verifyFlatMachine := cek.NewMachine[syn.DeBruijn](
+						programVersion,
+						0,
+						evalContext,
+					)
+					got, gotErr := cek.RunFlat(
+						verifyFlatMachine,
+						syn.NewDeBruijnDecoder(),
+						content,
+					)
+					if (wantErr == nil) != (gotErr == nil) {
+						b.Fatalf(
+							"Run/RunFlat errors differ: Run %v, RunFlat %v",
+							wantErr,
+							gotErr,
+						)
+					}
+					if wantErr != nil && wantErr.Error() != gotErr.Error() {
+						b.Fatalf(
+							"Run error %q differs from RunFlat error %q",
+							wantErr,
+							gotErr,
+						)
+					}
+					if wantErr == nil &&
+						syn.PrettyTerm[syn.DeBruijn](
+							want,
+						) != syn.PrettyTerm[syn.DeBruijn](
+							got,
+						) {
+						b.Fatalf("Run and RunFlat returned different terms")
+					}
+					if verifyMachine.ExBudget != verifyFlatMachine.ExBudget {
+						b.Fatalf(
+							"Run remaining budget %+v differs from RunFlat remaining budget %+v",
+							verifyMachine.ExBudget,
+							verifyFlatMachine.ExBudget,
+						)
 					}
 				}
+
+				for b.Loop() {
+					program := decodedProgram
+					if includeDecode {
+						if includeEval {
+							_, err := cek.RunFlat(machine, decoder, content)
+							if err != nil {
+								b.Fatalf("eval error: %v", err)
+							}
+							continue
+						}
+						var decodeErr error
+						program, decodeErr = decoder.DecodeBorrowed(content)
+						if decodeErr != nil {
+							b.Fatalf("decode error: %v", decodeErr)
+						}
+					}
+
+					if includeEval {
+						// Use an eval context with protocol major 200 so benchmark
+						// coverage includes every builtin without availability gating.
+						_, err := machine.Run(program.Term)
+						if err != nil {
+							b.Fatalf("eval error: %v", err)
+						}
+					}
+				}
+			})
+		},
+	)
+}
+
+func benchFlatFilesFresh(b *testing.B, includeDecode, includeEval bool) {
+	forEachBenchFile(
+		b,
+		func(b *testing.B, benchmarkName string, content []byte) {
+			var (
+				decodedProgram *syn.Program[syn.DeBruijn]
+				programVersion lang.LanguageVersion
+				evalContext    *cek.EvalContext
+			)
+			if includeEval {
+				var err error
+				decodedProgram, err = syn.Decode[syn.DeBruijn](content)
+				if err != nil {
+					b.Fatalf("decode error: %v", err)
+				}
+				programVersion = benchmarkProgramVersion(b, decodedProgram)
+				evalContext = benchmarkEvalContext(programVersion)
 			}
-		})
-	})
+
+			b.Run(benchmarkName, func(b *testing.B) {
+				for b.Loop() {
+					program := decodedProgram
+					if includeDecode {
+						var decodeErr error
+						program, decodeErr = syn.Decode[syn.DeBruijn](content)
+						if decodeErr != nil {
+							b.Fatalf("decode error: %v", decodeErr)
+						}
+					}
+
+					if includeEval {
+						machine := cek.NewMachine[syn.DeBruijn](
+							programVersion,
+							0,
+							evalContext,
+						)
+						_, err := machine.Run(program.Term)
+						if err != nil {
+							b.Fatalf("eval error: %v", err)
+						}
+					}
+				}
+			})
+		},
+	)
 }
 
 func forEachBenchFile(

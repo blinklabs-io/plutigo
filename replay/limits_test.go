@@ -89,7 +89,10 @@ func TestLoadRejectsInvalidCostModelParameters(t *testing.T) {
 
 	_, err = Load(context.Background(), bytes.NewReader(encoded))
 	if err == nil || !strings.Contains(err.Error(), "cekVarCost-exBudgetCPU") {
-		t.Fatalf("Load() error = %v, want the invalid cekVarCost parameter", err)
+		t.Fatalf(
+			"Load() error = %v, want the invalid cekVarCost parameter",
+			err,
+		)
 	}
 }
 
@@ -144,39 +147,54 @@ func TestRunEnforcesLimits(t *testing.T) {
 		{
 			name: "limits met exactly",
 			limits: Limits{
-				Case:   budget,
-				Corpus: ExUnits{Steps: 2 * budget.Steps, Memory: 2 * budget.Memory},
+				Case: budget,
+				Corpus: ExUnits{
+					Steps:  2 * budget.Steps,
+					Memory: 2 * budget.Memory,
+				},
 			},
 		},
 		{
 			name: "case steps over limit",
 			limits: Limits{
-				Case:   ExUnits{Steps: budget.Steps - 1, Memory: budget.Memory},
-				Corpus: ExUnits{Steps: 2 * budget.Steps, Memory: 2 * budget.Memory},
+				Case: ExUnits{Steps: budget.Steps - 1, Memory: budget.Memory},
+				Corpus: ExUnits{
+					Steps:  2 * budget.Steps,
+					Memory: 2 * budget.Memory,
+				},
 			},
 			wantError: "per-case limit",
 		},
 		{
 			name: "case memory over limit",
 			limits: Limits{
-				Case:   ExUnits{Steps: budget.Steps, Memory: budget.Memory - 1},
-				Corpus: ExUnits{Steps: 2 * budget.Steps, Memory: 2 * budget.Memory},
+				Case: ExUnits{Steps: budget.Steps, Memory: budget.Memory - 1},
+				Corpus: ExUnits{
+					Steps:  2 * budget.Steps,
+					Memory: 2 * budget.Memory,
+				},
 			},
 			wantError: "per-case limit",
 		},
 		{
 			name: "corpus steps over limit",
 			limits: Limits{
-				Case:   budget,
-				Corpus: ExUnits{Steps: 2*budget.Steps - 1, Memory: 2 * budget.Memory},
+				Case: budget,
+				Corpus: ExUnits{
+					Steps:  2*budget.Steps - 1,
+					Memory: 2 * budget.Memory,
+				},
 			},
 			wantError: "corpus limit",
 		},
 		{
 			name: "corpus memory over limit",
 			limits: Limits{
-				Case:   budget,
-				Corpus: ExUnits{Steps: 2 * budget.Steps, Memory: 2*budget.Memory - 1},
+				Case: budget,
+				Corpus: ExUnits{
+					Steps:  2 * budget.Steps,
+					Memory: 2*budget.Memory - 1,
+				},
 			},
 			wantError: "corpus limit",
 		},
@@ -192,7 +210,11 @@ func TestRunEnforcesLimits(t *testing.T) {
 			report, err := Run(context.Background(), corpus, tt.limits)
 			if tt.wantError == "" {
 				if err != nil || report.Summary.Total != 2 {
-					t.Fatalf("Run() = %+v, %v; want both cases run", report, err)
+					t.Fatalf(
+						"Run() = %+v, %v; want both cases run",
+						report,
+						err,
+					)
 				}
 				return
 			}
@@ -200,7 +222,10 @@ func TestRunEnforcesLimits(t *testing.T) {
 				t.Fatalf("Run() error = %v, want %q", err, tt.wantError)
 			}
 			if report != nil {
-				t.Fatalf("Run() report = %+v, want none when limits are exceeded", report)
+				t.Fatalf(
+					"Run() report = %+v, want none when limits are exceeded",
+					report,
+				)
 			}
 		})
 	}
@@ -259,7 +284,11 @@ func TestRunChecksLimitsBeforeValidatingCases(t *testing.T) {
 			corpus.Cases = append(corpus.Cases, invalid)
 			_, err := Run(context.Background(), corpus, tt.limits)
 			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
-				t.Fatalf("Run() error = %v, want %q before case validation", err, tt.wantError)
+				t.Fatalf(
+					"Run() error = %v, want %q before case validation",
+					err,
+					tt.wantError,
+				)
 			}
 		})
 	}
@@ -299,13 +328,19 @@ func TestLoadStopsReadingOnceCanceled(t *testing.T) {
 		t.Fatalf("json.Marshal() failed: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	reader := &cancelOnFirstRead{input: bytes.NewReader(encoded), cancel: cancel}
+	reader := &cancelOnFirstRead{
+		input:  bytes.NewReader(encoded),
+		cancel: cancel,
+	}
 
 	_, err = Load(ctx, reader)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Load() error = %v, want context.Canceled", err)
 	}
 	if reader.reads != 1 {
-		t.Fatalf("Load() made %d reads, want none after cancellation", reader.reads)
+		t.Fatalf(
+			"Load() made %d reads, want none after cancellation",
+			reader.reads,
+		)
 	}
 }
