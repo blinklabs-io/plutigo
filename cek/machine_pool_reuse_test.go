@@ -69,13 +69,21 @@ func TestSetExBudgetToPreviousRemaining(t *testing.T) {
 	m.SetExBudget(remaining)
 	run(m)
 	if want := remaining.Sub(&used); m.ExBudget != want {
-		t.Errorf("after SetExBudget(remaining): budget %+v, want %+v", m.ExBudget, want)
+		t.Errorf(
+			"after SetExBudget(remaining): budget %+v, want %+v",
+			m.ExBudget,
+			want,
+		)
 	}
 
 	// Leaving ExBudget as the run left it restores the initial budget.
 	run(m)
 	if want := remaining.Sub(&used); m.ExBudget != want {
-		t.Errorf("after an unchanged budget: budget %+v, want %+v", m.ExBudget, want)
+		t.Errorf(
+			"after an unchanged budget: budget %+v, want %+v",
+			m.ExBudget,
+			want,
+		)
 	}
 }
 
@@ -110,7 +118,10 @@ func TestPooledMachineKeepsArenasAcrossScripts(t *testing.T) {
 	// Reallocating the arenas costs megabytes per pair; reusing them,
 	// kilobytes.
 	if perPair := (after.TotalAlloc - before.TotalAlloc) / pairs; perPair > 256<<10 {
-		t.Errorf("alternating runs allocate %d bytes per pair, want at most 256KiB", perPair)
+		t.Errorf(
+			"alternating runs allocate %d bytes per pair, want at most 256KiB",
+			perPair,
+		)
 	}
 }
 
@@ -133,12 +144,21 @@ func TestValueArenaShrinksAfterSmallerRuns(t *testing.T) {
 	run(small)
 	for i := 1; i < valueArenaShrinkRuns; i++ {
 		if got := m.valueArenaRetentions[valueArenaLambda].retainedSlots(); got != grown {
-			t.Fatalf("after %d smaller runs the retained slot count is %d, want %d", i, got, grown)
+			t.Fatalf(
+				"after %d smaller runs the retained slot count is %d, want %d",
+				i,
+				got,
+				grown,
+			)
 		}
 		run(small)
 	}
 	if got := m.valueArenaRetentions[valueArenaLambda].retainedSlots(); got >= grown {
-		t.Errorf("after %d smaller runs the retained slot count is still %d", valueArenaShrinkRuns, got)
+		t.Errorf(
+			"after %d smaller runs the retained slot count is still %d",
+			valueArenaShrinkRuns,
+			got,
+		)
 	}
 }
 
@@ -165,14 +185,21 @@ func TestValueArenaShrinkCountRestartsAfterLargerRun(t *testing.T) {
 	for i := 1; i < valueArenaShrinkRuns; i++ {
 		run(small)
 		if got := m.valueArenaRetentions[valueArenaLambda].retainedSlots(); got != grown {
-			t.Fatalf("after %d smaller runs following a larger run the retained slot count is %d, want %d",
-				i, got, grown)
+			t.Fatalf(
+				"after %d smaller runs following a larger run the retained slot count is %d, want %d",
+				i,
+				got,
+				grown,
+			)
 		}
 	}
 	run(small)
 	if got := m.valueArenaRetentions[valueArenaLambda].retainedSlots(); got >= grown {
-		t.Errorf("after %d smaller runs following a larger run the retained slot count is still %d",
-			valueArenaShrinkRuns, got)
+		t.Errorf(
+			"after %d smaller runs following a larger run the retained slot count is still %d",
+			valueArenaShrinkRuns,
+			got,
+		)
 	}
 }
 
@@ -226,7 +253,10 @@ func TestValueElemArenaRetentionUsesActualChunkSize(t *testing.T) {
 	m.updateValueArenaRetentions()
 	m.lazyPrepareValueArenas()
 	if got := len(m.valueElemChunks); got != 5 {
-		t.Fatalf("value element arena retained %d chunks after growing, want 5", got)
+		t.Fatalf(
+			"value element arena retained %d chunks after growing, want 5",
+			got,
+		)
 	}
 	for range valueArenaShrinkRuns {
 		m.updateValueArenaRetentions()
@@ -243,7 +273,10 @@ func TestOversizedValueElemArenaShrinksAfterSmallerRuns(t *testing.T) {
 	m.updateValueArenaRetentions()
 	m.lazyPrepareValueArenas()
 	if got := len(m.valueElemChunks); got != 1 {
-		t.Fatalf("value element arena retained %d oversized chunks, want 1", got)
+		t.Fatalf(
+			"value element arena retained %d oversized chunks, want 1",
+			got,
+		)
 	}
 	for range valueArenaShrinkRuns {
 		m.allocValueElems(1)
@@ -251,7 +284,10 @@ func TestOversizedValueElemArenaShrinksAfterSmallerRuns(t *testing.T) {
 		m.lazyPrepareValueArenas()
 	}
 	if got := len(m.valueElemChunks); got != 0 {
-		t.Fatalf("cold value element arena retained %d oversized chunks, want 0", got)
+		t.Fatalf(
+			"cold value element arena retained %d oversized chunks, want 0",
+			got,
+		)
 	}
 }
 
@@ -300,10 +336,18 @@ func TestValueElemRetentionIgnoresSkippedChunkTails(t *testing.T) {
 		t.Fatalf("requested slots = %d, want 4800", m.valueElemSlotsUsed)
 	}
 	if m.valueElemChunkPos <= m.valueElemSlotsUsed {
-		t.Fatalf("cursor %d should exceed requested slots %d", m.valueElemChunkPos, m.valueElemSlotsUsed)
+		t.Fatalf(
+			"cursor %d should exceed requested slots %d",
+			m.valueElemChunkPos,
+			m.valueElemSlotsUsed,
+		)
 	}
 	var fromRequested valueArenaRetention
-	updateValueArenaRetention(&fromRequested, m.valueElemSlotsUsed, valueElemChunkSize)
+	updateValueArenaRetention(
+		&fromRequested,
+		m.valueElemSlotsUsed,
+		valueElemChunkSize,
+	)
 	m.updateValueArenaRetentions()
 	if got, want := m.valueArenaRetentions[valueArenaElem].retainedSlots(), fromRequested.retainedSlots(); got != want {
 		t.Fatalf("retained slots %d, want %d from requested count", got, want)

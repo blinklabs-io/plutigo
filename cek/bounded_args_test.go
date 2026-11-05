@@ -25,7 +25,12 @@ import (
 
 func bigPow2(n uint) *big.Int { return new(big.Int).Lsh(big.NewInt(1), n) }
 
-func addBig(x *big.Int, d int64) *big.Int { return new(big.Int).Add(x, big.NewInt(d)) }
+func addBig(
+	x *big.Int,
+	d int64,
+) *big.Int {
+	return new(big.Int).Add(x, big.NewInt(d))
+}
 
 // TestBoundedBuiltinArguments pins the van Rossem (semantics variants D and
 // E) argument bounds of the reference, PlutusCore.Default.Universe.Cardano:
@@ -42,9 +47,16 @@ func TestBoundedBuiltinArguments(t *testing.T) {
 	bs = func(n int) string {
 		switch {
 		case n <= 8192:
-			return fmt.Sprintf("[(builtin replicateByte) (con integer %d) (con integer 0)]", n)
+			return fmt.Sprintf(
+				"[(builtin replicateByte) (con integer %d) (con integer 0)]",
+				n,
+			)
 		default:
-			return fmt.Sprintf("[(builtin appendByteString) %s %s]", bs(n/2), bs(n-n/2))
+			return fmt.Sprintf(
+				"[(builtin appendByteString) %s %s]",
+				bs(n/2),
+				bs(n-n/2),
+			)
 		}
 	}
 	ci := func(v *big.Int) string { return fmt.Sprintf("(con integer %s)", v) }
@@ -56,35 +68,205 @@ func TestBoundedBuiltinArguments(t *testing.T) {
 		anyFails bool // at protocol 10 (variants B and C)
 	}
 	tests := []tc{
-		{name: "addInteger at maxBound", src: "[(builtin addInteger) " + ci(maxInt) + " (con integer 0)]"},
-		{name: "addInteger above maxBound", src: "[(builtin addInteger) " + ci(bigPow2(262143)) + " (con integer 0)]", v3Fails: true, v1Fails: true},
-		{name: "subtractInteger second above maxBound", src: "[(builtin subtractInteger) (con integer 0) " + ci(bigPow2(262143)) + "]", v3Fails: true, v1Fails: true},
-		{name: "multiplyInteger at minBound", src: "[(builtin multiplyInteger) " + ci(minInt) + " (con integer 1)]"},
-		{name: "multiplyInteger below minBound", src: "[(builtin multiplyInteger) " + ci(addBig(minInt, -1)) + " (con integer 1)]", v3Fails: true, v1Fails: true},
-		{name: "multiplyInteger result beyond the bound", src: "[(builtin multiplyInteger) " + ci(maxInt) + " " + ci(maxInt) + "]"},
-		{name: "lessThanInteger above maxBound", src: "[(builtin lessThanInteger) " + ci(bigPow2(262143)) + " (con integer 0)]", v3Fails: true, v1Fails: true},
-		{name: "equalsInteger is unbounded", src: "[(builtin equalsInteger) " + ci(bigPow2(262143)) + " (con integer 0)]"},
-		{name: "divideInteger above maxBound", src: "[(builtin divideInteger) " + ci(bigPow2(262144)) + " (con integer 3)]", v3Fails: true, v1Fails: true},
-		{name: "sha2_256 of 65536 bytes", src: "[(builtin sha2_256) " + bs(65536) + "]"},
-		{name: "sha2_256 of 65537 bytes", src: "[(builtin sha2_256) " + bs(65537) + "]", v3Fails: true, v1Fails: true},
-		{name: "appendByteString result beyond the bound", src: "[(builtin lengthOfByteString) [(builtin appendByteString) " + bs(65536) + " " + bs(65536) + "]]"},
-		{name: "appendByteString of 65537 bytes", src: "[(builtin appendByteString) " + bs(65537) + " (con bytestring #)]", v3Fails: true, v1Fails: true},
-		{name: "equalsByteString second of 65537 bytes", src: "[(builtin equalsByteString) (con bytestring #) " + bs(65537) + "]", v3Fails: true, v1Fails: true},
-		{name: "lengthOfByteString is unbounded", src: "[(builtin lengthOfByteString) " + bs(65537) + "]"},
-		{name: "sliceByteString of 65537 bytes", src: "[(builtin sliceByteString) (con integer 0) (con integer 1) " + bs(65537) + "]", v3Fails: true, v1Fails: true},
-		{name: "andByteString of 65537 bytes", src: "[(builtin andByteString) (con bool False) " + bs(65537) + " (con bytestring #00)]", v3Fails: true, v1Fails: true},
-		{name: "verifyEd25519Signature message of 65537 bytes", src: "[(builtin verifyEd25519Signature) " + bs(32) + " " + bs(65537) + " " + bs(64) + "]", v3Fails: true, v1Fails: true},
-		{name: "consByteString integer above maxBound", src: "[(builtin consByteString) " + ci(bigPow2(262143)) + " (con bytestring #)]", v3Fails: true, v1Fails: true},
-		{name: "consByteString integer 256", src: "[(builtin consByteString) (con integer 256) (con bytestring #)]", v3Fails: true},
+		{
+			name: "addInteger at maxBound",
+			src:  "[(builtin addInteger) " + ci(maxInt) + " (con integer 0)]",
+		},
+		{
+			name: "addInteger above maxBound",
+			src: "[(builtin addInteger) " + ci(
+				bigPow2(262143),
+			) + " (con integer 0)]",
+			v3Fails: true,
+			v1Fails: true,
+		},
+		{
+			name: "subtractInteger second above maxBound",
+			src: "[(builtin subtractInteger) (con integer 0) " + ci(
+				bigPow2(262143),
+			) + "]",
+			v3Fails: true,
+			v1Fails: true,
+		},
+		{
+			name: "multiplyInteger at minBound",
+			src: "[(builtin multiplyInteger) " + ci(
+				minInt,
+			) + " (con integer 1)]",
+		},
+		{
+			name: "multiplyInteger below minBound",
+			src: "[(builtin multiplyInteger) " + ci(
+				addBig(minInt, -1),
+			) + " (con integer 1)]",
+			v3Fails: true,
+			v1Fails: true,
+		},
+		{
+			name: "multiplyInteger result beyond the bound",
+			src: "[(builtin multiplyInteger) " + ci(
+				maxInt,
+			) + " " + ci(
+				maxInt,
+			) + "]",
+		},
+		{
+			name: "lessThanInteger above maxBound",
+			src: "[(builtin lessThanInteger) " + ci(
+				bigPow2(262143),
+			) + " (con integer 0)]",
+			v3Fails: true,
+			v1Fails: true,
+		},
+		{
+			name: "equalsInteger is unbounded",
+			src: "[(builtin equalsInteger) " + ci(
+				bigPow2(262143),
+			) + " (con integer 0)]",
+		},
+		{
+			name: "divideInteger above maxBound",
+			src: "[(builtin divideInteger) " + ci(
+				bigPow2(262144),
+			) + " (con integer 3)]",
+			v3Fails: true,
+			v1Fails: true,
+		},
+		{
+			name: "sha2_256 of 65536 bytes",
+			src:  "[(builtin sha2_256) " + bs(65536) + "]",
+		},
+		{
+			name:    "sha2_256 of 65537 bytes",
+			src:     "[(builtin sha2_256) " + bs(65537) + "]",
+			v3Fails: true,
+			v1Fails: true,
+		},
+		{
+			name: "appendByteString result beyond the bound",
+			src: "[(builtin lengthOfByteString) [(builtin appendByteString) " + bs(
+				65536,
+			) + " " + bs(
+				65536,
+			) + "]]",
+		},
+		{
+			name: "appendByteString of 65537 bytes",
+			src: "[(builtin appendByteString) " + bs(
+				65537,
+			) + " (con bytestring #)]",
+			v3Fails: true,
+			v1Fails: true,
+		},
+		{
+			name: "equalsByteString second of 65537 bytes",
+			src: "[(builtin equalsByteString) (con bytestring #) " + bs(
+				65537,
+			) + "]",
+			v3Fails: true,
+			v1Fails: true,
+		},
+		{
+			name: "lengthOfByteString is unbounded",
+			src:  "[(builtin lengthOfByteString) " + bs(65537) + "]",
+		},
+		{
+			name: "sliceByteString of 65537 bytes",
+			src: "[(builtin sliceByteString) (con integer 0) (con integer 1) " + bs(
+				65537,
+			) + "]",
+			v3Fails: true,
+			v1Fails: true,
+		},
+		{
+			name: "andByteString of 65537 bytes",
+			src: "[(builtin andByteString) (con bool False) " + bs(
+				65537,
+			) + " (con bytestring #00)]",
+			v3Fails: true,
+			v1Fails: true,
+		},
+		{
+			name: "verifyEd25519Signature message of 65537 bytes",
+			src: "[(builtin verifyEd25519Signature) " + bs(
+				32,
+			) + " " + bs(
+				65537,
+			) + " " + bs(
+				64,
+			) + "]",
+			v3Fails: true,
+			v1Fails: true,
+		},
+		{
+			name: "consByteString integer above maxBound",
+			src: "[(builtin consByteString) " + ci(
+				bigPow2(262143),
+			) + " (con bytestring #)]",
+			v3Fails: true,
+			v1Fails: true,
+		},
+		{
+			name:    "consByteString integer 256",
+			src:     "[(builtin consByteString) (con integer 256) (con bytestring #)]",
+			v3Fails: true,
+		},
 		// sliceByteString unlifts skip and take as Int in every variant.
-		{name: "sliceByteString skip beyond Int64", src: "[(builtin sliceByteString) " + ci(bigPow2(63)) + " (con integer 1) (con bytestring #0102)]", v3Fails: true, v1Fails: true, anyFails: true},
-		{name: "sliceByteString take beyond Int64", src: "[(builtin sliceByteString) (con integer 0) " + ci(new(big.Int).Neg(addBig(bigPow2(63), 1))) + " (con bytestring #0102)]", v3Fails: true, v1Fails: true, anyFails: true},
-		{name: "sliceByteString Int64 extremes", src: "[(builtin sliceByteString) " + ci(addBig(bigPow2(63), -1)) + " " + ci(new(big.Int).Neg(bigPow2(63))) + " (con bytestring #0102)]"},
+		{
+			name: "sliceByteString skip beyond Int64",
+			src: "[(builtin sliceByteString) " + ci(
+				bigPow2(63),
+			) + " (con integer 1) (con bytestring #0102)]",
+			v3Fails:  true,
+			v1Fails:  true,
+			anyFails: true,
+		},
+		{
+			name: "sliceByteString take beyond Int64",
+			src: "[(builtin sliceByteString) (con integer 0) " + ci(
+				new(big.Int).Neg(addBig(bigPow2(63), 1)),
+			) + " (con bytestring #0102)]",
+			v3Fails:  true,
+			v1Fails:  true,
+			anyFails: true,
+		},
+		{
+			name: "sliceByteString Int64 extremes",
+			src: "[(builtin sliceByteString) " + ci(
+				addBig(bigPow2(63), -1),
+			) + " " + ci(
+				new(big.Int).Neg(bigPow2(63)),
+			) + " (con bytestring #0102)]",
+		},
 		// scalarMul is bounded like multiScalarMul from van Rossem.
-		{name: "G1 scalarMul at 2^4095-1", src: "[(builtin bls12_381_G1_scalarMul) " + ci(addBig(bigPow2(4095), -1)) + " [(builtin bls12_381_G1_hashToGroup) (con bytestring #) (con bytestring #00)]]"},
-		{name: "G1 scalarMul at 2^4095", src: "[(builtin bls12_381_G1_scalarMul) " + ci(bigPow2(4095)) + " [(builtin bls12_381_G1_hashToGroup) (con bytestring #) (con bytestring #00)]]", v3Fails: true, v1Fails: true},
-		{name: "G2 scalarMul at -(2^4095)-1", src: "[(builtin bls12_381_G2_scalarMul) " + ci(addBig(new(big.Int).Neg(bigPow2(4095)), -1)) + " [(builtin bls12_381_G2_hashToGroup) (con bytestring #) (con bytestring #00)]]", v3Fails: true, v1Fails: true},
-		{name: "G2 scalarMul at -(2^4095)", src: "[(builtin bls12_381_G2_scalarMul) " + ci(new(big.Int).Neg(bigPow2(4095))) + " [(builtin bls12_381_G2_hashToGroup) (con bytestring #) (con bytestring #00)]]"},
+		{
+			name: "G1 scalarMul at 2^4095-1",
+			src: "[(builtin bls12_381_G1_scalarMul) " + ci(
+				addBig(bigPow2(4095), -1),
+			) + " [(builtin bls12_381_G1_hashToGroup) (con bytestring #) (con bytestring #00)]]",
+		},
+		{
+			name: "G1 scalarMul at 2^4095",
+			src: "[(builtin bls12_381_G1_scalarMul) " + ci(
+				bigPow2(4095),
+			) + " [(builtin bls12_381_G1_hashToGroup) (con bytestring #) (con bytestring #00)]]",
+			v3Fails: true,
+			v1Fails: true,
+		},
+		{
+			name: "G2 scalarMul at -(2^4095)-1",
+			src: "[(builtin bls12_381_G2_scalarMul) " + ci(
+				addBig(new(big.Int).Neg(bigPow2(4095)), -1),
+			) + " [(builtin bls12_381_G2_hashToGroup) (con bytestring #) (con bytestring #00)]]",
+			v3Fails: true,
+			v1Fails: true,
+		},
+		{
+			name: "G2 scalarMul at -(2^4095)",
+			src: "[(builtin bls12_381_G2_scalarMul) " + ci(
+				new(big.Int).Neg(bigPow2(4095)),
+			) + " [(builtin bls12_381_G2_hashToGroup) (con bytestring #) (con bytestring #00)]]",
+		},
 	}
 	for _, tt := range tests {
 		for _, run := range []struct {
@@ -136,7 +318,9 @@ func TestExpModIntegerBounds(t *testing.T) {
 	for _, tt := range tests {
 		src := fmt.Sprintf(
 			"(program 1.0.0 [(builtin expModInteger) (con integer %s) (con integer %s) (con integer %s)])",
-			tt.b, tt.e, tt.m,
+			tt.b,
+			tt.e,
+			tt.m,
 		)
 		got, err := runTextProgram(t, src, 11)
 		if tt.want == "" {

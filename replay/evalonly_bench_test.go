@@ -42,23 +42,37 @@ func BenchmarkMainnetEvalOnly(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		name := string(replayCase.Language) + "/" + strings.ReplaceAll(replayCase.ID, ":", "_")
+		name := string(
+			replayCase.Language,
+		) + "/" + strings.ReplaceAll(
+			replayCase.ID,
+			":",
+			"_",
+		)
 		b.Run(name, func(b *testing.B) {
 			b.ReportAllocs()
 			startCPU := processCPUNanos()
 			for b.Loop() {
-				machine := cek.NewMachine[syn.DeBruijn](prepared.languageVersion, 200, prepared.evalContext)
+				machine := cek.NewMachine[syn.DeBruijn](
+					prepared.languageVersion,
+					200,
+					prepared.evalContext,
+				)
 				machine.ExBudget = prepared.budget
 				if _, err := machine.Run(prepared.term); err != nil {
 					b.Fatal(err)
 				}
 				used := prepared.budget.Sub(&machine.ExBudget)
-				if used.Cpu != replayCase.Expected.ExUnits.Steps || used.Mem != replayCase.Expected.ExUnits.Memory {
+				if used.Cpu != replayCase.Expected.ExUnits.Steps ||
+					used.Mem != replayCase.Expected.ExUnits.Memory {
 					b.Fatalf("budget mismatch: %+v", used)
 				}
 			}
 			if startCPU != 0 {
-				b.ReportMetric(float64(processCPUNanos()-startCPU)/float64(b.N), "cpu-ns/op")
+				b.ReportMetric(
+					float64(processCPUNanos()-startCPU)/float64(b.N),
+					"cpu-ns/op",
+				)
 			}
 		})
 	}

@@ -83,37 +83,60 @@ func TestDecodeIntegerConstantsShareNoMagnitude(t *testing.T) {
 			{"reused", NewDeBruijnDecoder().Decode},
 			{"borrowed", NewDeBruijnDecoder().DecodeBorrowed},
 		} {
-			t.Run(fmt.Sprintf("%s/bump-%d-bits", decode.name, bump.BitLen()), func(t *testing.T) {
-				program, err := decode.fn(encodeIntegerListProgram(t, values))
-				if err != nil {
-					t.Fatalf("decode failed: %v", err)
-				}
-				ints := decodedIntegers(t, program)
-				for i, got := range ints {
-					if got.Inner.Cmp(values[i]) != 0 {
-						t.Fatalf("integer %d = %s, want %s", i, got.Inner, values[i])
+			t.Run(
+				fmt.Sprintf("%s/bump-%d-bits", decode.name, bump.BitLen()),
+				func(t *testing.T) {
+					program, err := decode.fn(
+						encodeIntegerListProgram(t, values),
+					)
+					if err != nil {
+						t.Fatalf("decode failed: %v", err)
 					}
-					want, ok := values[i].Int64(), values[i].IsInt64()
-					gotInt, gotOK := got.CachedInt64()
-					if gotOK != ok || (ok && gotInt != want) {
-						t.Fatalf("integer %d CachedInt64 = %d,%v, want %d,%v", i, gotInt, gotOK, want, ok)
-					}
-				}
-				// Magnitudes come from one arena slab; an in-place update of one
-				// integer must not reach its neighbours.
-				for i := range ints {
-					ints[i].Inner.Add(ints[i].Inner, bump)
-					for j, other := range ints {
-						want := values[j]
-						if j <= i {
-							want = new(big.Int).Add(values[j], bump)
+					ints := decodedIntegers(t, program)
+					for i, got := range ints {
+						if got.Inner.Cmp(values[i]) != 0 {
+							t.Fatalf(
+								"integer %d = %s, want %s",
+								i,
+								got.Inner,
+								values[i],
+							)
 						}
-						if other.Inner.Cmp(want) != 0 {
-							t.Fatalf("after bumping %d, integer %d = %s, want %s", i, j, other.Inner, want)
+						want, ok := values[i].Int64(), values[i].IsInt64()
+						gotInt, gotOK := got.CachedInt64()
+						if gotOK != ok || (ok && gotInt != want) {
+							t.Fatalf(
+								"integer %d CachedInt64 = %d,%v, want %d,%v",
+								i,
+								gotInt,
+								gotOK,
+								want,
+								ok,
+							)
 						}
 					}
-				}
-			})
+					// Magnitudes come from one arena slab; an in-place update of one
+					// integer must not reach its neighbours.
+					for i := range ints {
+						ints[i].Inner.Add(ints[i].Inner, bump)
+						for j, other := range ints {
+							want := values[j]
+							if j <= i {
+								want = new(big.Int).Add(values[j], bump)
+							}
+							if other.Inner.Cmp(want) != 0 {
+								t.Fatalf(
+									"after bumping %d, integer %d = %s, want %s",
+									i,
+									j,
+									other.Inner,
+									want,
+								)
+							}
+						}
+					}
+				},
+			)
 		}
 	}
 }
@@ -136,7 +159,11 @@ func TestDecodeIntegerConstantAllocationsDoNotScaleWithCount(t *testing.T) {
 	// Each integer used to allocate its accumulation words, a temporary
 	// big.Int and a copied magnitude; arena chunks are logarithmic in count.
 	if allocs > 64 {
-		t.Fatalf("decoding %d large integers made %.0f allocations, want at most 64", len(values), allocs)
+		t.Fatalf(
+			"decoding %d large integers made %.0f allocations, want at most 64",
+			len(values),
+			allocs,
+		)
 	}
 }
 

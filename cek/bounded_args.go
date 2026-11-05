@@ -195,7 +195,10 @@ func inSignedBitRange(x *big.Int, n int) bool {
 
 // checkBoundedArgs1/2/3 apply checkBoundedArg to the arguments of a
 // saturated builtin application in order.
-func (m *Machine[T]) checkBoundedArgs1(fn builtin.DefaultFunction, a Value[T]) error {
+func (m *Machine[T]) checkBoundedArgs1(
+	fn builtin.DefaultFunction,
+	a Value[T],
+) error {
 	bounds := m.boundedArgsFor(fn)
 	if bounds == (boundedArgs{}) {
 		return nil
@@ -203,7 +206,10 @@ func (m *Machine[T]) checkBoundedArgs1(fn builtin.DefaultFunction, a Value[T]) e
 	return checkBoundedArg[T](fn, bounds, 0, a)
 }
 
-func (m *Machine[T]) checkBoundedArgs2(fn builtin.DefaultFunction, a, b Value[T]) error {
+func (m *Machine[T]) checkBoundedArgs2(
+	fn builtin.DefaultFunction,
+	a, b Value[T],
+) error {
 	bounds := m.boundedArgsFor(fn)
 	if bounds == (boundedArgs{}) {
 		return nil
@@ -214,7 +220,10 @@ func (m *Machine[T]) checkBoundedArgs2(fn builtin.DefaultFunction, a, b Value[T]
 	return checkBoundedArg[T](fn, bounds, 1, b)
 }
 
-func (m *Machine[T]) checkBoundedArgs3(fn builtin.DefaultFunction, a, b, c Value[T]) error {
+func (m *Machine[T]) checkBoundedArgs3(
+	fn builtin.DefaultFunction,
+	a, b, c Value[T],
+) error {
 	bounds := m.boundedArgsFor(fn)
 	if bounds == (boundedArgs{}) {
 		return nil

@@ -118,7 +118,11 @@ func TestDecodeJSONAllowsNestingWithinPlutusDataLimit(t *testing.T) {
 	// library token decoder's independent nesting cap.
 	const depth = 5_100
 	if _, err := DecodeJSON([]byte(nestedListJSON(depth))); err != nil {
-		t.Fatalf("DecodeJSON rejected valid nesting at depth %d: %v", depth, err)
+		t.Fatalf(
+			"DecodeJSON rejected valid nesting at depth %d: %v",
+			depth,
+			err,
+		)
 	}
 }
 
@@ -146,7 +150,10 @@ func TestParseDeepPlutusDataJSONTreePreservesJSONValues(t *testing.T) {
 			root := *tree.node(tree.root)
 			for range depth {
 				if root.kind != jsonKindArray || root.count != 1 {
-					t.Fatalf("expected one-item array at each level, got kind %v", root.kind)
+					t.Fatalf(
+						"expected one-item array at each level, got kind %v",
+						root.kind,
+					)
 				}
 				root = tree.children(root)[0]
 			}
@@ -163,7 +170,11 @@ func TestParseDeepPlutusDataJSONTreePreservesJSONValues(t *testing.T) {
 				"empty_object": jsonKindObject,
 			}
 			if int(root.count) != len(wantKinds) {
-				t.Fatalf("innermost entry count = %d, want %d", root.count, len(wantKinds))
+				t.Fatalf(
+					"innermost entry count = %d, want %d",
+					root.count,
+					len(wantKinds),
+				)
 			}
 			for _, entry := range tree.children(root) {
 				name := tree.keyName(entry)
@@ -173,7 +184,12 @@ func TestParseDeepPlutusDataJSONTreePreservesJSONValues(t *testing.T) {
 					continue
 				}
 				if entry.kind != want {
-					t.Errorf("%s value kind = %v, want %v", name, entry.kind, want)
+					t.Errorf(
+						"%s value kind = %v, want %v",
+						name,
+						entry.kind,
+						want,
+					)
 				}
 				delete(wantKinds, name)
 			}
@@ -335,7 +351,10 @@ var concreteJSONShapes = []struct {
 		"Constr",
 		func(a, b string) string { return `{"constructor":0,"fields":[` + a + `,` + b + `]}` },
 		func(items int) string {
-			return `{"constructor":0,"fields":` + strings.TrimPrefix(wideFlatJSON(items), `{"list":`)
+			return `{"constructor":0,"fields":` + strings.TrimPrefix(
+				wideFlatJSON(items),
+				`{"list":`,
+			)
 		},
 		func(doc []byte) error { return new(Constr).UnmarshalJSON(doc) },
 	},
@@ -344,7 +363,10 @@ var concreteJSONShapes = []struct {
 		func(a, b string) string { return `{"map":[{"k":` + a + `,"v":` + b + `}]}` },
 		func(items int) string {
 			pair := `{"k":{"int":1},"v":{"int":1}}`
-			return `{"map":[` + strings.Repeat(pair+",", items/2-1) + pair + `]}`
+			return `{"map":[` + strings.Repeat(
+				pair+",",
+				items/2-1,
+			) + pair + `]}`
 		},
 		func(doc []byte) error { return new(Map).UnmarshalJSON(doc) },
 	},
@@ -364,11 +386,19 @@ func TestConcreteJSONDecodersShareDocumentNodeBudget(t *testing.T) {
 		doc := []byte(shape.wrap(child, child))
 		if _, err := DecodeJSON(doc); err == nil ||
 			!strings.Contains(err.Error(), "max node count") {
-			t.Fatalf("%s: DecodeJSON error = %v, want max node count", shape.name, err)
+			t.Fatalf(
+				"%s: DecodeJSON error = %v, want max node count",
+				shape.name,
+				err,
+			)
 		}
 		err := shape.decode(doc)
 		if err == nil || !strings.Contains(err.Error(), "max node count") {
-			t.Errorf("%s decoder error = %v, want max node count", shape.name, err)
+			t.Errorf(
+				"%s decoder error = %v, want max node count",
+				shape.name,
+				err,
+			)
 		}
 	}
 }
@@ -383,8 +413,13 @@ func TestConcreteJSONDecodersBoundParsedTree(t *testing.T) {
 
 	for _, shape := range concreteJSONShapes {
 		err := shape.decode([]byte(shape.wide(maxJSONParseNodes / 2)))
-		if err == nil || !strings.Contains(err.Error(), "tree exceeds max node count") {
-			t.Errorf("%s decoder error = %v, want parser node cap error", shape.name, err)
+		if err == nil ||
+			!strings.Contains(err.Error(), "tree exceeds max node count") {
+			t.Errorf(
+				"%s decoder error = %v, want parser node cap error",
+				shape.name,
+				err,
+			)
 		}
 	}
 }
@@ -397,7 +432,11 @@ func TestConcreteJSONDecodersMatchGenericDepthLimit(t *testing.T) {
 	for _, shape := range concreteJSONShapes {
 		err := shape.decode([]byte(shape.wrap(deep, `{"int":0}`)))
 		if err == nil || !strings.Contains(err.Error(), "max depth") {
-			t.Errorf("%s decoder error = %v, want max depth error", shape.name, err)
+			t.Errorf(
+				"%s decoder error = %v, want max depth error",
+				shape.name,
+				err,
+			)
 		}
 	}
 }

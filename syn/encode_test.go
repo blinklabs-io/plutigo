@@ -206,8 +206,14 @@ func TestEncodeDecodeConstantTerm(t *testing.T) {
 			constant: &ProtoPair{
 				FstType: &TList{Typ: &TInteger{}},
 				SndType: &TList{Typ: &TByteString{}},
-				First:   &ProtoList{LTyp: &TInteger{}, List: []IConstant{&Integer{Inner: big.NewInt(1)}}},
-				Second:  &ProtoList{LTyp: &TByteString{}, List: []IConstant{&ByteString{Inner: []byte{0xff}}}},
+				First: &ProtoList{
+					LTyp: &TInteger{},
+					List: []IConstant{&Integer{Inner: big.NewInt(1)}},
+				},
+				Second: &ProtoList{
+					LTyp: &TByteString{},
+					List: []IConstant{&ByteString{Inner: []byte{0xff}}},
+				},
 			},
 		},
 	}
@@ -264,14 +270,24 @@ func TestFlatRoundtrip(t *testing.T) {
 						Constr: &Apply[DeBruijn]{
 							Function: &Apply[DeBruijn]{
 								Function: &Force[DeBruijn]{
-									Term: &Builtin{DefaultFunction: builtin.IfThenElse},
+									Term: &Builtin{
+										DefaultFunction: builtin.IfThenElse,
+									},
 								},
 								Argument: &Apply[DeBruijn]{
 									Function: &Apply[DeBruijn]{
-										Function: &Builtin{DefaultFunction: builtin.EqualsInteger},
-										Argument: &Constant{Con: &Integer{Inner: big.NewInt(42)}},
+										Function: &Builtin{
+											DefaultFunction: builtin.EqualsInteger,
+										},
+										Argument: &Constant{
+											Con: &Integer{
+												Inner: big.NewInt(42),
+											},
+										},
 									},
-									Argument: &Constant{Con: &Integer{Inner: big.NewInt(42)}},
+									Argument: &Constant{
+										Con: &Integer{Inner: big.NewInt(42)},
+									},
 								},
 							},
 							Argument: &Constr[DeBruijn]{
@@ -283,8 +299,19 @@ func TestFlatRoundtrip(t *testing.T) {
 							&Constr[DeBruijn]{
 								Tag: 1,
 								Fields: []Term[DeBruijn]{
-									&Constant{Con: &Data{Inner: &data.Constr{Tag: big.NewInt(0), Fields: []data.PlutusData{}}}},
-									&Constant{Con: &ByteString{Inner: []byte{0xca, 0xfe}}},
+									&Constant{
+										Con: &Data{
+											Inner: &data.Constr{
+												Tag:    big.NewInt(0),
+												Fields: []data.PlutusData{},
+											},
+										},
+									},
+									&Constant{
+										Con: &ByteString{
+											Inner: []byte{0xca, 0xfe},
+										},
+									},
 									&Constant{Con: &Bool{Inner: true}},
 								},
 							},
@@ -318,7 +345,11 @@ func TestFlatRoundtrip(t *testing.T) {
 	}
 
 	if !reflect.DeepEqual(decoded, decodedFast) {
-		t.Fatalf("DecodeDeBruijn mismatch.\nDecode: %+v\nFast: %+v", decoded, decodedFast)
+		t.Fatalf(
+			"DecodeDeBruijn mismatch.\nDecode: %+v\nFast: %+v",
+			decoded,
+			decodedFast,
+		)
 	}
 
 	reencoded, err := Encode(decoded)
@@ -327,14 +358,21 @@ func TestFlatRoundtrip(t *testing.T) {
 	}
 
 	if !bytes.Equal(encoded, reencoded) {
-		t.Errorf("roundtrip mismatch: %d bytes -> %d bytes", len(encoded), len(reencoded))
+		t.Errorf(
+			"roundtrip mismatch: %d bytes -> %d bytes",
+			len(encoded),
+			len(reencoded),
+		)
 		origHex := hex.EncodeToString(encoded)
 		reHex := hex.EncodeToString(reencoded)
 		for i := 0; i < len(origHex) && i < len(reHex); i++ {
 			if origHex[i] != reHex[i] {
 				t.Logf("first diff at hex pos %d (byte %d)", i, i/2)
 				start := max(0, i-20)
-				t.Logf("  orig: ...%s...", origHex[start:min(len(origHex), i+40)])
+				t.Logf(
+					"  orig: ...%s...",
+					origHex[start:min(len(origHex), i+40)],
+				)
 				t.Logf("  ours: ...%s...", reHex[start:min(len(reHex), i+40)])
 				break
 			}
@@ -362,7 +400,9 @@ func TestDeBruijnDecoderReuse(t *testing.T) {
 								&Constant{Con: &Data{Inner: &data.List{
 									Items: []data.PlutusData{
 										&data.Integer{Inner: big.NewInt(1)},
-										&data.ByteString{Inner: []byte{0xca, 0xfe}},
+										&data.ByteString{
+											Inner: []byte{0xca, 0xfe},
+										},
 									},
 								}}},
 							},
@@ -391,7 +431,9 @@ func TestDeBruijnDecoderReuse(t *testing.T) {
 								Pairs: [][2]data.PlutusData{
 									{
 										&data.Integer{Inner: big.NewInt(7)},
-										&data.ByteString{Inner: []byte{0xde, 0xad}},
+										&data.ByteString{
+											Inner: []byte{0xde, 0xad},
+										},
 									},
 								},
 							}},
@@ -486,8 +528,18 @@ func TestDeBruijnDecoderReuseOverwritesBigInts(t *testing.T) {
 		{
 			name: "same_size_large_values",
 			programSequence: []programCase{
-				newProgramCase("same_size_a", new(big.Int).Add(new(big.Int).Lsh(big.NewInt(1), 80), big.NewInt(5))),
-				newProgramCase("same_size_b", new(big.Int).Add(new(big.Int).Lsh(big.NewInt(1), 80), big.NewInt(9))),
+				newProgramCase(
+					"same_size_a",
+					new(
+						big.Int,
+					).Add(new(big.Int).Lsh(big.NewInt(1), 80), big.NewInt(5)),
+				),
+				newProgramCase(
+					"same_size_b",
+					new(
+						big.Int,
+					).Add(new(big.Int).Lsh(big.NewInt(1), 80), big.NewInt(9)),
+				),
 			},
 		},
 		{
@@ -525,19 +577,37 @@ func TestDeBruijnDecoderReuseOverwritesBigInts(t *testing.T) {
 
 					constant, ok := decoded.Term.(*Constant)
 					if !ok {
-						t.Fatalf("decoded %s term = %T, want *Constant", programName, decoded.Term)
+						t.Fatalf(
+							"decoded %s term = %T, want *Constant",
+							programName,
+							decoded.Term,
+						)
 					}
 					integer, ok := constant.Con.(*Integer)
 					if !ok {
-						t.Fatalf("decoded %s constant = %T, want *Integer", programName, constant.Con)
+						t.Fatalf(
+							"decoded %s constant = %T, want *Integer",
+							programName,
+							constant.Con,
+						)
 					}
 					if expectedValue.IsInt64() {
 						if got, want := integer.Inner.Int64(), expectedValue.Int64(); got != want {
-							t.Fatalf("decoded %s integer = %d, want %d", programName, got, want)
+							t.Fatalf(
+								"decoded %s integer = %d, want %d",
+								programName,
+								got,
+								want,
+							)
 						}
 					}
 					if integer.Inner.Cmp(expectedValue) != 0 {
-						t.Fatalf("decoded %s integer = %s, want %s", programName, integer.Inner, expectedValue)
+						t.Fatalf(
+							"decoded %s integer = %s, want %s",
+							programName,
+							integer.Inner,
+							expectedValue,
+						)
 					}
 
 					reencoded, err := Encode(decoded)
@@ -545,7 +615,10 @@ func TestDeBruijnDecoderReuseOverwritesBigInts(t *testing.T) {
 						t.Fatalf("Re-encode %s failed: %v", programName, err)
 					}
 					if !bytes.Equal(expectedEncoded, reencoded) {
-						t.Fatalf("%s integer roundtrip mismatch after decoder reuse", programName)
+						t.Fatalf(
+							"%s integer roundtrip mismatch after decoder reuse",
+							programName,
+						)
 					}
 				}
 			})
@@ -597,8 +670,14 @@ func TestFlatRoundtripConstantTypes(t *testing.T) {
 			constant: &ProtoPair{
 				FstType: &TList{Typ: &TInteger{}},
 				SndType: &TList{Typ: &TByteString{}},
-				First:   &ProtoList{LTyp: &TInteger{}, List: []IConstant{&Integer{Inner: big.NewInt(1)}}},
-				Second:  &ProtoList{LTyp: &TByteString{}, List: []IConstant{&ByteString{Inner: []byte{0xff}}}},
+				First: &ProtoList{
+					LTyp: &TInteger{},
+					List: []IConstant{&Integer{Inner: big.NewInt(1)}},
+				},
+				Second: &ProtoList{
+					LTyp: &TByteString{},
+					List: []IConstant{&ByteString{Inner: []byte{0xff}}},
+				},
 			},
 		},
 		{
@@ -626,8 +705,17 @@ func TestFlatRoundtripConstantTypes(t *testing.T) {
 			constant: &ProtoList{
 				LTyp: &TList{Typ: &TInteger{}},
 				List: []IConstant{
-					&ProtoList{LTyp: &TInteger{}, List: []IConstant{&Integer{Inner: big.NewInt(1)}, &Integer{Inner: big.NewInt(2)}}},
-					&ProtoList{LTyp: &TInteger{}, List: []IConstant{&Integer{Inner: big.NewInt(3)}}},
+					&ProtoList{
+						LTyp: &TInteger{},
+						List: []IConstant{
+							&Integer{Inner: big.NewInt(1)},
+							&Integer{Inner: big.NewInt(2)},
+						},
+					},
+					&ProtoList{
+						LTyp: &TInteger{},
+						List: []IConstant{&Integer{Inner: big.NewInt(3)}},
+					},
 				},
 			},
 		},
@@ -656,7 +744,11 @@ func TestFlatRoundtripConstantTypes(t *testing.T) {
 			}
 
 			if !bytes.Equal(encoded, reencoded) {
-				t.Errorf("roundtrip mismatch: %d bytes -> %d bytes", len(encoded), len(reencoded))
+				t.Errorf(
+					"roundtrip mismatch: %d bytes -> %d bytes",
+					len(encoded),
+					len(reencoded),
+				)
 				t.Errorf("  encoded:    %x", encoded)
 				t.Errorf("  re-encoded: %x", reencoded)
 			}

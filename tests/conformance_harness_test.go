@@ -207,8 +207,14 @@ func TestConformanceHarnessRunsV3ReferenceText(t *testing.T) {
 	if len(cases) != 1 {
 		t.Fatalf("discovered %d cases, want 1", len(cases))
 	}
-	if version, protocol := conformanceLanguageForPath(cases[0].inputPath); version != lang.LanguageVersionV3 || protocol != 11 {
-		t.Fatalf("V3 language selection = %v/%d, want %v/11", version, protocol, lang.LanguageVersionV3)
+	if version, protocol := conformanceLanguageForPath(cases[0].inputPath); version != lang.LanguageVersionV3 ||
+		protocol != 11 {
+		t.Fatalf(
+			"V3 language selection = %v/%d, want %v/11",
+			version,
+			protocol,
+			lang.LanguageVersionV3,
+		)
 	}
 	if err := runConformanceCase(cases[0]); err != nil {
 		t.Fatalf("run V3 reference case: %v", err)

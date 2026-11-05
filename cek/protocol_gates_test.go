@@ -111,7 +111,8 @@ func TestCaseOnBuiltinDataRequiresVanRossem(t *testing.T) {
   (case [ [ (builtin constrData) (con integer 0) ] (con (list data) []) ]
     (con integer 1)))`
 	err := evalTextAt(t, src, 10)
-	if err == nil || !strings.Contains(err.Error(), "before protocol version 11") {
+	if err == nil ||
+		!strings.Contains(err.Error(), "before protocol version 11") {
 		t.Fatalf("protocol version 10: %v", err)
 	}
 }
@@ -142,7 +143,11 @@ func TestCaseWithoutProtocolVersionIsUnrestricted(t *testing.T) {
 		t.Fatalf("convert: %v", err)
 	}
 	// testEvalContext leaves the protocol major unset.
-	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+	machine := NewMachine[syn.DeBruijn](
+		lang.LanguageVersionV3,
+		0,
+		testEvalContext(),
+	)
 	if _, err := machine.Run(deBruijn.Term); err != nil {
 		t.Fatalf("protocol major 0: %v", err)
 	}

@@ -75,7 +75,10 @@ func TestBLSMultiScalarMulStopsOnCancellation(t *testing.T) {
 
 			_, err := evalBuiltinWithError(t, m, b)
 			if !errors.Is(err, context.Canceled) {
-				t.Fatalf("multi-scalar multiplication error = %v, want context.Canceled", err)
+				t.Fatalf(
+					"multi-scalar multiplication error = %v, want context.Canceled",
+					err,
+				)
 			}
 		})
 	}
@@ -91,7 +94,10 @@ func TestUnionValueStopsOnCancellation(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			m := newTestMachineV4()
-			ctx := &cancelAfterChecksContext{limit: tt.limit, done: make(chan struct{})}
+			ctx := &cancelAfterChecksContext{
+				limit: tt.limit,
+				done:  make(chan struct{}),
+			}
 			m.activeContext = ctx
 			t.Cleanup(func() { m.activeContext = nil })
 
@@ -105,7 +111,11 @@ func TestUnionValueStopsOnCancellation(t *testing.T) {
 				t.Fatalf("unionValue error = %v, want context.Canceled", err)
 			}
 			if ctx.checks != tt.limit {
-				t.Fatalf("context checks = %d, want cancellation at check %d", ctx.checks, tt.limit)
+				t.Fatalf(
+					"context checks = %d, want cancellation at check %d",
+					ctx.checks,
+					tt.limit,
+				)
 			}
 		})
 	}
@@ -137,7 +147,11 @@ func TestUnionValueStopsDuringValueConversion(t *testing.T) {
 		t.Fatalf("unionValue error = %v, want context.Canceled", err)
 	}
 	if ctx.checks != ctx.limit {
-		t.Fatalf("context checks = %d, want cancellation at check %d", ctx.checks, ctx.limit)
+		t.Fatalf(
+			"context checks = %d, want cancellation at check %d",
+			ctx.checks,
+			ctx.limit,
+		)
 	}
 }
 
@@ -168,7 +182,11 @@ func TestUnionValueStopsDuringMerge(t *testing.T) {
 		t.Fatalf("unionValue error = %v, want context.Canceled", err)
 	}
 	if ctx.checks != ctx.limit {
-		t.Fatalf("context checks = %d, want cancellation at check %d", ctx.checks, ctx.limit)
+		t.Fatalf(
+			"context checks = %d, want cancellation at check %d",
+			ctx.checks,
+			ctx.limit,
+		)
 	}
 }
 
@@ -184,12 +202,18 @@ func mustValueConstant(t *testing.T, entries []syn.IConstant) *Constant {
 // sweepBuiltinCancellation cancels the context at every successive check
 // until the builtin completes, so each cancellation point must surface
 // context.Canceled rather than a different error or a result.
-func sweepBuiltinCancellation(t *testing.T, newBuiltin func() *Builtin[syn.DeBruijn]) {
+func sweepBuiltinCancellation(
+	t *testing.T,
+	newBuiltin func() *Builtin[syn.DeBruijn],
+) {
 	t.Helper()
 	const maxChecks = 100000
 	for limit := 1; limit <= maxChecks; limit++ {
 		m := newTestMachineV4()
-		ctx := &cancelAfterChecksContext{limit: limit, done: make(chan struct{})}
+		ctx := &cancelAfterChecksContext{
+			limit: limit,
+			done:  make(chan struct{}),
+		}
 		m.activeContext = ctx
 		_, err := evalBuiltinWithError(t, m, newBuiltin())
 		m.activeContext = nil
@@ -200,7 +224,11 @@ func sweepBuiltinCancellation(t *testing.T, newBuiltin func() *Builtin[syn.DeBru
 			return
 		}
 		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("cancelling at check %d returned %v, want context.Canceled", limit, err)
+			t.Fatalf(
+				"cancelling at check %d returned %v, want context.Canceled",
+				limit,
+				err,
+			)
 		}
 	}
 	t.Fatalf("builtin still cancelled after %d checks", maxChecks)
@@ -216,9 +244,15 @@ func TestValueBuiltinsStopAtEveryCancellationPoint(t *testing.T) {
 		fn   builtin.DefaultFunction
 		args []*Constant
 	}{
-		{"insertCoin existing token", builtin.InsertCoin, []*Constant{policy, token, amount, value}},
+		{
+			"insertCoin existing token",
+			builtin.InsertCoin,
+			[]*Constant{policy, token, amount, value},
+		},
 		{"insertCoin new policy", builtin.InsertCoin, []*Constant{
-			{Constant: &syn.ByteString{Inner: []byte{9, 9}}}, token, amount, value,
+			{
+				Constant: &syn.ByteString{Inner: []byte{9, 9}},
+			}, token, amount, value,
 		}},
 		{"insertCoin zero removes", builtin.InsertCoin, []*Constant{
 			policy, token, {Constant: &syn.Integer{Inner: big.NewInt(0)}}, value,
@@ -248,8 +282,18 @@ func TestBLSMultiScalarMulStopsAtEveryCancellationPoint(t *testing.T) {
 		elemType syn.Typ
 		elem     syn.IConstant
 	}{
-		{"G1", builtin.Bls12_381_G1_MultiScalarMul, &syn.TBls12_381G1Element{}, &syn.Bls12_381G1Element{Inner: &g1Gen}},
-		{"G2", builtin.Bls12_381_G2_MultiScalarMul, &syn.TBls12_381G2Element{}, &syn.Bls12_381G2Element{Inner: &g2Gen}},
+		{
+			"G1",
+			builtin.Bls12_381_G1_MultiScalarMul,
+			&syn.TBls12_381G1Element{},
+			&syn.Bls12_381G1Element{Inner: &g1Gen},
+		},
+		{
+			"G2",
+			builtin.Bls12_381_G2_MultiScalarMul,
+			&syn.TBls12_381G2Element{},
+			&syn.Bls12_381G2Element{Inner: &g2Gen},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -270,8 +314,16 @@ func TestBLSMultiScalarMulStopsAtEveryCancellationPoint(t *testing.T) {
 
 func TestValueConstructionErrorKeepsCancellationMatchable(t *testing.T) {
 	for _, err := range []error{context.Canceled, context.DeadlineExceeded} {
-		if got := valueConstructionError("construct value", err); !errors.Is(got, err) {
-			t.Fatalf("valueConstructionError(%v) = %v, want it to match %v", err, got, err)
+		if got := valueConstructionError("construct value", err); !errors.Is(
+			got,
+			err,
+		) {
+			t.Fatalf(
+				"valueConstructionError(%v) = %v, want it to match %v",
+				err,
+				got,
+				err,
+			)
 		}
 	}
 

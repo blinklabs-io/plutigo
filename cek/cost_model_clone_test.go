@@ -34,7 +34,10 @@ func addIntegerCpuIntercept(t *testing.T, costs BuiltinCosts) int64 {
 	}
 	model, ok := costingFunc.cpu.(*MaxSizeModel)
 	if !ok {
-		t.Fatalf("addInteger cpu model is %T, want *MaxSizeModel", costingFunc.cpu)
+		t.Fatalf(
+			"addInteger cpu model is %T, want *MaxSizeModel",
+			costingFunc.cpu,
+		)
 	}
 	return model.intercept
 }
@@ -160,7 +163,10 @@ func TestBuildBuiltinCostsAreIndependent(t *testing.T) {
 func TestDefaultBuiltinCostsSurviveCostModelConstruction(t *testing.T) {
 	before := addIntegerCpuIntercept(t, DefaultBuiltinCosts)
 
-	params := make([]int64, len(lang.GetParamNamesForVersion(lang.LanguageVersionV3)))
+	params := make(
+		[]int64,
+		len(lang.GetParamNamesForVersion(lang.LanguageVersionV3)),
+	)
 	for i := range params {
 		params[i] = 1
 	}
@@ -185,7 +191,10 @@ func TestDefaultBuiltinCostsSurviveCostModelConstruction(t *testing.T) {
 // script evaluation. Each worker evaluates the same builtin operation so the
 // test covers concurrent cost-model use rather than only reading a model field.
 func TestNewEvalContextIsRaceFree(t *testing.T) {
-	params := make([]int64, len(lang.GetParamNamesForVersion(lang.LanguageVersionV3)))
+	params := make(
+		[]int64,
+		len(lang.GetParamNamesForVersion(lang.LanguageVersionV3)),
+	)
 	for i := range params {
 		params[i] = int64(i + 1)
 	}

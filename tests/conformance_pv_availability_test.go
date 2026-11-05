@@ -31,8 +31,11 @@ import (
 // builtin.IsAvailableInWithProto, so the expectations do not derive from the
 // table under test.
 var (
-	pvBatch2  = []string{"serialiseData"}
-	pvBatch3  = []string{"verifyEcdsaSecp256k1Signature", "verifySchnorrSecp256k1Signature"}
+	pvBatch2 = []string{"serialiseData"}
+	pvBatch3 = []string{
+		"verifyEcdsaSecp256k1Signature",
+		"verifySchnorrSecp256k1Signature",
+	}
 	pvBatch4a = []string{
 		"bls12_381_G1_add", "bls12_381_G1_neg", "bls12_381_G1_scalarMul",
 		"bls12_381_G1_equal", "bls12_381_G1_compress",
@@ -92,7 +95,10 @@ func saturatedBuiltinProgram(t *testing.T, name string) string {
 		term = "(force " + term + ")"
 	}
 	if fn.Arity() > 0 {
-		term = "[ " + term + strings.Repeat(" (con unit ())", int(fn.Arity())) + " ]"
+		term = "[ " + term + strings.Repeat(
+			" (con unit ())",
+			int(fn.Arity()),
+		) + " ]"
 	}
 	return "(program 1.0.0 " + term + ")"
 }
@@ -108,7 +114,14 @@ func pvAvailabilityCases(t *testing.T) []pvAvailabilityCase {
 	}{
 		{
 			"V1", lang.LanguageVersionV1,
-			concatNames(pvBatch2, pvBatch3, pvBatch4a, pvBatch4b, pvBatch5, pvBatch6),
+			concatNames(
+				pvBatch2,
+				pvBatch3,
+				pvBatch4a,
+				pvBatch4b,
+				pvBatch5,
+				pvBatch6,
+			),
 			[]string{"addInteger", "ifThenElse"},
 		},
 		{
@@ -119,7 +132,14 @@ func pvAvailabilityCases(t *testing.T) []pvAvailabilityCase {
 		{
 			"V3", lang.LanguageVersionV3,
 			pvBatch6,
-			concatNames([]string{"addInteger"}, pvBatch2, pvBatch3, pvBatch4a, pvBatch4b, pvBatch5),
+			concatNames(
+				[]string{"addInteger"},
+				pvBatch2,
+				pvBatch3,
+				pvBatch4a,
+				pvBatch4b,
+				pvBatch5,
+			),
 		},
 	}
 
@@ -171,7 +191,10 @@ func TestConformanceBuiltinAvailabilityAcrossPV10AndPV11(t *testing.T) {
 
 			_, validateErr := syn.ParseWithContext(tc.program, context)
 			if tc.available && validateErr != nil {
-				t.Fatalf("phase-1 validation rejected an available builtin: %v", validateErr)
+				t.Fatalf(
+					"phase-1 validation rejected an available builtin: %v",
+					validateErr,
+				)
 			}
 			if !tc.available && validateErr == nil {
 				t.Fatal("phase-1 validation accepted an unavailable builtin")
@@ -198,7 +221,9 @@ func TestConformanceBuiltinAvailabilityAcrossPV10AndPV11(t *testing.T) {
 			if got := isUnavailableBuiltinError(err); got == tc.available {
 				t.Fatalf(
 					"machine run error = %v; unavailable-builtin error = %t, builtin available = %t",
-					err, got, tc.available,
+					err,
+					got,
+					tc.available,
 				)
 			}
 		})
@@ -258,13 +283,19 @@ func TestConformanceAvailableBuiltinsEvaluateAcrossPV10AndPV11(t *testing.T) {
 				machine := cek.NewMachine[syn.DeBruijn](
 					tt.language,
 					0,
-					cek.NewDefaultEvalContext(tt.language, cek.ProtoVersion{Major: pv}),
+					cek.NewDefaultEvalContext(
+						tt.language,
+						cek.ProtoVersion{Major: pv},
+					),
 				)
 				machine.ExBudget = cek.DefaultExBudget
 				result, err := machine.Run(dbProgram.Term)
 				if pv == 10 {
 					if !isUnavailableBuiltinError(err) {
-						t.Fatalf("PV10: error = %v, want unavailable builtin", err)
+						t.Fatalf(
+							"PV10: error = %v, want unavailable builtin",
+							err,
+						)
 					}
 					continue
 				}

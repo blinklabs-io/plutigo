@@ -109,7 +109,10 @@ func downloadArchive(
 	if err != nil {
 		return fmt.Errorf("open archive file: %w", err)
 	}
-	written, copyErr := io.Copy(out, io.LimitReader(resp.Body, maxArchiveBytes+1))
+	written, copyErr := io.Copy(
+		out,
+		io.LimitReader(resp.Body, maxArchiveBytes+1),
+	)
 	closeErr := out.Close()
 	if copyErr != nil {
 		return fmt.Errorf("write archive: %w", copyErr)
@@ -275,7 +278,8 @@ func extractFixtures(archivePath, destination, expectedRoot string) error {
 		if err != nil {
 			return err
 		}
-		if archivePath != prefix && !strings.HasPrefix(archivePath, prefix+"/") {
+		if archivePath != prefix &&
+			!strings.HasPrefix(archivePath, prefix+"/") {
 			continue
 		}
 		relative := strings.TrimPrefix(archivePath, prefix)
@@ -308,14 +312,18 @@ func extractFixtures(archivePath, destination, expectedRoot string) error {
 			}
 			fileCount++
 			extractedBytes += header.Size
-			if fileCount > maxFixtureFiles || extractedBytes > maxExtractedBytes {
+			if fileCount > maxFixtureFiles ||
+				extractedBytes > maxExtractedBytes {
 				return errors.New("fixture corpus exceeds extraction limits")
 			}
 			if err := writeFixture(reader, target, header.Size); err != nil {
 				return fmt.Errorf("extract fixture %q: %w", relative, err)
 			}
 		default:
-			return fmt.Errorf("fixture %q has unsupported archive type", relative)
+			return fmt.Errorf(
+				"fixture %q has unsupported archive type",
+				relative,
+			)
 		}
 	}
 	if fileCount == 0 {
@@ -388,30 +396,33 @@ func writeFixture(reader io.Reader, target string, size int64) error {
 
 func validateCorpus(root string) error {
 	inputs := 0
-	err := filepath.WalkDir(root, func(name string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		ext := filepath.Ext(name)
-		if ext != ".uplc" && ext != ".flat" {
-			return nil
-		}
-		inputs++
-		if _, err := os.Stat(name + ".expected"); err != nil {
-			return fmt.Errorf("fixture %q has no expected result", name)
-		}
-		budget := strings.TrimSuffix(name, ext) + ".budget.expected"
-		if _, err := os.Stat(budget); err != nil {
-			legacyBudget := name + ".budget.expected"
-			if _, legacyErr := os.Stat(legacyBudget); legacyErr != nil {
-				return fmt.Errorf("fixture %q has no expected budget", name)
+	err := filepath.WalkDir(
+		root,
+		func(name string, entry os.DirEntry, err error) error {
+			if err != nil {
+				return err
 			}
-		}
-		return nil
-	})
+			if entry.IsDir() {
+				return nil
+			}
+			ext := filepath.Ext(name)
+			if ext != ".uplc" && ext != ".flat" {
+				return nil
+			}
+			inputs++
+			if _, err := os.Stat(name + ".expected"); err != nil {
+				return fmt.Errorf("fixture %q has no expected result", name)
+			}
+			budget := strings.TrimSuffix(name, ext) + ".budget.expected"
+			if _, err := os.Stat(budget); err != nil {
+				legacyBudget := name + ".budget.expected"
+				if _, legacyErr := os.Stat(legacyBudget); legacyErr != nil {
+					return fmt.Errorf("fixture %q has no expected budget", name)
+				}
+			}
+			return nil
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("validate staged corpus: %w", err)
 	}

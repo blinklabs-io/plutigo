@@ -39,7 +39,10 @@ func TestLoadRejectsUnknownFields(t *testing.T) {
 	}`
 	_, err := Load(context.Background(), strings.NewReader(input))
 	if err == nil || !strings.Contains(err.Error(), "unknown field") {
-		t.Fatalf("Load(context.Background(), ) error = %v, want unknown-field error", err)
+		t.Fatalf(
+			"Load(context.Background(), ) error = %v, want unknown-field error",
+			err,
+		)
 	}
 }
 
@@ -133,13 +136,23 @@ func TestEvaluateRejectsMalformedMachineTerm(t *testing.T) {
 		t.Fatalf("evaluate() reported setup error: %s", actual.Error)
 	}
 	if !strings.Contains(actual.Error, "term contains a nil application") {
-		t.Fatalf("evaluate() error = %q, want malformed-term error", actual.Error)
+		t.Fatalf(
+			"evaluate() error = %q, want malformed-term error",
+			actual.Error,
+		)
 	}
 	if actual.ErrorCode == nil || *actual.ErrorCode != cek.ErrCodeTypeMismatch {
-		t.Fatalf("evaluate() error code = %v, want %d", actual.ErrorCode, cek.ErrCodeTypeMismatch)
+		t.Fatalf(
+			"evaluate() error code = %v, want %d",
+			actual.ErrorCode,
+			cek.ErrCodeTypeMismatch,
+		)
 	}
 	if actual.ExUnits != (ExUnits{}) {
-		t.Fatalf("evaluate() consumed units = %+v before rejecting malformed term", actual.ExUnits)
+		t.Fatalf(
+			"evaluate() consumed units = %+v before rejecting malformed term",
+			actual.ExUnits,
+		)
 	}
 }
 
@@ -181,7 +194,10 @@ func TestRunCaseUsesLedgerLanguageInsteadOfUPLCVersion(t *testing.T) {
 		t.Fatal("Plutus V1 evaluation unexpectedly accepted a V2 builtin")
 	}
 	if !v1Result.Actual.SetupError {
-		t.Fatalf("Plutus V1 evaluation did not reject the invalid program during setup: %s", v1Result.Actual.Error)
+		t.Fatalf(
+			"Plutus V1 evaluation did not reject the invalid program during setup: %s",
+			v1Result.Actual.Error,
+		)
 	}
 }
 
@@ -196,20 +212,36 @@ func TestRunCaseUsesLedgerLanguageInsteadOfUPLCVersion(t *testing.T) {
 func TestRunCaseRejectsPreVanRossemTermVersionAtSetup(t *testing.T) {
 	t.Parallel()
 
-	replayCase := baseCaseWithVersion(t, lang.LanguageVersion{1, 1, 0}, &syn.Error{}, nil)
+	replayCase := baseCaseWithVersion(
+		t,
+		lang.LanguageVersion{1, 1, 0},
+		&syn.Error{},
+		nil,
+	)
 	replayCase.Language = PlutusV2
 	replayCase.ProtocolVersion = ProtocolVersion{Major: 10}
 	replayCase.Expected = Expected{Success: false}
 
 	result := RunCase(context.Background(), &replayCase)
 	if result.Actual.Success {
-		t.Fatal("RunCase() unexpectedly succeeded executing a pre-van-Rossem UPLC 1.1.0 V2 script")
+		t.Fatal(
+			"RunCase() unexpectedly succeeded executing a pre-van-Rossem UPLC 1.1.0 V2 script",
+		)
 	}
 	if !result.Actual.SetupError {
-		t.Fatalf("RunCase() actual = %+v, want setup error rejecting the term version before execution", result.Actual)
+		t.Fatalf(
+			"RunCase() actual = %+v, want setup error rejecting the term version before execution",
+			result.Actual,
+		)
 	}
-	if !strings.Contains(result.Actual.Error, "UPLC version 1.1.0 is not available") {
-		t.Fatalf("RunCase() error = %q, want UPLC-version-not-available error", result.Actual.Error)
+	if !strings.Contains(
+		result.Actual.Error,
+		"UPLC version 1.1.0 is not available",
+	) {
+		t.Fatalf(
+			"RunCase() error = %q, want UPLC-version-not-available error",
+			result.Actual.Error,
+		)
 	}
 }
 
@@ -221,7 +253,9 @@ func TestRunCaseNeverTreatsSetupFailureAsExpectedScriptFailure(t *testing.T) {
 
 	result := RunCase(context.Background(), &replayCase)
 	if result.Passed {
-		t.Fatal("RunCase() passed an invalid FLAT program as an expected failure")
+		t.Fatal(
+			"RunCase() passed an invalid FLAT program as an expected failure",
+		)
 	}
 	if !result.Actual.SetupError {
 		t.Fatalf("RunCase() actual = %+v, want setup error", result.Actual)
@@ -293,7 +327,11 @@ func TestLoadRoundTrip(t *testing.T) {
 		t.Fatalf("Load(context.Background(), ) failed: %v", err)
 	}
 	if loaded.Cases[0].ID != replayCase.ID {
-		t.Fatalf("Load(context.Background(), ) case id = %q, want %q", loaded.Cases[0].ID, replayCase.ID)
+		t.Fatalf(
+			"Load(context.Background(), ) case id = %q, want %q",
+			loaded.Cases[0].ID,
+			replayCase.ID,
+		)
 	}
 }
 

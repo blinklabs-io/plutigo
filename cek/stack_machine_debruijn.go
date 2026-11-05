@@ -231,7 +231,10 @@ func computeKnownImmediateValueDeBruijn(
 		}
 		value, ok := lookupEnvDeBruijn(env, int(t.Name))
 		if !ok {
-			return nil, &TypeError{Code: ErrCodeOpenTerm, Message: "open term evaluated"}
+			return nil, &TypeError{
+				Code:    ErrCodeOpenTerm,
+				Message: "open term evaluated",
+			}
 		}
 		return value, nil
 	case delayTermTabDeBruijn:
@@ -259,7 +262,10 @@ func computeKnownImmediateValueDeBruijn(
 		}
 		return machineConstantValue(m, t.Con), nil
 	case errorTermTab:
-		return nil, &ScriptError{Code: ErrCodeExplicitError, Message: "error explicitly called"}
+		return nil, &ScriptError{
+			Code:    ErrCodeExplicitError,
+			Message: "error explicitly called",
+		}
 	case builtinTermTabDeBruijn:
 		t := (*syn.Builtin)(termIface.data)
 		if !steps.count(ExBuiltin) {

@@ -29,7 +29,9 @@ var ErrValueOverflow = errors.New("value quantity out of range")
 var ErrValueUninitialized = errors.New("uninitialized value")
 
 var (
-	valueQuantityMax = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 127), big.NewInt(1))
+	valueQuantityMax = new(
+		big.Int,
+	).Sub(new(big.Int).Lsh(big.NewInt(1), 127), big.NewInt(1))
 	valueQuantityMin = new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), 127))
 )
 
@@ -125,7 +127,12 @@ func ownedValueKey(entries []IConstant, i int, found bool, key []byte) []byte {
 // spliceValueEntry returns a copy of entries with item placed at index i:
 // replacing the entry there when found, inserted before it otherwise. A nil
 // item removes the found entry.
-func spliceValueEntry(entries []IConstant, i int, found bool, item IConstant) []IConstant {
+func spliceValueEntry(
+	entries []IConstant,
+	i int,
+	found bool,
+	item IConstant,
+) []IConstant {
 	switch {
 	case item == nil:
 		out := make([]IConstant, 0, len(entries)-1)
@@ -150,7 +157,10 @@ func spliceValueEntry(entries []IConstant, i int, found bool, item IConstant) []
 // which is never modified. The caller must have checked key lengths and that
 // amount is within the signed 128-bit range. The receiver itself is returned
 // when nothing changes.
-func (v *Value) Insert(policyID, tokenID []byte, amount *big.Int) (*Value, error) {
+func (v *Value) Insert(
+	policyID, tokenID []byte,
+	amount *big.Int,
+) (*Value, error) {
 	total, ok := v.TotalSize()
 	if !ok {
 		return nil, ErrValueUninitialized
@@ -178,7 +188,14 @@ func (v *Value) Insert(policyID, tokenID []byte, amount *big.Int) (*Value, error
 	var token IConstant
 	if !zero {
 		token = newValueTokenPair(
-			ownedValueKey(oldTokens, ti, tFound, tokenID), new(big.Int).Set(amount))
+			ownedValueKey(
+				oldTokens,
+				ti,
+				tFound,
+				tokenID,
+			),
+			new(big.Int).Set(amount),
+		)
 	}
 	newTokens := spliceValueEntry(oldTokens, ti, tFound, token)
 
@@ -302,7 +319,13 @@ func UnionValue(a, b *Value, check func() error) (*Value, error) {
 	entries, err := mergeValueEntries(a.entries, b.entries, check,
 		func(pa, pb IConstant) (IConstant, error) {
 			tokens, err := mergeValueEntries(
-				valuePolicyTokens(pa), valuePolicyTokens(pb), check, sumValueTokens)
+				valuePolicyTokens(
+					pa,
+				),
+				valuePolicyTokens(pb),
+				check,
+				sumValueTokens,
+			)
 			if err != nil || len(tokens) == 0 {
 				return nil, err
 			}

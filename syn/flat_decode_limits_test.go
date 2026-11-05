@@ -70,7 +70,11 @@ func TestDecodeTermDepthLimit(t *testing.T) {
 				t.Fatal("expected error, got nil")
 			}
 			if !strings.Contains(err.Error(), tt.wantErrText) {
-				t.Fatalf("expected error containing %q, got: %v", tt.wantErrText, err)
+				t.Fatalf(
+					"expected error containing %q, got: %v",
+					tt.wantErrText,
+					err,
+				)
 			}
 		})
 	}
@@ -119,7 +123,11 @@ func TestDecodeRejectsTrailingBytes(t *testing.T) {
 			} {
 				if !tt.wantErr {
 					if err != nil {
-						t.Errorf("%s: decode should succeed, got: %v", path, err)
+						t.Errorf(
+							"%s: decode should succeed, got: %v",
+							path,
+							err,
+						)
 					}
 					continue
 				}
@@ -150,9 +158,17 @@ func TestDecodeHugeVersionIsPhaseTwo(t *testing.T) {
 		want  lang.LanguageVersion
 	}{
 		// (program 2^64.0.0 (con integer 0)), version groups well past 64 bits.
-		{"major 2^64", "808080808080808080020000480081", lang.LanguageVersion{math.MaxUint32, 0, 0}},
+		{
+			"major 2^64",
+			"808080808080808080020000480081",
+			lang.LanguageVersion{math.MaxUint32, 0, 0},
+		},
 		// (program 1.2^32.0 (con integer 0))
-		{"minor 2^32", "01808080801000480081", lang.LanguageVersion{1, math.MaxUint32, 0}},
+		{
+			"minor 2^32",
+			"01808080801000480081",
+			lang.LanguageVersion{1, math.MaxUint32, 0},
+		},
 		// Non-minimal encoding of 1.0.0 with a zero continuation group.
 		{"non-minimal major", "81000000480081", lang.LanguageVersion{1, 0, 0}},
 	}
@@ -182,7 +198,13 @@ func TestDecodeHugeVersionIsPhaseTwo(t *testing.T) {
 				t.Fatalf("%s %s: %v", tt.name, name, err)
 			}
 			if got != tt.want {
-				t.Fatalf("%s %s: version %v, want %v", tt.name, name, got, tt.want)
+				t.Fatalf(
+					"%s %s: version %v, want %v",
+					tt.name,
+					name,
+					got,
+					tt.want,
+				)
 			}
 		}
 		if tt.want != (lang.LanguageVersion{1, 0, 0}) {
@@ -190,7 +212,11 @@ func TestDecodeHugeVersionIsPhaseTwo(t *testing.T) {
 				LedgerLanguage: lang.LanguageVersionV3,
 				ProtocolMajor:  10,
 			}); err == nil {
-				t.Fatalf("%s: version %v accepted for execution", tt.name, tt.want)
+				t.Fatalf(
+					"%s: version %v accepted for execution",
+					tt.name,
+					tt.want,
+				)
 			}
 		}
 	}
@@ -238,7 +264,11 @@ func TestWordOverflowRejected(t *testing.T) {
 				t.Fatal("expected error, got nil")
 			}
 			if !strings.Contains(err.Error(), tt.wantErrText) {
-				t.Fatalf("expected error containing %q, got: %v", tt.wantErrText, err)
+				t.Fatalf(
+					"expected error containing %q, got: %v",
+					tt.wantErrText,
+					err,
+				)
 			}
 		})
 	}
@@ -267,7 +297,10 @@ func TestInvalidUTF8ErrorIsBounded(t *testing.T) {
 		name   string
 		decode func(*decoder) (string, error)
 	}{
-		{name: "standard", decode: func(d *decoder) (string, error) { return d.utf8() }},
+		{
+			name:   "standard",
+			decode: func(d *decoder) (string, error) { return d.utf8() },
+		},
 		{name: "arena", decode: func(d *decoder) (string, error) {
 			return d.utf8WithArena(&constantArena{})
 		}},
@@ -374,7 +407,11 @@ func TestBigWordSmallLargeValue(t *testing.T) {
 							t.Fatalf("decode prefix: %v", err)
 						}
 						if prefix != alignment.prefix {
-							t.Fatalf("prefix = %d, want %d", prefix, alignment.prefix)
+							t.Fatalf(
+								"prefix = %d, want %d",
+								prefix,
+								alignment.prefix,
+							)
 						}
 					}
 
@@ -415,7 +452,11 @@ func TestBigWordSmallLargeValueAllocations(t *testing.T) {
 	}
 	wantBitLen := len(encoded) * 7
 	if decoded.BitLen() != wantBitLen {
-		t.Fatalf("decoded bit length = %d, want %d", decoded.BitLen(), wantBitLen)
+		t.Fatalf(
+			"decoded bit length = %d, want %d",
+			decoded.BitLen(),
+			wantBitLen,
+		)
 	}
 
 	var decodedBitLen int
@@ -427,10 +468,17 @@ func TestBigWordSmallLargeValueAllocations(t *testing.T) {
 		}
 	})
 	if decodedBitLen != wantBitLen {
-		t.Fatalf("measured decode bit length = %d, want %d", decodedBitLen, wantBitLen)
+		t.Fatalf(
+			"measured decode bit length = %d, want %d",
+			decodedBitLen,
+			wantBitLen,
+		)
 	}
 	if allocs > 32 {
-		t.Fatalf("large integer decode allocated %.0f objects, want at most 32", allocs)
+		t.Fatalf(
+			"large integer decode allocated %.0f objects, want at most 32",
+			allocs,
+		)
 	}
 }
 

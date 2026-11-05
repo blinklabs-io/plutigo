@@ -47,11 +47,19 @@ func TestInstallCorpus(t *testing.T) {
 	if err := installCorpus(archive, destination, digest, root); err != nil {
 		t.Fatalf("installCorpus() error = %v", err)
 	}
-	assertFileContents(t, filepath.Join(destination, "case", "sample.uplc"), "(program 1.1.0 (con unit ()))")
-	if _, err := os.Stat(filepath.Join(destination, "case", "ren.sh")); !os.IsNotExist(err) {
+	assertFileContents(
+		t,
+		filepath.Join(destination, "case", "sample.uplc"),
+		"(program 1.1.0 (con unit ()))",
+	)
+	if _, err := os.Stat(filepath.Join(destination, "case", "ren.sh")); !os.IsNotExist(
+		err,
+	) {
 		t.Fatalf("non-fixture file was installed: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(destination, "old.txt")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(destination, "old.txt")); !os.IsNotExist(
+		err,
+	) {
 		t.Fatalf("previous corpus was not replaced: %v", err)
 	}
 }
@@ -119,7 +127,11 @@ func TestInstallCorpusRejectsUnsafeArchivesBeforeReplacement(t *testing.T) {
 			if err := installCorpus(archive, destination, digest, root); err == nil {
 				t.Fatal("installCorpus() succeeded for unsafe archive")
 			}
-			assertFileContents(t, filepath.Join(destination, "old.txt"), "old corpus")
+			assertFileContents(
+				t,
+				filepath.Join(destination, "old.txt"),
+				"old corpus",
+			)
 		})
 	}
 }
@@ -177,11 +189,18 @@ func TestInstallCorpusPreservesBackupWhenRestoreFails(t *testing.T) {
 	}
 
 	err := installCorpusWithRename(archive, destination, digest, root, rename)
-	if err == nil || !strings.Contains(err.Error(), "previous corpus preserved at") {
-		t.Fatalf("installCorpusWithRename() error = %v, want preserved backup path", err)
+	if err == nil ||
+		!strings.Contains(err.Error(), "previous corpus preserved at") {
+		t.Fatalf(
+			"installCorpusWithRename() error = %v, want preserved backup path",
+			err,
+		)
 	}
 	if renameCalls != 3 {
-		t.Fatalf("rename called %d times, want install and restore failures after backup", renameCalls)
+		t.Fatalf(
+			"rename called %d times, want install and restore failures after backup",
+			renameCalls,
+		)
 	}
 	backup := strings.SplitN(err.Error(), "; previous corpus preserved at ", 2)[1]
 	assertFileContents(t, filepath.Join(backup, "old.txt"), "old corpus")

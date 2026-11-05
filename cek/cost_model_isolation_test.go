@@ -42,11 +42,19 @@ func TestCostModelConstructionIsolation(t *testing.T) {
 
 	baselineDefault := dumpCostModel(DefaultCostModel)
 
-	cmA, err := costModelFromList(lang.LanguageVersionV3, SemanticsVariantC, paramsA)
+	cmA, err := costModelFromList(
+		lang.LanguageVersionV3,
+		SemanticsVariantC,
+		paramsA,
+	)
 	if err != nil {
 		t.Fatalf("costModelFromList(paramsA): %v", err)
 	}
-	cmB, err := costModelFromList(lang.LanguageVersionV3, SemanticsVariantC, paramsB)
+	cmB, err := costModelFromList(
+		lang.LanguageVersionV3,
+		SemanticsVariantC,
+		paramsB,
+	)
 	if err != nil {
 		t.Fatalf("costModelFromList(paramsB): %v", err)
 	}
@@ -58,10 +66,14 @@ func TestCostModelConstructionIsolation(t *testing.T) {
 		t.Fatalf("two distinct parameter lists produced identical cost models")
 	}
 	if dumpCostModel(cmA) != dumpA {
-		t.Fatalf("re-dumping cmA changed its value; something is mutating it after construction")
+		t.Fatalf(
+			"re-dumping cmA changed its value; something is mutating it after construction",
+		)
 	}
 	if dumpCostModel(DefaultCostModel) != baselineDefault {
-		t.Fatalf("building cmA/cmB mutated the package-level DefaultCostModel (plutigo#395 class)")
+		t.Fatalf(
+			"building cmA/cmB mutated the package-level DefaultCostModel (plutigo#395 class)",
+		)
 	}
 
 	// Concurrent phase: many goroutines alternate building from paramsA and
@@ -85,7 +97,11 @@ func TestCostModelConstructionIsolation(t *testing.T) {
 			defer wg.Done()
 
 			for range iterations {
-				cm, err := costModelFromList(lang.LanguageVersionV3, SemanticsVariantC, params)
+				cm, err := costModelFromList(
+					lang.LanguageVersionV3,
+					SemanticsVariantC,
+					params,
+				)
 				if err != nil {
 					errCh <- fmt.Errorf("costModelFromList: %w", err)
 					return

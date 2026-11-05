@@ -281,7 +281,8 @@ func TestNegativeBuiltinCostNeverIncreasesBudget(t *testing.T) {
 	if !IsBudgetError(err) {
 		t.Fatalf("Run error = %v, want a budget error", err)
 	}
-	if machine.ExBudget.Cpu > initial.Cpu || machine.ExBudget.Mem > initial.Mem {
+	if machine.ExBudget.Cpu > initial.Cpu ||
+		machine.ExBudget.Mem > initial.Mem {
 		t.Fatalf("budget grew from %+v to %+v", initial, machine.ExBudget)
 	}
 }

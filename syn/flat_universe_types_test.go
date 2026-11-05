@@ -38,7 +38,10 @@ func TestDecodeFlatUniverseTypes(t *testing.T) {
 					t.Fatalf("constant type = %T, want *ProtoList", constant)
 				}
 				if _, ok := list.LTyp.(*TBls12_381G1Element); !ok {
-					t.Fatalf("list element type = %T, want *TBls12_381G1Element", list.LTyp)
+					t.Fatalf(
+						"list element type = %T, want *TBls12_381G1Element",
+						list.LTyp,
+					)
 				}
 				if len(list.List) != 0 {
 					t.Fatalf("list length = %d, want 0", len(list.List))
@@ -55,7 +58,10 @@ func TestDecodeFlatUniverseTypes(t *testing.T) {
 					t.Fatalf("constant type = %T, want *ProtoList", constant)
 				}
 				if _, ok := list.LTyp.(*TBls12_381G2Element); !ok {
-					t.Fatalf("list element type = %T, want *TBls12_381G2Element", list.LTyp)
+					t.Fatalf(
+						"list element type = %T, want *TBls12_381G2Element",
+						list.LTyp,
+					)
 				}
 				if len(list.List) != 0 {
 					t.Fatalf("list length = %d, want 0", len(list.List))
@@ -72,7 +78,10 @@ func TestDecodeFlatUniverseTypes(t *testing.T) {
 					t.Fatalf("constant type = %T, want *ProtoList", constant)
 				}
 				if _, ok := list.LTyp.(*TBls12_381MlResult); !ok {
-					t.Fatalf("list element type = %T, want *TBls12_381MlResult", list.LTyp)
+					t.Fatalf(
+						"list element type = %T, want *TBls12_381MlResult",
+						list.LTyp,
+					)
 				}
 				if len(list.List) != 0 {
 					t.Fatalf("list length = %d, want 0", len(list.List))
@@ -114,7 +123,10 @@ func TestDecodeFlatUniverseTypes(t *testing.T) {
 					t.Fatalf("constant type = %s, want *syn.Value", got)
 				}
 				if _, ok := constant.Typ().(*TValue); !ok {
-					t.Fatalf("constant Typ() = %T, want *TValue", constant.Typ())
+					t.Fatalf(
+						"constant Typ() = %T, want *TValue",
+						constant.Typ(),
+					)
 				}
 			},
 		},
@@ -127,7 +139,10 @@ func TestDecodeFlatUniverseTypes(t *testing.T) {
 					t.Fatalf("constant type = %s, want *syn.Value", got)
 				}
 				if _, ok := constant.Typ().(*TValue); !ok {
-					t.Fatalf("constant Typ() = %T, want *TValue", constant.Typ())
+					t.Fatalf(
+						"constant Typ() = %T, want *TValue",
+						constant.Typ(),
+					)
 				}
 			},
 		},
@@ -164,7 +179,10 @@ func TestDecodeFlatUniverseTypes(t *testing.T) {
 			}
 			genericConstant, ok := genericProgram.Term.(*Constant)
 			if !ok {
-				t.Fatalf("generic term type = %T, want *Constant", genericProgram.Term)
+				t.Fatalf(
+					"generic term type = %T, want *Constant",
+					genericProgram.Term,
+				)
 			}
 			test.check(t, genericConstant.Con)
 		})
@@ -179,7 +197,11 @@ func TestDecodeUnsupportedBLSConstantsFailsClosed(t *testing.T) {
 	}{
 		{name: "G1", hexInput: "0101004c81", wantType: "bls12_381_G1_element"},
 		{name: "G2", hexInput: "0101004d01", wantType: "bls12_381_G2_element"},
-		{name: "Miller-loop result", hexInput: "0101004d81", wantType: "bls12_381_mlresult"},
+		{
+			name:     "Miller-loop result",
+			hexInput: "0101004d81",
+			wantType: "bls12_381_mlresult",
+		},
 	}
 
 	for _, test := range tests {
@@ -201,10 +223,18 @@ func TestDecodeUnsupportedBLSConstantsFailsClosed(t *testing.T) {
 			} {
 				err := decode(input)
 				if err == nil {
-					t.Fatalf("Decode[%s]() error = nil, want unsupported BLS constant error", name)
+					t.Fatalf(
+						"Decode[%s]() error = nil, want unsupported BLS constant error",
+						name,
+					)
 				}
 				if !strings.Contains(err.Error(), test.wantType) {
-					t.Fatalf("Decode[%s]() error = %q, want type %q", name, err, test.wantType)
+					t.Fatalf(
+						"Decode[%s]() error = %q, want type %q",
+						name,
+						err,
+						test.wantType,
+					)
 				}
 			}
 		})

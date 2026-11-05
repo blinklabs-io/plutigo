@@ -78,7 +78,11 @@ func TestMetricsMatchConsumedBudget(t *testing.T) {
 		}
 		metrics := machine.Metrics()
 
-		wantSteps := map[StepKind]uint64{ExApply: 6, ExBuiltin: 3, ExConstant: 4}
+		wantSteps := map[StepKind]uint64{
+			ExApply:    6,
+			ExBuiltin:  3,
+			ExConstant: 4,
+		}
 		for kind := range StepKind(numStepKinds) {
 			if metrics.Steps[kind] != wantSteps[kind] {
 				t.Errorf(
@@ -89,11 +93,21 @@ func TestMetricsMatchConsumedBudget(t *testing.T) {
 		}
 		add := metrics.Builtins[builtin.AddInteger]
 		if add.Calls != 3 {
-			t.Errorf("slippage %d: addInteger calls = %d, want 3", slippage, add.Calls)
+			t.Errorf(
+				"slippage %d: addInteger calls = %d, want 3",
+				slippage,
+				add.Calls,
+			)
 		}
 		for fn, bm := range metrics.Builtins {
-			if builtin.DefaultFunction(fn) != builtin.AddInteger && bm != (BuiltinMetrics{}) {
-				t.Errorf("slippage %d: %s reported %+v", slippage, builtin.DefaultFunction(fn), bm)
+			if builtin.DefaultFunction(fn) != builtin.AddInteger &&
+				bm != (BuiltinMetrics{}) {
+				t.Errorf(
+					"slippage %d: %s reported %+v",
+					slippage,
+					builtin.DefaultFunction(fn),
+					bm,
+				)
 			}
 		}
 
@@ -107,10 +121,19 @@ func TestMetricsMatchConsumedBudget(t *testing.T) {
 		want.Cpu += add.Budget.Cpu
 		want.Mem += add.Budget.Mem
 		if consumed := initial.Sub(&machine.ExBudget); consumed != want {
-			t.Errorf("slippage %d: consumed %+v, metrics account for %+v", slippage, consumed, want)
+			t.Errorf(
+				"slippage %d: consumed %+v, metrics account for %+v",
+				slippage,
+				consumed,
+				want,
+			)
 		}
 		if add.Budget.Cpu <= 0 || add.Budget.Mem <= 0 {
-			t.Errorf("slippage %d: addInteger budget = %+v, want positive", slippage, add.Budget)
+			t.Errorf(
+				"slippage %d: addInteger budget = %+v, want positive",
+				slippage,
+				add.Budget,
+			)
 		}
 	}
 }
@@ -161,7 +184,13 @@ func TestMetricsAccountForConsumedBudgetAcrossPrograms(t *testing.T) {
 				builtinCalls += bm.Calls
 			}
 			if consumed := initial.Sub(&machine.ExBudget); consumed != want {
-				t.Errorf("%s (slippage %d): consumed %+v, metrics account for %+v", name, slippage, consumed, want)
+				t.Errorf(
+					"%s (slippage %d): consumed %+v, metrics account for %+v",
+					name,
+					slippage,
+					consumed,
+					want,
+				)
 			}
 			if builtinCalls != metrics.Steps[ExBuiltin] {
 				t.Errorf(
@@ -208,7 +237,11 @@ func TestMetricsMaxStackDepthGrowsWithNesting(t *testing.T) {
 	}
 	base := depthOf(2)
 	if got := depthOf(6); got != base+4 {
-		t.Fatalf("max stack depth: 6 levels = %d, 2 levels = %d; want a difference of 4", got, base)
+		t.Fatalf(
+			"max stack depth: 6 levels = %d, 2 levels = %d; want a difference of 4",
+			got,
+			base,
+		)
 	}
 	if base <= 0 {
 		t.Fatalf("max stack depth = %d, want positive", base)

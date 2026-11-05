@@ -75,7 +75,11 @@ func TestParseLegacyVerifySignatureBuiltin(t *testing.T) {
 		t.Fatalf("parse canonical verifyEd25519Signature builtin: %v", err)
 	}
 	if got, want := Pretty(legacy), Pretty(canonical); got != want {
-		t.Fatalf("legacy builtin prints as %q, canonical builtin prints as %q", got, want)
+		t.Fatalf(
+			"legacy builtin prints as %q, canonical builtin prints as %q",
+			got,
+			want,
+		)
 	}
 }
 
@@ -97,10 +101,18 @@ func TestParsePrettyRoundTripPlutusValue(t *testing.T) {
 	pretty := Pretty(parsed)
 	parsedAgain, err := Parse(pretty)
 	if err != nil {
-		t.Fatalf("failed to parse pretty-printed Plutus Value %q: %v", pretty, err)
+		t.Fatalf(
+			"failed to parse pretty-printed Plutus Value %q: %v",
+			pretty,
+			err,
+		)
 	}
 	if prettyAgain := Pretty(parsedAgain); prettyAgain != pretty {
-		t.Fatalf("Plutus Value pretty-print is not stable: %q != %q", prettyAgain, pretty)
+		t.Fatalf(
+			"Plutus Value pretty-print is not stable: %q != %q",
+			prettyAgain,
+			pretty,
+		)
 	}
 }
 
@@ -162,7 +174,11 @@ func FuzzPretty(f *testing.F) {
 		}
 
 		if stable := Pretty(parsedAgain); stable != prettyAgain {
-			t.Fatalf("pretty output was not stable:\nfirst:\n%s\nsecond:\n%s", prettyAgain, stable)
+			t.Fatalf(
+				"pretty output was not stable:\nfirst:\n%s\nsecond:\n%s",
+				prettyAgain,
+				stable,
+			)
 		}
 	})
 }

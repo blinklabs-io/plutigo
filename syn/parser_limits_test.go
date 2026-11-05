@@ -138,6 +138,9 @@ func TestParseApplyReleasesWidthOnArgumentError(t *testing.T) {
 		t.Fatal("expected argument parse error, got nil")
 	}
 	if p.depth != 0 {
-		t.Fatalf("parser depth leaked after argument parse error: got %d, want 0", p.depth)
+		t.Fatalf(
+			"parser depth leaked after argument parse error: got %d, want 0",
+			p.depth,
+		)
 	}
 }

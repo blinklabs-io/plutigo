@@ -115,15 +115,60 @@ func TestInsertCoinCostsMaxDepthNotSize(t *testing.T) {
 		wantMaxDepth    uint64
 	}{
 		{name: "empty", policyCount: 0, tokensPerPolicy: 0, wantMaxDepth: 0},
-		{name: "one policy one token", policyCount: 1, tokensPerPolicy: 1, wantMaxDepth: 2},
-		{name: "one policy three tokens", policyCount: 1, tokensPerPolicy: 3, wantMaxDepth: 3},
-		{name: "two policies one token", policyCount: 2, tokensPerPolicy: 1, wantMaxDepth: 3},
-		{name: "three policies one token", policyCount: 3, tokensPerPolicy: 1, wantMaxDepth: 3},
-		{name: "four policies one token", policyCount: 4, tokensPerPolicy: 1, wantMaxDepth: 4},
-		{name: "eight policies one token", policyCount: 8, tokensPerPolicy: 1, wantMaxDepth: 5},
-		{name: "five policies two tokens", policyCount: 5, tokensPerPolicy: 2, wantMaxDepth: 5},
-		{name: "eight policies four tokens", policyCount: 8, tokensPerPolicy: 4, wantMaxDepth: 7},
-		{name: "sixteen policies one token", policyCount: 16, tokensPerPolicy: 1, wantMaxDepth: 6},
+		{
+			name:            "one policy one token",
+			policyCount:     1,
+			tokensPerPolicy: 1,
+			wantMaxDepth:    2,
+		},
+		{
+			name:            "one policy three tokens",
+			policyCount:     1,
+			tokensPerPolicy: 3,
+			wantMaxDepth:    3,
+		},
+		{
+			name:            "two policies one token",
+			policyCount:     2,
+			tokensPerPolicy: 1,
+			wantMaxDepth:    3,
+		},
+		{
+			name:            "three policies one token",
+			policyCount:     3,
+			tokensPerPolicy: 1,
+			wantMaxDepth:    3,
+		},
+		{
+			name:            "four policies one token",
+			policyCount:     4,
+			tokensPerPolicy: 1,
+			wantMaxDepth:    4,
+		},
+		{
+			name:            "eight policies one token",
+			policyCount:     8,
+			tokensPerPolicy: 1,
+			wantMaxDepth:    5,
+		},
+		{
+			name:            "five policies two tokens",
+			policyCount:     5,
+			tokensPerPolicy: 2,
+			wantMaxDepth:    5,
+		},
+		{
+			name:            "eight policies four tokens",
+			policyCount:     8,
+			tokensPerPolicy: 4,
+			wantMaxDepth:    7,
+		},
+		{
+			name:            "sixteen policies one token",
+			policyCount:     16,
+			tokensPerPolicy: 1,
+			wantMaxDepth:    6,
+		},
 	}
 
 	for _, tt := range tests {
@@ -136,8 +181,12 @@ func TestInsertCoinCostsMaxDepthNotSize(t *testing.T) {
 				&Constant{&syn.Integer{Inner: big.NewInt(5)}},
 				newValueCostTestInput(tt.policyCount, tt.tokensPerPolicy),
 			)
-			wantCPU := insertCoinCPUIntercept + insertCoinCPUSlope*int64(tt.wantMaxDepth)
-			wantMem := insertCoinMemIntercept + insertCoinMemSlope*int64(tt.wantMaxDepth)
+			wantCPU := insertCoinCPUIntercept + insertCoinCPUSlope*int64(
+				tt.wantMaxDepth,
+			)
+			wantMem := insertCoinMemIntercept + insertCoinMemSlope*int64(
+				tt.wantMaxDepth,
+			)
 			if cost.Cpu != wantCPU || cost.Mem != wantMem {
 				t.Fatalf(
 					"insertCoin over %d policies x %d tokens cost (%d cpu, %d mem), want (%d cpu, %d mem) for max depth %d",
@@ -171,11 +220,36 @@ func TestLookupCoinCostsMaxDepthNotSize(t *testing.T) {
 		wantMaxDepth    uint64
 	}{
 		{name: "empty", policyCount: 0, tokensPerPolicy: 0, wantMaxDepth: 0},
-		{name: "one policy one token", policyCount: 1, tokensPerPolicy: 1, wantMaxDepth: 2},
-		{name: "three policies one token", policyCount: 3, tokensPerPolicy: 1, wantMaxDepth: 3},
-		{name: "four policies one token", policyCount: 4, tokensPerPolicy: 1, wantMaxDepth: 4},
-		{name: "eight policies one token", policyCount: 8, tokensPerPolicy: 1, wantMaxDepth: 5},
-		{name: "eight policies four tokens", policyCount: 8, tokensPerPolicy: 4, wantMaxDepth: 7},
+		{
+			name:            "one policy one token",
+			policyCount:     1,
+			tokensPerPolicy: 1,
+			wantMaxDepth:    2,
+		},
+		{
+			name:            "three policies one token",
+			policyCount:     3,
+			tokensPerPolicy: 1,
+			wantMaxDepth:    3,
+		},
+		{
+			name:            "four policies one token",
+			policyCount:     4,
+			tokensPerPolicy: 1,
+			wantMaxDepth:    4,
+		},
+		{
+			name:            "eight policies one token",
+			policyCount:     8,
+			tokensPerPolicy: 1,
+			wantMaxDepth:    5,
+		},
+		{
+			name:            "eight policies four tokens",
+			policyCount:     8,
+			tokensPerPolicy: 4,
+			wantMaxDepth:    7,
+		},
 	}
 
 	for _, tt := range tests {
@@ -222,11 +296,36 @@ func TestScaleValueCostsTotalSizeNotOuterPlusInner(t *testing.T) {
 		wantTotalSize   uint64
 	}{
 		{name: "empty", policyCount: 0, tokensPerPolicy: 0, wantTotalSize: 0},
-		{name: "one policy one token", policyCount: 1, tokensPerPolicy: 1, wantTotalSize: 1},
-		{name: "two policies one token", policyCount: 2, tokensPerPolicy: 1, wantTotalSize: 2},
-		{name: "one policy eight tokens", policyCount: 1, tokensPerPolicy: 8, wantTotalSize: 8},
-		{name: "three policies one token", policyCount: 3, tokensPerPolicy: 1, wantTotalSize: 3},
-		{name: "eight policies four tokens", policyCount: 8, tokensPerPolicy: 4, wantTotalSize: 32},
+		{
+			name:            "one policy one token",
+			policyCount:     1,
+			tokensPerPolicy: 1,
+			wantTotalSize:   1,
+		},
+		{
+			name:            "two policies one token",
+			policyCount:     2,
+			tokensPerPolicy: 1,
+			wantTotalSize:   2,
+		},
+		{
+			name:            "one policy eight tokens",
+			policyCount:     1,
+			tokensPerPolicy: 8,
+			wantTotalSize:   8,
+		},
+		{
+			name:            "three policies one token",
+			policyCount:     3,
+			tokensPerPolicy: 1,
+			wantTotalSize:   3,
+		},
+		{
+			name:            "eight policies four tokens",
+			policyCount:     8,
+			tokensPerPolicy: 4,
+			wantTotalSize:   32,
+		},
 	}
 
 	for _, tt := range tests {
@@ -272,10 +371,30 @@ func TestUnionValueCostsTotalSizeNotOuterCount(t *testing.T) {
 		wantTotalSize   uint64
 	}{
 		{name: "empty", policyCount: 0, tokensPerPolicy: 0, wantTotalSize: 0},
-		{name: "one policy one token", policyCount: 1, tokensPerPolicy: 1, wantTotalSize: 1},
-		{name: "one policy three tokens", policyCount: 1, tokensPerPolicy: 3, wantTotalSize: 3},
-		{name: "four policies one token", policyCount: 4, tokensPerPolicy: 1, wantTotalSize: 4},
-		{name: "eight policies four tokens", policyCount: 8, tokensPerPolicy: 4, wantTotalSize: 32},
+		{
+			name:            "one policy one token",
+			policyCount:     1,
+			tokensPerPolicy: 1,
+			wantTotalSize:   1,
+		},
+		{
+			name:            "one policy three tokens",
+			policyCount:     1,
+			tokensPerPolicy: 3,
+			wantTotalSize:   3,
+		},
+		{
+			name:            "four policies one token",
+			policyCount:     4,
+			tokensPerPolicy: 1,
+			wantTotalSize:   4,
+		},
+		{
+			name:            "eight policies four tokens",
+			policyCount:     8,
+			tokensPerPolicy: 4,
+			wantTotalSize:   32,
+		},
 	}
 
 	for _, tt := range tests {

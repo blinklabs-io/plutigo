@@ -86,14 +86,38 @@ func TestDecodeJSONIntegerDigitCap(t *testing.T) {
 		wantErr bool
 	}{
 		{"int at cap", `{"int":` + digits(MaxJSONIntegerDigits) + `}`, false},
-		{"negative int at cap", `{"int":-` + digits(MaxJSONIntegerDigits) + `}`, false},
-		{"int over cap", `{"int":` + digits(MaxJSONIntegerDigits+1) + `}`, true},
-		{"negative int over cap", `{"int":-` + digits(MaxJSONIntegerDigits+1) + `}`, true},
-		{"tag at cap", `{"constructor":` + digits(MaxJSONIntegerDigits) + `,"fields":[]}`, false},
-		{"tag over cap", `{"constructor":` + digits(MaxJSONIntegerDigits+1) + `,"fields":[]}`, true},
+		{
+			"negative int at cap",
+			`{"int":-` + digits(MaxJSONIntegerDigits) + `}`,
+			false,
+		},
+		{
+			"int over cap",
+			`{"int":` + digits(MaxJSONIntegerDigits+1) + `}`,
+			true,
+		},
+		{
+			"negative int over cap",
+			`{"int":-` + digits(MaxJSONIntegerDigits+1) + `}`,
+			true,
+		},
+		{
+			"tag at cap",
+			`{"constructor":` + digits(MaxJSONIntegerDigits) + `,"fields":[]}`,
+			false,
+		},
+		{
+			"tag over cap",
+			`{"constructor":` + digits(
+				MaxJSONIntegerDigits+1,
+			) + `,"fields":[]}`,
+			true,
+		},
 		{
 			"nested int over cap",
-			`{"list":[{"int":1},{"int":` + digits(MaxJSONIntegerDigits+1) + `}]}`,
+			`{"list":[{"int":1},{"int":` + digits(
+				MaxJSONIntegerDigits+1,
+			) + `}]}`,
 			true,
 		},
 	}

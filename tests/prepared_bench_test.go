@@ -35,14 +35,21 @@ var nodePathContext = syn.ProgramContext{
 // BenchmarkNodeScriptContext evaluates a cached program with
 // Machine.RunScriptContext, which walks the program before every run.
 func BenchmarkNodeScriptContext(b *testing.B) {
-	evalContext := cek.NewDefaultEvalContext(lang.LanguageVersionV3, cek.ProtoVersion{Major: 11})
+	evalContext := cek.NewDefaultEvalContext(
+		lang.LanguageVersionV3,
+		cek.ProtoVersion{Major: 11},
+	)
 	forEachBenchFile(b, func(b *testing.B, name string, content []byte) {
 		program, err := syn.DecodeDeBruijnWithContext(content, nodePathContext)
 		if err != nil {
 			b.Fatalf("decode error: %v", err)
 		}
 		b.Run(name, func(b *testing.B) {
-			machine := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, evalContext)
+			machine := cek.NewMachine[syn.DeBruijn](
+				lang.LanguageVersionV3,
+				0,
+				evalContext,
+			)
 			for b.Loop() {
 				machine.ExBudget = cek.DefaultExBudget
 				if _, err := machine.RunScriptContext(context.Background(), program.Term); err != nil {
@@ -56,14 +63,21 @@ func BenchmarkNodeScriptContext(b *testing.B) {
 // BenchmarkNodePrepared evaluates a cached PreparedProgram with
 // cek.RunPreparedScriptContext, which skips the per-run walk.
 func BenchmarkNodePrepared(b *testing.B) {
-	evalContext := cek.NewDefaultEvalContext(lang.LanguageVersionV3, cek.ProtoVersion{Major: 11})
+	evalContext := cek.NewDefaultEvalContext(
+		lang.LanguageVersionV3,
+		cek.ProtoVersion{Major: 11},
+	)
 	forEachBenchFile(b, func(b *testing.B, name string, content []byte) {
 		prepared, err := cek.PrepareProgram(content, nodePathContext)
 		if err != nil {
 			b.Fatalf("prepare error: %v", err)
 		}
 		b.Run(name, func(b *testing.B) {
-			machine := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, evalContext)
+			machine := cek.NewMachine[syn.DeBruijn](
+				lang.LanguageVersionV3,
+				0,
+				evalContext,
+			)
 			for b.Loop() {
 				machine.ExBudget = cek.DefaultExBudget
 				if _, err := cek.RunPreparedScriptContext(context.Background(), machine, prepared); err != nil {

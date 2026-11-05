@@ -34,7 +34,9 @@ func toOracle(v *Value) oracleValue {
 		out[pol] = map[string]*big.Int{}
 		for _, t := range p.Second.(*ProtoList).List {
 			tp := t.(*ProtoPair)
-			out[pol][string(tp.First.(*ByteString).Inner)] = new(big.Int).Set(tp.Second.(*Integer).Inner)
+			out[pol][string(tp.First.(*ByteString).Inner)] = new(
+				big.Int,
+			).Set(tp.Second.(*Integer).Inner)
 		}
 	}
 	return out
@@ -89,15 +91,34 @@ func randValue(t testing.TB, r *rand.Rand, withNeg bool) *Value {
 func sameValue(t *testing.T, got, want *Value, what string) {
 	t.Helper()
 	if !reflect.DeepEqual(got.Entries(), want.Entries()) {
-		t.Fatalf("%s: entries differ\n got %v\nwant %v", what, toOracle(got), toOracle(want))
+		t.Fatalf(
+			"%s: entries differ\n got %v\nwant %v",
+			what,
+			toOracle(got),
+			toOracle(want),
+		)
 	}
 	g1, g2, g3, _ := got.Sizes()
 	w1, w2, w3, _ := want.Sizes()
 	if g1 != w1 || g2 != w2 || g3 != w3 {
-		t.Fatalf("%s: sizes %d/%d/%d want %d/%d/%d", what, g1, g2, g3, w1, w2, w3)
+		t.Fatalf(
+			"%s: sizes %d/%d/%d want %d/%d/%d",
+			what,
+			g1,
+			g2,
+			g3,
+			w1,
+			w2,
+			w3,
+		)
 	}
 	if got.HasNegative() != want.HasNegative() {
-		t.Fatalf("%s: HasNegative %v want %v", what, got.HasNegative(), want.HasNegative())
+		t.Fatalf(
+			"%s: HasNegative %v want %v",
+			what,
+			got.HasNegative(),
+			want.HasNegative(),
+		)
 	}
 }
 
@@ -171,7 +192,8 @@ func TestValueUnionMatchesOracle(t *testing.T) {
 			t.Fatal(err)
 		}
 		sameValue(t, got, o.build(t), "union")
-		if !reflect.DeepEqual(ba, a.Entries()) || !reflect.DeepEqual(bb, b.Entries()) {
+		if !reflect.DeepEqual(ba, a.Entries()) ||
+			!reflect.DeepEqual(bb, b.Entries()) {
 			t.Fatal("UnionValue mutated an input")
 		}
 	}
@@ -200,7 +222,13 @@ func TestValueContainsMatchesOracle(t *testing.T) {
 			}
 		}
 		if got := a.Contains(b); got != want {
-			t.Fatalf("Contains = %v, want %v\n a=%v\n b=%v", got, want, oa, toOracle(b))
+			t.Fatalf(
+				"Contains = %v, want %v\n a=%v\n b=%v",
+				got,
+				want,
+				oa,
+				toOracle(b),
+			)
 		}
 		if want {
 			hits++
@@ -212,9 +240,14 @@ func TestValueContainsMatchesOracle(t *testing.T) {
 }
 
 func TestValueOverflow(t *testing.T) {
-	maxQ := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 127), big.NewInt(1))
+	maxQ := new(
+		big.Int,
+	).Sub(new(big.Int).Lsh(big.NewInt(1), 127), big.NewInt(1))
 	v := oracleValue{"p": {"t": maxQ}}.build(t)
-	if _, err := v.Scale(big.NewInt(2), nil); !errors.Is(err, ErrValueOverflow) {
+	if _, err := v.Scale(big.NewInt(2), nil); !errors.Is(
+		err,
+		ErrValueOverflow,
+	) {
 		t.Fatalf("Scale err = %v", err)
 	}
 	if _, err := UnionValue(v, v, nil); !errors.Is(err, ErrValueOverflow) {

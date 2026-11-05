@@ -41,19 +41,35 @@ func TestStepBatchingLoopsAgree(t *testing.T) {
 	}
 	for pi, src := range programs {
 		prog := parseDeBruijn(t, src)
-		ec := cek.NewDefaultEvalContext(lang.LanguageVersionV3, cek.ProtoVersion{Major: 11})
+		ec := cek.NewDefaultEvalContext(
+			lang.LanguageVersionV3,
+			cek.ProtoVersion{Major: 11},
+		)
 		for _, slippage := range []uint32{0, 1, 2, 3, 7, cek.DefaultSlippage, 1000} {
 			run := func(metered bool, budget cek.ExBudget) string {
-				m := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, slippage, ec)
+				m := cek.NewMachine[syn.DeBruijn](
+					lang.LanguageVersionV3,
+					slippage,
+					ec,
+				)
 				if metered {
 					m.EnableMetrics()
 				}
 				m.ExBudget = budget
 				_, err := m.Run(prog.Term)
-				return fmt.Sprintf("%v | %+v | %s", err, m.ExBudget, strings.Join(m.Logs, ","))
+				return fmt.Sprintf(
+					"%v | %+v | %s",
+					err,
+					m.ExBudget,
+					strings.Join(m.Logs, ","),
+				)
 			}
 			full := cek.ExBudget{Mem: 1_000_000, Cpu: 1_000_000_000}
-			m := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, slippage, ec)
+			m := cek.NewMachine[syn.DeBruijn](
+				lang.LanguageVersionV3,
+				slippage,
+				ec,
+			)
 			m.ExBudget = full
 			_, _ = m.Run(prog.Term)
 			used := full.Sub(&m.ExBudget)
@@ -65,7 +81,13 @@ func TestStepBatchingLoopsAgree(t *testing.T) {
 				)
 			}
 			for i := int64(1); i < 16; i++ {
-				budgets = append(budgets, cek.ExBudget{Mem: used.Mem * i / 16, Cpu: used.Cpu * i / 16})
+				budgets = append(
+					budgets,
+					cek.ExBudget{
+						Mem: used.Mem * i / 16,
+						Cpu: used.Cpu * i / 16,
+					},
+				)
 			}
 			budgets = append(budgets, full)
 			for _, budget := range budgets {
@@ -74,8 +96,14 @@ func TestStepBatchingLoopsAgree(t *testing.T) {
 				}
 				got, want := run(false, budget), run(true, budget)
 				if got != want {
-					t.Fatalf("program %d slippage %d budget %+v:\n De Bruijn: %s\n generic:   %s",
-						pi, slippage, budget, got, want)
+					t.Fatalf(
+						"program %d slippage %d budget %+v:\n De Bruijn: %s\n generic:   %s",
+						pi,
+						slippage,
+						budget,
+						got,
+						want,
+					)
 				}
 			}
 		}

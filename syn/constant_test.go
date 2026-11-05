@@ -88,28 +88,44 @@ func TestValueSnapshotPreservesCachedShape(t *testing.T) {
 	}
 	gotEntries := value.Entries()
 	if len(gotEntries) != 1 {
-		t.Fatalf("Entries() after mutation returned %d policies, want 1", len(gotEntries))
+		t.Fatalf(
+			"Entries() after mutation returned %d policies, want 1",
+			len(gotEntries),
+		)
 	}
 	gotPolicy := gotEntries[0].(*ProtoPair)
-	if got := gotPolicy.First.(*ByteString).Inner; !bytes.Equal(got, []byte{1}) {
+	if got := gotPolicy.First.(*ByteString).Inner; !bytes.Equal(
+		got,
+		[]byte{1},
+	) {
 		t.Fatalf("policy ID = %x, want 01", got)
 	}
 	gotTokens := gotPolicy.Second.(*ProtoList).List
 	if len(gotTokens) != 1 {
 		t.Fatalf("token count = %d, want 1", len(gotTokens))
 	}
-	if got := gotTokens[0].(*ProtoPair).Second.(*Integer).Inner; got.Cmp(big.NewInt(3)) != 0 {
+	if got := gotTokens[0].(*ProtoPair).Second.(*Integer).Inner; got.Cmp(
+		big.NewInt(3),
+	) != 0 {
 		t.Fatalf("quantity = %s, want 3", got)
 	}
 	if got := Pretty(program); got != wantPretty {
-		t.Fatalf("Pretty changed after external mutation: %q != %q", got, wantPretty)
+		t.Fatalf(
+			"Pretty changed after external mutation: %q != %q",
+			got,
+			wantPretty,
+		)
 	}
 	gotFlat, err := Encode(program)
 	if err != nil {
 		t.Fatalf("Encode after external mutation: %v", err)
 	}
 	if !bytes.Equal(gotFlat, wantFlat) {
-		t.Fatalf("FLAT encoding changed after external mutation: %x != %x", gotFlat, wantFlat)
+		t.Fatalf(
+			"FLAT encoding changed after external mutation: %x != %x",
+			gotFlat,
+			wantFlat,
+		)
 	}
 }
 
@@ -134,7 +150,11 @@ func TestNewValueRejectsTypedNilEntries(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			defer func() {
 				if recovered := recover(); recovered != nil {
-					t.Fatalf("NewValue panicked for typed-nil %s: %v", name, recovered)
+					t.Fatalf(
+						"NewValue panicked for typed-nil %s: %v",
+						name,
+						recovered,
+					)
 				}
 			}()
 			if _, err := NewValue(entries); err == nil {
@@ -159,12 +179,20 @@ func TestValueNarrowReadsReturnCopies(t *testing.T) {
 	}
 	policyIDs, ok := value.PolicyIDs()
 	if !ok || len(policyIDs) != 2 {
-		t.Fatalf("PolicyIDs() returned %d IDs with ok=%t, want 2 and true", len(policyIDs), ok)
+		t.Fatalf(
+			"PolicyIDs() returned %d IDs with ok=%t, want 2 and true",
+			len(policyIDs),
+			ok,
+		)
 	}
 	policyIDs[0][0] = 9
 	policyIDs, ok = value.PolicyIDs()
 	if !ok || !bytes.Equal(policyIDs[0], []byte{1}) {
-		t.Fatalf("PolicyIDs()[0] = %x with ok=%t, want 01 and true", policyIDs[0], ok)
+		t.Fatalf(
+			"PolicyIDs()[0] = %x with ok=%t, want 01 and true",
+			policyIDs[0],
+			ok,
+		)
 	}
 
 	quantity, ok := value.LookupCoin([]byte{4}, []byte{5})
@@ -174,10 +202,19 @@ func TestValueNarrowReadsReturnCopies(t *testing.T) {
 	quantity.SetInt64(99)
 	quantity, ok = value.LookupCoin([]byte{4}, []byte{5})
 	if !ok || quantity.Cmp(big.NewInt(6)) != 0 {
-		t.Fatalf("LookupCoin() after mutation = (%v, %t), want (6, true)", quantity, ok)
+		t.Fatalf(
+			"LookupCoin() after mutation = (%v, %t), want (6, true)",
+			quantity,
+			ok,
+		)
 	}
-	if quantity, ok := value.LookupCoin([]byte{4}, []byte{6}); ok || quantity != nil {
-		t.Fatalf("LookupCoin() missing token = (%v, %t), want (nil, false)", quantity, ok)
+	if quantity, ok := value.LookupCoin([]byte{4}, []byte{6}); ok ||
+		quantity != nil {
+		t.Fatalf(
+			"LookupCoin() missing token = (%v, %t), want (nil, false)",
+			quantity,
+			ok,
+		)
 	}
 }
 
@@ -217,7 +254,11 @@ func TestIntegerSetInnerRefreshesMetadata(t *testing.T) {
 	integer.SetInner(big.NewInt(-7))
 	got, ok := integer.CachedInt64()
 	if !ok || got != -7 {
-		t.Fatalf("CachedInt64() after reset = (%d, %t), want (-7, true)", got, ok)
+		t.Fatalf(
+			"CachedInt64() after reset = (%d, %t), want (-7, true)",
+			got,
+			ok,
+		)
 	}
 }
 

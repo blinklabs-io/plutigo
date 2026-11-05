@@ -52,7 +52,12 @@ func runContext(
 	flags.SetOutput(stderr)
 	var corpusPath string
 	var pretty bool
-	flags.StringVar(&corpusPath, "corpus", "", "path to a replay corpus JSON file")
+	flags.StringVar(
+		&corpusPath,
+		"corpus",
+		"",
+		"path to a replay corpus JSON file",
+	)
 	flags.BoolVar(&pretty, "pretty", false, "indent the JSON report")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {

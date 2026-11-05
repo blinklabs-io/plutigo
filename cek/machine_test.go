@@ -65,11 +65,18 @@ func TestNewMachineSharesImmutableBuiltinPrototypes(t *testing.T) {
 		first := NewMachine[syn.DeBruijn](version, 0, testEvalContext())
 		second := NewMachine[syn.DeBruijn](version, 0, testEvalContext())
 		if first.builtinNoArgValues != second.builtinNoArgValues {
-			t.Fatalf("version %v machines do not share builtin prototypes", version)
+			t.Fatalf(
+				"version %v machines do not share builtin prototypes",
+				version,
+			)
 		}
 	}
 
-	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+	machine := NewMachine[syn.DeBruijn](
+		lang.LanguageVersionV3,
+		0,
+		testEvalContext(),
+	)
 	prototype := machine.builtinNoArgValues[builtin.AddInteger][0]
 	want := *prototype
 	arg := &Constant{Constant: &syn.Integer{Inner: big.NewInt(1)}}
@@ -88,11 +95,21 @@ func TestBuiltinForceCountCache(t *testing.T) {
 	for fn := builtin.DefaultFunction(0); fn < builtin.TotalBuiltinCount; fn++ {
 		want := fn.ForceCount()
 		if got := uint(machine.builtinNoArgValues[fn][0].forceCount); got != want {
-			t.Errorf("builtin %s prototype force count = %d, want %d", fn, got, want)
+			t.Errorf(
+				"builtin %s prototype force count = %d, want %d",
+				fn,
+				got,
+				want,
+			)
 		}
 
 		if got := uint(machine.allocBuiltin(fn, 0, 1, nil).forceCount); got != want {
-			t.Errorf("builtin %s allocated force count = %d, want %d", fn, got, want)
+			t.Errorf(
+				"builtin %s allocated force count = %d, want %d",
+				fn,
+				got,
+				want,
+			)
 		}
 	}
 }
@@ -129,7 +146,10 @@ func TestRunReturnsIndependentConstantTerms(t *testing.T) {
 	}
 	firstInt, ok := firstConst.Con.(*syn.Integer)
 	if !ok {
-		t.Fatalf("first Run returned %T constant, want *syn.Integer", firstConst.Con)
+		t.Fatalf(
+			"first Run returned %T constant, want *syn.Integer",
+			firstConst.Con,
+		)
 	}
 	firstInt.Inner.SetInt64(99)
 
@@ -144,7 +164,10 @@ func TestRunReturnsIndependentConstantTerms(t *testing.T) {
 	}
 	secondInt, ok := secondConst.Con.(*syn.Integer)
 	if !ok {
-		t.Fatalf("second Run returned %T constant, want *syn.Integer", secondConst.Con)
+		t.Fatalf(
+			"second Run returned %T constant, want *syn.Integer",
+			secondConst.Con,
+		)
 	}
 	if got := secondInt.Inner.Int64(); got != 42 {
 		t.Fatalf("second Run integer = %d, want 42", got)
@@ -160,7 +183,9 @@ func TestRunReturnsIndependentConstantTerms(t *testing.T) {
 func TestRunResetsEnvArena(t *testing.T) {
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 
-	dbProgram, err := syn.NameToDeBruijn(buildLambdaChainProgram(envChunkSize + 1))
+	dbProgram, err := syn.NameToDeBruijn(
+		buildLambdaChainProgram(envChunkSize + 1),
+	)
 	if err != nil {
 		t.Fatalf("NameToDeBruijn returned error: %v", err)
 	}
@@ -171,10 +196,19 @@ func TestRunResetsEnvArena(t *testing.T) {
 			t.Fatalf("%s Run returned error: %v", run, err)
 		}
 		if got := len(m.envChunks); got > envRetainChunkCap {
-			t.Fatalf("len(envChunks) after %s Run = %d, want <= %d", run, got, envRetainChunkCap)
+			t.Fatalf(
+				"len(envChunks) after %s Run = %d, want <= %d",
+				run,
+				got,
+				envRetainChunkCap,
+			)
 		}
 		if m.envChunkPos != 0 {
-			t.Fatalf("envChunkPos after %s Run = %d, want 0", run, m.envChunkPos)
+			t.Fatalf(
+				"envChunkPos after %s Run = %d, want 0",
+				run,
+				m.envChunkPos,
+			)
 		}
 	}
 }
@@ -191,7 +225,9 @@ func TestRunClearsRetainedArenaReferencesAfterReturn(t *testing.T) {
 	// envChunkSize+1 forces env arena extension past a single chunk while
 	// also populating lambda, constant, and elem arenas through the apply
 	// chain.
-	dbProgram, err := syn.NameToDeBruijn(buildLambdaChainProgram(envChunkSize + 1))
+	dbProgram, err := syn.NameToDeBruijn(
+		buildLambdaChainProgram(envChunkSize + 1),
+	)
 	if err != nil {
 		t.Fatalf("NameToDeBruijn returned error: %v", err)
 	}
@@ -216,7 +252,12 @@ func TestRunClearsRetainedArenaReferencesAfterReturn(t *testing.T) {
 		for si := range chunk {
 			slot := chunk[si]
 			if slot.AST != nil || slot.Env != nil {
-				t.Fatalf("lambdaChunks[%d][%d] retained stale data after Run: %+v", ci, si, slot)
+				t.Fatalf(
+					"lambdaChunks[%d][%d] retained stale data after Run: %+v",
+					ci,
+					si,
+					slot,
+				)
 			}
 		}
 	}
@@ -224,7 +265,12 @@ func TestRunClearsRetainedArenaReferencesAfterReturn(t *testing.T) {
 		for si := range chunk {
 			slot := chunk[si]
 			if slot.AST != nil || slot.Env != nil {
-				t.Fatalf("delayChunks[%d][%d] retained stale data after Run: %+v", ci, si, slot)
+				t.Fatalf(
+					"delayChunks[%d][%d] retained stale data after Run: %+v",
+					ci,
+					si,
+					slot,
+				)
 			}
 		}
 	}
@@ -232,7 +278,12 @@ func TestRunClearsRetainedArenaReferencesAfterReturn(t *testing.T) {
 		for si := range chunk {
 			slot := chunk[si]
 			if slot.Tag != 0 || slot.Fields != nil {
-				t.Fatalf("constrChunks[%d][%d] retained stale data after Run: %+v", ci, si, slot)
+				t.Fatalf(
+					"constrChunks[%d][%d] retained stale data after Run: %+v",
+					ci,
+					si,
+					slot,
+				)
 			}
 		}
 	}
@@ -240,22 +291,37 @@ func TestRunClearsRetainedArenaReferencesAfterReturn(t *testing.T) {
 		for si := range chunk {
 			slot := chunk[si]
 			if slot.Constant != nil {
-				t.Fatalf("constantChunks[%d][%d] retained stale data after Run: %+v", ci, si, slot)
+				t.Fatalf(
+					"constantChunks[%d][%d] retained stale data after Run: %+v",
+					ci,
+					si,
+					slot,
+				)
 			}
 		}
 	}
 	for ci, chunk := range m.envChunks {
 		for si := range chunk {
 			slot := chunk[si]
-			if slot.data != nil || slot.next != nil || slot.jump != nil || slot.depth != 0 {
-				t.Fatalf("envChunks[%d][%d] retained stale data after Run: %+v", ci, si, slot)
+			if slot.data != nil || slot.next != nil || slot.jump != nil ||
+				slot.depth != 0 {
+				t.Fatalf(
+					"envChunks[%d][%d] retained stale data after Run: %+v",
+					ci,
+					si,
+					slot,
+				)
 			}
 		}
 	}
 	for ci, chunk := range m.valueElemChunks {
 		for si := range chunk {
 			if chunk[si] != nil {
-				t.Fatalf("valueElemChunks[%d][%d] retained stale Value after Run", ci, si)
+				t.Fatalf(
+					"valueElemChunks[%d][%d] retained stale Value after Run",
+					ci,
+					si,
+				)
 			}
 		}
 	}
@@ -277,7 +343,11 @@ func TestRunKeepsSmallReusedValueArenaCold(t *testing.T) {
 		{
 			name: "single lambda reuse",
 			setup: func() *Machine[syn.DeBruijn] {
-				return NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+				return NewMachine[syn.DeBruijn](
+					lang.LanguageVersionV3,
+					0,
+					testEvalContext(),
+				)
 			},
 			term:               term,
 			wantLambdaChunks:   1,
@@ -298,13 +368,21 @@ func TestRunKeepsSmallReusedValueArenaCold(t *testing.T) {
 			}
 
 			if got := len(m.lambdaChunks); got != tt.wantLambdaChunks {
-				t.Fatalf("len(lambdaChunks) after small reuse = %d, want %d", got, tt.wantLambdaChunks)
+				t.Fatalf(
+					"len(lambdaChunks) after small reuse = %d, want %d",
+					got,
+					tt.wantLambdaChunks,
+				)
 			}
 			if tt.wantLambdaChunks == 0 {
 				return
 			}
 			if got := len(m.lambdaChunks[0]); got != tt.wantLambdaChunkLen {
-				t.Fatalf("len(lambdaChunks[0]) after small reuse = %d, want %d", got, tt.wantLambdaChunkLen)
+				t.Fatalf(
+					"len(lambdaChunks[0]) after small reuse = %d, want %d",
+					got,
+					tt.wantLambdaChunkLen,
+				)
 			}
 		})
 	}
@@ -331,7 +409,11 @@ func TestRunStackLambdaImmediateFastPathSkipsLambdaArena(t *testing.T) {
 		}
 		outInt, ok := outConst.Con.(*syn.Integer)
 		if !ok {
-			t.Fatalf("%s Run returned %T constant, want *syn.Integer", run, outConst.Con)
+			t.Fatalf(
+				"%s Run returned %T constant, want *syn.Integer",
+				run,
+				outConst.Con,
+			)
 		}
 		if got := outInt.Inner.Int64(); got != 42 {
 			t.Fatalf("%s Run integer = %d, want 42", run, got)
@@ -339,7 +421,10 @@ func TestRunStackLambdaImmediateFastPathSkipsLambdaArena(t *testing.T) {
 	}
 
 	if got := len(m.lambdaChunks); got != 0 {
-		t.Fatalf("len(lambdaChunks) after lambda immediate fast path = %d, want 0", got)
+		t.Fatalf(
+			"len(lambdaChunks) after lambda immediate fast path = %d, want 0",
+			got,
+		)
 	}
 }
 
@@ -369,7 +454,10 @@ func TestMachineReusesUnConstrDataValueWithinRun(t *testing.T) {
 	}
 	firstFields := firstPair.second.(*dataListValue[syn.DeBruijn]).items
 	if len(firstFields) != 1 || firstFields[0] != constr.Fields[0] {
-		t.Fatalf("unConstrData fields = %v, want original constructor fields", firstFields)
+		t.Fatalf(
+			"unConstrData fields = %v, want original constructor fields",
+			firstFields,
+		)
 	}
 
 	beforeCPU = m.ExBudget.Cpu
@@ -382,7 +470,11 @@ func TestMachineReusesUnConstrDataValueWithinRun(t *testing.T) {
 		t.Fatal("repeated unConstrData conversion did not reuse its value")
 	}
 	if firstCost == 0 || secondCost != firstCost {
-		t.Fatalf("unConstrData costs = %d then %d, want equal nonzero costs", firstCost, secondCost)
+		t.Fatalf(
+			"unConstrData costs = %d then %d, want equal nonzero costs",
+			firstCost,
+			secondCost,
+		)
 	}
 	if got := m.unConstrDataValue(otherConstr); got == firstPair {
 		t.Fatal("different constructor reused the previous unConstrData value")
@@ -390,7 +482,9 @@ func TestMachineReusesUnConstrDataValueWithinRun(t *testing.T) {
 
 	m.resetValueArenas()
 	if m.lastUnConstrData != nil || m.lastUnConstrValue != nil {
-		t.Fatal("unConstrData cache retained pointers after resetting value arenas")
+		t.Fatal(
+			"unConstrData cache retained pointers after resetting value arenas",
+		)
 	}
 }
 
@@ -421,7 +515,10 @@ func TestRunFlushesSuccessfulFinalSlippageBatch(t *testing.T) {
 
 	t.Run("missing final constant memory", func(t *testing.T) {
 		m := NewMachine[syn.DeBruijn](lang.LanguageVersionV1, 200, ctx)
-		m.ExBudget = ExBudget{Cpu: haskellBudget.Cpu, Mem: haskellBudget.Mem - 1}
+		m.ExBudget = ExBudget{
+			Cpu: haskellBudget.Cpu,
+			Mem: haskellBudget.Mem - 1,
+		}
 
 		_, err := m.Run(term)
 		if err == nil {
@@ -448,10 +545,18 @@ func TestResetEnvArenaRetainsOnlyTrackedChunkHeaders(t *testing.T) {
 	m.resetEnvArena()
 
 	if len(m.envChunks) != envRetainChunkCap {
-		t.Fatalf("len(envChunks) after reset = %d, want %d", len(m.envChunks), envRetainChunkCap)
+		t.Fatalf(
+			"len(envChunks) after reset = %d, want %d",
+			len(m.envChunks),
+			envRetainChunkCap,
+		)
 	}
 	if cap(m.envChunks) != envRetainChunkCap {
-		t.Fatalf("cap(envChunks) after reset = %d, want %d", cap(m.envChunks), envRetainChunkCap)
+		t.Fatalf(
+			"cap(envChunks) after reset = %d, want %d",
+			cap(m.envChunks),
+			envRetainChunkCap,
+		)
 	}
 	if m.envChunkPos != 0 {
 		t.Fatalf("envChunkPos after reset = %d, want 0", m.envChunkPos)
@@ -468,13 +573,18 @@ func TestAllocArenaSliceReusesLaterChunk(t *testing.T) {
 	allocated := allocArenaSlice(&chunks, &pos, 2, 4)
 
 	if len(chunks) != 2 {
-		t.Fatalf("allocArenaSlice appended a chunk, len(chunks) = %d, want 2", len(chunks))
+		t.Fatalf(
+			"allocArenaSlice appended a chunk, len(chunks) = %d, want 2",
+			len(chunks),
+		)
 	}
 	if pos != 6 {
 		t.Fatalf("allocArenaSlice pos = %d, want 6", pos)
 	}
 	if unsafe.SliceData(allocated) != unsafe.SliceData(chunks[1]) {
-		t.Fatal("allocArenaSlice did not reuse the next existing chunk from its start")
+		t.Fatal(
+			"allocArenaSlice did not reuse the next existing chunk from its start",
+		)
 	}
 }
 
@@ -524,21 +634,39 @@ func TestLookupEnvUsesOneIndexedDepth(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			value, ok := lookupEnv(tt.env, tt.idx)
 			if ok != tt.wantOk {
-				t.Fatalf("lookupEnv(%d) ok = %v, want %v", tt.idx, ok, tt.wantOk)
+				t.Fatalf(
+					"lookupEnv(%d) ok = %v, want %v",
+					tt.idx,
+					ok,
+					tt.wantOk,
+				)
 			}
 			if !tt.wantOk {
 				return
 			}
 			intValue, ok := value.(*Constant)
 			if !ok {
-				t.Fatalf("lookupEnv(%d) returned %T, want *Constant", tt.idx, value)
+				t.Fatalf(
+					"lookupEnv(%d) returned %T, want *Constant",
+					tt.idx,
+					value,
+				)
 			}
 			got, ok := intValue.Constant.(*syn.Integer)
 			if !ok {
-				t.Fatalf("lookupEnv(%d) constant = %T, want *syn.Integer", tt.idx, intValue.Constant)
+				t.Fatalf(
+					"lookupEnv(%d) constant = %T, want *syn.Integer",
+					tt.idx,
+					intValue.Constant,
+				)
 			}
 			if got.Inner.Int64() != tt.wantIntValue {
-				t.Fatalf("lookupEnv(%d) = %d, want %d", tt.idx, got.Inner.Int64(), tt.wantIntValue)
+				t.Fatalf(
+					"lookupEnv(%d) = %d, want %d",
+					tt.idx,
+					got.Inner.Int64(),
+					tt.wantIntValue,
+				)
 			}
 		})
 	}
@@ -547,7 +675,11 @@ func TestLookupEnvUsesOneIndexedDepth(t *testing.T) {
 func TestLookupEnvIndexedAtMaximumDepth(t *testing.T) {
 	const depth = 100_000
 
-	machine := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+	machine := NewMachine[syn.DeBruijn](
+		lang.LanguageVersionV3,
+		0,
+		testEvalContext(),
+	)
 	var env *Env[syn.DeBruijn]
 	for i := 1; i <= depth; i++ {
 		env = machine.extendEnv(env, int64Constant(int64(i)))
@@ -594,13 +726,26 @@ func TestEnvLookupBeyondIndexRange(t *testing.T) {
 
 	value, ok := env.Lookup(depth)
 	if !ok {
-		t.Fatalf("Lookup(%d) failed for an environment of depth %d", depth, depth)
+		t.Fatalf(
+			"Lookup(%d) failed for an environment of depth %d",
+			depth,
+			depth,
+		)
 	}
 	if value != oldest {
-		t.Fatalf("Lookup(%d) returned %p, want oldest value %p", depth, value, oldest)
+		t.Fatalf(
+			"Lookup(%d) returned %p, want oldest value %p",
+			depth,
+			value,
+			oldest,
+		)
 	}
 	if _, ok := env.Lookup(depth + 1); ok {
-		t.Fatalf("Lookup(%d) succeeded beyond environment depth %d", depth+1, depth)
+		t.Fatalf(
+			"Lookup(%d) succeeded beyond environment depth %d",
+			depth+1,
+			depth,
+		)
 	}
 }
 
@@ -632,7 +777,11 @@ func TestRunResetsTransientStateAcrossInvocations(t *testing.T) {
 		t.Fatalf("second Run returned error: %v", err)
 	}
 	if m.ExBudget != firstRemaining {
-		t.Fatalf("ExBudget after second Run = %+v, want %+v", m.ExBudget, firstRemaining)
+		t.Fatalf(
+			"ExBudget after second Run = %+v, want %+v",
+			m.ExBudget,
+			firstRemaining,
+		)
 	}
 	if len(m.Logs) != 0 {
 		t.Fatalf("Logs after second Run = %v, want empty", m.Logs)
@@ -641,7 +790,10 @@ func TestRunResetsTransientStateAcrossInvocations(t *testing.T) {
 		t.Fatalf("unbudgetedSteps after second Run = %v, want zeroed", got)
 	}
 	if m.unbudgetedTotal != 0 {
-		t.Fatalf("unbudgetedTotal after second Run = %d, want 0", m.unbudgetedTotal)
+		t.Fatalf(
+			"unbudgetedTotal after second Run = %d, want 0",
+			m.unbudgetedTotal,
+		)
 	}
 }
 
@@ -662,7 +814,11 @@ func TestRunUsesUpdatedBudgetOverrideOnReuse(t *testing.T) {
 		t.Fatalf("second Run returned error: %v", err)
 	}
 	if !(m.ExBudget.Mem < secondBudget.Mem && m.ExBudget.Cpu < secondBudget.Cpu) {
-		t.Fatalf("ExBudget after override run = %+v, want remaining budget below %+v", m.ExBudget, secondBudget)
+		t.Fatalf(
+			"ExBudget after override run = %+v, want remaining budget below %+v",
+			m.ExBudget,
+			secondBudget,
+		)
 	}
 }
 
@@ -685,15 +841,26 @@ func TestRunResetsFrameStackAcrossInvocations(t *testing.T) {
 		t.Fatalf("first Run returned error: %v", err)
 	}
 	if len(m.frameStack) != 0 {
-		t.Fatalf("frameStack len after first Run = %d, want 0", len(m.frameStack))
+		t.Fatalf(
+			"frameStack len after first Run = %d, want 0",
+			len(m.frameStack),
+		)
 	}
 	if m.frameStackUsed != 0 {
-		t.Fatalf("frameStackUsed after first Run = %d, want 0", m.frameStackUsed)
+		t.Fatalf(
+			"frameStackUsed after first Run = %d, want 0",
+			m.frameStackUsed,
+		)
 	}
 	hiddenAfterFirst := m.frameStack[:cap(m.frameStack)]
 	for i := range hiddenAfterFirst {
-		if hiddenAfterFirst[i].value != nil || hiddenAfterFirst[i].env != nil || hiddenAfterFirst[i].term != nil {
-			t.Fatalf("frameStack[%d] retained stale data after first Run: %+v", i, hiddenAfterFirst[i])
+		if hiddenAfterFirst[i].value != nil || hiddenAfterFirst[i].env != nil ||
+			hiddenAfterFirst[i].term != nil {
+			t.Fatalf(
+				"frameStack[%d] retained stale data after first Run: %+v",
+				i,
+				hiddenAfterFirst[i],
+			)
 		}
 	}
 
@@ -710,10 +877,16 @@ func TestRunResetsFrameStackAcrossInvocations(t *testing.T) {
 		t.Fatalf("second Run returned error: %v", err)
 	}
 	if len(m.frameStack) != 0 {
-		t.Fatalf("frameStack len after second Run = %d, want 0", len(m.frameStack))
+		t.Fatalf(
+			"frameStack len after second Run = %d, want 0",
+			len(m.frameStack),
+		)
 	}
 	if m.frameStackUsed != 0 {
-		t.Fatalf("frameStackUsed after second Run = %d, want 0", m.frameStackUsed)
+		t.Fatalf(
+			"frameStackUsed after second Run = %d, want 0",
+			m.frameStackUsed,
+		)
 	}
 
 	hidden := m.frameStack[:cap(m.frameStack)]
@@ -734,6 +907,9 @@ func TestDischargeValueUnsupportedValueReturnsInternalError(t *testing.T) {
 		t.Fatalf("expected InternalError, got %T", err)
 	}
 	if !strings.Contains(err.Error(), "unsupportedDischargeValue") {
-		t.Fatalf("expected error to mention unsupported value type, got %q", err.Error())
+		t.Fatalf(
+			"expected error to mention unsupported value type, got %q",
+			err.Error(),
+		)
 	}
 }

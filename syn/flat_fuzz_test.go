@@ -44,7 +44,11 @@ func FuzzDecodeFlatDeBruijn(f *testing.F) {
 		genericProgram, genericErr := Decode[DeBruijn](input)
 		fastProgram, fastErr := DecodeDeBruijn(input)
 		if (genericErr != nil) != (fastErr != nil) {
-			t.Fatalf("Decode and DecodeDeBruijn error mismatch: generic=%v fast=%v", genericErr, fastErr)
+			t.Fatalf(
+				"Decode and DecodeDeBruijn error mismatch: generic=%v fast=%v",
+				genericErr,
+				fastErr,
+			)
 		}
 		if genericErr != nil {
 			return

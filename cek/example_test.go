@@ -86,7 +86,9 @@ func ExampleEvaluateText_rejected() {
 // the ledger language and protocol version come from the caller, never from
 // the program header.
 func ExampleNewMachine() {
-	flat, err := syn.Encode(deBruijnProgram(`(program 1.1.0 [ (lam x x) (con integer 7) ])`))
+	flat, err := syn.Encode(
+		deBruijnProgram(`(program 1.1.0 [ (lam x x) (con integer 7) ])`),
+	)
 	if err != nil {
 		fmt.Println("error:", err)
 		return

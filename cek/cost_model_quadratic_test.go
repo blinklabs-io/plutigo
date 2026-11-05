@@ -26,8 +26,31 @@ import (
 // fast-path limit.
 func TestConstAboveDiagonalQuadraticMatchesBig(t *testing.T) {
 	const limit = quadraticFastLimit
-	edges := []int64{0, 1, 2, 4, 1000, limit - 1, limit, limit + 1, 1 << 31, math.MaxInt64}
-	coeffEdges := []int64{0, 1, -1, 1000, -1000, limit, -limit, limit + 1, -(limit + 1), math.MaxInt64, math.MinInt64}
+	edges := []int64{
+		0,
+		1,
+		2,
+		4,
+		1000,
+		limit - 1,
+		limit,
+		limit + 1,
+		1 << 31,
+		math.MaxInt64,
+	}
+	coeffEdges := []int64{
+		0,
+		1,
+		-1,
+		1000,
+		-1000,
+		limit,
+		-limit,
+		limit + 1,
+		-(limit + 1),
+		math.MaxInt64,
+		math.MinInt64,
+	}
 
 	rng := rand.New(rand.NewPCG(1, 2))
 	pick := func(vals []int64) int64 { return vals[rng.IntN(len(vals))] }
@@ -50,10 +73,13 @@ func TestConstAboveDiagonalQuadraticMatchesBig(t *testing.T) {
 
 	models := []ConstAboveDiagonalIntoQuadraticXAndYModel{
 		// Mainnet PlutusV3 divideInteger CPU parameters.
-		{constant: 85848, TwoArgumentsQuadraticFunction: TwoArgumentsQuadraticFunction{
-			minimum: 85848, coeff00: 123203, coeff10: 1716, coeff01: 7305,
-			coeff20: 57, coeff11: 960, coeff02: -900,
-		}},
+		{
+			constant: 85848,
+			TwoArgumentsQuadraticFunction: TwoArgumentsQuadraticFunction{
+				minimum: 85848, coeff00: 123203, coeff10: 1716, coeff01: 7305,
+				coeff20: 57, coeff11: 960, coeff02: -900,
+			},
+		},
 	}
 	for range 2000 {
 		models = append(models, ConstAboveDiagonalIntoQuadraticXAndYModel{
@@ -75,11 +101,24 @@ func TestConstAboveDiagonalQuadraticMatchesBig(t *testing.T) {
 			got := m.CostTwo(ExMem(x), ExMem(y))
 			want := m.costTwoBig(x, y)
 			if got != want {
-				t.Fatalf("model %d %+v: CostTwo(%d, %d) = %d, want %d", i, m, x, y, got, want)
+				t.Fatalf(
+					"model %d %+v: CostTwo(%d, %d) = %d, want %d",
+					i,
+					m,
+					x,
+					y,
+					got,
+					want,
+				)
 			}
 		}
 		if got := m.CostTwo(ExMem(1), ExMem(2)); got != m.constant {
-			t.Fatalf("model %d: below diagonal = %d, want constant %d", i, got, m.constant)
+			t.Fatalf(
+				"model %d: below diagonal = %d, want constant %d",
+				i,
+				got,
+				m.constant,
+			)
 		}
 	}
 }

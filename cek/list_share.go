@@ -108,7 +108,12 @@ func (b *frontBuf[E]) isFront(s []E) bool {
 // front the head goes into a free slot (O(1)); a full front moves to a buffer
 // with len(s) free slots (O(1) amortised, by doubling). Otherwise s is copied
 // into a new buffer with the given headroom. s is never modified.
-func consInto[E any](b *frontBuf[E], head E, s []E, headroom int) ([]E, *frontBuf[E]) {
+func consInto[E any](
+	b *frontBuf[E],
+	head E,
+	s []E,
+	headroom int,
+) ([]E, *frontBuf[E]) {
 	if b != nil && b.isFront(s) {
 		if b.lo > 0 {
 			b.lo--
@@ -133,7 +138,11 @@ type convBuf[D any] struct {
 // at the end of the source array e describes. Elements are converted in
 // order, so the first failing element (and its error) is the same as for a
 // plain loop; already converted elements are known to succeed.
-func convertSuffix[S, D any](e *convBuf[D], src []S, conv func(S) (D, error)) ([]D, error) {
+func convertSuffix[S, D any](
+	e *convBuf[D],
+	src []S,
+	conv func(S) (D, error),
+) ([]D, error) {
 	n := len(src)
 	if n <= e.covered {
 		return e.dst[len(e.dst)-n:], nil

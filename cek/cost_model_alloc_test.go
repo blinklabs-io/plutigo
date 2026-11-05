@@ -57,26 +57,29 @@ func TestCostModelParameterUpdatesDoNotAllocate(t *testing.T) {
 		semantics := GetSemantics(version, ProtoVersion{Major: 10})
 		params := synthCostModelParams(names)
 
-		t.Run(fmt.Sprintf("v%d.%d.%d", version[0], version[1], version[2]), func(t *testing.T) {
-			build := func(data []int64) float64 {
-				return testing.AllocsPerRun(20, func() {
-					if _, err := costModelFromList(version, semantics, data); err != nil {
-						t.Fatalf("costModelFromList: %v", err)
-					}
-				})
-			}
-			empty := build(nil)
-			full := build(params)
-			if full != empty {
-				t.Fatalf(
-					"applying %d parameters allocated %.0f times, want 0 (%.0f with all parameters, %.0f with none)",
-					len(params),
-					full-empty,
-					full,
-					empty,
-				)
-			}
-		})
+		t.Run(
+			fmt.Sprintf("v%d.%d.%d", version[0], version[1], version[2]),
+			func(t *testing.T) {
+				build := func(data []int64) float64 {
+					return testing.AllocsPerRun(20, func() {
+						if _, err := costModelFromList(version, semantics, data); err != nil {
+							t.Fatalf("costModelFromList: %v", err)
+						}
+					})
+				}
+				empty := build(nil)
+				full := build(params)
+				if full != empty {
+					t.Fatalf(
+						"applying %d parameters allocated %.0f times, want 0 (%.0f with all parameters, %.0f with none)",
+						len(params),
+						full-empty,
+						full,
+						empty,
+					)
+				}
+			},
+		)
 	}
 }
 

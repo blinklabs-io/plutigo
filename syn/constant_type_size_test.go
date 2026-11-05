@@ -104,7 +104,10 @@ func TestContextualValidationConstantTypeSizeLimit(t *testing.T) {
 				{
 					name: "DecodeWithContext generic",
 					run: func() error {
-						decoded, err := DecodeWithContext[Name](encoded, context)
+						decoded, err := DecodeWithContext[Name](
+							encoded,
+							context,
+						)
 						if err != nil {
 							return err
 						}
@@ -114,7 +117,10 @@ func TestContextualValidationConstantTypeSizeLimit(t *testing.T) {
 				{
 					name: "DecodeDeBruijnWithContext",
 					run: func() error {
-						decoded, err := DecodeDeBruijnWithContext(encoded, context)
+						decoded, err := DecodeDeBruijnWithContext(
+							encoded,
+							context,
+						)
 						if err != nil {
 							return err
 						}
@@ -129,7 +135,8 @@ func TestContextualValidationConstantTypeSizeLimit(t *testing.T) {
 
 					err := entryPoint.run()
 					if tt.wantErr != "" {
-						if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+						if err == nil ||
+							!strings.Contains(err.Error(), tt.wantErr) {
 							t.Fatalf("error = %v, want %q", err, tt.wantErr)
 						}
 						return
@@ -155,7 +162,11 @@ func assertNestedListConstant(term any, depth int) error {
 	for i := 0; i < depth; i++ {
 		list, ok := typ.(*TList)
 		if !ok {
-			return fmt.Errorf("type nesting level %d is %T, want *TList", i, typ)
+			return fmt.Errorf(
+				"type nesting level %d is %T, want *TList",
+				i,
+				typ,
+			)
 		}
 		typ = list.Typ
 	}

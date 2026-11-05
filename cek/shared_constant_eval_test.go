@@ -66,7 +66,10 @@ func forced(fn builtin.DefaultFunction, forces int) syn.Term[syn.DeBruijn] {
 	return t
 }
 
-func apply(f syn.Term[syn.DeBruijn], args ...syn.Term[syn.DeBruijn]) syn.Term[syn.DeBruijn] {
+func apply(
+	f syn.Term[syn.DeBruijn],
+	args ...syn.Term[syn.DeBruijn],
+) syn.Term[syn.DeBruijn] {
 	for _, a := range args {
 		f = &syn.Apply[syn.DeBruijn]{Function: f, Argument: a}
 	}
@@ -127,7 +130,10 @@ func runDecoded(
 	if err != nil {
 		t.Fatalf("decode (%d bytes): %v", len(input), err)
 	}
-	ec := cek.NewDefaultEvalContext(lang.LanguageVersionV3, cek.ProtoVersion{Major: proto})
+	ec := cek.NewDefaultEvalContext(
+		lang.LanguageVersionV3,
+		cek.ProtoVersion{Major: proto},
+	)
 	machine := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ec)
 	start := machine.ExBudget
 	result, runErr := machine.Run(program.Term)
@@ -152,22 +158,29 @@ func TestEvalDecodedZeroWidthListConstant(t *testing.T) {
 		{depth: 3, items: 20_000},
 	}
 	for _, tc := range tests {
-		probes := zeroWidthProbes(zeroWidthListConstant(tc.depth, tc.items, true))
+		probes := zeroWidthProbes(
+			zeroWidthListConstant(tc.depth, tc.items, true),
+		)
 		_, wantSnd := balancedUnitPair(tc.depth - 1)
 		want := map[string]string{
-			"chooseList":       "(con integer 1)",
-			"sndPair-headList": syn.PrettyTerm[syn.DeBruijn](&syn.Constant{Con: wantSnd}),
+			"chooseList": "(con integer 1)",
+			"sndPair-headList": syn.PrettyTerm[syn.DeBruijn](
+				&syn.Constant{Con: wantSnd},
+			),
 		}
 		for name, wantResult := range want {
-			t.Run(fmt.Sprintf("depth%d/%s", tc.depth, name), func(t *testing.T) {
-				result, _, err := runDecoded(t, probes[name], 10)
-				if err != nil {
-					t.Fatalf("run: %v", err)
-				}
-				if got := syn.PrettyTerm[syn.DeBruijn](result); got != wantResult {
-					t.Fatalf("result %s, want %s", got, wantResult)
-				}
-			})
+			t.Run(
+				fmt.Sprintf("depth%d/%s", tc.depth, name),
+				func(t *testing.T) {
+					result, _, err := runDecoded(t, probes[name], 10)
+					if err != nil {
+						t.Fatalf("run: %v", err)
+					}
+					if got := syn.PrettyTerm[syn.DeBruijn](result); got != wantResult {
+						t.Fatalf("result %s, want %s", got, wantResult)
+					}
+				},
+			)
 		}
 	}
 }
@@ -198,7 +211,11 @@ func TestEvalLargeZeroWidthListConstant(t *testing.T) {
 		small := zeroWidthProbes(zeroWidthListConstant(tc.depth, 1, true))
 		for name, term := range big {
 			t.Run(tc.name+"/"+name, func(t *testing.T) {
-				wantResult, wantBudget, err := runDecoded(t, small[name], tc.proto)
+				wantResult, wantBudget, err := runDecoded(
+					t,
+					small[name],
+					tc.proto,
+				)
 				if err != nil {
 					t.Fatalf("one-item run: %v", err)
 				}
@@ -207,7 +224,11 @@ func TestEvalLargeZeroWidthListConstant(t *testing.T) {
 					t.Fatalf("run %d items: %v", tc.items, err)
 				}
 				if gotBudget != wantBudget {
-					t.Fatalf("budget %+v, want %+v (one-item list)", gotBudget, wantBudget)
+					t.Fatalf(
+						"budget %+v, want %+v (one-item list)",
+						gotBudget,
+						wantBudget,
+					)
 				}
 				if name == "constant" {
 					// The result is the list itself.
@@ -233,9 +254,14 @@ func TestEvalLargeZeroWidthListConstant(t *testing.T) {
 func TestEvalZeroWidthListSharedMatchesIndependent(t *testing.T) {
 	for _, depth := range []int{1, 2, 3} {
 		shared := zeroWidthProbes(zeroWidthListConstant(depth, 5_000, true))
-		independent := zeroWidthProbes(zeroWidthListConstant(depth, 5_000, false))
+		independent := zeroWidthProbes(
+			zeroWidthListConstant(depth, 5_000, false),
+		)
 		for name := range shared {
-			ec := cek.NewDefaultEvalContext(lang.LanguageVersionV3, cek.ProtoVersion{Major: 10})
+			ec := cek.NewDefaultEvalContext(
+				lang.LanguageVersionV3,
+				cek.ProtoVersion{Major: 10},
+			)
 			run := func(term syn.Term[syn.DeBruijn]) (string, cek.ExBudget) {
 				m := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ec)
 				start := m.ExBudget
@@ -248,7 +274,13 @@ func TestEvalZeroWidthListSharedMatchesIndependent(t *testing.T) {
 			gotRes, gotBudget := run(shared[name])
 			wantRes, wantBudget := run(independent[name])
 			if gotRes != wantRes || gotBudget != wantBudget {
-				t.Fatalf("depth %d %s: shared (%v) differs from independent (%v)", depth, name, gotBudget, wantBudget)
+				t.Fatalf(
+					"depth %d %s: shared (%v) differs from independent (%v)",
+					depth,
+					name,
+					gotBudget,
+					wantBudget,
+				)
 			}
 		}
 	}

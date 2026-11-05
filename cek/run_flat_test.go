@@ -57,7 +57,11 @@ func TestRunFlatMatchesRun(t *testing.T) {
 		t.Fatalf("RunFlat result = %q, Run result = %q", got, want)
 	}
 	if flatMachine.ExBudget != regularMachine.ExBudget {
-		t.Fatalf("RunFlat remaining budget = %+v, Run remaining budget = %+v", flatMachine.ExBudget, regularMachine.ExBudget)
+		t.Fatalf(
+			"RunFlat remaining budget = %+v, Run remaining budget = %+v",
+			flatMachine.ExBudget,
+			regularMachine.ExBudget,
+		)
 	}
 }
 
@@ -72,7 +76,11 @@ func TestRunFlatUsesFullValidationForLargePrograms(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(flat) <= maxFlatRunSkipValidationBytes {
-		t.Fatalf("encoded program length = %d, want > %d", len(flat), maxFlatRunSkipValidationBytes)
+		t.Fatalf(
+			"encoded program length = %d, want > %d",
+			len(flat),
+			maxFlatRunSkipValidationBytes,
+		)
 	}
 
 	regularMachine := newTestMachineFlow()
@@ -91,7 +99,11 @@ func TestRunFlatUsesFullValidationForLargePrograms(t *testing.T) {
 		t.Fatal("RunFlat returned different bytes")
 	}
 	if flatMachine.ExBudget != regularMachine.ExBudget {
-		t.Fatalf("RunFlat remaining budget = %+v, Run remaining budget = %+v", flatMachine.ExBudget, regularMachine.ExBudget)
+		t.Fatalf(
+			"RunFlat remaining budget = %+v, Run remaining budget = %+v",
+			flatMachine.ExBudget,
+			regularMachine.ExBudget,
+		)
 	}
 }
 
@@ -108,14 +120,18 @@ func TestRunFlatMatchesRunScopeRules(t *testing.T) {
 		{
 			name: "pre-PV12 scope checks constr fields at evaluation",
 			term: &syn.Constr[syn.DeBruijn]{
-				Fields: []syn.Term[syn.DeBruijn]{&syn.Var[syn.DeBruijn]{Name: 1}},
+				Fields: []syn.Term[syn.DeBruijn]{
+					&syn.Var[syn.DeBruijn]{Name: 1},
+				},
 			},
 			protoMajor: 11,
 		},
 		{
 			name: "PV12 full scope rejects open constr field",
 			term: &syn.Constr[syn.DeBruijn]{
-				Fields: []syn.Term[syn.DeBruijn]{&syn.Var[syn.DeBruijn]{Name: 1}},
+				Fields: []syn.Term[syn.DeBruijn]{
+					&syn.Var[syn.DeBruijn]{Name: 1},
+				},
 			},
 			protoMajor: 12,
 		},
@@ -146,18 +162,36 @@ func TestRunFlatMatchesRunScopeRules(t *testing.T) {
 			)
 			_, flatErr := RunFlat(flatMachine, syn.NewDeBruijnDecoder(), flat)
 			if regularErr == nil || flatErr == nil {
-				t.Fatalf("Run error = %v, RunFlat error = %v; both must fail", regularErr, flatErr)
+				t.Fatalf(
+					"Run error = %v, RunFlat error = %v; both must fail",
+					regularErr,
+					flatErr,
+				)
 			}
 			regularCode, regularCodeOK := GetErrorCode(regularErr)
 			flatCode, flatCodeOK := GetErrorCode(flatErr)
 			if !regularCodeOK || !flatCodeOK || regularCode != flatCode {
-				t.Fatalf("Run error code = %v (%t), RunFlat error code = %v (%t)", regularCode, regularCodeOK, flatCode, flatCodeOK)
+				t.Fatalf(
+					"Run error code = %v (%t), RunFlat error code = %v (%t)",
+					regularCode,
+					regularCodeOK,
+					flatCode,
+					flatCodeOK,
+				)
 			}
 			if regularErr.Error() != flatErr.Error() {
-				t.Fatalf("Run error = %q, RunFlat error = %q", regularErr, flatErr)
+				t.Fatalf(
+					"Run error = %q, RunFlat error = %q",
+					regularErr,
+					flatErr,
+				)
 			}
 			if regularMachine.ExBudget != flatMachine.ExBudget {
-				t.Fatalf("Run remaining budget = %+v, RunFlat remaining budget = %+v", regularMachine.ExBudget, flatMachine.ExBudget)
+				t.Fatalf(
+					"Run remaining budget = %+v, RunFlat remaining budget = %+v",
+					regularMachine.ExBudget,
+					flatMachine.ExBudget,
+				)
 			}
 		})
 	}

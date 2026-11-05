@@ -449,7 +449,11 @@ func (l *Lexer) readNumberToken(tok Token) Token {
 	n, ok := new(big.Int).SetString(literal, 10)
 	if !ok {
 		tok.Type = TokenError
-		tok.Literal = fmt.Sprintf("invalid number %s at position %d", literal, l.pos)
+		tok.Literal = fmt.Sprintf(
+			"invalid number %s at position %d",
+			literal,
+			l.pos,
+		)
 
 		return tok
 	}
