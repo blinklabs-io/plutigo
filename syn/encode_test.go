@@ -387,12 +387,13 @@ func TestDeBruijnDecoderReuse(t *testing.T) {
 							Tag: 1,
 							Fields: []Term[DeBruijn]{
 								&Var[DeBruijn]{Name: DeBruijn(1)},
-								&Constant{Con: &Data{Inner: data.WrapList([]data.PlutusData{
-									&data.Integer{Inner: big.NewInt(1)},
-									&data.ByteString{
-										Inner: []byte{0xca, 0xfe},
-									},
-								}),
+								&Constant{Con: &Data{
+									Inner: data.WrapList([]data.PlutusData{
+										&data.Integer{Inner: big.NewInt(1)},
+										&data.ByteString{
+											Inner: []byte{0xca, 0xfe},
+										},
+									}),
 								}},
 							},
 						},
@@ -409,35 +410,38 @@ func TestDeBruijnDecoderReuse(t *testing.T) {
 			name: "constant_heavy_program",
 			program: &Program[DeBruijn]{
 				Version: lang.LanguageVersionV3,
-				Term: &Constant{Con: WrapProtoList(&TPair{First: &TInteger{}, Second: &TData{}},
-					[]IConstant{
-						&ProtoPair{
-							FstType: &TInteger{},
-							SndType: &TData{},
-							First:   &Integer{Inner: big.NewInt(42)},
-							Second: &Data{Inner: data.WrapMap([][2]data.PlutusData{
-								{
-									&data.Integer{Inner: big.NewInt(7)},
-									&data.ByteString{
-										Inner: []byte{0xde, 0xad},
-									},
-								},
-							}),
-							},
-						},
-						&ProtoPair{
-							FstType: &TInteger{},
-							SndType: &TData{},
-							First:   &Integer{Inner: big.NewInt(-5)},
-							Second: &Data{Inner: data.WrapConstr(big.NewInt(2),
-								[]data.PlutusData{
-									&data.Integer{Inner: big.NewInt(9)}, data.WrapList([]data.PlutusData{
-										&data.ByteString{Inner: []byte{0xaa}},
+				Term: &Constant{
+					Con: WrapProtoList(&TPair{First: &TInteger{}, Second: &TData{}},
+						[]IConstant{
+							&ProtoPair{
+								FstType: &TInteger{},
+								SndType: &TData{},
+								First:   &Integer{Inner: big.NewInt(42)},
+								Second: &Data{
+									Inner: data.WrapMap([][2]data.PlutusData{
+										{
+											&data.Integer{Inner: big.NewInt(7)},
+											&data.ByteString{
+												Inner: []byte{0xde, 0xad},
+											},
+										},
 									}),
-								}),
+								},
 							},
-						},
-					}),
+							&ProtoPair{
+								FstType: &TInteger{},
+								SndType: &TData{},
+								First:   &Integer{Inner: big.NewInt(-5)},
+								Second: &Data{
+									Inner: data.WrapConstr(big.NewInt(2),
+										[]data.PlutusData{
+											&data.Integer{Inner: big.NewInt(9)}, data.WrapList([]data.PlutusData{
+												&data.ByteString{Inner: []byte{0xaa}},
+											}),
+										}),
+								},
+							},
+						}),
 				},
 			},
 		},
@@ -679,12 +683,13 @@ func TestFlatRoundtripConstantTypes(t *testing.T) {
 		{
 			name: "nested_list_of_lists",
 			constant: WrapProtoList(&TList{Typ: &TInteger{}},
-				[]IConstant{WrapProtoList(&TInteger{},
-					[]IConstant{
-						&Integer{Inner: big.NewInt(1)},
-						&Integer{Inner: big.NewInt(2)},
-					}), WrapProtoList(&TInteger{},
-					[]IConstant{&Integer{Inner: big.NewInt(3)}}),
+				[]IConstant{
+					WrapProtoList(&TInteger{},
+						[]IConstant{
+							&Integer{Inner: big.NewInt(1)},
+							&Integer{Inner: big.NewInt(2)},
+						}), WrapProtoList(&TInteger{},
+						[]IConstant{&Integer{Inner: big.NewInt(3)}}),
 				}),
 		},
 	}

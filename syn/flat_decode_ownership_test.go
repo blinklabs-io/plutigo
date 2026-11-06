@@ -50,29 +50,32 @@ func ownershipProgram(seed byte) *Program[DeBruijn] {
 								Inner: new(big.Int).Lsh(big.NewInt(n+1), 90),
 							},
 						},
-						&Constant{Con: WrapProtoList(&TInteger{},
-							[]IConstant{
-								&Integer{Inner: big.NewInt(n)},
-								&Integer{Inner: big.NewInt(n + 100)},
-							}),
+						&Constant{
+							Con: WrapProtoList(&TInteger{},
+								[]IConstant{
+									&Integer{Inner: big.NewInt(n)},
+									&Integer{Inner: big.NewInt(n + 100)},
+								}),
 						},
-						&Constant{Con: WrapProtoList(&TPair{First: &TInteger{}, Second: &TData{}},
-							[]IConstant{&ProtoPair{
-								FstType: &TInteger{},
-								SndType: &TData{},
-								First:   &Integer{Inner: big.NewInt(-n)},
-								Second: &Data{Inner: data.WrapConstr(big.NewInt(n),
-									[]data.PlutusData{
-										&data.ByteString{
-											Inner: []byte{seed, 0xaa},
-										}, data.WrapList([]data.PlutusData{
-											&data.Integer{
-												Inner: big.NewInt(n + 7),
-											},
-										}),
-									}),
-								},
-							}}),
+						&Constant{
+							Con: WrapProtoList(&TPair{First: &TInteger{}, Second: &TData{}},
+								[]IConstant{&ProtoPair{
+									FstType: &TInteger{},
+									SndType: &TData{},
+									First:   &Integer{Inner: big.NewInt(-n)},
+									Second: &Data{
+										Inner: data.WrapConstr(big.NewInt(n),
+											[]data.PlutusData{
+												&data.ByteString{
+													Inner: []byte{seed, 0xaa},
+												}, data.WrapList([]data.PlutusData{
+													&data.Integer{
+														Inner: big.NewInt(n + 7),
+													},
+												}),
+											}),
+									},
+								}}),
 						},
 					},
 				},

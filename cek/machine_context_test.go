@@ -117,8 +117,9 @@ func TestDischargeStopsDuringConstantClone(t *testing.T) {
 	_, err := dischargeValueContext[syn.DeBruijn](
 		ctx,
 		true,
-		&Constant{Constant: syn.WrapProtoList(&syn.TInteger{},
-			items),
+		&Constant{
+			Constant: syn.WrapProtoList(&syn.TInteger{},
+				items),
 		},
 	)
 	if !errors.Is(err, context.Canceled) {

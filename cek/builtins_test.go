@@ -4100,11 +4100,12 @@ func TestMkConsDataValueOntoConstantList(t *testing.T) {
 	head := m.allocDataValue(&data.Integer{Inner: big.NewInt(42)})
 
 	// Right: a regular Constant ProtoList of Data
-	tail := &Constant{syn.WrapProtoList(&syn.TData{},
-		[]syn.IConstant{
-			&syn.Data{Inner: &data.Integer{Inner: big.NewInt(1)}},
-			&syn.Data{Inner: &data.Integer{Inner: big.NewInt(2)}},
-		}),
+	tail := &Constant{
+		syn.WrapProtoList(&syn.TData{},
+			[]syn.IConstant{
+				&syn.Data{Inner: &data.Integer{Inner: big.NewInt(1)}},
+				&syn.Data{Inner: &data.Integer{Inner: big.NewInt(2)}},
+			}),
 	}
 
 	b = b.ApplyArg(head)
@@ -5258,14 +5259,16 @@ func TestBLSMultiScalarMulValidatesUnpairedScalar(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			evaluate := func(secondScalar syn.IConstant) (Value[syn.DeBruijn], error) {
 				b := newTestBuiltin(tt.builtinFunc)
-				b = b.ApplyArg(&Constant{syn.WrapProtoList(&syn.TInteger{},
-					[]syn.IConstant{
-						&syn.Integer{Inner: big.NewInt(1)},
-						secondScalar,
-					}),
+				b = b.ApplyArg(&Constant{
+					syn.WrapProtoList(&syn.TInteger{},
+						[]syn.IConstant{
+							&syn.Integer{Inner: big.NewInt(1)},
+							secondScalar,
+						}),
 				})
-				b = b.ApplyArg(&Constant{syn.WrapProtoList(tt.elemType,
-					[]syn.IConstant{tt.elem}),
+				b = b.ApplyArg(&Constant{
+					syn.WrapProtoList(tt.elemType,
+						[]syn.IConstant{tt.elem}),
 				})
 				return evalBuiltinWithError(t, newTestMachineV4(), b)
 			}
@@ -5338,13 +5341,15 @@ func TestDataBuiltinsRejectMalformedElements(t *testing.T) {
 	intElem := &syn.Integer{Inner: big.NewInt(1)}
 
 	// list declared as (list data) but containing an integer element
-	badDataList := &Constant{syn.WrapProtoList(&syn.TData{},
-		[]syn.IConstant{intElem}),
+	badDataList := &Constant{
+		syn.WrapProtoList(&syn.TData{},
+			[]syn.IConstant{intElem}),
 	}
 
 	// list declared as (list (pair data data)) but containing an integer element
-	badPairList := &Constant{syn.WrapProtoList(&syn.TPair{First: &syn.TData{}, Second: &syn.TData{}},
-		[]syn.IConstant{intElem}),
+	badPairList := &Constant{
+		syn.WrapProtoList(&syn.TPair{First: &syn.TData{}, Second: &syn.TData{}},
+			[]syn.IConstant{intElem}),
 	}
 
 	tests := []struct {

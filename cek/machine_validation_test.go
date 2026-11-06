@@ -51,8 +51,9 @@ func TestRunMethodsRejectMalformedAST(t *testing.T) {
 		},
 		{
 			name: "nil composite child",
-			term: &syn.Constant{Con: syn.WrapProtoList(&syn.TInteger{},
-				[]syn.IConstant{nil}),
+			term: &syn.Constant{
+				Con: syn.WrapProtoList(&syn.TInteger{},
+					[]syn.IConstant{nil}),
 			},
 		},
 		{

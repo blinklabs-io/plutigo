@@ -64,11 +64,13 @@ func TestBLSMultiScalarMulStopsOnCancellation(t *testing.T) {
 				elems[i] = tt.elem
 			}
 			b := newTestBuiltin(tt.builtinFunc)
-			b = b.ApplyArg(&Constant{syn.WrapProtoList(&syn.TInteger{},
-				ints),
+			b = b.ApplyArg(&Constant{
+				syn.WrapProtoList(&syn.TInteger{},
+					ints),
 			})
-			b = b.ApplyArg(&Constant{syn.WrapProtoList(tt.elemType,
-				elems),
+			b = b.ApplyArg(&Constant{
+				syn.WrapProtoList(tt.elemType,
+					elems),
 			})
 
 			_, err := evalBuiltinWithError(t, m, b)

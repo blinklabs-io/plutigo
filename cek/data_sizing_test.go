@@ -174,10 +174,12 @@ func TestDataSizingAcceptsValueNodes(t *testing.T) {
 		{"bytes", data.ByteString{Inner: make([]byte, 9)}, DataCost + 2},
 		{
 			"nested", *data.WrapConstr(big.NewInt(0),
-				[]data.PlutusData{*data.WrapList([]data.PlutusData{
-					data.Integer{Inner: big.NewInt(1)},
-					data.ByteString{Inner: make([]byte, 9)},
-				}), data.Map{},
+				[]data.PlutusData{
+					*data.WrapList([]data.PlutusData{
+						data.Integer{Inner: big.NewInt(1)},
+						data.ByteString{Inner: make([]byte, 9)},
+					}),
+					data.Map{},
 					data.Value{},
 				}), DataCost*6 + 3,
 		},

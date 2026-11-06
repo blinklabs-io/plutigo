@@ -92,7 +92,6 @@ func TestDecodedCompositeConstantTypesAreNotShared(t *testing.T) {
 	listOfDataPairs := func() IConstant {
 		return WrapProtoList(&TPair{First: &TData{}, Second: &TData{}},
 			[]IConstant{})
-
 	}
 	encoded := encodeConstantsProgram(
 		t,

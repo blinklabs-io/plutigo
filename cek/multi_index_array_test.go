@@ -58,13 +58,14 @@ func TestMultiIndexArrayReferenceVectors(t *testing.T) {
 			&syn.Integer{Inner: big.NewInt(30)},
 		},
 	}}
-	indices := &Constant{syn.WrapProtoList(&syn.TInteger{},
-		[]syn.IConstant{
-			&syn.Integer{Inner: big.NewInt(2)},
-			&syn.Integer{Inner: big.NewInt(0)},
-			&syn.Integer{Inner: big.NewInt(0)},
-			&syn.Integer{Inner: big.NewInt(1)},
-		}),
+	indices := &Constant{
+		syn.WrapProtoList(&syn.TInteger{},
+			[]syn.IConstant{
+				&syn.Integer{Inner: big.NewInt(2)},
+				&syn.Integer{Inner: big.NewInt(0)},
+				&syn.Integer{Inner: big.NewInt(0)},
+				&syn.Integer{Inner: big.NewInt(1)},
+			}),
 	}
 
 	b := newTestBuiltin(fn)
@@ -118,8 +119,9 @@ func TestMultiIndexArrayRejectsMoreThanMaximumIndices(t *testing.T) {
 	}}
 	b := newTestBuiltin(fn)
 	b = b.ApplyArg(array)
-	b = b.ApplyArg(&Constant{syn.WrapProtoList(&syn.TInteger{},
-		indices),
+	b = b.ApplyArg(&Constant{
+		syn.WrapProtoList(&syn.TInteger{},
+			indices),
 	})
 	_, err := multiIndexArray(newTestMachineV4(), b)
 	if err == nil {
@@ -156,8 +158,9 @@ func TestMultiIndexArrayAcceptsMaximumIndices(t *testing.T) {
 		ATyp:  &syn.TInteger{},
 		Array: []syn.IConstant{&syn.Integer{Inner: big.NewInt(42)}},
 	}})
-	b = b.ApplyArg(&Constant{syn.WrapProtoList(&syn.TInteger{},
-		indices),
+	b = b.ApplyArg(&Constant{
+		syn.WrapProtoList(&syn.TInteger{},
+			indices),
 	})
 	value, err := multiIndexArray(newTestMachineV4(), b)
 	if err != nil {

@@ -31,8 +31,9 @@ func encodeIntegerListProgram(t *testing.T, values []*big.Int) []byte {
 	}
 	encoded, err := Encode(&Program[DeBruijn]{
 		Version: lang.LanguageVersionV1,
-		Term: &Constant{Con: WrapProtoList(&TInteger{},
-			items),
+		Term: &Constant{
+			Con: WrapProtoList(&TInteger{},
+				items),
 		},
 	})
 	if err != nil {

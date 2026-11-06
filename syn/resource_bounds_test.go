@@ -592,10 +592,11 @@ func TestPrettyStopsBeforeNextConstant(t *testing.T) {
 
 func TestPrettyStopsBeforeNextData(t *testing.T) {
 	out, err := PrettyTermWithLimits[DeBruijn](
-		&Constant{Con: &Data{Inner: data.WrapList([]data.PlutusData{
-			data.NewByteString(make([]byte, 100)),
-			(*data.ByteString)(nil),
-		}),
+		&Constant{Con: &Data{
+			Inner: data.WrapList([]data.PlutusData{
+				data.NewByteString(make([]byte, 100)),
+				(*data.ByteString)(nil),
+			}),
 		}},
 		PrettyLimits{MaxOutputBytes: 50},
 	)
