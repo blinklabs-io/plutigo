@@ -774,6 +774,7 @@ func TestRunResetsTransientStateAcrossInvocations(t *testing.T) {
 	m.unbudgetedSteps = [9]uint32{1, 1, 1, 1, 1, 1, 1, 1, 1}
 	m.unbudgetedTotal = 9
 
+	m.ExBudget = initialBudget
 	if _, err := m.Run(constTerm); err != nil {
 		t.Fatalf("second Run returned error: %v", err)
 	}

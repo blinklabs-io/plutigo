@@ -190,14 +190,10 @@ type Machine[T syn.Eval] struct {
 	envActiveOff       int
 	envChunkPos        int
 	envPooled          *pooledEnvChunks[T]
-	budgetTemplate     ExBudget
-	lastRunRemaining   ExBudget
 	hasRun             bool
 
 	valueArenaRetentions [valueArenaCount]valueArenaRetention
 	valueArenaResetStart int
-	// budgetSet records a SetExBudget call since the last run.
-	budgetSet bool
 	// skipDischarge is set by RunScriptContext: the final value is only
 	// classified (resultIsUnit), never discharged into a term.
 	skipDischarge bool
@@ -992,8 +988,6 @@ func NewMachine[T syn.Eval](
 		builtinArgChunkPos:    0,
 		envChunks:             make([][]Env[T], 0, 8),
 		envChunkPos:           0,
-		budgetTemplate:        DefaultExBudget,
-		lastRunRemaining:      DefaultExBudget,
 		hasRun:                false,
 	}
 }
@@ -1464,18 +1458,12 @@ func isUnitValue[T syn.Eval](value Value[T]) bool {
 	}
 }
 
-// SetExBudget sets the budget of the machine's next run.
-//
-// Assigning m.ExBudget has the same effect, except in one case. A run that
-// finds m.ExBudget still equal to the budget the previous run left treats the
-// field as unchanged and restores the previous run's initial budget, so that
-// running the same machine repeatedly charges each run the same budget. A
-// caller that wants the next run to have exactly the previous run's remaining
-// budget, such as one passing what is left of a transaction's budget from one
-// script to the next, must use SetExBudget.
+// SetExBudget sets the budget of the machine's next run. It is equivalent to
+// assigning m.ExBudget: every run starts from the value of m.ExBudget and
+// leaves the remaining budget there, so a machine that runs again must have
+// its budget set first.
 func (m *Machine[T]) SetExBudget(budget ExBudget) {
 	m.ExBudget = budget
-	m.budgetSet = true
 }
 
 // Run executes a Plutus term using the CEK (Control, Environment, Kontinuation) abstract machine.
@@ -1728,16 +1716,7 @@ func (m *Machine[T]) runContext(
 	}
 	firstRun := !m.hasRun
 	if m.hasRun {
-		if m.budgetSet || m.ExBudget != m.lastRunRemaining {
-			m.budgetTemplate = m.ExBudget
-		} else {
-			m.ExBudget = m.budgetTemplate
-		}
-		m.budgetSet = false
 		m.resetFrameStack()
-	} else {
-		m.budgetTemplate = m.ExBudget
-		m.budgetSet = false
 	}
 	m.Logs = m.Logs[:0]
 	if m.metrics != nil {
@@ -1751,7 +1730,6 @@ func (m *Machine[T]) runContext(
 		}
 		m.updateValueArenaRetentions()
 		m.lastRunEnvHighWatermark = m.envChunkPos
-		m.lastRunRemaining = m.ExBudget
 		m.hasRun = true
 		m.listShare.reset()
 		m.resetFrameStack()

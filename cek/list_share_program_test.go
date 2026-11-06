@@ -442,7 +442,8 @@ func TestListSharingMachineReuse(t *testing.T) {
 		cek.ProtoVersion{Major: 10},
 	)
 	m := cek.NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ec)
-	m.ExBudget = cek.ExBudget{Cpu: 1 << 50, Mem: 1 << 50}
+	budget := cek.ExBudget{Cpu: 1 << 50, Mem: 1 << 50}
+	m.ExBudget = budget
 
 	resA, err := m.Run(progA.Term)
 	if err != nil {
@@ -451,6 +452,7 @@ func TestListSharingMachineReuse(t *testing.T) {
 	prettyA := syn.PrettyTerm[syn.DeBruijn](resA)
 	remainingA := m.ExBudget
 	for range 3 {
+		m.ExBudget = budget
 		if _, err := m.Run(progB.Term); err != nil {
 			t.Fatal(err)
 		}
@@ -459,6 +461,7 @@ func TestListSharingMachineReuse(t *testing.T) {
 				"result of an earlier run changed after the machine was reused",
 			)
 		}
+		m.ExBudget = budget
 		resA2, err := m.Run(progA.Term)
 		if err != nil {
 			t.Fatal(err)
