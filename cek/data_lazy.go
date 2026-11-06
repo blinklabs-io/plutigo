@@ -189,3 +189,89 @@ func (m *Machine[T]) dataPairsValue(dataMap *data.Map) Value[T] {
 	}
 	return m.allocDataMapValue(dataMap.Pairs())
 }
+
+// cellIter walks a list built by mkCons, cell by cell and then its base.
+type cellIter[E any] struct {
+	cell *consCell[E]
+	base []E
+	i    int
+}
+
+func (it *cellIter[E]) next() (E, bool) {
+	if c := it.cell; c != nil {
+		if c.next != nil {
+			it.cell = c.next
+		} else {
+			it.cell, it.base = nil, c.base
+		}
+		return c.head, true
+	}
+	if it.i < len(it.base) {
+		it.i++
+		return it.base[it.i-1], true
+	}
+	var zero E
+	return zero, false
+}
+
+// lazyDataCursor yields the children of a data container built over a list
+// made by mkCons in order (a map's pairs as key, value), without building
+// the container's contiguous elements, so walks that size data stay
+// proportional to the nodes they visit.
+type lazyDataCursor struct {
+	items   *cellIter[data.PlutusData]
+	pairs   *cellIter[[2]data.PlutusData]
+	consts  *cellIter[syn.IConstant]
+	pending data.PlutusData
+}
+
+func newLazyDataCursor(pd data.PlutusData) *lazyDataCursor {
+	switch s := lazydata.Hooks.SourceOf(pd).(type) {
+	case *dataCellSource:
+		return &lazyDataCursor{items: &cellIter[data.PlutusData]{cell: s.cell}}
+	case *pairCellSource:
+		return &lazyDataCursor{pairs: &cellIter[[2]data.PlutusData]{cell: s.cell}}
+	case *constCellSource[data.PlutusData]:
+		return &lazyDataCursor{consts: &cellIter[syn.IConstant]{cell: s.cell}}
+	case *constCellSource[[2]data.PlutusData]:
+		return &lazyDataCursor{consts: &cellIter[syn.IConstant]{cell: s.cell}}
+	}
+	return nil
+}
+
+func (c *lazyDataCursor) next() (data.PlutusData, bool) {
+	if c.pending != nil {
+		pd := c.pending
+		c.pending = nil
+		return pd, true
+	}
+	switch {
+	case c.items != nil:
+		return c.items.next()
+	case c.pairs != nil:
+		pair, ok := c.pairs.next()
+		if !ok {
+			return nil, false
+		}
+		c.pending = pair[1]
+		return pair[0], true
+	case c.consts != nil:
+		item, ok := c.consts.next()
+		if !ok {
+			return nil, false
+		}
+		switch v := item.(type) {
+		case *syn.Data:
+			return v.Inner, true
+		case *syn.ProtoPair:
+			first, _ := v.First.(*syn.Data)
+			second, _ := v.Second.(*syn.Data)
+			if first == nil || second == nil {
+				return nil, false
+			}
+			c.pending = second.Inner
+			return first.Inner, true
+		}
+	}
+	return nil, false
+}

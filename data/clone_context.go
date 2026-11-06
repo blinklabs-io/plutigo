@@ -102,9 +102,9 @@ func (s *cloneContextState) cloneMap(
 			Actual: s.maxNodes + 1,
 		}
 	}
-	target.pairs = make([][2]PlutusData, len(source.Pairs()))
+	target.pairs = make([][2]PlutusData, source.Len())
 	target.useIndef = cloneUseIndef(source.useIndef)
-	for i := len(source.Pairs()) - 1; i >= 0; i-- {
+	for i := source.Len() - 1; i >= 0; i-- {
 		if err := s.schedule(source.Pairs()[i][1], &target.pairs[i][1], depth+1); err != nil {
 			return err
 		}
@@ -171,11 +171,11 @@ func CloneContext(
 			}
 			cloned := &Constr{
 				Tag:      tag,
-				fields:   make([]PlutusData, len(source.Fields())),
+				fields:   make([]PlutusData, source.NumFields()),
 				useIndef: cloneUseIndef(source.useIndef),
 			}
 			*item.target = cloned
-			for i := len(source.Fields()) - 1; i >= 0; i-- {
+			for i := source.NumFields() - 1; i >= 0; i-- {
 				if err := state.schedule(source.Fields()[i], &cloned.fields[i], item.depth+1); err != nil {
 					return nil, err
 				}
@@ -263,11 +263,11 @@ func CloneContext(
 				return nil, err
 			}
 			cloned := &List{
-				items:    make([]PlutusData, len(source.Items())),
+				items:    make([]PlutusData, source.Len()),
 				useIndef: cloneUseIndef(source.useIndef),
 			}
 			*item.target = cloned
-			for i := len(source.Items()) - 1; i >= 0; i-- {
+			for i := source.Len() - 1; i >= 0; i-- {
 				if err := state.schedule(source.Items()[i], &cloned.items[i], item.depth+1); err != nil {
 					return nil, err
 				}

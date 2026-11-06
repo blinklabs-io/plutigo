@@ -137,7 +137,7 @@ func (c Constr) appendCBORHead(buf *bytes.Buffer) (*encodeFrame, error) {
 	// Determine whether to use indefinite-length encoding for fields.
 	// If useIndef is explicitly set, honor it; otherwise default to
 	// Haskell's cborg behavior: indefinite for non-empty, definite for empty.
-	useIndef := len(c.Fields()) > 0
+	useIndef := c.NumFields() > 0
 	if c.useIndef != nil {
 		useIndef = *c.useIndef
 	}
@@ -336,7 +336,7 @@ func (m Map) appendCBORHead(buf *bytes.Buffer) *encodeFrame {
 	if useIndef {
 		buf.WriteByte(CborTypeMap | CborIndefFlag)
 	} else {
-		appendCBORHead(buf, CborTypeMap, uint64(len(m.Pairs())))
+		appendCBORHead(buf, CborTypeMap, uint64(m.Len()))
 	}
 	return &encodeFrame{
 		children: childFrame{pairs: m.Pairs()},
@@ -465,7 +465,7 @@ func (v Value) Validate() error {
 				policy[1],
 			)
 		}
-		if err := CheckValueTokenCount(i, len(tokens.Pairs())); err != nil {
+		if err := CheckValueTokenCount(i, tokens.Len()); err != nil {
 			return err
 		}
 		var prevToken []byte
@@ -808,7 +808,7 @@ func (l List) appendCBORHead(buf *bytes.Buffer) *encodeFrame {
 	// Determine whether to use indefinite-length encoding.
 	// If useIndef is explicitly set, honor it; otherwise default to
 	// Haskell's cborg behavior: indefinite for non-empty, definite for empty.
-	useIndef := len(l.Items()) > 0
+	useIndef := l.Len() > 0
 	if l.useIndef != nil {
 		useIndef = *l.useIndef
 	}

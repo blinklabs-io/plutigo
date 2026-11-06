@@ -5479,11 +5479,11 @@ func unValueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	// Validate guarantees every key is a bytestring and every quantity an integer.
-	result := make([]syn.IConstant, 0, len(dmap.Pairs()))
+	result := make([]syn.IConstant, 0, dmap.Len())
 	for _, pair := range dmap.Pairs() {
 		policyData, _ := pair[0].(*data.ByteString)
 		tokensData, _ := pair[1].(*data.Map)
-		tokenPairs := make([]syn.IConstant, 0, len(tokensData.Pairs()))
+		tokenPairs := make([]syn.IConstant, 0, tokensData.Len())
 		for _, tkPair := range tokensData.Pairs() {
 			tokenData, _ := tkPair[0].(*data.ByteString)
 			amtData, _ := tkPair[1].(*data.Integer)

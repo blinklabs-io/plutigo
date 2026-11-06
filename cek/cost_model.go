@@ -429,6 +429,9 @@ func dataExMem(x data.PlutusData) func() ExMem {
 type dataWalkFrame struct {
 	node data.PlutusData
 	next int
+	// lazy walks the children of a container built over a list made by
+	// mkCons without building its contiguous elements.
+	lazy *lazyDataCursor
 }
 
 type plutusDataWalker struct {
@@ -444,40 +447,49 @@ func newPlutusDataWalker(root data.PlutusData) plutusDataWalker {
 }
 
 func nextDataChild(frame *dataWalkFrame) (data.PlutusData, bool) {
+	if frame.lazy != nil {
+		return frame.lazy.next()
+	}
+	if frame.next == 0 {
+		if cursor := newLazyDataCursor(frame.node); cursor != nil {
+			frame.lazy = cursor
+			return cursor.next()
+		}
+	}
 	switch node := frame.node.(type) {
 	case *data.Constr:
-		if node != nil && frame.next < len(node.Fields()) {
+		if node != nil && frame.next < node.NumFields() {
 			child := node.Fields()[frame.next]
 			frame.next++
 			return child, true
 		}
 	case data.Constr:
-		if frame.next < len(node.Fields()) {
+		if frame.next < node.NumFields() {
 			child := node.Fields()[frame.next]
 			frame.next++
 			return child, true
 		}
 	case *data.List:
-		if node != nil && frame.next < len(node.Items()) {
+		if node != nil && frame.next < node.Len() {
 			child := node.Items()[frame.next]
 			frame.next++
 			return child, true
 		}
 	case data.List:
-		if frame.next < len(node.Items()) {
+		if frame.next < node.Len() {
 			child := node.Items()[frame.next]
 			frame.next++
 			return child, true
 		}
 	case *data.Map:
-		if node != nil && frame.next < len(node.Pairs())*2 {
+		if node != nil && frame.next < node.Len()*2 {
 			pair := node.Pairs()[frame.next/2]
 			child := pair[frame.next%2]
 			frame.next++
 			return child, true
 		}
 	case data.Map:
-		if frame.next < len(node.Pairs())*2 {
+		if frame.next < node.Len()*2 {
 			pair := node.Pairs()[frame.next/2]
 			child := pair[frame.next%2]
 			frame.next++

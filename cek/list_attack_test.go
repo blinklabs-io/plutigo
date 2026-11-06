@@ -596,6 +596,19 @@ func listAttacks() []listAttack {
 			},
 		},
 		{
+			// equalsData is costed by the smaller argument, so sizing a
+			// branch against an empty list must not build the branch.
+			name: "equalsData-branches-against-empty",
+			prog: func(n int) string {
+				return branchesOfOneTail(n, uBuild(n, uNilData, uIData), func(c string) string {
+					return fmt.Sprintf(
+						"[(builtin equalsData) [(builtin listData) %s] (con data (List []))]",
+						c,
+					)
+				})
+			},
+		},
+		{
 			name: "constrData-branches-of-one-tail",
 			prog: func(n int) string {
 				return branchesOfOneTail(n, uBuild(n, uNilData, uIData), func(c string) string {

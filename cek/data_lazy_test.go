@@ -16,8 +16,11 @@ package cek
 
 import (
 	"context"
+	"errors"
+	"math/big"
 	"testing"
 
+	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/internal/lazydata"
 	"github.com/blinklabs-io/plutigo/lang"
@@ -125,5 +128,38 @@ func TestLazyDataResultIsPlainData(t *testing.T) {
 	}
 	if got := inner.String(); got != "List[Integer(1) Integer(2) Integer(3)]" {
 		t.Fatalf("nested result = %s", got)
+	}
+}
+
+// TestIllTypedListConstantIsRejected checks that a list constant whose
+// elements do not have its declared element type is rejected before
+// evaluation, so listData never wraps one.
+func TestIllTypedListConstantIsRejected(t *testing.T) {
+	illTyped := &syn.Constant{Con: &syn.ProtoList{
+		LTyp: &syn.TData{},
+		List: []syn.IConstant{&syn.Integer{Inner: big.NewInt(1)}},
+	}}
+	terms := map[string]syn.Term[syn.DeBruijn]{
+		"constant": illTyped,
+		"listData of mkCons": &syn.Apply[syn.DeBruijn]{
+			Function: &syn.Builtin{DefaultFunction: builtin.ListData},
+			Argument: &syn.Apply[syn.DeBruijn]{
+				Function: &syn.Apply[syn.DeBruijn]{
+					Function: &syn.Force[syn.DeBruijn]{Term: &syn.Builtin{DefaultFunction: builtin.MkCons}},
+					Argument: &syn.Constant{Con: &syn.Data{Inner: data.NewInteger(big.NewInt(0))}},
+				},
+				Argument: illTyped,
+			},
+		},
+	}
+	for name, term := range terms {
+		t.Run(name, func(t *testing.T) {
+			m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+			_, err := m.Run(term)
+			var typeErr *TypeError
+			if !errors.As(err, &typeErr) {
+				t.Fatalf("Run = %v, want a TypeError", err)
+			}
+		})
 	}
 }

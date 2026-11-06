@@ -112,14 +112,14 @@ func isNormalized(pd PlutusData) bool {
 		switch v := node.(type) {
 		case *Constr:
 			if v != nil {
-				if len(v.Fields()) > 0 && v.useIndef != nil && !*v.useIndef {
+				if v.NumFields() > 0 && v.useIndef != nil && !*v.useIndef {
 					return false
 				}
 				stack = append(stack, normalizeFrame{items: v.Fields()})
 			}
 		case *List:
 			if v != nil {
-				if len(v.Items()) > 0 && v.useIndef != nil && !*v.useIndef {
+				if v.Len() > 0 && v.useIndef != nil && !*v.useIndef {
 					return false
 				}
 				stack = append(stack, normalizeFrame{items: v.Items()})
