@@ -79,6 +79,13 @@ func TestReusedMachineRunsWithAssignedBudget(t *testing.T) {
 		)
 	}
 
+	// SetExBudget replaces whatever the previous run left.
+	m.SetExBudget(start)
+	run(m)
+	if want := start.Sub(&used); m.ExBudget != want {
+		t.Errorf("after SetExBudget(start): budget %+v, want %+v", m.ExBudget, want)
+	}
+
 	m.ExBudget = start
 	run(m)
 	remaining = m.ExBudget

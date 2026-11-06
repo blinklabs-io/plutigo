@@ -67,6 +67,7 @@ func BenchmarkMachineLambdaChain(b *testing.B) {
 			b.ReportAllocs()
 
 			for b.Loop() {
+				machine.ExBudget = DefaultExBudget
 				result, err := machine.Run(term)
 				if err != nil {
 					b.Fatalf("Run failed: %v", err)
@@ -92,6 +93,7 @@ func BenchmarkMachineBuiltinHeavy(b *testing.B) {
 			b.ReportAllocs()
 
 			for b.Loop() {
+				machine.ExBudget = DefaultExBudget
 				result, err := machine.Run(term)
 				if err != nil {
 					b.Fatalf("Run failed: %v", err)
@@ -123,6 +125,7 @@ func BenchmarkMachineMetrics(b *testing.B) {
 			b.ReportAllocs()
 
 			for b.Loop() {
+				machine.ExBudget = DefaultExBudget
 				result, err := machine.Run(term)
 				if err != nil {
 					b.Fatalf("Run failed: %v", err)

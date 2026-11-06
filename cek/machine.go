@@ -1480,9 +1480,9 @@ func (m *Machine[T]) SetExBudget(budget ExBudget) {
 //
 // Arena teardown runs in the deferred block so a long-lived or pooled
 // Machine does not retain references into the previous evaluation's
-// Value/Env/syn.Term graph after Run returns. The entry path only handles
-// budget restoration and frame-stack reset (the latter also defends against
-// tests or other callers that tamper with the frame stack between runs).
+// Value/Env/syn.Term graph after Run returns. The entry path only resets the
+// frame stack, which also defends against tests or other callers that tamper
+// with it between runs.
 //
 // # Budget
 //
