@@ -48,16 +48,6 @@ func errTooMany(what string, limit int) error {
 	return fmt.Errorf("too many %s: limit is %d", what, limit)
 }
 
-// constrFieldLimit returns the widest constr the protocol admits. The
-// protocol bound is enforced while decoding so an over-wide field list is
-// rejected before it is allocated.
-func constrFieldLimit(protocolMajor uint) int {
-	if protocolMajor >= builtin.VanRossemProtoVersion {
-		return maxConstrFieldsPV11
-	}
-	return maxCollectionWidth
-}
-
 const (
 	// Arena chunks grow geometrically from decodeTermMinChunkSize to
 	// decodeTermChunkSize. A script populates a handful of node types densely
@@ -311,7 +301,9 @@ func decodeProgramVersion(
 		if err := validateLedgerLanguageAvailability(*context); err != nil {
 			return lang.LanguageVersion{}, err
 		}
-		d.maxConstrFields = constrFieldLimit(context.ProtocolMajor)
+		// The ledger bound is enforced while decoding so an over-wide field
+		// list is rejected before it is allocated.
+		d.maxConstrFields = maxScriptConstrFields
 	}
 	return version, nil
 }

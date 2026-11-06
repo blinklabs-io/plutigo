@@ -271,12 +271,13 @@ func TestDecodeZeroWidthListOfPairsIsAccepted(t *testing.T) {
 				if !bytes.Equal(reencoded, input) {
 					t.Fatal("decode/encode round trip changed the program")
 				}
-				if _, err := DecodeDeBruijnWithContext(input, ProgramContext{
+				// The ledger bounds a constant's type header at every
+				// protocol version, so the validated decode rejects it.
+				_, err = DecodeDeBruijnWithContext(input, ProgramContext{
 					LedgerLanguage: lang.LanguageVersionV3,
 					ProtocolMajor:  10,
-				}); err != nil {
-					t.Fatalf("validated decode: %v", err)
-				}
+				})
+				requireErrContains(t, "validated decode", err, "exceeds the maximum type header size")
 			})
 		}
 	}
@@ -355,12 +356,11 @@ func TestDecodeConstantValueAmplificationBounded(t *testing.T) {
 				tc.check(t, c.Con, tc.depth, tc.items)
 			})
 		}
-		if _, err := DecodeDeBruijnWithContext(tc.input, ProgramContext{
+		_, err := DecodeDeBruijnWithContext(tc.input, ProgramContext{
 			LedgerLanguage: lang.LanguageVersionV3,
 			ProtocolMajor:  10,
-		}); err != nil {
-			t.Fatalf("%s: validated decode: %v", tc.name, err)
-		}
+		})
+		requireErrContains(t, tc.name+": validated decode", err, "exceeds the maximum type header size")
 	}
 }
 

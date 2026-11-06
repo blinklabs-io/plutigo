@@ -130,7 +130,7 @@ func TestFlatDecodeProtocolConstrBoundBeforeAllocation(t *testing.T) {
 	t.Parallel()
 	encoded := encodeV110(
 		t,
-		&Constr[DeBruijn]{Fields: errorFields(maxConstrFieldsPV11 + 100)},
+		&Constr[DeBruijn]{Fields: errorFields(maxScriptConstrFields + 100)},
 	)
 	truncated := encoded[:len(encoded)-20]
 	context := ProgramContext{
@@ -142,16 +142,10 @@ func TestFlatDecodeProtocolConstrBoundBeforeAllocation(t *testing.T) {
 	_, err = DecodeWithContext[NamedDeBruijn](truncated, context)
 	requireErrContains(t, "DecodeWithContext[NamedDeBruijn]", err, "too many")
 
-	// Before protocol version 11 the same fields are only bounded by the
-	// default width, so the truncation is what fails.
+	// The ledger applies the bound at every protocol version.
 	context.ProtocolMajor = builtin.VanRossemProtoVersion - 1
 	_, err = DecodeWithContext[DeBruijn](truncated, context)
-	if err == nil || strings.Contains(err.Error(), "too many") {
-		t.Errorf(
-			"pre-PV11 decode should not apply the PV11 bound, got: %v",
-			err,
-		)
-	}
+	requireErrContains(t, "DecodeWithContext[DeBruijn] before PV11", err, "too many")
 }
 
 func TestParseRejectsOversizedInput(t *testing.T) {
@@ -195,7 +189,7 @@ func TestParseWithContextProtocolConstrBoundBeforeAllocation(t *testing.T) {
 	// The program is never closed: a parser that applies the protocol bound
 	// only through ValidateProgram fails on the missing parenthesis instead.
 	input := "(program 1.1.0 (constr 0" +
-		strings.Repeat(" (error)", maxConstrFieldsPV11+1)
+		strings.Repeat(" (error)", maxScriptConstrFields+1)
 	context := ProgramContext{
 		LedgerLanguage: lang.LanguageVersionV3,
 		ProtocolMajor:  builtin.VanRossemProtoVersion,
@@ -391,23 +385,21 @@ func TestFlatDecodeAcceptsTransactionSizedUnitList(t *testing.T) {
 	}
 }
 
-// TestValidateProgramPrePV11ConstrUnbounded checks that the decoders' default
-// width is not reported as a protocol rule before protocol version 11.
-func TestValidateProgramPrePV11ConstrUnbounded(t *testing.T) {
+// TestValidateProgramPrePV11ConstrBounded checks that the ledger's constr
+// field bound applies before protocol version 11 as well.
+func TestValidateProgramPrePV11ConstrBounded(t *testing.T) {
 	t.Parallel()
 	program := &Program[DeBruijn]{
 		Version: uplcVersion110,
 		Term: &Constr[DeBruijn]{
-			Fields: errorFields(maxCollectionWidth + 1),
+			Fields: errorFields(maxScriptConstrFields + 1),
 		},
 	}
 	err := ValidateProgram(program, ProgramContext{
 		LedgerLanguage: lang.LanguageVersionV3,
 		ProtocolMajor:  builtin.VanRossemProtoVersion - 1,
 	})
-	if err != nil {
-		t.Errorf("ValidateProgram: %v", err)
-	}
+	requireErrContains(t, "ValidateProgram", err, "exceeds the maximum of 1024")
 }
 
 func checkAllocationBound(t *testing.T, run func()) {

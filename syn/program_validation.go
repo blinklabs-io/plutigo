@@ -38,13 +38,16 @@ var (
 	uplcVersion110 = lang.LanguageVersion{1, 1, 0}
 )
 
-const maxConstrFieldsPV11 = 1024
+// maxScriptConstrFields is maxConstrFields in plutus-ledger-api's
+// PlutusLedgerApi.Common.Versions: scriptCBORDecoder rejects a constr with
+// more fields at every protocol version.
+const maxScriptConstrFields = 1024
 
-// maxConstantTypeTagsPV11 bounds the number of 4-bit type tags a constant's
-// type encodes to. It is mbHeader in plutus-ledger-api's MaxBounds, which
-// scriptCBORDecoder applies to defaultUniSize from protocol version 11 on and
-// leaves unbounded before it.
-const maxConstantTypeTagsPV11 = 32
+// maxScriptConstantTypeTags bounds the number of 4-bit type tags a constant's
+// type encodes to. It is maxHeaderSize in plutus-ledger-api's
+// PlutusLedgerApi.Common.Versions, which scriptCBORDecoder applies to
+// defaultUniSize at every protocol version.
+const maxScriptConstantTypeTags = 32
 
 // constantTypeSize counts the type tags a constant type encodes to, mirroring
 // defaultUniSize in PlutusCore.Default.Universe: a type application costs one
@@ -133,13 +136,13 @@ func (c *contextChecks) constant(con IConstant) error {
 			)
 		}
 	}
-	if con != nil && c.protocolMajor >= builtin.VanRossemProtoVersion {
+	if con != nil {
 		size := constantSize(con)
-		if size > maxConstantTypeTagsPV11 {
+		if size > maxScriptConstantTypeTags {
 			return fmt.Errorf(
-				"constant type of size %d is not available in protocol version %d",
+				"constant type of size %d exceeds the maximum type header size of %d",
 				size,
-				c.protocolMajor,
+				maxScriptConstantTypeTags,
 			)
 		}
 	}
@@ -219,12 +222,11 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 			if !supportsConstructors(program.Version) {
 				return fmt.Errorf("constr is not available in UPLC version %s", formatVersion(program.Version))
 			}
-			if context.ProtocolMajor >= builtin.VanRossemProtoVersion &&
-				len(t.Fields) > maxConstrFieldsPV11 {
+			if len(t.Fields) > maxScriptConstrFields {
 				return fmt.Errorf(
-					"constr with %d fields is not available in protocol version %d",
+					"constr with %d fields exceeds the maximum of %d",
 					len(t.Fields),
-					context.ProtocolMajor,
+					maxScriptConstrFields,
 				)
 			}
 			terms = append(terms, t.Fields...)
@@ -464,7 +466,7 @@ func ParseWithContext(
 	context ProgramContext,
 ) (*Program[Name], error) {
 	p := NewParser(input)
-	p.maxConstrFields = constrFieldLimit(context.ProtocolMajor)
+	p.maxConstrFields = maxScriptConstrFields
 	p.strictValues = true
 	program, err := p.ParseProgram()
 	if err != nil {

@@ -146,7 +146,7 @@ func legacyDecodeWithContext(
 ) (*Program[DeBruijn], error) {
 	d := newDecoder(b)
 	d.strictValues = true
-	d.maxConstrFields = constrFieldLimit(context.ProtocolMajor)
+	d.maxConstrFields = maxScriptConstrFields
 	program, err := decodeDeBruijnProgram(
 		d,
 		newTermArena[DeBruijn](),
