@@ -231,6 +231,18 @@ When adding a new builtin function:
 
 6. Add conformance tests if official tests exist
 
+### BLS G1 decompression cache
+
+The G1 uncompress builtin charges its execution cost and checks the exact
+compressed length before consulting a process-wide cache. Only successful
+curve and subgroup validation admits an entry. Exact compressed bytes key
+64 shards of at most 64 entries each; a full shard clears before admitting a
+new key. Values are copied Jacobian points, so evaluator mutations cannot
+change a retained point. The bound is 4,096 keys and approximately 768 KiB of
+key and point payload, plus bounded map overhead. Cache warmth changes host
+work only; returned points, failures and charged execution units are identical.
+
+
 ### Cost Model Changes
 
 Cost models are version-specific. When modifying:
