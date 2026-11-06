@@ -196,10 +196,11 @@ var zeroWidthDecodePaths = []struct {
 	},
 }
 
-// TestDecodeZeroWidthListOfPairsIsAccepted guards against charging unit and
-// pair values against the program node budget: they occupy no FLAT bits, and
-// the reference decoder accepts lists of them up to the item limit.
-func TestDecodeZeroWidthListOfPairsIsAccepted(t *testing.T) {
+// TestDecodeZeroWidthListOfPairs guards against charging unit and pair values
+// against the program node budget: they occupy no FLAT bits, and the
+// reference decoder accepts lists of them up to the item limit. The ledger's
+// decoder rejects these constant types by their size.
+func TestDecodeZeroWidthListOfPairs(t *testing.T) {
 	tests := []struct {
 		depth int
 		items int
@@ -271,12 +272,13 @@ func TestDecodeZeroWidthListOfPairsIsAccepted(t *testing.T) {
 				if !bytes.Equal(reencoded, input) {
 					t.Fatal("decode/encode round trip changed the program")
 				}
-				if _, err := DecodeDeBruijnWithContext(input, ProgramContext{
+				// The ledger bounds a constant's type header at every
+				// protocol version, so the validated decode rejects it.
+				_, err = DecodeDeBruijnWithContext(input, ProgramContext{
 					LedgerLanguage: lang.LanguageVersionV3,
 					ProtocolMajor:  10,
-				}); err != nil {
-					t.Fatalf("validated decode: %v", err)
-				}
+				})
+				requireErrContains(t, "validated decode", err, "exceeds the maximum type header size")
 			})
 		}
 	}
@@ -355,11 +357,19 @@ func TestDecodeConstantValueAmplificationBounded(t *testing.T) {
 				tc.check(t, c.Con, tc.depth, tc.items)
 			})
 		}
-		if _, err := DecodeDeBruijnWithContext(tc.input, ProgramContext{
+		// The validated decode rejects the type header before it reads the
+		// value.
+		runtime.GC()
+		var m0, m1 runtime.MemStats
+		runtime.ReadMemStats(&m0)
+		_, err := DecodeDeBruijnWithContext(tc.input, ProgramContext{
 			LedgerLanguage: lang.LanguageVersionV3,
 			ProtocolMajor:  10,
-		}); err != nil {
-			t.Fatalf("%s: validated decode: %v", tc.name, err)
+		})
+		runtime.ReadMemStats(&m1)
+		requireErrContains(t, tc.name+": validated decode", err, "exceeds the maximum type header size")
+		if alloc := m1.TotalAlloc - m0.TotalAlloc; alloc > 1<<20 {
+			t.Fatalf("%s: validated decode allocated %d KB", tc.name, alloc>>10)
 		}
 	}
 }

@@ -22,8 +22,8 @@ import (
 	"math"
 	"math/big"
 	"math/bits"
+	"reflect"
 	"sync"
-	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
@@ -56,11 +56,20 @@ var (
 	)
 )
 
-// Machine is only instantiated with syn.DeBruijn in this codebase. These
-// helpers reuse shared syn.DeBruijn builtin tables across Machine[T] instances,
-// and NewMachine panics if T does not match syn.DeBruijn.
+// Machine is only instantiated with syn.DeBruijn in this codebase:
+// NewMachine panics for any other T. The shared builtin tables below are built
+// for syn.DeBruijn and handed to Machine[T] through a checked type assertion,
+// which holds for that one instantiation.
+func sharedTableFor[V any](table any) V {
+	typed, ok := table.(V)
+	if !ok {
+		panic(fmt.Sprintf("cek: builtin tables are built for syn.DeBruijn, not %T", *new(V)))
+	}
+	return typed
+}
+
 func getSharedBuiltins[T syn.Eval]() *Builtins[T] {
-	return (*Builtins[T])(unsafe.Pointer(&sharedBuiltinTable))
+	return sharedTableFor[*Builtins[T]](&sharedBuiltinTable)
 }
 
 func getSharedBuiltinNoArgValues[T syn.Eval](
@@ -79,10 +88,9 @@ func getSharedBuiltinNoArgValues[T syn.Eval](
 	default:
 		return newBuiltinNoArgValues[T](version)
 	}
-	return (*[builtin.TotalBuiltinCount][3]*Builtin[T])(unsafe.Pointer(values))
+	return sharedTableFor[*[builtin.TotalBuiltinCount][3]*Builtin[T]](values)
 }
 
-// See getSharedBuiltins for the syn.DeBruijn invariant behind this cast.
 func getFilteredBuiltins[T syn.Eval](
 	version lang.LanguageVersion,
 	protoMajor uint,
@@ -90,13 +98,13 @@ func getFilteredBuiltins[T syn.Eval](
 	if protoMajor == 0 {
 		switch version {
 		case lang.LanguageVersionV1:
-			return (*Builtins[T])(unsafe.Pointer(filteredBuiltinsV10))
+			return sharedTableFor[*Builtins[T]](filteredBuiltinsV10)
 		case lang.LanguageVersionV2:
-			return (*Builtins[T])(unsafe.Pointer(filteredBuiltinsV20))
+			return sharedTableFor[*Builtins[T]](filteredBuiltinsV20)
 		case lang.LanguageVersionV3:
-			return (*Builtins[T])(unsafe.Pointer(filteredBuiltinsV30))
+			return sharedTableFor[*Builtins[T]](filteredBuiltinsV30)
 		case lang.LanguageVersionV4:
-			return (*Builtins[T])(unsafe.Pointer(filteredBuiltinsV40))
+			return sharedTableFor[*Builtins[T]](filteredBuiltinsV40)
 		}
 	}
 	return nil
@@ -190,14 +198,10 @@ type Machine[T syn.Eval] struct {
 	envActiveOff       int
 	envChunkPos        int
 	envPooled          *pooledEnvChunks[T]
-	budgetTemplate     ExBudget
-	lastRunRemaining   ExBudget
 	hasRun             bool
 
 	valueArenaRetentions [valueArenaCount]valueArenaRetention
 	valueArenaResetStart int
-	// budgetSet records a SetExBudget call since the last run.
-	budgetSet bool
 	// skipDischarge is set by RunScriptContext: the final value is only
 	// classified (resultIsUnit), never discharged into a term.
 	skipDischarge bool
@@ -575,9 +579,8 @@ func valueArenaRetainedChunks[S any](
 	retainSlots int,
 	retainBytes int,
 ) (int, int) {
-	var slot S
-	slotBytes := int(unsafe.Sizeof(slot))
-	chunkHeaderBytes := int(unsafe.Sizeof(chunks))
+	slotBytes := int(reflect.TypeFor[S]().Size())
+	chunkHeaderBytes := int(reflect.TypeFor[[]S]().Size())
 	retainedChunks := 0
 	retainedSlots := 0
 	retainedBytes := 0
@@ -992,8 +995,6 @@ func NewMachine[T syn.Eval](
 		builtinArgChunkPos:    0,
 		envChunks:             make([][]Env[T], 0, 8),
 		envChunkPos:           0,
-		budgetTemplate:        DefaultExBudget,
-		lastRunRemaining:      DefaultExBudget,
 		hasRun:                false,
 	}
 }
@@ -1464,18 +1465,12 @@ func isUnitValue[T syn.Eval](value Value[T]) bool {
 	}
 }
 
-// SetExBudget sets the budget of the machine's next run.
-//
-// Assigning m.ExBudget has the same effect, except in one case. A run that
-// finds m.ExBudget still equal to the budget the previous run left treats the
-// field as unchanged and restores the previous run's initial budget, so that
-// running the same machine repeatedly charges each run the same budget. A
-// caller that wants the next run to have exactly the previous run's remaining
-// budget, such as one passing what is left of a transaction's budget from one
-// script to the next, must use SetExBudget.
+// SetExBudget sets the budget of the machine's next run. It is equivalent to
+// assigning m.ExBudget: every run starts from the value of m.ExBudget and
+// leaves the remaining budget there, so a machine that runs again must have
+// its budget set first.
 func (m *Machine[T]) SetExBudget(budget ExBudget) {
 	m.ExBudget = budget
-	m.budgetSet = true
 }
 
 // Run executes a Plutus term using the CEK (Control, Environment, Kontinuation) abstract machine.
@@ -1485,9 +1480,9 @@ func (m *Machine[T]) SetExBudget(budget ExBudget) {
 //
 // Arena teardown runs in the deferred block so a long-lived or pooled
 // Machine does not retain references into the previous evaluation's
-// Value/Env/syn.Term graph after Run returns. The entry path only handles
-// budget restoration and frame-stack reset (the latter also defends against
-// tests or other callers that tamper with the frame stack between runs).
+// Value/Env/syn.Term graph after Run returns. The entry path only resets the
+// frame stack, which also defends against tests or other callers that tamper
+// with it between runs.
 //
 // # Budget
 //
@@ -1728,16 +1723,7 @@ func (m *Machine[T]) runContext(
 	}
 	firstRun := !m.hasRun
 	if m.hasRun {
-		if m.budgetSet || m.ExBudget != m.lastRunRemaining {
-			m.budgetTemplate = m.ExBudget
-		} else {
-			m.ExBudget = m.budgetTemplate
-		}
-		m.budgetSet = false
 		m.resetFrameStack()
-	} else {
-		m.budgetTemplate = m.ExBudget
-		m.budgetSet = false
 	}
 	m.Logs = m.Logs[:0]
 	if m.metrics != nil {
@@ -1751,7 +1737,6 @@ func (m *Machine[T]) runContext(
 		}
 		m.updateValueArenaRetentions()
 		m.lastRunEnvHighWatermark = m.envChunkPos
-		m.lastRunRemaining = m.ExBudget
 		m.hasRun = true
 		m.listShare.reset()
 		m.resetFrameStack()
@@ -1771,9 +1756,9 @@ func (m *Machine[T]) runContext(
 	}
 	// The De Bruijn loop charges steps exactly as runStack does; it only
 	// skips the metrics counters, so a metered machine runs runStack.
-	if dbTerm, ok := any(term).(syn.Term[syn.DeBruijn]); ok &&
+	dbMachine, isDeBruijn := any(m).(*Machine[syn.DeBruijn])
+	if dbTerm, ok := any(term).(syn.Term[syn.DeBruijn]); ok && isDeBruijn &&
 		m.metrics == nil {
-		dbMachine := (*Machine[syn.DeBruijn])(unsafe.Pointer(m))
 		steps := newStepCounter(m.slippage)
 		dbResult, err := runStackDeBruijn(
 			ctx,

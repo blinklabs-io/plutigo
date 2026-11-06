@@ -528,9 +528,17 @@ func TestContextualValidationConstrFieldLimit(t *testing.T) {
 		wantDecodeErr string
 	}{
 		{
-			name:       "pre-PV11 remains unbounded",
+			name:       "pre-PV11 at limit",
+			protocol:   10,
+			fieldCount: 1024,
+		},
+		{
+			name:       "pre-PV11 above limit",
 			protocol:   10,
 			fieldCount: 1025,
+			wantErr:    "constr with 1025 fields exceeds the maximum of 1024",
+
+			wantDecodeErr: "too many term list items: limit is 1024",
 		},
 		{
 			name:       "PV11 below limit",
@@ -546,7 +554,7 @@ func TestContextualValidationConstrFieldLimit(t *testing.T) {
 			name:       "PV11 above limit",
 			protocol:   11,
 			fieldCount: 1025,
-			wantErr:    "constr with 1025 fields is not available in protocol version 11",
+			wantErr:    "constr with 1025 fields exceeds the maximum of 1024",
 
 			wantDecodeErr: "too many term list items: limit is 1024",
 		},
@@ -554,7 +562,7 @@ func TestContextualValidationConstrFieldLimit(t *testing.T) {
 			name:       "post-PV11 above limit",
 			protocol:   12,
 			fieldCount: 1025,
-			wantErr:    "constr with 1025 fields is not available in protocol version 12",
+			wantErr:    "constr with 1025 fields exceeds the maximum of 1024",
 
 			wantDecodeErr: "too many term list items: limit is 1024",
 		},

@@ -106,12 +106,6 @@ func (c Constr) appendCBORHead(buf *bytes.Buffer) (*encodeFrame, error) {
 	if constrTag == nil {
 		constrTag = new(big.Int)
 	}
-	if !constrTag.IsUint64() {
-		return nil, fmt.Errorf(
-			"constructor tag %s is outside the Word64 CBOR range",
-			constrTag,
-		)
-	}
 
 	// Determine whether to use indefinite-length encoding for fields.
 	// If useIndef is explicitly set, honor it; otherwise default to
@@ -122,14 +116,17 @@ func (c Constr) appendCBORHead(buf *bytes.Buffer) (*encodeFrame, error) {
 	}
 
 	switch {
-	case constrTag.Uint64() <= 6:
+	case constrTag.IsUint64() && constrTag.Uint64() <= 6:
 		// Tags 0-6 map to CBOR tags 121-127
 		appendCBORHead(buf, CborTypeTag, 121+constrTag.Uint64())
-	case constrTag.Uint64() <= 127:
+	case constrTag.IsUint64() && constrTag.Uint64() <= 127:
 		// Tags 7-127 map to CBOR tags 1280-1400
 		appendCBORHead(buf, CborTypeTag, 1280+constrTag.Uint64()-7)
 	default:
-		// Tag 102 uses a definite-length 2-element outer list
+		// Tag 102 uses a definite-length 2-element outer list. As in
+		// PlutusCore.Data.encodeData, a tag outside the Word64 range is
+		// written as a CBOR integer (a bignum beyond the 64-bit heads); the
+		// result does not decode, since decoding requires a Word64 tag.
 		appendCBORHead(buf, CborTypeTag, 102)
 		appendCBORHead(buf, CborTypeArray, 2)
 		encodedTag, err := cborMarshal(constrTag)

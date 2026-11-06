@@ -139,6 +139,9 @@ func benchFlatFiles(b *testing.B, includeDecode, includeEval bool) {
 
 				for b.Loop() {
 					program := decodedProgram
+					if includeEval {
+						machine.ExBudget = cek.DefaultExBudget
+					}
 					if includeDecode {
 						if includeEval {
 							_, err := cek.RunFlat(machine, decoder, content)

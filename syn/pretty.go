@@ -726,8 +726,18 @@ func (pp *PrettyPrinter) printValueAtom(pd data.PlutusData) {
 	}
 }
 
+// asciiControlNames are the names Haskell's showLitChar gives the ASCII
+// control characters; the parser reads each back as one character whatever
+// follows it, except SO before H, which reads as SOH.
+var asciiControlNames = [...]string{
+	"NUL", "SOH", "STX", "ETX", "EOT", "ENQ", "ACK", "BEL",
+	"BS", "HT", "LF", "VT", "FF", "CR", "SO", "SI",
+	"DLE", "DC1", "DC2", "DC3", "DC4", "NAK", "SYN", "ETB",
+	"CAN", "EM", "SUB", "ESC", "FS", "GS", "RS", "US",
+}
+
 func (pp *PrettyPrinter) writeEscapedString(s string) {
-	for _, r := range s {
+	for i, r := range s {
 		if pp.err != nil {
 			break
 		}
@@ -750,9 +760,17 @@ func (pp *PrettyPrinter) writeEscapedString(s string) {
 			pp.write("\\r")
 		case '\v':
 			pp.write("\\v")
+		case 0x0e:
+			if strings.HasPrefix(s[i+1:], "H") {
+				pp.write("\\^N")
+			} else {
+				pp.write("\\SO")
+			}
+		case 0x7f:
+			pp.write("\\DEL")
 		default:
-			if r < 0x20 || r == 0x7f {
-				pp.writef("\\o%03o", r)
+			if r < 0x20 {
+				pp.write("\\" + asciiControlNames[r])
 			} else {
 				pp.write(string(r))
 			}

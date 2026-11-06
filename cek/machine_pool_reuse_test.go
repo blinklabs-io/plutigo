@@ -18,9 +18,9 @@ import (
 	"context"
 	"math/big"
 	"os"
+	"reflect"
 	"runtime"
 	"testing"
-	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
@@ -50,10 +50,11 @@ func pooledTestMachine() *Machine[syn.DeBruijn] {
 	)
 }
 
-// TestSetExBudgetToPreviousRemaining checks that SetExBudget gives the next
-// run exactly the budget it sets, also when that budget is the previous run's
-// remaining budget, which an assignment to ExBudget cannot express.
-func TestSetExBudgetToPreviousRemaining(t *testing.T) {
+// TestReusedMachineRunsWithAssignedBudget checks that a reused machine runs
+// with exactly the budget in ExBudget, whether it was set through
+// SetExBudget or assigned, including when it equals the previous run's
+// remaining budget.
+func TestReusedMachineRunsWithAssignedBudget(t *testing.T) {
 	program := pooledTestProgram(t, "guardrail-sorted-small")
 	run := func(m *Machine[syn.DeBruijn]) {
 		t.Helper()
@@ -78,7 +79,29 @@ func TestSetExBudgetToPreviousRemaining(t *testing.T) {
 		)
 	}
 
-	// Leaving ExBudget as the run left it restores the initial budget.
+	// SetExBudget replaces whatever the previous run left.
+	m.SetExBudget(start)
+	run(m)
+	if want := start.Sub(&used); m.ExBudget != want {
+		t.Errorf("after SetExBudget(start): budget %+v, want %+v", m.ExBudget, want)
+	}
+
+	m.ExBudget = start
+	run(m)
+	remaining = m.ExBudget
+	m.ExBudget = remaining
+	run(m)
+	if want := remaining.Sub(&used); m.ExBudget != want {
+		t.Errorf(
+			"after assigning the remaining budget: budget %+v, want %+v",
+			m.ExBudget,
+			want,
+		)
+	}
+
+	// A machine run again without setting its budget continues from what
+	// the previous run left.
+	remaining = m.ExBudget
 	run(m)
 	if want := remaining.Sub(&used); m.ExBudget != want {
 		t.Errorf(
@@ -248,10 +271,9 @@ func TestValueArenasShrinkIndependently(t *testing.T) {
 }
 
 func retainedArenaBytes[S any](chunks [][]S) int {
-	var slot S
-	retained := cap(chunks) * int(unsafe.Sizeof(chunks))
+	retained := cap(chunks) * int(reflect.TypeFor[[]S]().Size())
 	for _, chunk := range chunks {
-		retained += len(chunk) * int(unsafe.Sizeof(slot))
+		retained += len(chunk) * int(reflect.TypeFor[S]().Size())
 	}
 	return retained
 }

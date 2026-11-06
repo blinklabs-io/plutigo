@@ -20,8 +20,8 @@ import (
 	"math"
 	"math/big"
 	"math/bits"
+	"reflect"
 	"unicode/utf8"
-	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
@@ -46,16 +46,6 @@ const (
 
 func errTooMany(what string, limit int) error {
 	return fmt.Errorf("too many %s: limit is %d", what, limit)
-}
-
-// constrFieldLimit returns the widest constr the protocol admits. The
-// protocol bound is enforced while decoding so an over-wide field list is
-// rejected before it is allocated.
-func constrFieldLimit(protocolMajor uint) int {
-	if protocolMajor >= builtin.VanRossemProtoVersion {
-		return maxConstrFieldsPV11
-	}
-	return maxCollectionWidth
 }
 
 const (
@@ -311,7 +301,11 @@ func decodeProgramVersion(
 		if err := validateLedgerLanguageAvailability(*context); err != nil {
 			return lang.LanguageVersion{}, err
 		}
-		d.maxConstrFields = constrFieldLimit(context.ProtocolMajor)
+		// The ledger bounds are enforced while decoding so an over-wide
+		// field list or an oversized constant is rejected before it is
+		// allocated.
+		d.maxConstrFields = maxScriptConstrFields
+		d.maxConstantTypeTags = maxScriptConstantTypeTags
 	}
 	return version, nil
 }
@@ -674,12 +668,11 @@ type arenaChunks[S any] struct {
 
 // capacityBytes is the storage the arena's chunks hold.
 func (a *arenaChunks[S]) capacityBytes() int64 {
-	var zero S
 	n := 0
 	for _, chunk := range a.chunks {
 		n += len(chunk)
 	}
-	return int64(n) * int64(unsafe.Sizeof(zero))
+	return int64(n) * int64(reflect.TypeFor[S]().Size())
 }
 
 func (a *arenaChunks[S]) used() int {
@@ -810,12 +803,11 @@ type arenaSlices[S any] struct {
 
 // capacityBytes is the storage the arena's chunks hold.
 func (a *arenaSlices[S]) capacityBytes() int64 {
-	var zero S
 	n := 0
 	for _, chunk := range a.chunks {
 		n += len(chunk)
 	}
-	return int64(n) * int64(unsafe.Sizeof(zero))
+	return int64(n) * int64(reflect.TypeFor[S]().Size())
 }
 
 func (a *arenaSlices[S]) used() int {
@@ -962,8 +954,10 @@ func newTermArena[T Binder]() *termArena[T] {
 }
 
 const (
-	termSlotBytes     = int64(unsafe.Sizeof(Term[DeBruijn](nil)))
-	constantSlotBytes = int64(unsafe.Sizeof(IConstant(nil)))
+	// An interface value is a type word and a data word.
+	interfaceSlotBytes = 2 * bits.UintSize / 8
+	termSlotBytes      = int64(interfaceSlotBytes)
+	constantSlotBytes  = int64(interfaceSlotBytes)
 	// listArenaSlots is the number of slots a term or constant list takes
 	// from the arena before it grows on the heap.
 	listArenaSlots = 4
@@ -1537,7 +1531,22 @@ func DecodeConstant(d *decoder) (IConstant, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := d.checkConstantTypeSize(typ); err != nil {
+		return nil, err
+	}
 	return decodeConstantValue(d, typ)
+}
+
+// checkConstantTypeSize applies maxConstantTypeTags to a decoded constant
+// type, as scriptCBORDecoder's checkConstant does before the value.
+func (d *decoder) checkConstantTypeSize(typ Typ) error {
+	if d.maxConstantTypeTags == 0 {
+		return nil
+	}
+	if size := constantTypeSize(typ); size > d.maxConstantTypeTags {
+		return constantTypeSizeError(size)
+	}
+	return nil
 }
 
 func decodeConstantWithArena(
@@ -1551,6 +1560,9 @@ func decodeConstantWithArena(
 	}
 	typ, err := decodeConstantType(&tags, arena, d)
 	if err != nil {
+		return nil, err
+	}
+	if err := d.checkConstantTypeSize(typ); err != nil {
 		return nil, err
 	}
 	return decodeConstantValueWithArena(d, typ, arena)
@@ -2193,11 +2205,14 @@ type decoder struct {
 	zeroWidth map[*TPair]IConstant
 	// maxConstrFields is the widest constr field list accepted.
 	maxConstrFields int
-	strictValues    bool
-	checkScope      bool
-	fullScopeCheck  bool
-	scope           int
-	scopeError      *DeBruijnScopeError
+	// maxConstantTypeTags, when non-zero, is the largest constant type
+	// accepted, checked before the constant's value is decoded.
+	maxConstantTypeTags int
+	strictValues        bool
+	checkScope          bool
+	fullScopeCheck      bool
+	scope               int
+	scopeError          *DeBruijnScopeError
 	// contextChecks, when set, applies ValidateProgram's checks to every
 	// constant and builtin as it is decoded; contextError keeps the last
 	// failure in decode order, which is the first ValidateProgram reports

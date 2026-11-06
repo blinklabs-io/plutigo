@@ -16,7 +16,8 @@ package data
 
 import (
 	"math/big"
-	"unsafe"
+	"math/bits"
+	"reflect"
 )
 
 const (
@@ -34,12 +35,11 @@ type arenaChunks[S any] struct {
 
 // capacityBytes is the storage the arena's chunks hold.
 func (a *arenaChunks[S]) capacityBytes() int64 {
-	var zero S
 	n := 0
 	for _, chunk := range a.chunks {
 		n += len(chunk)
 	}
-	return int64(n) * int64(unsafe.Sizeof(zero))
+	return int64(n) * int64(reflect.TypeFor[S]().Size())
 }
 
 func (a *arenaChunks[S]) used() int {
@@ -154,12 +154,11 @@ type arenaSlices[S any] struct {
 // live allocation.
 // capacityBytes is the storage the arena's chunks hold.
 func (a *arenaSlices[S]) capacityBytes() int64 {
-	var zero S
 	n := 0
 	for _, chunk := range a.chunks {
 		n += len(chunk)
 	}
-	return int64(n) * int64(unsafe.Sizeof(zero))
+	return int64(n) * int64(reflect.TypeFor[S]().Size())
 }
 
 func (a *arenaSlices[S]) alloc(n int) []S {
@@ -325,7 +324,7 @@ func (d *Decoder) allocBigInt() *big.Int {
 // classes.
 func (d *Decoder) countMagnitude(inner *big.Int) {
 	if d != nil {
-		n := int64(cap(inner.Bits())) * int64(unsafe.Sizeof(big.Word(0)))
+		n := int64(cap(inner.Bits())) * int64(bits.UintSize/8)
 		d.heapBytes += (n + 15) &^ 15
 	}
 }

@@ -148,7 +148,7 @@ func TestEvalDecodedZeroWidthListConstant(t *testing.T) {
 	// These stay below the machine's structure-validation budget
 	// (maxDischargeWork), which counts every pair and pair type of every
 	// item, so the larger decode-only shapes of
-	// TestDecodeZeroWidthListOfPairsIsAccepted are rejected at Run.
+	// TestDecodeZeroWidthListOfPairs are rejected at Run.
 	tests := []struct {
 		depth int
 		items int
@@ -198,12 +198,10 @@ func TestEvalLargeZeroWidthListConstant(t *testing.T) {
 		items int
 		proto uint
 	}{
-		// list (pair^3 unit) is 31 type tags, within the PV11 bound of 32.
+		// list (pair^3 unit) is 31 type tags, within the ledger's bound of
+		// 32; larger types do not pass phase 1 at any protocol version.
 		{"pair3-pv11", 3, 130_000, 11},
 		{"pair3-pv10", 3, 130_000, 10},
-		// Larger types are only legal before PV11.
-		{"pair4-pv10", 4, 130_000, 10},
-		{"pair5-pv10", 5, 130_000, 10},
 		{"pair1-pv11", 1, 130_000, 11},
 	}
 	for _, tc := range tests {

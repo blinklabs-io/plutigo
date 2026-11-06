@@ -32,10 +32,10 @@ func nestedListConstant(depth int) IConstant {
 	return &ProtoList{LTyp: typ}
 }
 
-// TestContextualValidationConstantTypeSizeLimit covers the PV11 bound on the
-// size of a constant's encoded type (mbHeader in plutus-ledger-api's
-// MaxBounds, checked by scriptCBORDecoder's checkConstant against
-// defaultUniSize). Encoded type sizes are always odd -- a base type is one
+// TestContextualValidationConstantTypeSizeLimit covers the bound on the size
+// of a constant's encoded type (maxHeaderSize in plutus-ledger-api's
+// PlutusLedgerApi.Common.Versions, checked by scriptCBORDecoder's
+// checkConstant against defaultUniSize at every protocol version). Encoded type sizes are always odd -- a base type is one
 // tag, a list or array adds two, a pair adds three -- so 32 itself is
 // unreachable and the first rejected size is 33.
 func TestContextualValidationConstantTypeSizeLimit(t *testing.T) {
@@ -48,9 +48,15 @@ func TestContextualValidationConstantTypeSizeLimit(t *testing.T) {
 		wantErr  string
 	}{
 		{
-			name:     "pre-PV11 remains unbounded",
+			name:     "pre-PV11 at largest reachable size",
 			protocol: 10,
-			depth:    64,
+			depth:    15,
+		},
+		{
+			name:     "pre-PV11 above limit",
+			protocol: 10,
+			depth:    16,
+			wantErr:  "constant type of size 33 exceeds the maximum type header size of 32",
 		},
 		{
 			name:     "PV11 below limit",
@@ -66,13 +72,13 @@ func TestContextualValidationConstantTypeSizeLimit(t *testing.T) {
 			name:     "PV11 above limit",
 			protocol: 11,
 			depth:    16,
-			wantErr:  "constant type of size 33 is not available in protocol version 11",
+			wantErr:  "constant type of size 33 exceeds the maximum type header size of 32",
 		},
 		{
 			name:     "post-PV11 above limit",
 			protocol: 12,
 			depth:    16,
-			wantErr:  "constant type of size 33 is not available in protocol version 12",
+			wantErr:  "constant type of size 33 exceeds the maximum type header size of 32",
 		},
 	}
 

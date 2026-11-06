@@ -49,6 +49,13 @@ func retainedShapes(t *testing.T) map[string][]byte {
 		fields = append(fields, &syn.Delay[syn.DeBruijn]{Term: &syn.Error{}})
 	}
 	con := func(c syn.IConstant) syn.Term[syn.DeBruijn] { return &syn.Constant{Con: c} }
+	// The ledger admits at most 1024 constr fields, so the n fields are
+	// spread over nested constructors.
+	const constrWidth = 1000
+	wide := make([]syn.Term[syn.DeBruijn], 0, n/constrWidth)
+	for i := 0; i < n; i += constrWidth {
+		wide = append(wide, &syn.Constr[syn.DeBruijn]{Fields: fields[i : i+constrWidth]})
+	}
 	terms := map[string]syn.Term[syn.DeBruijn]{
 		"integer list": con(&syn.ProtoList{LTyp: &syn.TInteger{}, List: ints}),
 		"unit list":    con(&syn.ProtoList{LTyp: &syn.TUnit{}, List: units}),
@@ -64,7 +71,7 @@ func retainedShapes(t *testing.T) map[string][]byte {
 			List: pairs,
 		}),
 		"data list":         con(&syn.Data{Inner: data.NewList(dataItems...)}),
-		"wide constructor":  &syn.Constr[syn.DeBruijn]{Fields: fields},
+		"wide constructor":  &syn.Constr[syn.DeBruijn]{Fields: wide},
 		"string":            con(&syn.String{Inner: string(make([]byte, n))}),
 		"constructor field": &syn.Constr[syn.DeBruijn]{Fields: fields[:5]},
 	}
@@ -102,7 +109,6 @@ func TestPreparedRetainedBytesTracksHeap(t *testing.T) {
 		}
 		programs[filepath.Base(p)] = b
 	}
-	// Protocol 10 admits the wide constructor, which PV11 limits.
 	pc := syn.ProgramContext{
 		LedgerLanguage: lang.LanguageVersionV3,
 		ProtocolMajor:  10,

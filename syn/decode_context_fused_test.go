@@ -138,15 +138,17 @@ func fusedDecodeCorpus(t *testing.T, stride int) [][]byte {
 }
 
 // legacyDecodeWithContext is DecodeDeBruijnWithContext as it was before the
-// decoder applied the context checks: a decode that only takes the constr
-// field limit from the context, followed by a ValidateProgram walk.
+// decoder applied the context checks: a decode that applies only the
+// ledger's constr field and constant type bounds, followed by a
+// ValidateProgram walk.
 func legacyDecodeWithContext(
 	b []byte,
 	context ProgramContext,
 ) (*Program[DeBruijn], error) {
 	d := newDecoder(b)
 	d.strictValues = true
-	d.maxConstrFields = constrFieldLimit(context.ProtocolMajor)
+	d.maxConstrFields = maxScriptConstrFields
+	d.maxConstantTypeTags = maxScriptConstantTypeTags
 	program, err := decodeDeBruijnProgram(
 		d,
 		newTermArena[DeBruijn](),
