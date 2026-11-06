@@ -37,6 +37,11 @@ const (
 	frameCases
 )
 
+const (
+	frameStackInitialCap = 32
+	frameStackRetainCap  = 4096
+)
+
 type stackFrame[T syn.Eval] struct {
 	kind stackFrameKind
 
@@ -55,7 +60,11 @@ func (m *Machine[T]) resetFrameStack() {
 	if m.frameStackUsed > 0 {
 		clear(m.frameStack[:m.frameStackUsed])
 	}
-	m.frameStack = m.frameStack[:0]
+	if cap(m.frameStack) > frameStackRetainCap {
+		m.frameStack = make([]stackFrame[T], 0, frameStackRetainCap)
+	} else {
+		m.frameStack = m.frameStack[:0]
+	}
 	m.frameStackUsed = 0
 }
 
