@@ -235,8 +235,8 @@ When adding a new builtin function:
 
 The G1 uncompress builtin charges its execution cost and checks the exact
 compressed length before consulting a process-wide cache. Only successful
-curve and subgroup validation admits an entry. Exact compressed bytes key
-64 shards of at most 64 entries each; a full shard clears before admitting a
+curve and subgroup validation admits an entry. A per-cache seeded hash of all
+compressed bytes selects among 64 shards of at most 64 entries each; a full shard clears before admitting a
 new key. Values are copied Jacobian points, so evaluator mutations cannot
 change a retained point. The bound is 4,096 keys and approximately 768 KiB of
 key and point payload, plus bounded map overhead. Cache warmth changes host

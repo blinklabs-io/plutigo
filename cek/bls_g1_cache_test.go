@@ -132,14 +132,20 @@ func TestBLSG1UncompressCacheRejectsInvalidPoints(t *testing.T) {
 
 func TestBLSG1UncompressCacheBoundAndConcurrency(t *testing.T) {
 	t.Parallel()
-	var cache blsG1UncompressStore
+	cache := newBLSG1UncompressStore()
 	generator, _, _, _ := bls.Generators()
-	var latest blsG1UncompressKey
-	for i := range blsG1UncompressShardLimit + 1 {
-		// These bytes do not affect shard selection; all keys fill one shard.
-		binary.LittleEndian.PutUint64(latest[8:16], uint64(i))
-		cache.store(&latest, generator)
+	keys := make([]blsG1UncompressKey, 0, blsG1UncompressShardLimit+2)
+	for i := uint64(0); len(keys) < cap(keys); i++ {
+		var key blsG1UncompressKey
+		binary.LittleEndian.PutUint64(key[:8], i)
+		if cache.shard(&key) == &cache.shards[0] {
+			keys = append(keys, key)
+		}
 	}
+	for _, key := range keys[:len(keys)-1] {
+		cache.store(&key, generator)
+	}
+	latest := keys[len(keys)-2]
 	shard := cache.shard(&latest)
 	if len(shard.values) != 1 {
 		t.Fatalf("full shard did not reset: %d", len(shard.values))
@@ -147,8 +153,7 @@ func TestBLSG1UncompressCacheBoundAndConcurrency(t *testing.T) {
 	if _, ok := cache.get(&latest); !ok {
 		t.Fatal("new key not admitted after eviction")
 	}
-	otherKey := latest
-	otherKey[8] ^= 0x80
+	otherKey := keys[len(keys)-1]
 	var negated bls.G1Jac
 	negated.Neg(&generator)
 	cache.store(&otherKey, negated)
@@ -178,6 +183,35 @@ func TestBLSG1UncompressCacheBoundAndConcurrency(t *testing.T) {
 	for i := range cache.shards {
 		if len(cache.shards[i].values) > blsG1UncompressShardLimit {
 			t.Fatal("cache exceeded its per-shard bound")
+		}
+	}
+}
+
+func TestBLSG1UncompressCacheUsesEveryKeyWord(t *testing.T) {
+	t.Parallel()
+	generator, _, _, _ := bls.Generators()
+	for word := range 6 {
+		cache := newBLSG1UncompressStore()
+		const count = 512
+		for i := range count {
+			var key blsG1UncompressKey
+			binary.LittleEndian.PutUint64(key[word*8:], uint64(i))
+			cache.store(&key, generator)
+		}
+		retained := 0
+		for i := range count {
+			var key blsG1UncompressKey
+			binary.LittleEndian.PutUint64(key[word*8:], uint64(i))
+			if _, ok := cache.get(&key); ok {
+				retained++
+			}
+		}
+		if retained < count/2 {
+			t.Fatalf(
+				"keys differing in word %d concentrated in one shard: %d retained",
+				word,
+				retained,
+			)
 		}
 	}
 }

@@ -15,8 +15,7 @@
 package cek
 
 import (
-	"encoding/binary"
-	"math/bits"
+	"hash/maphash"
 	"sync"
 
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
@@ -35,17 +34,20 @@ type blsG1UncompressShard struct {
 }
 
 type blsG1UncompressStore struct {
+	seed   maphash.Seed
 	shards [blsG1UncompressCacheShards]blsG1UncompressShard
 }
 
-var blsG1UncompressCache blsG1UncompressStore
+var blsG1UncompressCache = newBLSG1UncompressStore()
+
+func newBLSG1UncompressStore() *blsG1UncompressStore {
+	return &blsG1UncompressStore{seed: maphash.MakeSeed()}
+}
 
 func (c *blsG1UncompressStore) shard(
 	key *blsG1UncompressKey,
 ) *blsG1UncompressShard {
-	hash := binary.LittleEndian.Uint64(key[:8])
-	hash ^= bits.RotateLeft64(binary.LittleEndian.Uint64(key[16:24]), 21)
-	hash ^= bits.RotateLeft64(binary.LittleEndian.Uint64(key[40:48]), 42)
+	hash := maphash.Bytes(c.seed, key[:])
 	return &c.shards[hash&(blsG1UncompressCacheShards-1)]
 }
 
