@@ -49,6 +49,14 @@ const maxScriptConstrFields = 1024
 // defaultUniSize at every protocol version.
 const maxScriptConstantTypeTags = 32
 
+func constantTypeSizeError(size int) error {
+	return fmt.Errorf(
+		"constant type of size %d exceeds the maximum type header size of %d",
+		size,
+		maxScriptConstantTypeTags,
+	)
+}
+
 // constantTypeSize counts the type tags a constant type encodes to, mirroring
 // defaultUniSize in PlutusCore.Default.Universe: a type application costs one
 // tag plus its operands, and every other type costs one. A list or array is
@@ -137,13 +145,8 @@ func (c *contextChecks) constant(con IConstant) error {
 		}
 	}
 	if con != nil {
-		size := constantSize(con)
-		if size > maxScriptConstantTypeTags {
-			return fmt.Errorf(
-				"constant type of size %d exceeds the maximum type header size of %d",
-				size,
-				maxScriptConstantTypeTags,
-			)
+		if size := constantSize(con); size > maxScriptConstantTypeTags {
+			return constantTypeSizeError(size)
 		}
 	}
 	return nil

@@ -301,9 +301,11 @@ func decodeProgramVersion(
 		if err := validateLedgerLanguageAvailability(*context); err != nil {
 			return lang.LanguageVersion{}, err
 		}
-		// The ledger bound is enforced while decoding so an over-wide field
-		// list is rejected before it is allocated.
+		// The ledger bounds are enforced while decoding so an over-wide
+		// field list or an oversized constant is rejected before it is
+		// allocated.
 		d.maxConstrFields = maxScriptConstrFields
+		d.maxConstantTypeTags = maxScriptConstantTypeTags
 	}
 	return version, nil
 }
@@ -1529,7 +1531,22 @@ func DecodeConstant(d *decoder) (IConstant, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := d.checkConstantTypeSize(typ); err != nil {
+		return nil, err
+	}
 	return decodeConstantValue(d, typ)
+}
+
+// checkConstantTypeSize applies maxConstantTypeTags to a decoded constant
+// type, as scriptCBORDecoder's checkConstant does before the value.
+func (d *decoder) checkConstantTypeSize(typ Typ) error {
+	if d.maxConstantTypeTags == 0 {
+		return nil
+	}
+	if size := constantTypeSize(typ); size > d.maxConstantTypeTags {
+		return constantTypeSizeError(size)
+	}
+	return nil
 }
 
 func decodeConstantWithArena(
@@ -1543,6 +1560,9 @@ func decodeConstantWithArena(
 	}
 	typ, err := decodeConstantType(&tags, arena, d)
 	if err != nil {
+		return nil, err
+	}
+	if err := d.checkConstantTypeSize(typ); err != nil {
 		return nil, err
 	}
 	return decodeConstantValueWithArena(d, typ, arena)
@@ -2185,11 +2205,14 @@ type decoder struct {
 	zeroWidth map[*TPair]IConstant
 	// maxConstrFields is the widest constr field list accepted.
 	maxConstrFields int
-	strictValues    bool
-	checkScope      bool
-	fullScopeCheck  bool
-	scope           int
-	scopeError      *DeBruijnScopeError
+	// maxConstantTypeTags, when non-zero, is the largest constant type
+	// accepted, checked before the constant's value is decoded.
+	maxConstantTypeTags int
+	strictValues        bool
+	checkScope          bool
+	fullScopeCheck      bool
+	scope               int
+	scopeError          *DeBruijnScopeError
 	// contextChecks, when set, applies ValidateProgram's checks to every
 	// constant and builtin as it is decoded; contextError keeps the last
 	// failure in decode order, which is the first ValidateProgram reports

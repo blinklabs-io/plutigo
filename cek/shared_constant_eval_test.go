@@ -148,7 +148,7 @@ func TestEvalDecodedZeroWidthListConstant(t *testing.T) {
 	// These stay below the machine's structure-validation budget
 	// (maxDischargeWork), which counts every pair and pair type of every
 	// item, so the larger decode-only shapes of
-	// TestDecodeZeroWidthListOfPairsIsAccepted are rejected at Run.
+	// TestDecodeZeroWidthListOfPairs are rejected at Run.
 	tests := []struct {
 		depth int
 		items int

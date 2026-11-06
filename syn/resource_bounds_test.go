@@ -190,12 +190,14 @@ func TestParseWithContextProtocolConstrBoundBeforeAllocation(t *testing.T) {
 	// only through ValidateProgram fails on the missing parenthesis instead.
 	input := "(program 1.1.0 (constr 0" +
 		strings.Repeat(" (error)", maxScriptConstrFields+1)
-	context := ProgramContext{
-		LedgerLanguage: lang.LanguageVersionV3,
-		ProtocolMajor:  builtin.VanRossemProtoVersion,
+	for _, major := range []uint{builtin.VanRossemProtoVersion - 1, builtin.VanRossemProtoVersion} {
+		context := ProgramContext{
+			LedgerLanguage: lang.LanguageVersionV3,
+			ProtocolMajor:  major,
+		}
+		_, err := ParseWithContext(input, context)
+		requireErrContains(t, fmt.Sprintf("ParseWithContext at protocol %d", major), err, "too many")
 	}
-	_, err := ParseWithContext(input, context)
-	requireErrContains(t, "ParseWithContext", err, "too many")
 }
 
 func TestPrettyDepthLimit(t *testing.T) {
