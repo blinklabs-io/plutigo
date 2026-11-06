@@ -92,3 +92,32 @@ func TestPrettyInvalidValueIsNotSilentlyRewritten(t *testing.T) {
 		)
 	}
 }
+
+// TestPrettyStringEscapesRoundTrip checks that every control character
+// prints as an escape the parser reads back as that one character, whatever
+// follows it. Numeric escapes take every following digit, so a fixed-width
+// form is needed before a digit.
+func TestPrettyStringEscapesRoundTrip(t *testing.T) {
+	for r := rune(0); r < 0x80; r++ {
+		for _, next := range []string{"", "0", "7", "9", "H", "a", "\\"} {
+			want := string(r) + next
+			program := &Program[Name]{
+				Version: [3]uint32{1, 0, 0},
+				Term:    &Constant{Con: &String{Inner: want}},
+			}
+			printed := Pretty(program)
+			parsed, err := Parse(printed)
+			if err != nil {
+				t.Fatalf("Parse(%q): %v", printed, err)
+			}
+			c, ok := parsed.Term.(*Constant)
+			if !ok {
+				t.Fatalf("Parse(%q) term is %T", printed, parsed.Term)
+			}
+			got, ok := c.Con.(*String)
+			if !ok || got.Inner != want {
+				t.Fatalf("Parse(Pretty(%q)) = %#v from %q", want, c.Con, printed)
+			}
+		}
+	}
+}
