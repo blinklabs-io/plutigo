@@ -243,19 +243,11 @@ func TestValidateProgramRejectsValueDataInCallerConstants(t *testing.T) {
 				FstType: &TData{},
 				SndType: &TData{},
 				First: Data{
-					Inner: data.List{
-						Items: []data.PlutusData{
-							data.Constr{
-								Fields: []data.PlutusData{
-									data.Map{
-										Pairs: [][2]data.PlutusData{
-											{data.Integer{}, *newValueData()},
-										},
-									},
-								},
-							},
-						},
-					},
+					Inner: *data.WrapList([]data.PlutusData{*data.WrapConstr(nil, []data.PlutusData{*data.WrapMap([][2]data.PlutusData{
+						{data.Integer{}, *newValueData()},
+					}),
+					}),
+					}),
 				},
 				Second: Data{Inner: data.Integer{}},
 			}},

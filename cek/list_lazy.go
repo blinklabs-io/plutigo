@@ -125,7 +125,7 @@ func (x *consCell[E]) each(f func(E)) {
 //
 // They are always non-empty. Builtins that only need the head, the tail,
 // emptiness or a bounded prefix handle them directly; listData, mapData and
-// constrData use their memoised contiguous form; every other consumer
+// constrData wrap them as lazy data (data_lazy.go); every other consumer
 // flattens them first (unwrapList, materializeConstantValue, discharge), so
 // code that does not know about them still sees the contiguous value.
 type lazyListValue[T syn.Eval] interface {

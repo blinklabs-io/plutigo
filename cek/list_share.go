@@ -44,11 +44,15 @@ import (
 //     Lists not built here (program literals, lists decoded from Data) use a
 //     per-run cache keyed by the address of their last element instead.
 //
+//   - lazydata.Source: listData, mapData and constrData wrap a list built by
+//     mkCons without copying it (data_lazy.go); its contiguous form is built
+//     only when something costed by its size reads it.
+//
 // What cannot be made O(1): two different cells consed onto the same tail
-// are two distinct lists, and listData/mapData/constrData (and a list used as
-// a mkCons head in a list of lists) must produce a contiguous slice for each
-// of them, because data.List/Map/Constr expose their elements as slices. That
-// copy is O(length) and happens at most once per cell.
+// are two distinct lists, and a list used as a mkCons head in a list of lists
+// must become a contiguous slice for each of them, because syn.ProtoList
+// exposes its elements as a slice. That copy is O(length) and happens at most
+// once per cell.
 //
 // Safety invariants (aliasing):
 //   - A slot of a frontBuf or convBuf is written only while it lies outside

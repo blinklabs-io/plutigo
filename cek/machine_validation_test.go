@@ -207,8 +207,8 @@ func TestRunContextDataConstantsHaveNoAggregateLimit(t *testing.T) {
 	for i := range fields {
 		fields[i] = leaf
 	}
-	firstData := data.Constr{Tag: big.NewInt(1), Fields: fields}
-	secondData := data.Constr{Tag: big.NewInt(2), Fields: fields}
+	firstData := *data.WrapConstr(big.NewInt(1), fields)
+	secondData := *data.WrapConstr(big.NewInt(2), fields)
 	term := syn.Term[syn.DeBruijn](&syn.Lambda[syn.DeBruijn]{
 		ParameterName: syn.DeBruijn(0),
 		Body: &syn.Lambda[syn.DeBruijn]{

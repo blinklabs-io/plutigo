@@ -235,10 +235,10 @@ func (l legacyString) String() string {
 	}
 	switch v := l.pd.(type) {
 	case *List:
-		return fmt.Sprintf("List%v", wrap(v.Items))
+		return fmt.Sprintf("List%v", wrap(v.Items()))
 	case *Map:
-		pairs := make([][2]legacyString, len(v.Pairs))
-		for i, p := range v.Pairs {
+		pairs := make([][2]legacyString, len(v.Pairs()))
+		for i, p := range v.Pairs() {
 			pairs[i] = [2]legacyString{{p[0]}, {p[1]}}
 		}
 		return fmt.Sprintf("Map%v", pairs)
@@ -246,7 +246,7 @@ func (l legacyString) String() string {
 		return fmt.Sprintf(
 			"Constr{tag: %s, fields: %v}",
 			constrTagString(v.Tag),
-			wrap(v.Fields),
+			wrap(v.Fields()),
 		)
 	case *Integer:
 		return fmt.Sprintf("Integer(%s)", v.Inner.String())
@@ -278,8 +278,8 @@ func stringCorpus() []PlutusData {
 		NewConstr(0),
 		NewConstr(5, NewInteger(big.NewInt(1)), NewConstr(1, inner)),
 		NewConstrFromBigInt(big1, NewList(NewConstr(2))),
-		&Constr{Fields: []PlutusData{nil}},
-		&List{Items: []PlutusData{nil, (*Integer)(nil), NewList()}},
+		&Constr{fields: []PlutusData{nil}},
+		&List{items: []PlutusData{nil, (*Integer)(nil), NewList()}},
 		&Value{Inner: inner.(*Map)},
 		NewList(&Value{Inner: inner.(*Map)}),
 		&Value{},

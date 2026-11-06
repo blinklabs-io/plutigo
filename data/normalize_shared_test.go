@@ -114,10 +114,10 @@ func TestNormalizeSharedDecodedEncodings(t *testing.T) {
 func TestNormalizeSharedValueFormContainers(t *testing.T) {
 	one := NewInteger(big.NewInt(1))
 	for name, pd := range map[string]PlutusData{
-		"constr": Constr{Tag: big.NewInt(0), Fields: []PlutusData{one}},
-		"list":   List{Items: []PlutusData{one}},
-		"map":    Map{Pairs: [][2]PlutusData{{one, one}}},
-		"nested": NewList(List{Items: []PlutusData{one}}),
+		"constr": Constr{Tag: big.NewInt(0), fields: []PlutusData{one}},
+		"list":   List{items: []PlutusData{one}},
+		"map":    Map{pairs: [][2]PlutusData{{one, one}}},
+		"nested": NewList(List{items: []PlutusData{one}}),
 	} {
 		t.Run(name, func(t *testing.T) {
 			requireNormalizeSharedMatches(t, pd, false)
@@ -141,7 +141,7 @@ func TestNormalizeSharedValue(t *testing.T) {
 		t.Fatal(err)
 	}
 	requireNormalizeSharedMatches(t, v, true)
-	indefInner, ok := NewMapDefIndef(true, inner.Pairs).(*Map)
+	indefInner, ok := NewMapDefIndef(true, inner.Pairs()).(*Map)
 	if !ok {
 		t.Fatal("NewMapDefIndef did not return *Map")
 	}
@@ -199,9 +199,9 @@ func randomData(rng *rand.Rand, depth int) PlutusData {
 		}
 		return NewMap(pairs)
 	case 5:
-		return List{Items: children()}
+		return List{items: children()}
 	default:
-		return Constr{Tag: big.NewInt(int64(rng.Intn(10))), Fields: children()}
+		return Constr{Tag: big.NewInt(int64(rng.Intn(10))), fields: children()}
 	}
 }
 

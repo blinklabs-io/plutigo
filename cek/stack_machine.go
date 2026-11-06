@@ -870,10 +870,10 @@ func (m *Machine[T]) caseEvaluateDataStack(
 	branches []syn.Term[T],
 	item data.PlutusData,
 ) (syn.Term[T], *Env[T], Value[T], bool, error) {
-	tag, fields, err := m.caseOnData(item, len(branches))
+	tag, constr, err := m.caseOnData(item, len(branches))
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
-	m.pushApplyFrames([]Value[T]{m.allocDataListValue(fields)})
+	m.pushApplyFrames([]Value[T]{m.dataFieldsValue(constr)})
 	return branches[tag], env, nil, false, nil
 }

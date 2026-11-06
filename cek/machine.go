@@ -775,7 +775,7 @@ func (m *Machine[T]) unConstrDataValue(constr *data.Constr) *pairValue[T] {
 	}
 	value := m.allocPairValue(
 		m.allocConstant(m.allocIntegerConstant(tag)),
-		m.allocDataListValue(constr.Fields),
+		m.dataFieldsValue(constr),
 	)
 	m.lastUnConstrData = constr
 	m.lastUnConstrValue = value
@@ -2141,7 +2141,7 @@ func (m *Machine[T]) checkCaseOnBuiltin(value Value[T]) error {
 func (m *Machine[T]) caseOnData(
 	item data.PlutusData,
 	branches int,
-) (int, []data.PlutusData, error) {
+) (int, *data.Constr, error) {
 	if m.protoMajor != 0 && m.protoMajor < dijkstraProtoMajorVersion {
 		return 0, nil, &ScriptError{
 			Code:    ErrCodeCaseOnBuiltinUnavailable,
@@ -2162,7 +2162,7 @@ func (m *Machine[T]) caseOnData(
 			Message: "MissingCaseBranch",
 		}
 	}
-	return int(constr.Tag.Int64()), constr.Fields, nil
+	return int(constr.Tag.Int64()), constr, nil
 }
 
 func (m *Machine[T]) caseEvaluate(
@@ -2360,12 +2360,12 @@ func (m *Machine[T]) caseEvaluateData(
 	context MachineContext[T],
 	item data.PlutusData,
 ) (MachineState[T], error) {
-	tag, fields, err := m.caseOnData(item, len(branches))
+	tag, constr, err := m.caseOnData(item, len(branches))
 	if err != nil {
 		return nil, err
 	}
 	args := m.allocValueElems(1)
-	args[0] = m.allocDataListValue(fields)
+	args[0] = m.dataFieldsValue(constr)
 	comp := m.getCompute()
 	comp.Ctx = m.transferArgStack(args, context)
 	comp.Env = env

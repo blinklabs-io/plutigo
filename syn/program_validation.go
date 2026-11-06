@@ -382,22 +382,22 @@ func constantHasValueData(con IConstant, items *int) (bool, error) {
 			return true, nil
 		case *data.Constr:
 			if d != nil {
-				frames = append(frames, valueDataFrame{items: d.Fields})
+				frames = append(frames, valueDataFrame{items: d.Fields()})
 			}
 		case data.Constr:
-			frames = append(frames, valueDataFrame{items: d.Fields})
+			frames = append(frames, valueDataFrame{items: d.Fields()})
 		case *data.List:
 			if d != nil {
-				frames = append(frames, valueDataFrame{items: d.Items})
+				frames = append(frames, valueDataFrame{items: d.Items()})
 			}
 		case data.List:
-			frames = append(frames, valueDataFrame{items: d.Items})
+			frames = append(frames, valueDataFrame{items: d.Items()})
 		case *data.Map:
 			if d != nil {
-				frames = append(frames, valueDataFrame{pairs: d.Pairs})
+				frames = append(frames, valueDataFrame{pairs: d.Pairs()})
 			}
 		case data.Map:
-			frames = append(frames, valueDataFrame{pairs: d.Pairs})
+			frames = append(frames, valueDataFrame{pairs: d.Pairs()})
 		}
 	}
 	return false, nil

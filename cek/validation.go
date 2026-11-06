@@ -814,12 +814,12 @@ func validateDataStructureWithBudget(
 				if value == nil {
 					return malformedASTError("constant contains a nil PlutusData constructor")
 				}
-				fields = value.Fields
+				fields = value.Fields()
 				if value.Tag != nil {
 					tag = value.Tag
 				}
 			case data.Constr:
-				fields = value.Fields
+				fields = value.Fields()
 				if value.Tag != nil {
 					tag = value.Tag
 				}
@@ -841,9 +841,9 @@ func validateDataStructureWithBudget(
 				if value == nil {
 					return malformedASTError("constant contains a nil PlutusData map")
 				}
-				pairs = value.Pairs
+				pairs = value.Pairs()
 			case data.Map:
-				pairs = value.Pairs
+				pairs = value.Pairs()
 			}
 			for _, pair := range pairs {
 				if err := scheduleValidationItem(budget, "PlutusData", &work, dataValidationItem{value: pair[0], depth: nextDepth}); err != nil {
@@ -901,9 +901,9 @@ func validateDataStructureWithBudget(
 				if value == nil {
 					return malformedASTError("constant contains a nil PlutusData list")
 				}
-				items = value.Items
+				items = value.Items()
 			case data.List:
-				items = value.Items
+				items = value.Items()
 			}
 			for _, child := range items {
 				if err := scheduleValidationItem(budget, "PlutusData", &work, dataValidationItem{value: child, depth: nextDepth}); err != nil {
@@ -950,16 +950,16 @@ func validateDataConstant(
 			if d == nil {
 				return malformedASTError("constant contains a nil PlutusData constructor")
 			}
-			work = append(work, d.Fields...)
+			work = append(work, d.Fields()...)
 		case data.Constr:
-			work = append(work, d.Fields...)
+			work = append(work, d.Fields()...)
 		case *data.Map:
 			if d == nil {
 				return malformedASTError("constant contains a nil PlutusData map")
 			}
-			work = appendDataPairs(work, d.Pairs)
+			work = appendDataPairs(work, d.Pairs())
 		case data.Map:
-			work = appendDataPairs(work, d.Pairs)
+			work = appendDataPairs(work, d.Pairs())
 		case *data.Value:
 			if d == nil {
 				return malformedASTError("constant contains a nil PlutusData Value")
@@ -988,9 +988,9 @@ func validateDataConstant(
 			if d == nil {
 				return malformedASTError("constant contains a nil PlutusData list")
 			}
-			work = append(work, d.Items...)
+			work = append(work, d.Items()...)
 		case data.List:
-			work = append(work, d.Items...)
+			work = append(work, d.Items()...)
 		default:
 			return malformedASTError("unsupported PlutusData type %T", item)
 		}

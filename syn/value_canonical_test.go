@@ -298,14 +298,14 @@ func valueTextPrettyForTest(t testing.TB, valueText string) string {
 
 func TestEncodeRejectsNonCanonicalDataValue(t *testing.T) {
 	t.Parallel()
-	tokens := &data.Map{Pairs: [][2]data.PlutusData{{
+	tokens := data.WrapMap([][2]data.PlutusData{{
 		data.NewByteString([]byte{1}),
 		data.NewInteger(new(big.Int)),
-	}}}
-	inner := &data.Map{Pairs: [][2]data.PlutusData{{
+	}})
+	inner := data.WrapMap([][2]data.PlutusData{{
 		data.NewByteString([]byte{1}),
 		tokens,
-	}}}
+	}})
 	_, err := Encode(&Program[DeBruijn]{
 		Version: lang.LanguageVersionV4,
 		Term: &Constant{Con: &Data{

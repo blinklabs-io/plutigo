@@ -446,39 +446,39 @@ func newPlutusDataWalker(root data.PlutusData) plutusDataWalker {
 func nextDataChild(frame *dataWalkFrame) (data.PlutusData, bool) {
 	switch node := frame.node.(type) {
 	case *data.Constr:
-		if node != nil && frame.next < len(node.Fields) {
-			child := node.Fields[frame.next]
+		if node != nil && frame.next < len(node.Fields()) {
+			child := node.Fields()[frame.next]
 			frame.next++
 			return child, true
 		}
 	case data.Constr:
-		if frame.next < len(node.Fields) {
-			child := node.Fields[frame.next]
+		if frame.next < len(node.Fields()) {
+			child := node.Fields()[frame.next]
 			frame.next++
 			return child, true
 		}
 	case *data.List:
-		if node != nil && frame.next < len(node.Items) {
-			child := node.Items[frame.next]
+		if node != nil && frame.next < len(node.Items()) {
+			child := node.Items()[frame.next]
 			frame.next++
 			return child, true
 		}
 	case data.List:
-		if frame.next < len(node.Items) {
-			child := node.Items[frame.next]
+		if frame.next < len(node.Items()) {
+			child := node.Items()[frame.next]
 			frame.next++
 			return child, true
 		}
 	case *data.Map:
-		if node != nil && frame.next < len(node.Pairs)*2 {
-			pair := node.Pairs[frame.next/2]
+		if node != nil && frame.next < len(node.Pairs())*2 {
+			pair := node.Pairs()[frame.next/2]
 			child := pair[frame.next%2]
 			frame.next++
 			return child, true
 		}
 	case data.Map:
-		if frame.next < len(node.Pairs)*2 {
-			pair := node.Pairs[frame.next/2]
+		if frame.next < len(node.Pairs())*2 {
+			pair := node.Pairs()[frame.next/2]
 			child := pair[frame.next%2]
 			frame.next++
 			return child, true

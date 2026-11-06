@@ -62,10 +62,10 @@ func TestDecodedFlatUniverseConstantsEvaluate(t *testing.T) {
 						wrapped.Inner,
 					)
 				}
-				if len(valueMap.Pairs) != 0 {
+				if len(valueMap.Pairs()) != 0 {
 					t.Fatalf(
 						"result map length = %d, want 0",
-						len(valueMap.Pairs),
+						len(valueMap.Pairs()),
 					)
 				}
 			},
@@ -86,10 +86,10 @@ func TestDecodedFlatUniverseConstantsEvaluate(t *testing.T) {
 						wrapped.Inner,
 					)
 				}
-				if len(valueMap.Pairs) != 1 {
+				if len(valueMap.Pairs()) != 1 {
 					t.Fatalf(
 						"result map length = %d, want 1",
-						len(valueMap.Pairs),
+						len(valueMap.Pairs()),
 					)
 				}
 			},

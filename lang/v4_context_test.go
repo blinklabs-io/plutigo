@@ -314,8 +314,8 @@ func TestTxInfoDataFieldOrder(t *testing.T) {
 	)
 	got := tx.ToData()
 	list := got.(*data.List)
-	if len(list.Items) != 19 {
-		t.Fatalf("TxInfo has %d fields, want 19", len(list.Items))
+	if len(list.Items()) != 19 {
+		t.Fatalf("TxInfo has %d fields, want 19", len(list.Items()))
 	}
 	assertDataEqual(t, got, want)
 }
@@ -369,8 +369,8 @@ func TestTopTxInfoSimplifiedDataFieldOrder(t *testing.T) {
 	)
 	got := info.ToData()
 	list := got.(*data.List)
-	if len(list.Items) != 18 {
-		t.Fatalf("TopTxInfoSimplified has %d fields, want 18", len(list.Items))
+	if len(list.Items()) != 18 {
+		t.Fatalf("TopTxInfoSimplified has %d fields, want 18", len(list.Items()))
 	}
 	assertDataEqual(t, got, want)
 }
@@ -392,10 +392,10 @@ func TestNestedTopTxInfoAndScriptContextData(t *testing.T) {
 	}
 	topData := top.ToData()
 	topList := topData.(*data.List)
-	if len(topList.Items) != 4 {
-		t.Fatalf("TopTxInfo has %d fields, want 4", len(topList.Items))
+	if len(topList.Items()) != 4 {
+		t.Fatalf("TopTxInfo has %d fields, want 4", len(topList.Items()))
 	}
-	assertDataEqual(t, topList.Items[0], data.NewList(info.ToData()))
+	assertDataEqual(t, topList.Items()[0], data.NewList(info.ToData()))
 
 	context := ScriptContextV4{
 		TxInfo:   info,
@@ -408,12 +408,12 @@ func TestNestedTopTxInfoAndScriptContextData(t *testing.T) {
 	}
 	contextData := context.ToData()
 	contextList := contextData.(*data.List)
-	if len(contextList.Items) != 4 {
-		t.Fatalf("ScriptContext has %d fields, want 4", len(contextList.Items))
+	if len(contextList.Items()) != 4 {
+		t.Fatalf("ScriptContext has %d fields, want 4", len(contextList.Items()))
 	}
 	assertDataEqual(
 		t,
-		contextList.Items[2],
+		contextList.Items()[2],
 		data.NewConstr(6, integer(6), data.NewConstr(1, topData)),
 	)
 	encoded, err := data.Encode(contextData)

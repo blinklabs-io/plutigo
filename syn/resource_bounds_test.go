@@ -532,7 +532,7 @@ func TestPrettyRecursiveDepth(t *testing.T) {
 	for range 20 {
 		typ = &TList{Typ: typ}
 		pair = &ProtoPair{First: pair, Second: &Unit{}}
-		datum = &data.List{Items: []data.PlutusData{datum}}
+		datum = data.WrapList([]data.PlutusData{datum})
 		term = &Case[DeBruijn]{Constr: term}
 	}
 	for name, node := range map[string]Term[DeBruijn]{
@@ -598,12 +598,11 @@ func TestPrettyStopsBeforeNextConstant(t *testing.T) {
 
 func TestPrettyStopsBeforeNextData(t *testing.T) {
 	out, err := PrettyTermWithLimits[DeBruijn](
-		&Constant{Con: &Data{Inner: &data.List{
-			Items: []data.PlutusData{
-				data.NewByteString(make([]byte, 100)),
-				(*data.ByteString)(nil),
-			},
-		}}},
+		&Constant{Con: &Data{Inner: data.WrapList([]data.PlutusData{
+			data.NewByteString(make([]byte, 100)),
+			(*data.ByteString)(nil),
+		}),
+		}},
 		PrettyLimits{MaxOutputBytes: 50},
 	)
 	requireErrContains(t, "PrettyTermWithLimits", err, "output")
@@ -618,12 +617,12 @@ func TestPrettyExactOutputAllowance(t *testing.T) {
 		&Constant{Con: &ByteString{Inner: []byte{0, 15, 16, 255}}},
 		&Constant{Con: &Integer{Inner: big.NewInt(-1024)}},
 		&Constant{Con: &Data{Inner: data.NewConstr(7, data.NewInteger(big.NewInt(1)))}},
-		&Constant{Con: &Data{Inner: &data.Value{Inner: &data.Map{Pairs: [][2]data.PlutusData{
+		&Constant{Con: &Data{Inner: &data.Value{Inner: data.WrapMap([][2]data.PlutusData{
 			{data.NewByteString(nil), &data.Map{}},
-			{data.NewByteString([]byte{1}), &data.Map{Pairs: [][2]data.PlutusData{
+			{data.NewByteString([]byte{1}), data.WrapMap([][2]data.PlutusData{
 				{data.NewByteString(nil), data.NewInteger(big.NewInt(0))},
-			}}},
-		}}}}},
+			})},
+		})}}},
 	} {
 		want := PrettyTerm[DeBruijn](term)
 		if want == "" {
@@ -645,16 +644,16 @@ func TestPrettyExactOutputAllowance(t *testing.T) {
 }
 
 func TestPrettyValueOutputLimit(t *testing.T) {
-	tokens := &data.Map{Pairs: [][2]data.PlutusData{
+	tokens := data.WrapMap([][2]data.PlutusData{
 		{data.NewByteString(nil), data.NewInteger(big.NewInt(1))},
 		{data.NewByteString([]byte{1}), data.NewInteger(big.NewInt(2))},
-	}}
+	})
 	term := &Constant{
 		Con: &Data{
-			Inner: &data.Value{Inner: &data.Map{Pairs: [][2]data.PlutusData{
+			Inner: &data.Value{Inner: data.WrapMap([][2]data.PlutusData{
 				{data.NewByteString(nil), tokens},
 				{data.NewByteString([]byte{1}), tokens},
-			}}},
+			})},
 		},
 	}
 	_, err := PrettyTermWithLimits[DeBruijn](

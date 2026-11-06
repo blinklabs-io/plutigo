@@ -63,19 +63,17 @@ func ownershipProgram(seed byte) *Program[DeBruijn] {
 								FstType: &TInteger{},
 								SndType: &TData{},
 								First:   &Integer{Inner: big.NewInt(-n)},
-								Second: &Data{Inner: &data.Constr{
-									Tag: big.NewInt(n),
-									Fields: []data.PlutusData{
+								Second: &Data{Inner: data.WrapConstr(big.NewInt(n),
+									[]data.PlutusData{
 										&data.ByteString{
 											Inner: []byte{seed, 0xaa},
-										},
-										&data.List{Items: []data.PlutusData{
+										}, data.WrapList([]data.PlutusData{
 											&data.Integer{
 												Inner: big.NewInt(n + 7),
 											},
-										}},
-									},
-								}},
+										}),
+									}),
+								},
 							}},
 						}},
 					},

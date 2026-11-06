@@ -33,7 +33,7 @@ func oversizedDataList(size int) *data.List {
 	for i := range items {
 		items[i] = item
 	}
-	return &data.List{Items: items}
+	return data.WrapList(items)
 }
 
 // The reference streams a Data builtin's cost: the costing function's
@@ -173,19 +173,13 @@ func TestDataSizingAcceptsValueNodes(t *testing.T) {
 		{"integer", data.Integer{Inner: big.NewInt(1)}, DataCost + 1},
 		{"bytes", data.ByteString{Inner: make([]byte, 9)}, DataCost + 2},
 		{
-			"nested",
-			data.Constr{
-				Tag: big.NewInt(0),
-				Fields: []data.PlutusData{
-					data.List{Items: []data.PlutusData{
-						data.Integer{Inner: big.NewInt(1)},
-						data.ByteString{Inner: make([]byte, 9)},
-					}},
-					data.Map{},
+			"nested", *data.WrapConstr(big.NewInt(0),
+				[]data.PlutusData{*data.WrapList([]data.PlutusData{
+					data.Integer{Inner: big.NewInt(1)},
+					data.ByteString{Inner: make([]byte, 9)},
+				}), data.Map{},
 					data.Value{},
-				},
-			},
-			DataCost*6 + 3,
+				}), DataCost*6 + 3,
 		},
 	}
 	for _, tt := range tests {
@@ -210,8 +204,7 @@ func TestDataSizingRejectsNilNodes(t *testing.T) {
 		{"nil bytes", (*data.ByteString)(nil)},
 		{"nil list", (*data.List)(nil)},
 		{
-			"nested nil integer",
-			data.List{Items: []data.PlutusData{(*data.Integer)(nil)}},
+			"nested nil integer", *data.WrapList([]data.PlutusData{(*data.Integer)(nil)}),
 		},
 	}
 	for _, tt := range tests {
@@ -241,9 +234,7 @@ func TestConstantDataCostDoesNotEvaluateSizingThunk(t *testing.T) {
 	m := newTestMachine()
 	m.ExBudget = ExBudget{Cpu: 1 << 30, Mem: 1 << 30}
 	b := newTestBuiltin(builtin.UnListData).ApplyArg(
-		&Constant{Constant: &syn.Data{Inner: &data.List{
-			Items: []data.PlutusData{(*data.Integer)(nil)},
-		}}},
+		&Constant{Constant: &syn.Data{Inner: data.WrapList([]data.PlutusData{(*data.Integer)(nil)})}},
 	)
 	if _, err := evalBuiltinWithError(t, m, b); err != nil {
 		t.Fatalf("constant-cost unListData evaluated its sizing thunk: %v", err)
@@ -251,12 +242,11 @@ func TestConstantDataCostDoesNotEvaluateSizingThunk(t *testing.T) {
 }
 
 func TestLegacyDataSizingClosuresFailClosed(t *testing.T) {
-	malformed := data.List{
-		Items: []data.PlutusData{
-			data.Integer{Inner: big.NewInt(1)},
-			(*data.Integer)(nil),
-		},
-	}
+	malformed := *data.WrapList([]data.PlutusData{
+		data.Integer{Inner: big.NewInt(1)},
+		(*data.Integer)(nil),
+	})
+
 	tests := []struct {
 		name string
 		size func() ExMem
@@ -289,10 +279,7 @@ func BenchmarkEqualsDataSizing(b *testing.B) {
 			m := newTestMachine()
 			arg := &Constant{
 				Constant: &syn.Data{
-					Inner: &data.Constr{
-						Tag:    big.NewInt(0),
-						Fields: []data.PlutusData{oversizedDataList(n)},
-					},
+					Inner: data.WrapConstr(big.NewInt(0), []data.PlutusData{oversizedDataList(n)}),
 				},
 			}
 			fn := newTestBuiltin(builtin.EqualsData).ApplyArg(arg).ApplyArg(arg)

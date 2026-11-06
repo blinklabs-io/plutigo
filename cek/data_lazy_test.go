@@ -1,0 +1,129 @@
+// Copyright 2026 Blink Labs Software
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package cek
+
+import (
+	"context"
+	"testing"
+
+	"github.com/blinklabs-io/plutigo/data"
+	"github.com/blinklabs-io/plutigo/internal/lazydata"
+	"github.com/blinklabs-io/plutigo/lang"
+	"github.com/blinklabs-io/plutigo/syn"
+)
+
+// Lists built by mkCons onto a constant list and onto a list taken out of a
+// data value; each is [I 1, I 2, I 3].
+const (
+	lazyConstTail = "[(force (builtin mkCons)) (con data (I 1)) (con (list data) [I 2, I 3])]"
+	lazyDataTail  = "[(force (builtin mkCons)) (con data (I 1)) [(builtin unListData) (con data (List [I 2, I 3]))]]"
+	lazyPairs     = "[(force (builtin mkCons)) [(builtin mkPairData) (con data (I 1)) (con data (I 2))] (con (list (pair data data)) [(I 3, I 4)])]"
+	eagerList     = "(con data (List [I 1, I 2, I 3]))"
+)
+
+func evalLazyDataProgram(t *testing.T, term string, major uint) string {
+	t.Helper()
+	ec := NewDefaultEvalContext(lang.LanguageVersionV3, ProtoVersion{Major: major})
+	result, _, err := EvaluateText(
+		context.Background(),
+		"(program 1.1.0 "+term+")",
+		lang.LanguageVersionV3,
+		ec,
+		DefaultExBudget,
+	)
+	if err != nil {
+		t.Fatalf("evaluate %s: %v", term, err)
+	}
+	return syn.PrettyTerm[syn.DeBruijn](result)
+}
+
+// TestLazyDataMatchesEagerData checks that data built by listData, mapData and
+// constrData over lists made by mkCons is observed exactly as the same data
+// written out.
+func TestLazyDataMatchesEagerData(t *testing.T) {
+	tests := map[string]string{
+		"listData equals":         "[(builtin equalsData) [(builtin listData) " + lazyConstTail + "] " + eagerList + "]",
+		"listData of data equals": "[(builtin equalsData) [(builtin listData) " + lazyDataTail + "] " + eagerList + "]",
+		"listData serialises": "[(builtin equalsByteString) [(builtin serialiseData) [(builtin listData) " + lazyDataTail + "]] " +
+			"[(builtin serialiseData) " + eagerList + "]]",
+		"constrData equals": "[(builtin equalsData) [(builtin constrData) (con integer 5) " + lazyConstTail + "] " +
+			"(con data (Constr 5 [I 1, I 2, I 3]))]",
+		"constrData serialises": "[(builtin equalsByteString) [(builtin serialiseData) [(builtin constrData) (con integer 5) " + lazyDataTail + "]] " +
+			"[(builtin serialiseData) (con data (Constr 5 [I 1, I 2, I 3]))]]",
+		"mapData equals": "[(builtin equalsData) [(builtin mapData) " + lazyPairs + "] " +
+			"(con data (Map [(I 1, I 2), (I 3, I 4)]))]",
+		"unListData tail": "[(builtin equalsData) [(builtin listData) [(force (builtin tailList)) [(builtin unListData) [(builtin listData) " + lazyConstTail + "]]]] " +
+			"(con data (List [I 2, I 3]))]",
+		"unConstrData fields": "[(builtin equalsData) [(builtin listData) [(force (force (builtin sndPair))) [(builtin unConstrData) [(builtin constrData) (con integer 5) " + lazyDataTail + "]]]] " +
+			eagerList + "]",
+		"unMapData head": "[(builtin equalsData) [(force (force (builtin fstPair))) [(force (builtin headList)) [(builtin unMapData) [(builtin mapData) " + lazyPairs + "]]]] " +
+			"(con data (I 1))]",
+		"nested": "[(builtin equalsData) [(builtin listData) [(force (builtin mkCons)) [(builtin listData) " + lazyConstTail + "] (con (list data) [])]] " +
+			"(con data (List [List [I 1, I 2, I 3]]))]",
+		"chooseData": "[(force (builtin chooseData)) [(builtin listData) " + lazyConstTail + "] " +
+			"(con bool False) (con bool False) (con bool True) (con bool False) (con bool False)]",
+	}
+	for name, term := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := evalLazyDataProgram(t, term, 11); got != "(con bool True)" {
+				t.Fatalf("%s = %s, want (con bool True)", term, got)
+			}
+		})
+	}
+	t.Run("case on data", func(t *testing.T) {
+		term := "(case [(builtin constrData) (con integer 0) " + lazyConstTail + "] " +
+			"(lam fs [(builtin equalsData) [(builtin listData) fs] " + eagerList + "]))"
+		if got := evalLazyDataProgram(t, term, 12); got != "(con bool True)" {
+			t.Fatalf("%s = %s, want (con bool True)", term, got)
+		}
+	})
+}
+
+// TestLazyDataResultIsPlainData checks that a result built over a list made
+// by mkCons reaches the caller as plain data, with no evaluator storage.
+func TestLazyDataResultIsPlainData(t *testing.T) {
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+	program, err := syn.Parse("(program 1.1.0 [(builtin listData) [(force (builtin mkCons)) [(builtin listData) " +
+		lazyConstTail + "] (con (list data) [])]])")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dbProgram, err := syn.NameToDeBruijn(program)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := m.Run(dbProgram.Term)
+	if err != nil {
+		t.Fatal(err)
+	}
+	constant, ok := result.(*syn.Constant)
+	if !ok {
+		t.Fatalf("result is %T", result)
+	}
+	outer := constant.Con.(*syn.Data).Inner.(*data.List)
+	if lazydata.Hooks.SourceOf(outer) != nil {
+		t.Fatal("result list still holds evaluator storage")
+	}
+	inner, ok := outer.Items()[0].(*data.List)
+	if !ok {
+		t.Fatalf("result item is %T", outer.Items()[0])
+	}
+	if lazydata.Hooks.SourceOf(inner) != nil {
+		t.Fatal("nested result list still holds evaluator storage")
+	}
+	if got := inner.String(); got != "List[Integer(1) Integer(2) Integer(3)]" {
+		t.Fatalf("nested result = %s", got)
+	}
+}

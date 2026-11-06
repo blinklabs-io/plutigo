@@ -704,7 +704,7 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 				Message: "data is not a map",
 			}
 		}
-		return m.allocDataMapValue(dataMap.Pairs), true, nil
+		return m.dataPairsValue(dataMap), true, nil
 	case builtin.UnListData:
 		datum, err := unwrapData[T](arg)
 		if err != nil {
@@ -721,7 +721,7 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 				Message: "data is not a list",
 			}
 		}
-		return m.allocDataListValue(dataList.Items), true, nil
+		return m.dataItemsValue(dataList), true, nil
 	case builtin.UnIData:
 		datum, err := unwrapData[T](arg)
 		if err != nil {
@@ -2401,8 +2401,18 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	// A cons-cell list must become one contiguous slice; flattening is
-	// memoised per cell and O(1) amortised for lists built by chained mkCons.
+	if src := lazyDataItems[T](m.argHolder[1], constrDataElem); src != nil {
+		err = m.CostTwo(&b.Func, bigIntExMem(arg1), valueExMem[T](m.argHolder[1]))
+		if err != nil {
+			return nil, err
+		}
+		tag, tagErr := validateConstrTag(m.semantics, arg1)
+		if tagErr != nil {
+			return nil, tagErr
+		}
+		return m.allocDataValue(newLazyConstr(tag, src)), nil
+	}
+
 	listArg, owner := flattenListArg[T](m.argHolder[1])
 	if arg2, ok := listArg.(*dataListValue[T]); ok {
 		err = m.CostTwo(&b.Func, bigIntExMem(arg1), valueExMem[T](arg2))
@@ -2415,10 +2425,7 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			return nil, tagErr
 		}
 
-		return m.allocDataValue(&data.Constr{
-			Tag:    tag,
-			Fields: arg2.items,
-		}), nil
+		return m.allocDataValue(data.WrapConstr(tag, arg2.items)), nil
 	}
 
 	arg2, err := unwrapList[T](&syn.TData{}, listArg)
@@ -2446,14 +2453,18 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, tagErr
 	}
 
-	return m.allocDataValue(&data.Constr{
-		Tag:    tag,
-		Fields: dataList,
-	}), nil
+	return m.allocDataValue(data.WrapConstr(tag, dataList)), nil
 }
 
 func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	if src := lazyDataPairs[T](m.argHolder[0]); src != nil {
+		if err := m.CostOne(&b.Func, valueExMem[T](m.argHolder[0])); err != nil {
+			return nil, err
+		}
+		return m.allocDataValue(newLazyMap(src)), nil
+	}
 
 	listArg, owner := flattenListArg[T](m.argHolder[0])
 	if arg1, ok := listArg.(*dataMapValue[T]); ok {
@@ -2461,9 +2472,7 @@ func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		if err != nil {
 			return nil, err
 		}
-		return m.allocDataValue(&data.Map{
-			Pairs: arg1.items,
-		}), nil
+		return m.allocDataValue(data.WrapMap(arg1.items)), nil
 	}
 
 	pairType := &syn.TPair{
@@ -2491,13 +2500,18 @@ func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	return m.allocDataValue(&data.Map{
-		Pairs: dataList,
-	}), nil
+	return m.allocDataValue(data.WrapMap(dataList)), nil
 }
 
 func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	if src := lazyDataItems[T](m.argHolder[0], listDataElem); src != nil {
+		if err := m.CostOne(&b.Func, valueExMem[T](m.argHolder[0])); err != nil {
+			return nil, err
+		}
+		return m.allocDataValue(newLazyList(src)), nil
+	}
 
 	listArg, owner := flattenListArg[T](m.argHolder[0])
 	if arg1, ok := listArg.(*dataListValue[T]); ok {
@@ -2505,9 +2519,7 @@ func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		if err != nil {
 			return nil, err
 		}
-		return m.allocDataValue(&data.List{
-			Items: arg1.items,
-		}), nil
+		return m.allocDataValue(data.WrapList(arg1.items)), nil
 	}
 
 	arg1, err := unwrapList[T](&syn.TData{}, listArg)
@@ -2530,9 +2542,7 @@ func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	return m.allocDataValue(&data.List{
-		Items: dataList,
-	}), nil
+	return m.allocDataValue(data.WrapList(dataList)), nil
 }
 
 func iData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -5420,11 +5430,11 @@ func valueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 		entries = append(entries, [2]data.PlutusData{
 			&data.ByteString{Inner: policyBs.Inner},
-			&data.Map{Pairs: tokenEntries},
+			data.WrapMap(tokenEntries),
 		})
 	}
 
-	return &Constant{&syn.Data{Inner: &data.Map{Pairs: entries}}}, nil
+	return &Constant{&syn.Data{Inner: data.WrapMap(entries)}}, nil
 }
 
 // unValueData converts a Data Map to a Value.
@@ -5469,12 +5479,12 @@ func unValueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	// Validate guarantees every key is a bytestring and every quantity an integer.
-	result := make([]syn.IConstant, 0, len(dmap.Pairs))
-	for _, pair := range dmap.Pairs {
+	result := make([]syn.IConstant, 0, len(dmap.Pairs()))
+	for _, pair := range dmap.Pairs() {
 		policyData, _ := pair[0].(*data.ByteString)
 		tokensData, _ := pair[1].(*data.Map)
-		tokenPairs := make([]syn.IConstant, 0, len(tokensData.Pairs))
-		for _, tkPair := range tokensData.Pairs {
+		tokenPairs := make([]syn.IConstant, 0, len(tokensData.Pairs()))
+		for _, tkPair := range tokensData.Pairs() {
 			tokenData, _ := tkPair[0].(*data.ByteString)
 			amtData, _ := tkPair[1].(*data.Integer)
 			tokenPairs = append(tokenPairs, &syn.ProtoPair{

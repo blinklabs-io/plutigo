@@ -417,9 +417,9 @@ func (h *diffHarness) stepConvert(src modelList) {
 		var items []data.PlutusData
 		switch d := v.(*dataValue[syn.DeBruijn]).item.(type) {
 		case *data.List:
-			items = d.Items
+			items = d.Items()
 		case *data.Constr:
-			items = d.Fields
+			items = d.Fields()
 		}
 		h.snapshot(items, nil, src.elems)
 		back, _ := h.call(
@@ -433,7 +433,7 @@ func (h *diffHarness) stepConvert(src modelList) {
 		}
 	case kMap, kPairC:
 		v := h.callBoth(builtin.MapData, nil, src.value)
-		pairs := v.(*dataValue[syn.DeBruijn]).item.(*data.Map).Pairs
+		pairs := v.(*dataValue[syn.DeBruijn]).item.(*data.Map).Pairs()
 		h.snapshot(nil, pairs, src.elems)
 		back, _ := h.call(builtin.UnMapData, v)
 		h.add(kMap, back, slices.Clone(src.elems))

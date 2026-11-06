@@ -1374,7 +1374,7 @@ func (p *Parser) parsePlutusValue() (data.PlutusData, error) {
 	if err := p.expect(lex.TokenRBracket); err != nil {
 		return nil, err
 	}
-	value, err := data.NewValue(&data.Map{Pairs: pairs})
+	value, err := data.NewValue(data.WrapMap(pairs))
 	if err != nil {
 		return nil, err
 	}

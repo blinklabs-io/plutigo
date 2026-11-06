@@ -112,31 +112,31 @@ func isNormalized(pd PlutusData) bool {
 		switch v := node.(type) {
 		case *Constr:
 			if v != nil {
-				if len(v.Fields) > 0 && v.useIndef != nil && !*v.useIndef {
+				if len(v.Fields()) > 0 && v.useIndef != nil && !*v.useIndef {
 					return false
 				}
-				stack = append(stack, normalizeFrame{items: v.Fields})
+				stack = append(stack, normalizeFrame{items: v.Fields()})
 			}
 		case *List:
 			if v != nil {
-				if len(v.Items) > 0 && v.useIndef != nil && !*v.useIndef {
+				if len(v.Items()) > 0 && v.useIndef != nil && !*v.useIndef {
 					return false
 				}
-				stack = append(stack, normalizeFrame{items: v.Items})
+				stack = append(stack, normalizeFrame{items: v.Items()})
 			}
 		case *Map:
 			if v != nil {
 				if !mapIsNormalized(v) {
 					return false
 				}
-				stack = append(stack, normalizeFrame{pairs: v.Pairs})
+				stack = append(stack, normalizeFrame{pairs: v.Pairs()})
 			}
 		case *Value:
 			if v != nil && v.Inner != nil {
 				if !mapIsNormalized(v.Inner) {
 					return false
 				}
-				stack = append(stack, normalizeFrame{pairs: v.Inner.Pairs})
+				stack = append(stack, normalizeFrame{pairs: v.Inner.Pairs()})
 			}
 		case Constr, List, Map, Value:
 			// Normalize returns containers as pointers.

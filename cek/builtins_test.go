@@ -1030,10 +1030,7 @@ func TestUnConstrDataBuiltin(t *testing.T) {
 	}
 
 	// Create a constr data
-	constr := &data.Constr{
-		Tag:    big.NewInt(1),
-		Fields: []data.PlutusData{&data.Integer{Inner: big.NewInt(99)}},
-	}
+	constr := data.WrapConstr(big.NewInt(1), []data.PlutusData{&data.Integer{Inner: big.NewInt(99)}})
 	d := &syn.Data{Inner: constr}
 
 	v1 := &Constant{d}
@@ -2038,8 +2035,8 @@ func TestListDataBuiltin(t *testing.T) {
 		t.Fatalf("expected List data, got %T", dataConst.Inner)
 	}
 
-	if len(listData.Items) != 2 {
-		t.Fatalf("expected 2 items, got %d", len(listData.Items))
+	if len(listData.Items()) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(listData.Items()))
 	}
 }
 
@@ -3965,13 +3962,12 @@ func TestUnListDataBuiltin(t *testing.T) {
 	b := newTestBuiltin(builtin.UnListData)
 
 	// Create a data value containing a list
-	list := &data.List{
-		Items: []data.PlutusData{
-			&data.Integer{Inner: big.NewInt(1)},
-			&data.Integer{Inner: big.NewInt(2)},
-			&data.Integer{Inner: big.NewInt(3)},
-		},
-	}
+	list := data.WrapList([]data.PlutusData{
+		&data.Integer{Inner: big.NewInt(1)},
+		&data.Integer{Inner: big.NewInt(2)},
+		&data.Integer{Inner: big.NewInt(3)},
+	})
+
 	dataVal := &syn.Data{Inner: list}
 
 	v1 := &Constant{dataVal}
@@ -4014,18 +4010,17 @@ func TestUnMapDataBuiltin(t *testing.T) {
 	b := newTestBuiltin(builtin.UnMapData)
 
 	// Create a data value containing a map
-	dataMap := &data.Map{
-		Pairs: [][2]data.PlutusData{
-			{
-				&data.Integer{Inner: big.NewInt(1)},
-				&data.ByteString{Inner: []byte("one")},
-			},
-			{
-				&data.Integer{Inner: big.NewInt(2)},
-				&data.ByteString{Inner: []byte("two")},
-			},
+	dataMap := data.WrapMap([][2]data.PlutusData{
+		{
+			&data.Integer{Inner: big.NewInt(1)},
+			&data.ByteString{Inner: []byte("one")},
 		},
-	}
+		{
+			&data.Integer{Inner: big.NewInt(2)},
+			&data.ByteString{Inner: []byte("two")},
+		},
+	})
+
 	dataVal := &syn.Data{Inner: dataMap}
 
 	v1 := &Constant{dataVal}
@@ -4283,13 +4278,13 @@ func TestMapDataBuiltinOnDataMapValue(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Data Map, got %T", dataConst.Inner)
 	}
-	if len(dataMap.Pairs) != 2 {
-		t.Fatalf("expected map with 2 pairs, got %d", len(dataMap.Pairs))
+	if len(dataMap.Pairs()) != 2 {
+		t.Fatalf("expected map with 2 pairs, got %d", len(dataMap.Pairs()))
 	}
 
-	keyInt, ok := dataMap.Pairs[0][0].(*data.Integer)
+	keyInt, ok := dataMap.Pairs()[0][0].(*data.Integer)
 	if !ok {
-		t.Fatalf("expected first key Integer, got %T", dataMap.Pairs[0][0])
+		t.Fatalf("expected first key Integer, got %T", dataMap.Pairs()[0][0])
 	}
 	if keyInt.Inner.Cmp(big.NewInt(1)) != 0 {
 		t.Fatalf("expected first key 1, got %v", keyInt.Inner)
@@ -4333,16 +4328,16 @@ func TestMapDataBuiltin(t *testing.T) {
 		t.Fatalf("expected Map, got %T", resultData.Inner)
 	}
 
-	if len(resultMap.Pairs) != 2 {
-		t.Errorf("expected map with 2 pairs, got %d", len(resultMap.Pairs))
+	if len(resultMap.Pairs()) != 2 {
+		t.Errorf("expected map with 2 pairs, got %d", len(resultMap.Pairs()))
 	}
 
 	// Check first pair
-	keyInt, ok := resultMap.Pairs[0][0].(*data.Integer)
+	keyInt, ok := resultMap.Pairs()[0][0].(*data.Integer)
 	if !ok {
 		t.Fatalf(
 			"expected *data.Integer for key, got %T",
-			resultMap.Pairs[0][0],
+			resultMap.Pairs()[0][0],
 		)
 	}
 	if keyInt.Inner.Cmp(big.NewInt(1)) != 0 {
@@ -4351,11 +4346,11 @@ func TestMapDataBuiltin(t *testing.T) {
 			keyInt.Inner,
 		)
 	}
-	valBS, ok := resultMap.Pairs[0][1].(*data.ByteString)
+	valBS, ok := resultMap.Pairs()[0][1].(*data.ByteString)
 	if !ok {
 		t.Fatalf(
 			"expected *data.ByteString for value, got %T",
-			resultMap.Pairs[0][1],
+			resultMap.Pairs()[0][1],
 		)
 	}
 	if string(valBS.Inner) != "one" {
@@ -5524,24 +5519,24 @@ func TestValueDataEntryLimit(t *testing.T) {
 			if !ok {
 				t.Fatalf("expected data map, got %T", result.Inner)
 			}
-			if len(resultMap.Pairs) != 1 {
+			if len(resultMap.Pairs()) != 1 {
 				t.Fatalf(
 					"expected one policy entry, got %d",
-					len(resultMap.Pairs),
+					len(resultMap.Pairs()),
 				)
 			}
-			tokens, ok := resultMap.Pairs[0][1].(*data.Map)
+			tokens, ok := resultMap.Pairs()[0][1].(*data.Map)
 			if !ok {
 				t.Fatalf(
 					"expected token data map, got %T",
-					resultMap.Pairs[0][1],
+					resultMap.Pairs()[0][1],
 				)
 			}
-			if len(tokens.Pairs) != tt.wantOutput {
+			if len(tokens.Pairs()) != tt.wantOutput {
 				t.Fatalf(
 					"expected %d token entries, got %d",
 					tt.wantOutput,
-					len(tokens.Pairs),
+					len(tokens.Pairs()),
 				)
 			}
 		})

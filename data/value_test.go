@@ -31,7 +31,7 @@ func valuePolicy(key []byte, tokens ...[2]PlutusData) [2]PlutusData {
 }
 
 func valueMap(policies ...[2]PlutusData) *Map {
-	return &Map{Pairs: policies}
+	return &Map{pairs: policies}
 }
 
 func pow2(n uint) *big.Int { return new(big.Int).Lsh(big.NewInt(1), n) }

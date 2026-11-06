@@ -301,10 +301,7 @@ func TestFlatRoundtrip(t *testing.T) {
 								Fields: []Term[DeBruijn]{
 									&Constant{
 										Con: &Data{
-											Inner: &data.Constr{
-												Tag:    big.NewInt(0),
-												Fields: []data.PlutusData{},
-											},
+											Inner: data.WrapConstr(big.NewInt(0), []data.PlutusData{}),
 										},
 									},
 									&Constant{
@@ -397,14 +394,13 @@ func TestDeBruijnDecoderReuse(t *testing.T) {
 							Tag: 1,
 							Fields: []Term[DeBruijn]{
 								&Var[DeBruijn]{Name: DeBruijn(1)},
-								&Constant{Con: &Data{Inner: &data.List{
-									Items: []data.PlutusData{
-										&data.Integer{Inner: big.NewInt(1)},
-										&data.ByteString{
-											Inner: []byte{0xca, 0xfe},
-										},
+								&Constant{Con: &Data{Inner: data.WrapList([]data.PlutusData{
+									&data.Integer{Inner: big.NewInt(1)},
+									&data.ByteString{
+										Inner: []byte{0xca, 0xfe},
 									},
-								}}},
+								}),
+								}},
 							},
 						},
 					},
@@ -427,30 +423,27 @@ func TestDeBruijnDecoderReuse(t *testing.T) {
 							FstType: &TInteger{},
 							SndType: &TData{},
 							First:   &Integer{Inner: big.NewInt(42)},
-							Second: &Data{Inner: &data.Map{
-								Pairs: [][2]data.PlutusData{
-									{
-										&data.Integer{Inner: big.NewInt(7)},
-										&data.ByteString{
-											Inner: []byte{0xde, 0xad},
-										},
+							Second: &Data{Inner: data.WrapMap([][2]data.PlutusData{
+								{
+									&data.Integer{Inner: big.NewInt(7)},
+									&data.ByteString{
+										Inner: []byte{0xde, 0xad},
 									},
 								},
-							}},
+							}),
+							},
 						},
 						&ProtoPair{
 							FstType: &TInteger{},
 							SndType: &TData{},
 							First:   &Integer{Inner: big.NewInt(-5)},
-							Second: &Data{Inner: &data.Constr{
-								Tag: big.NewInt(2),
-								Fields: []data.PlutusData{
-									&data.Integer{Inner: big.NewInt(9)},
-									&data.List{Items: []data.PlutusData{
+							Second: &Data{Inner: data.WrapConstr(big.NewInt(2),
+								[]data.PlutusData{
+									&data.Integer{Inner: big.NewInt(9)}, data.WrapList([]data.PlutusData{
 										&data.ByteString{Inner: []byte{0xaa}},
-									}},
-								},
-							}},
+									}),
+								}),
+							},
 						},
 					},
 				}},
