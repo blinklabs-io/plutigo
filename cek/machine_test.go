@@ -912,8 +912,10 @@ func TestRunCapsRetainedFrameStack(t *testing.T) {
 		}
 	}
 
-	if _, err := m.Run(term); err == nil {
-		t.Fatal("deep non-functional application returned no error")
+	_, err := m.Run(term)
+	var typeErr *TypeError
+	if !errors.As(err, &typeErr) || typeErr.Code != ErrCodeNonFunctionalApp {
+		t.Fatalf("deep non-functional application error = %v, want NonFunctionalApplication", err)
 	}
 	if len(m.frameStack) != 0 {
 		t.Fatalf("frameStack len after Run = %d, want 0", len(m.frameStack))
@@ -937,8 +939,17 @@ func TestRunCapsRetainedFrameStack(t *testing.T) {
 	}
 
 	m.ExBudget = ExBudget{Cpu: math.MaxInt64, Mem: math.MaxInt64}
-	if _, err := m.Run(constant); err != nil {
+	got, err := m.Run(constant)
+	if err != nil {
 		t.Fatalf("shallow Run after oversized stack returned error: %v", err)
+	}
+	gotConst, ok := got.(*syn.Constant)
+	if !ok {
+		t.Fatalf("shallow Run result = %T, want *syn.Constant", got)
+	}
+	gotInt, ok := gotConst.Con.(*syn.Integer)
+	if !ok || gotInt.Inner.Cmp(big.NewInt(1)) != 0 {
+		t.Fatalf("shallow Run result = %v, want integer 1", gotConst.Con)
 	}
 }
 
