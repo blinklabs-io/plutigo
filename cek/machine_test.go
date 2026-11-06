@@ -20,7 +20,6 @@ import (
 	"math/big"
 	"strings"
 	"testing"
-	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
@@ -582,7 +581,7 @@ func TestAllocArenaSliceReusesLaterChunk(t *testing.T) {
 	if pos != 6 {
 		t.Fatalf("allocArenaSlice pos = %d, want 6", pos)
 	}
-	if unsafe.SliceData(allocated) != unsafe.SliceData(chunks[1]) {
+	if len(allocated) == 0 || &allocated[0] != &chunks[1][0] {
 		t.Fatal(
 			"allocArenaSlice did not reuse the next existing chunk from its start",
 		)

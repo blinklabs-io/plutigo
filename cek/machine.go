@@ -22,8 +22,8 @@ import (
 	"math"
 	"math/big"
 	"math/bits"
+	"reflect"
 	"sync"
-	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
@@ -56,11 +56,20 @@ var (
 	)
 )
 
-// Machine is only instantiated with syn.DeBruijn in this codebase. These
-// helpers reuse shared syn.DeBruijn builtin tables across Machine[T] instances,
-// and NewMachine panics if T does not match syn.DeBruijn.
+// Machine is only instantiated with syn.DeBruijn in this codebase:
+// NewMachine panics for any other T. The shared builtin tables below are built
+// for syn.DeBruijn and handed to Machine[T] through a checked type assertion,
+// which holds for that one instantiation.
+func sharedTableFor[V any](table any) V {
+	typed, ok := table.(V)
+	if !ok {
+		panic(fmt.Sprintf("cek: builtin tables are built for syn.DeBruijn, not %T", *new(V)))
+	}
+	return typed
+}
+
 func getSharedBuiltins[T syn.Eval]() *Builtins[T] {
-	return (*Builtins[T])(unsafe.Pointer(&sharedBuiltinTable))
+	return sharedTableFor[*Builtins[T]](&sharedBuiltinTable)
 }
 
 func getSharedBuiltinNoArgValues[T syn.Eval](
@@ -79,10 +88,9 @@ func getSharedBuiltinNoArgValues[T syn.Eval](
 	default:
 		return newBuiltinNoArgValues[T](version)
 	}
-	return (*[builtin.TotalBuiltinCount][3]*Builtin[T])(unsafe.Pointer(values))
+	return sharedTableFor[*[builtin.TotalBuiltinCount][3]*Builtin[T]](values)
 }
 
-// See getSharedBuiltins for the syn.DeBruijn invariant behind this cast.
 func getFilteredBuiltins[T syn.Eval](
 	version lang.LanguageVersion,
 	protoMajor uint,
@@ -90,13 +98,13 @@ func getFilteredBuiltins[T syn.Eval](
 	if protoMajor == 0 {
 		switch version {
 		case lang.LanguageVersionV1:
-			return (*Builtins[T])(unsafe.Pointer(filteredBuiltinsV10))
+			return sharedTableFor[*Builtins[T]](filteredBuiltinsV10)
 		case lang.LanguageVersionV2:
-			return (*Builtins[T])(unsafe.Pointer(filteredBuiltinsV20))
+			return sharedTableFor[*Builtins[T]](filteredBuiltinsV20)
 		case lang.LanguageVersionV3:
-			return (*Builtins[T])(unsafe.Pointer(filteredBuiltinsV30))
+			return sharedTableFor[*Builtins[T]](filteredBuiltinsV30)
 		case lang.LanguageVersionV4:
-			return (*Builtins[T])(unsafe.Pointer(filteredBuiltinsV40))
+			return sharedTableFor[*Builtins[T]](filteredBuiltinsV40)
 		}
 	}
 	return nil
@@ -571,9 +579,8 @@ func valueArenaRetainedChunks[S any](
 	retainSlots int,
 	retainBytes int,
 ) (int, int) {
-	var slot S
-	slotBytes := int(unsafe.Sizeof(slot))
-	chunkHeaderBytes := int(unsafe.Sizeof(chunks))
+	slotBytes := int(reflect.TypeFor[S]().Size())
+	chunkHeaderBytes := int(reflect.TypeFor[[]S]().Size())
 	retainedChunks := 0
 	retainedSlots := 0
 	retainedBytes := 0
@@ -1749,9 +1756,9 @@ func (m *Machine[T]) runContext(
 	}
 	// The De Bruijn loop charges steps exactly as runStack does; it only
 	// skips the metrics counters, so a metered machine runs runStack.
-	if dbTerm, ok := any(term).(syn.Term[syn.DeBruijn]); ok &&
+	dbMachine, isDeBruijn := any(m).(*Machine[syn.DeBruijn])
+	if dbTerm, ok := any(term).(syn.Term[syn.DeBruijn]); ok && isDeBruijn &&
 		m.metrics == nil {
-		dbMachine := (*Machine[syn.DeBruijn])(unsafe.Pointer(m))
 		steps := newStepCounter(m.slippage)
 		dbResult, err := runStackDeBruijn(
 			ctx,

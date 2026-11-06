@@ -20,8 +20,8 @@ import (
 	"math"
 	"math/big"
 	"math/bits"
+	"reflect"
 	"unicode/utf8"
-	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
@@ -666,12 +666,11 @@ type arenaChunks[S any] struct {
 
 // capacityBytes is the storage the arena's chunks hold.
 func (a *arenaChunks[S]) capacityBytes() int64 {
-	var zero S
 	n := 0
 	for _, chunk := range a.chunks {
 		n += len(chunk)
 	}
-	return int64(n) * int64(unsafe.Sizeof(zero))
+	return int64(n) * int64(reflect.TypeFor[S]().Size())
 }
 
 func (a *arenaChunks[S]) used() int {
@@ -802,12 +801,11 @@ type arenaSlices[S any] struct {
 
 // capacityBytes is the storage the arena's chunks hold.
 func (a *arenaSlices[S]) capacityBytes() int64 {
-	var zero S
 	n := 0
 	for _, chunk := range a.chunks {
 		n += len(chunk)
 	}
-	return int64(n) * int64(unsafe.Sizeof(zero))
+	return int64(n) * int64(reflect.TypeFor[S]().Size())
 }
 
 func (a *arenaSlices[S]) used() int {
@@ -954,8 +952,10 @@ func newTermArena[T Binder]() *termArena[T] {
 }
 
 const (
-	termSlotBytes     = int64(unsafe.Sizeof(Term[DeBruijn](nil)))
-	constantSlotBytes = int64(unsafe.Sizeof(IConstant(nil)))
+	// An interface value is a type word and a data word.
+	interfaceSlotBytes = 2 * bits.UintSize / 8
+	termSlotBytes      = int64(interfaceSlotBytes)
+	constantSlotBytes  = int64(interfaceSlotBytes)
 	// listArenaSlots is the number of slots a term or constant list takes
 	// from the arena before it grows on the heap.
 	listArenaSlots = 4

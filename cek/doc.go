@@ -59,8 +59,8 @@
 // # Performance
 //
 // The machine uses object pooling (sync.Pool) for state objects to reduce
-// allocations. The pools use unsafe.Pointer casting and are only tested
-// with [syn.DeBruijn] type parameter.
+// allocations. Machines are only instantiated with the [syn.DeBruijn] type
+// parameter.
 //
 // # Cost Model
 //

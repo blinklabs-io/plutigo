@@ -18,9 +18,9 @@ import (
 	"context"
 	"math/big"
 	"os"
+	"reflect"
 	"runtime"
 	"testing"
-	"unsafe"
 
 	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
@@ -264,10 +264,9 @@ func TestValueArenasShrinkIndependently(t *testing.T) {
 }
 
 func retainedArenaBytes[S any](chunks [][]S) int {
-	var slot S
-	retained := cap(chunks) * int(unsafe.Sizeof(chunks))
+	retained := cap(chunks) * int(reflect.TypeFor[[]S]().Size())
 	for _, chunk := range chunks {
-		retained += len(chunk) * int(unsafe.Sizeof(slot))
+		retained += len(chunk) * int(reflect.TypeFor[S]().Size())
 	}
 	return retained
 }
