@@ -95,7 +95,7 @@ func (s *cloneContextState) cloneMap(
 		}
 		s.remaining--
 	}
-	if len(source.Pairs()) > s.remaining/2 {
+	if source.Len() > s.remaining/2 {
 		return &DecodeLimitError{
 			Limit:  "clone node count",
 			Max:    s.maxNodes,
@@ -159,7 +159,7 @@ func CloneContext(
 			if source == nil {
 				return nil, errors.New("cannot clone a nil PlutusData constructor")
 			}
-			if err := state.checkAdditionalNodes(len(source.Fields())); err != nil {
+			if err := state.checkAdditionalNodes(source.NumFields()); err != nil {
 				return nil, err
 			}
 			tag := new(big.Int)
@@ -259,7 +259,7 @@ func CloneContext(
 			if source == nil {
 				return nil, errors.New("cannot clone a nil PlutusData list")
 			}
-			if err := state.checkAdditionalNodes(len(source.Items())); err != nil {
+			if err := state.checkAdditionalNodes(source.Len()); err != nil {
 				return nil, err
 			}
 			cloned := &List{
