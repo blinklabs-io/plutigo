@@ -596,6 +596,54 @@ func listAttacks() []listAttack {
 			},
 		},
 		{
+			// Each branch k : t becomes an element of a list of lists.
+			name: "list-of-lists-branches-of-one-tail",
+			prog: func(n int) string {
+				return listOfListsBranches(n, uBuild(n, uNilInt, uIdent), "uIdent", "(con (list (list integer)) [])", func(acc string) string {
+					return uHead(uHead(acc))
+				})
+			},
+		},
+		{
+			name: "list-of-data-lists-branches-of-an-unListData-tail",
+			prog: func(n int) string {
+				tail := fmt.Sprintf("[(builtin unListData) [(builtin listData) %s]]", dataLiteral(0, n))
+				return listOfListsBranches(n, tail, "uIData", "(con (list (list data)) [])", func(acc string) string {
+					return fmt.Sprintf("[(builtin unIData) %s]", uHead(uHead(acc)))
+				})
+			},
+		},
+		{
+			name: "list-of-maps-branches-of-one-tail",
+			prog: func(n int) string {
+				return listOfListsBranches(n, uBuild(n, uNilPair, uPairData), "uPairData", "(con (list (list (pair data data))) [])", func(acc string) string {
+					return fmt.Sprintf(
+						"[(builtin unIData) [(force (force (builtin fstPair))) %s]]",
+						uHead(uHead(acc)),
+					)
+				})
+			},
+		},
+		{
+			// Each branch is taken back out of the list of lists and read.
+			name: "list-of-lists-branches-read-back",
+			prog: func(n int) string {
+				return listOfListsReadBack(n, func(acc string) string {
+					return uHead(uHead(acc))
+				})
+			},
+		},
+		{
+			// case on a list of lists hands its head to the branch.
+			name:  "case-on-list-of-lists-branches",
+			proto: 11,
+			prog: func(n int) string {
+				return listOfListsReadBack(n, func(acc string) string {
+					return fmt.Sprintf("(case %s (lam h (lam tl %s)))", acc, uHead("h"))
+				})
+			},
+		},
+		{
 			// equalsData is costed by the smaller argument, so sizing a
 			// branch against an empty list must not build the branch.
 			name: "equalsData-branches-against-empty",
@@ -674,6 +722,47 @@ func listAttacks() []listAttack {
 			},
 		},
 	}
+}
+
+// listOfListsBranches loops n times consing k : tail onto a list of lists,
+// then applies result to it. elem names the helper that turns k into an
+// element of tail.
+func listOfListsBranches(n int, tail, elem, nilTerm string, result func(string) string) string {
+	elems := map[string]func(string) string{"uIdent": uIdent, "uIData": uIData, "uPairData": uPairData}
+	loop := uLoop(
+		[]string{"t", "acc"},
+		uIte(
+			uIsZero("k"),
+			result("acc"),
+			fmt.Sprintf("[self %s t %s]", uSub1("k"), uCons(uCons(elems[elem]("k"), "t"), "acc")),
+		),
+	)
+	return uProgram(fmt.Sprintf("[%s %s %s %s]", loop, uInt(n), tail, nilTerm))
+}
+
+// listOfListsReadBack loops n times consing k : t onto a list of lists and
+// reading the new branch back out with read.
+func listOfListsReadBack(n int, read func(string) string) string {
+	acc := uCons(uCons("k", "t"), "acc")
+	loop := uLoop(
+		[]string{"t", "acc"},
+		uIte(
+			uIsZero("k"),
+			"(con integer 0)",
+			fmt.Sprintf(
+				"[(lam next (lam x [self %s t next])) %s %s]",
+				uSub1("k"),
+				acc,
+				read(acc),
+			),
+		),
+	)
+	return uProgram(fmt.Sprintf(
+		"[%s %s %s (con (list (list integer)) [])]",
+		loop,
+		uInt(n),
+		uBuild(n, uNilInt, uIdent),
+	))
 }
 
 // branchesOfOneTail loops n times applying wrap to k : tail, each a distinct

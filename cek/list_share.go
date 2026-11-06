@@ -43,16 +43,11 @@ import (
 //     converting any suffix or front extension costs O(new elements).
 //     Lists not built here (program literals, lists decoded from Data) use a
 //     per-run cache keyed by the address of their last element instead.
-//
-//   - lazydata.Source: listData, mapData and constrData wrap a list built by
-//     mkCons without copying it (data_lazy.go); its contiguous form is built
-//     only when something costed by its size reads it.
-//
-// What cannot be made O(1): two different cells consed onto the same tail
-// are two distinct lists, and a list used as a mkCons head in a list of lists
-// must become a contiguous slice for each of them, because syn.ProtoList
-// exposes its elements as a slice. That copy is O(length) and happens at most
-// once per cell.
+//   - lazydata.Source: listData, mapData and constrData, and mkCons with a
+//     list-valued head, wrap a list built by mkCons without copying it
+//     (data_lazy.go); its contiguous form is built only when something
+//     costed by its size reads it, and taking it apart again hands back the
+//     cells.
 //
 // Safety invariants (aliasing):
 //   - A slot of a frontBuf or convBuf is written only while it lies outside
@@ -264,19 +259,13 @@ func dataPairConstant(item [2]data.PlutusData) (syn.IConstant, error) {
 }
 
 // dataListConstant is materializeDataListConstant through the caches.
-func (l *listShare) dataListConstant(
-	owner *frontBuf[data.PlutusData],
-	items []data.PlutusData,
-) *syn.ProtoList {
-	list, _ := convertList(&l.fromData, owner, items, dataItemConstant)
+func (l *listShare) dataListConstant(items []data.PlutusData) *syn.ProtoList {
+	list, _ := convertList(&l.fromData, nil, items, dataItemConstant)
 	return syn.WrapProtoList(sharedDataType, list)
 }
 
 // dataMapConstant is materializeDataMapConstant through the caches.
-func (l *listShare) dataMapConstant(
-	owner *frontBuf[[2]data.PlutusData],
-	items [][2]data.PlutusData,
-) *syn.ProtoList {
-	list, _ := convertList(&l.fromPairs, owner, items, dataPairConstant)
+func (l *listShare) dataMapConstant(items [][2]data.PlutusData) *syn.ProtoList {
+	list, _ := convertList(&l.fromPairs, nil, items, dataPairConstant)
 	return syn.WrapProtoList(sharedPairDataType, list)
 }

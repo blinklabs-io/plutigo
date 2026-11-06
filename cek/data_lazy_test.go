@@ -135,8 +135,9 @@ func TestLazyDataResultIsPlainData(t *testing.T) {
 // elements do not have its declared element type is rejected before
 // evaluation, so listData never wraps one.
 func TestIllTypedListConstantIsRejected(t *testing.T) {
-	illTyped := &syn.Constant{Con: syn.WrapProtoList(&syn.TData{},
-		[]syn.IConstant{&syn.Integer{Inner: big.NewInt(1)}}),
+	illTyped := &syn.Constant{
+		Con: syn.WrapProtoList(&syn.TData{},
+			[]syn.IConstant{&syn.Integer{Inner: big.NewInt(1)}}),
 	}
 	terms := map[string]syn.Term[syn.DeBruijn]{
 		"constant": illTyped,
@@ -160,5 +161,85 @@ func TestIllTypedListConstantIsRejected(t *testing.T) {
 				t.Fatalf("Run = %v, want a TypeError", err)
 			}
 		})
+	}
+}
+
+// TestLazyListConstantsMatchEager checks that lists of lists built by
+// mkCons, whose elements share their cells, evaluate and discharge exactly as
+// the same lists written out (want, evaluated as a constant).
+func TestLazyListConstantsMatchEager(t *testing.T) {
+	const (
+		intHead  = "[(force (builtin mkCons)) (con integer 1) (con (list integer) [2, 3])]"
+		dataHead = "[(force (builtin mkCons)) (con data (I 1)) [(builtin unListData) (con data (List [I 2]))]]"
+		mapHead  = "[(force (builtin mkCons)) [(builtin mkPairData) (con data (I 1)) (con data (I 2))] [(builtin unMapData) (con data (Map [(I 3, I 4)]))]]"
+	)
+	cons := func(head, tail string) string {
+		return "[(force (builtin mkCons)) " + head + " " + tail + "]"
+	}
+	tests := []struct {
+		name  string
+		term  string
+		major uint
+		want  string
+	}{
+		{
+			"list of integer lists", cons(intHead, "(con (list (list integer)) [])"), 11,
+			"(con (list (list integer)) [[1, 2, 3]])",
+		},
+		{
+			"list of data lists", cons(dataHead, "(con (list (list data)) [])"), 11,
+			"(con (list (list data)) [[I 1, I 2]])",
+		},
+		{
+			"list of maps", cons(mapHead, "(con (list (list (pair data data))) [])"), 11,
+			"(con (list (list (pair data data))) [[(I 1, I 2), (I 3, I 4)]])",
+		},
+		{"head read back", "[(force (builtin headList)) [(force (builtin tailList)) [(force (builtin headList)) " +
+			cons(intHead, "(con (list (list integer)) [])") + "]]]", 11, "(con integer 2)"},
+		{"data head read back", "[(builtin listData) [(force (builtin headList)) " +
+			cons(dataHead, "(con (list (list data)) [])") + "]]", 11, "(con data (List [I 1, I 2]))"},
+		{"case head", "(case " + cons(intHead, "(con (list (list integer)) [])") +
+			" (lam h (lam tl [(force (builtin headList)) h])))", 11, "(con integer 1)"},
+		{
+			"nested twice", cons(cons(intHead, "(con (list (list integer)) [])"), "(con (list (list (list integer))) [])"), 11,
+			"(con (list (list (list integer))) [[[1, 2, 3]]])",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			want := evalLazyDataProgram(t, tt.want, tt.major)
+			if got := evalLazyDataProgram(t, tt.term, tt.major); got != want {
+				t.Fatalf("%s = %s, want %s", tt.term, got, want)
+			}
+		})
+	}
+}
+
+// TestLazyListConstantResultIsPlain checks that a list of lists built by
+// mkCons reaches the caller with no evaluator storage in its elements.
+func TestLazyListConstantResultIsPlain(t *testing.T) {
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+	program, err := syn.Parse("(program 1.1.0 [(force (builtin mkCons)) [(force (builtin mkCons)) (con integer 1) (con (list integer) [2])] (con (list (list integer)) [])])")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dbProgram, err := syn.NameToDeBruijn(program)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := m.Run(dbProgram.Term)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outer := result.(*syn.Constant).Con.(*syn.ProtoList)
+	if lazydata.Hooks.ProtoListSource(outer) != nil {
+		t.Fatal("result list holds evaluator storage")
+	}
+	inner, ok := outer.List()[0].(*syn.ProtoList)
+	if !ok {
+		t.Fatalf("result element is %T", outer.List()[0])
+	}
+	if lazydata.Hooks.ProtoListSource(inner) != nil {
+		t.Fatal("result element holds evaluator storage")
 	}
 }

@@ -28,7 +28,9 @@ import (
 // copying them; the contiguous elements are built only when something costed
 // by size (equalsData, serialiseData, a result copy) reads them. unListData,
 // unMapData, unConstrData and case on Data hand the cells back as a list
-// value, so taking such data apart again is O(1) as well.
+// value, so taking such data apart again is O(1) as well. mkCons with a
+// list-valued head does the same for the list constant it stores, and
+// reading that element back yields the cells.
 
 // dataCellSource is a data list built by mkCons onto a list of data.
 type dataCellSource struct {
@@ -58,32 +60,36 @@ func (s *pairCellSource) Materialize() [][2]data.PlutusData {
 
 func (*pairCellSource) Seal(lazydata.Token) {}
 
-// constCellSource is a constant list of data, or of data pairs, built by
-// mkCons; its elements are converted on first use.
-type constCellSource[D any] struct {
+// convCellSource is a list built by mkCons whose elements, of type S, become
+// elements of type D on first use; a nil conv means S and D are the same.
+type convCellSource[S, D any] struct {
 	typ  syn.Typ
-	cell *consCell[syn.IConstant]
-	conv func(syn.IConstant) (D, error)
+	cell *consCell[S]
+	conv func(S) (D, error)
 	out  []D
 }
 
-func (s *constCellSource[D]) Len() int { return s.cell.n }
+func (s *convCellSource[S, D]) Len() int { return s.cell.n }
 
-func (s *constCellSource[D]) Materialize() []D {
+func (s *convCellSource[S, D]) Materialize() []D {
 	if s.out == nil {
 		flat, buf := s.cell.flatten()
+		if s.conv == nil {
+			s.out = any(flat).([]D)
+			return s.out
+		}
 		var (
 			out []D
 			err error
 		)
 		if buf != nil {
-			out, err = convertList[syn.IConstant, D](nil, buf, flat, s.conv)
+			out, err = convertList[S, D](nil, buf, flat, s.conv)
 		} else {
 			out, err = convertSuffix(&convBuf[D]{}, flat, s.conv)
 		}
 		if err != nil {
-			// The list's type was checked when the source was built, so
-			// every element converts.
+			// Every element was type-checked: the cells by mkCons, the
+			// list they extend by structure validation.
 			panic(err)
 		}
 		s.out = out
@@ -91,7 +97,11 @@ func (s *constCellSource[D]) Materialize() []D {
 	return s.out
 }
 
-func (*constCellSource[D]) Seal(lazydata.Token) {}
+func (*convCellSource[S, D]) Seal(lazydata.Token) {}
+
+// constCellSource is a constant list of data, or of data pairs, built by
+// mkCons; its elements are converted on first use.
+type constCellSource[D any] = convCellSource[syn.IConstant, D]
 
 // lazyDataItems returns a source over value when it is a list of data built
 // by mkCons, or nil.
@@ -274,4 +284,62 @@ func (c *lazyDataCursor) next() (data.PlutusData, bool) {
 		}
 	}
 	return nil, false
+}
+
+// lazyListConstant returns a list constant over a list value built by
+// mkCons, as mkCons needs for a list-valued head, without building its
+// contiguous elements.
+func lazyListConstant[T syn.Eval](value Value[T]) (*syn.ProtoList, bool) {
+	var (
+		typ syn.Typ
+		src lazydata.Source[syn.IConstant]
+	)
+	switch v := value.(type) {
+	case *consConstList[T]:
+		typ = v.typ
+		src = &convCellSource[syn.IConstant, syn.IConstant]{typ: v.typ, cell: v.cell}
+	case *consDataList[T]:
+		typ = sharedDataType
+		src = &convCellSource[data.PlutusData, syn.IConstant]{
+			typ:  typ,
+			cell: v.cell,
+			conv: dataItemConstant,
+		}
+	case *consDataMap[T]:
+		typ = sharedPairDataType
+		src = &convCellSource[[2]data.PlutusData, syn.IConstant]{
+			typ:  typ,
+			cell: v.cell,
+			conv: dataPairConstant,
+		}
+	default:
+		return nil, false
+	}
+	return lazydata.Hooks.NewProtoList(typ, src).(*syn.ProtoList), true
+}
+
+// lazyListConstantValue returns the list value behind a list constant built
+// by lazyListConstant.
+func lazyListConstantValue[T syn.Eval](c syn.IConstant) (Value[T], bool) {
+	pl, ok := c.(*syn.ProtoList)
+	if !ok {
+		return nil, false
+	}
+	switch s := lazydata.Hooks.ProtoListSource(pl).(type) {
+	case *convCellSource[syn.IConstant, syn.IConstant]:
+		return &consConstList[T]{typ: s.typ, cell: s.cell}, true
+	case *convCellSource[data.PlutusData, syn.IConstant]:
+		return &consDataList[T]{cell: s.cell}, true
+	case *convCellSource[[2]data.PlutusData, syn.IConstant]:
+		return &consDataMap[T]{cell: s.cell}, true
+	}
+	return nil, false
+}
+
+// elementValue returns a list or pair element as a value.
+func (m *Machine[T]) elementValue(c syn.IConstant) Value[T] {
+	if v, ok := lazyListConstantValue[T](c); ok {
+		return v
+	}
+	return m.allocConstant(c)
 }

@@ -124,10 +124,11 @@ func (x *consCell[E]) each(f func(E)) {
 //	consDataMap   -> *dataMapValue
 //
 // They are always non-empty. Builtins that only need the head, the tail,
-// emptiness or a bounded prefix handle them directly; listData, mapData and
-// constrData wrap them as lazy data (data_lazy.go); every other consumer
-// flattens them first (unwrapList, materializeConstantValue, discharge), so
-// code that does not know about them still sees the contiguous value.
+// emptiness or a bounded prefix handle them directly; listData, mapData,
+// constrData and a list-valued mkCons head wrap them without copying
+// (data_lazy.go); every other consumer flattens them first (unwrapList,
+// discharge), so code that does not know about them still sees the
+// contiguous value.
 type lazyListValue[T syn.Eval] interface {
 	Value[T]
 	lazyLen() int
@@ -177,7 +178,7 @@ func (l *consConstList[T]) lazyHead(m *Machine[T]) Value[T] {
 }
 
 func (l *consConstList[T]) lazyCaseHead(m *Machine[T]) Value[T] {
-	return m.allocConstant(l.cell.head)
+	return m.elementValue(l.cell.head)
 }
 
 func (l *consConstList[T]) rest(

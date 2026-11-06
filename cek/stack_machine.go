@@ -748,15 +748,15 @@ func (m *Machine[T]) caseEvaluateStack(
 				tag = 1
 			} else {
 				tag = 0
-				firstArg = m.allocConstant(cval.List()[0])
+				firstArg = m.elementValue(cval.List()[0])
 				tail := m.allocProtoListConstant(cval.LTyp, cval.List()[1:])
 				secondArg = m.allocConstant(tail)
 			}
 		case *syn.ProtoPair:
 			branchRule = 1
 			tag = 0
-			firstArg = m.allocConstant(cval.First)
-			secondArg = m.allocConstant(cval.Second)
+			firstArg = m.elementValue(cval.First)
+			secondArg = m.elementValue(cval.Second)
 		case *syn.Data:
 			return m.caseEvaluateDataStack(env, branches, cval.Inner)
 		default:

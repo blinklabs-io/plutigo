@@ -2228,7 +2228,7 @@ func (m *Machine[T]) caseEvaluate(
 			} else {
 				tag = 0
 				args = m.allocValueElems(2)
-				args[0] = m.allocConstant(cval.List()[0])
+				args[0] = m.elementValue(cval.List()[0])
 				tail := m.allocProtoListConstant(cval.LTyp, cval.List()[1:])
 				args[1] = m.allocConstant(tail)
 			}
@@ -2236,8 +2236,8 @@ func (m *Machine[T]) caseEvaluate(
 			branchRule = 1
 			tag = 0
 			args = m.allocValueElems(2)
-			args[0] = m.allocConstant(cval.First)
-			args[1] = m.allocConstant(cval.Second)
+			args[0] = m.elementValue(cval.First)
+			args[1] = m.elementValue(cval.Second)
 		case *syn.Data:
 			return m.caseEvaluateData(env, branches, context, cval.Inner)
 		default:
