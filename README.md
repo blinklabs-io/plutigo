@@ -76,6 +76,12 @@ Go 1.26 delivers ~10% faster full-script execution vs Go 1.25 across all Plutus 
 - Version Compatibility: Automatic cost model and builtin selection by Plutus version
 - Testing First: Property-based testing and fuzzing ensure correctness
 
+Blake2b-256 builtin inputs from 4 KiB to 1 MiB inclusive can reuse exact-byte
+hash results within one CEK evaluation; other sizes bypass the cache. The
+cache retains at most 64 inputs and 1 MiB of copied input bytes, releases
+those bytes on every evaluation exit, and charges the full builtin execution
+cost on hits. Returned hashes have independent storage.
+
 ### Script Contexts
 
 The `lang` package serializes Plutus V4 addresses, transaction outputs,
