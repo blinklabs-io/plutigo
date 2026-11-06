@@ -205,41 +205,36 @@ func TestValidateProgramRejectsValueDataInCallerConstants(t *testing.T) {
 	}
 	unitPairType := &TPair{First: &TUnit{}, Second: &TUnit{}}
 	cases := map[string]IConstant{
-		"shared pair under a declared unit pair list": &ProtoList{
-			LTyp: unitPairType,
-			List: []IConstant{sharedPair, sharedPair, sharedPair},
-		},
-		"shared pair nested twice in a pair": &ProtoList{
-			LTyp: &TPair{First: unitPairType, Second: unitPairType},
-			List: []IConstant{&ProtoPair{
+		"shared pair under a declared unit pair list": WrapProtoList(unitPairType,
+			[]IConstant{sharedPair, sharedPair, sharedPair}),
+
+		"shared pair nested twice in a pair": WrapProtoList(&TPair{First: unitPairType, Second: unitPairType},
+			[]IConstant{&ProtoPair{
 				FstType: unitPairType,
 				SndType: unitPairType,
 				First:   sharedPair,
 				Second:  sharedPair,
-			}},
-		},
-		"pair child under a declared integer pair": &ProtoList{
-			LTyp: &TPair{First: &TInteger{}, Second: &TInteger{}},
-			List: []IConstant{&ProtoPair{
+			}}),
+
+		"pair child under a declared integer pair": WrapProtoList(&TPair{First: &TInteger{}, Second: &TInteger{}},
+			[]IConstant{&ProtoPair{
 				FstType: &TInteger{},
 				SndType: &TInteger{},
 				First:   integer,
 				Second:  &Data{Inner: newValueData()},
-			}},
-		},
-		"data child under a declared integer list": &ProtoList{
-			LTyp: &TInteger{},
-			List: []IConstant{&Data{Inner: newValueData()}},
-		},
+			}}),
+
+		"data child under a declared integer list": WrapProtoList(&TInteger{},
+			[]IConstant{&Data{Inner: newValueData()}}),
+
 		"data child under a declared integer array": &ProtoArray{
 			ATyp:  &TInteger{},
 			Array: []IConstant{&Data{Inner: newValueData()}},
 		},
 		"value-form Data":       Data{Inner: newValueData()},
 		"value-form data.Value": &Data{Inner: *newValueData()},
-		"value-form containers": ProtoList{
-			LTyp: &TData{},
-			List: []IConstant{ProtoPair{
+		"value-form containers": *WrapProtoList(&TData{},
+			[]IConstant{ProtoPair{
 				FstType: &TData{},
 				SndType: &TData{},
 				First: Data{
@@ -250,8 +245,8 @@ func TestValidateProgramRejectsValueDataInCallerConstants(t *testing.T) {
 					}),
 				},
 				Second: Data{Inner: data.Integer{}},
-			}},
-		},
+			}}),
+
 		"value-form array": ProtoArray{
 			ATyp:  &TData{},
 			Array: []IConstant{Data{Inner: newValueData()}},
@@ -299,10 +294,9 @@ func TestValidateProgramValueDataMatchesDecoderAccounting(t *testing.T) {
 	for i := range pairs {
 		pairs[i] = pair
 	}
-	pairList := &ProtoList{
-		LTyp: &TPair{First: &TInteger{}, Second: &TInteger{}},
-		List: pairs,
-	}
+	pairList := WrapProtoList(&TPair{First: &TInteger{}, Second: &TInteger{}},
+		pairs)
+
 	if err := valueDataV3(pairList); err != nil {
 		t.Fatalf("list of 400,000 pairs rejected: %v", err)
 	}
@@ -332,7 +326,7 @@ func TestValidateProgramBoundsConstantItems(t *testing.T) {
 	for i := range list {
 		list[i] = integer
 	}
-	err := valueDataV3(&ProtoList{LTyp: &TInteger{}, List: list})
+	err := valueDataV3(WrapProtoList(&TInteger{}, list))
 	if err == nil || !strings.Contains(err.Error(), "too many nodes") {
 		t.Fatalf("expected node limit error, got %v", err)
 	}

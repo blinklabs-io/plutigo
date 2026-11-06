@@ -132,7 +132,7 @@ func readList(t *testing.T, v Value[syn.DeBruijn]) []int64 {
 		if !ok {
 			t.Fatalf("not a list constant: %T", l.Constant)
 		}
-		for _, c := range pl.List {
+		for _, c := range pl.List() {
 			out = append(out, constID(t, c))
 		}
 	case *dataListValue[syn.DeBruijn]:
@@ -254,7 +254,7 @@ func (h *diffHarness) foreign(kind listKind, n int) {
 		for i, id := range ids {
 			l[i] = elem(id)
 		}
-		return &Constant{&syn.ProtoList{LTyp: typ, List: l}}
+		return &Constant{syn.WrapProtoList(typ, l)}
 	}
 	var v Value[syn.DeBruijn]
 	switch kind {
@@ -455,9 +455,7 @@ func (h *diffHarness) stepNest(src modelList) {
 		elemTyp = sharedPairDataType
 		kind = kPairC
 	}
-	nilOuter := &Constant{
-		&syn.ProtoList{LTyp: &syn.TList{Typ: elemTyp}, List: nil},
-	}
+	nilOuter := &Constant{syn.WrapProtoList(&syn.TList{Typ: elemTyp}, nil)}
 	outer, _ := h.call(builtin.MkCons, src.value, nilOuter)
 	inner, _ := h.call(builtin.HeadList, outer)
 	if got := readList(h.t, inner); !slices.Equal(got, src.elems) {

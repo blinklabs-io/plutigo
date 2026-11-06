@@ -708,8 +708,7 @@ func (m *Machine[T]) allocProtoListConstant(
 		&m.protoListChunkPos,
 		valueColdChunkSize,
 	)
-	listConstant.LTyp = typ
-	listConstant.List = list
+	*listConstant = *syn.WrapProtoList(typ, list)
 	return listConstant
 }
 
@@ -2224,13 +2223,13 @@ func (m *Machine[T]) caseEvaluate(
 			return nil, &ScriptError{Code: ErrCodeCaseOnByteString, Message: "case on bytestring constant not allowed"}
 		case *syn.ProtoList:
 			branchRule = 2
-			if len(cval.List) == 0 {
+			if len(cval.List()) == 0 {
 				tag = 1
 			} else {
 				tag = 0
 				args = m.allocValueElems(2)
-				args[0] = m.allocConstant(cval.List[0])
-				tail := m.allocProtoListConstant(cval.LTyp, cval.List[1:])
+				args[0] = m.allocConstant(cval.List()[0])
+				tail := m.allocProtoListConstant(cval.LTyp, cval.List()[1:])
 				args[1] = m.allocConstant(tail)
 			}
 		case *syn.ProtoPair:

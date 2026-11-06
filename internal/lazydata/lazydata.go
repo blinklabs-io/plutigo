@@ -13,8 +13,8 @@
 // limitations under the License.
 
 // Package lazydata lets the evaluator build PlutusData lists, maps and
-// constructor fields over its own persistent lists without copying them,
-// and recover those lists again.
+// constructor fields, and list constants, over its own persistent lists
+// without copying them, and recover those lists again.
 //
 // A Source is not safe for concurrent use. Data holding one must not leave
 // the evaluation that built it: the evaluator hands results to its caller
@@ -36,7 +36,7 @@ type Source[E any] interface {
 	Seal(Token)
 }
 
-// Hooks are set by package data. The arguments and results are the data
+// Hooks are set by packages data and syn. The arguments and results are the
 // types named in each comment.
 var Hooks struct {
 	// NewList returns a *data.List over a Source[data.PlutusData].
@@ -49,4 +49,10 @@ var Hooks struct {
 	// SourceOf returns the Source behind a *data.List, *data.Map or
 	// *data.Constr, or nil.
 	SourceOf func(pd any) any
+	// NewProtoList returns a *syn.ProtoList with element type typ, a
+	// syn.Typ, over a Source[syn.IConstant]. It is set by package syn.
+	NewProtoList func(typ any, src any) any
+	// ProtoListSource returns the Source behind a *syn.ProtoList, or nil.
+	// It is set by package syn.
+	ProtoListSource func(pl any) any
 }

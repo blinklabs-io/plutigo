@@ -109,18 +109,16 @@ func TestCloneConstantSnapshotsDecodedValue(t *testing.T) {
 					Second: &syn.TInteger{},
 				}},
 				First: &syn.ByteString{Inner: []byte{1}},
-				Second: &syn.ProtoList{
-					LTyp: &syn.TPair{
-						First:  &syn.TByteString{},
-						Second: &syn.TInteger{},
-					},
-					List: []syn.IConstant{&syn.ProtoPair{
+				Second: syn.WrapProtoList(&syn.TPair{
+					First:  &syn.TByteString{},
+					Second: &syn.TInteger{},
+				},
+					[]syn.IConstant{&syn.ProtoPair{
 						FstType: &syn.TByteString{},
 						SndType: &syn.TInteger{},
 						First:   &syn.ByteString{Inner: []byte{2}},
 						Second:  &syn.Integer{Inner: big.NewInt(quantity)},
-					}},
-				},
+					}}),
 			},
 		}
 		value, err := syn.NewValue(entries)

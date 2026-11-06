@@ -30,8 +30,8 @@ func TestRunMethodsRejectMalformedAST(t *testing.T) {
 	typedNilString := (*syn.String)(nil)
 	cyclicDelay := &syn.Delay[syn.DeBruijn]{}
 	cyclicDelay.Term = cyclicDelay
-	cyclicList := &syn.ProtoList{LTyp: &syn.TInteger{}}
-	cyclicList.List = []syn.IConstant{cyclicList}
+	cyclicList := syn.WrapProtoList(&syn.TInteger{}, make([]syn.IConstant, 1))
+	cyclicList.List()[0] = cyclicList
 	cyclicType := &syn.TList{}
 	cyclicType.Typ = cyclicType
 	typedNilListType := (*syn.TList)(nil)
@@ -51,10 +51,9 @@ func TestRunMethodsRejectMalformedAST(t *testing.T) {
 		},
 		{
 			name: "nil composite child",
-			term: &syn.Constant{Con: &syn.ProtoList{
-				LTyp: &syn.TInteger{},
-				List: []syn.IConstant{nil},
-			}},
+			term: &syn.Constant{Con: syn.WrapProtoList(&syn.TInteger{},
+				[]syn.IConstant{nil}),
+			},
 		},
 		{
 			name: "nil PlutusData integer",

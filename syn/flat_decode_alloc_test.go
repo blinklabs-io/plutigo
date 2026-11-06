@@ -31,10 +31,9 @@ func encodeIntegerListProgram(t *testing.T, values []*big.Int) []byte {
 	}
 	encoded, err := Encode(&Program[DeBruijn]{
 		Version: lang.LanguageVersionV1,
-		Term: &Constant{Con: &ProtoList{
-			LTyp: &TInteger{},
-			List: items,
-		}},
+		Term: &Constant{Con: WrapProtoList(&TInteger{},
+			items),
+		},
 	})
 	if err != nil {
 		t.Fatalf("Encode() failed: %v", err)
@@ -45,8 +44,8 @@ func encodeIntegerListProgram(t *testing.T, values []*big.Int) []byte {
 func decodedIntegers(t *testing.T, program *Program[DeBruijn]) []*Integer {
 	t.Helper()
 	list := program.Term.(*Constant).Con.(*ProtoList)
-	ints := make([]*Integer, len(list.List))
-	for i, item := range list.List {
+	ints := make([]*Integer, len(list.List()))
+	for i, item := range list.List() {
 		ints[i] = item.(*Integer)
 	}
 	return ints
@@ -169,17 +168,12 @@ func TestDecodeIntegerConstantAllocationsDoNotScaleWithCount(t *testing.T) {
 
 func TestValidateCompositeConstantsDoesNotAllocate(t *testing.T) {
 	encoded := encodeConstantsProgram(
-		t,
-		&ProtoList{LTyp: &TData{}, List: []IConstant{}},
-		&ProtoList{
-			LTyp: &TPair{First: &TData{}, Second: &TData{}},
-			List: []IConstant{},
-		},
-		&ProtoPair{
+		t, WrapProtoList(&TData{}, []IConstant{}), WrapProtoList(&TPair{First: &TData{}, Second: &TData{}},
+			[]IConstant{}), &ProtoPair{
 			FstType: &TInteger{},
 			SndType: &TList{Typ: &TData{}},
 			First:   &Integer{Inner: big.NewInt(1)},
-			Second:  &ProtoList{LTyp: &TData{}, List: []IConstant{}},
+			Second:  WrapProtoList(&TData{}, []IConstant{}),
 		},
 	)
 	program, err := Decode[DeBruijn](encoded)

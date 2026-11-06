@@ -135,10 +135,9 @@ func TestLazyDataResultIsPlainData(t *testing.T) {
 // elements do not have its declared element type is rejected before
 // evaluation, so listData never wraps one.
 func TestIllTypedListConstantIsRejected(t *testing.T) {
-	illTyped := &syn.Constant{Con: &syn.ProtoList{
-		LTyp: &syn.TData{},
-		List: []syn.IConstant{&syn.Integer{Inner: big.NewInt(1)}},
-	}}
+	illTyped := &syn.Constant{Con: syn.WrapProtoList(&syn.TData{},
+		[]syn.IConstant{&syn.Integer{Inner: big.NewInt(1)}}),
+	}
 	terms := map[string]syn.Term[syn.DeBruijn]{
 		"constant": illTyped,
 		"listData of mkCons": &syn.Apply[syn.DeBruijn]{

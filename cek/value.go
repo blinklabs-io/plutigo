@@ -259,10 +259,9 @@ func materializeDataListConstant(items []data.PlutusData) *syn.ProtoList {
 	for i, item := range items {
 		list[i] = &syn.Data{Inner: item}
 	}
-	return &syn.ProtoList{
-		LTyp: sharedDataType,
-		List: list,
-	}
+	return syn.WrapProtoList(sharedDataType,
+		list)
+
 }
 
 func materializeDataMapConstant(items [][2]data.PlutusData) *syn.ProtoList {
@@ -275,10 +274,9 @@ func materializeDataMapConstant(items [][2]data.PlutusData) *syn.ProtoList {
 			Second:  &syn.Data{Inner: item[1]},
 		}
 	}
-	return &syn.ProtoList{
-		LTyp: sharedPairDataType,
-		List: list,
-	}
+	return syn.WrapProtoList(sharedPairDataType,
+		list)
+
 }
 
 func materializeConstantValue[T syn.Eval](
@@ -514,23 +512,21 @@ func (m *constantCloneMemo) cloneUncached(
 		if c == nil {
 			return nil, malformedASTError("cannot clone a nil ProtoList constant")
 		}
-		items := make([]syn.IConstant, len(c.List))
-		for i := range c.List {
+		items := make([]syn.IConstant, len(c.List()))
+		for i := range c.List() {
 			var err error
 			items[i], err = m.clone(
 				ctx,
 				checkCancellation,
-				c.List[i],
+				c.List()[i],
 				depth+1,
 			)
 			if err != nil {
 				return nil, err
 			}
 		}
-		return &syn.ProtoList{
-			LTyp: c.LTyp,
-			List: items,
-		}, nil
+		return syn.WrapProtoList(c.LTyp,
+			items), nil
 	case *syn.ProtoArray:
 		if c == nil {
 			return nil, malformedASTError("cannot clone a nil ProtoArray constant")

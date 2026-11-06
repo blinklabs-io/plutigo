@@ -744,12 +744,12 @@ func (m *Machine[T]) caseEvaluateStack(
 			}
 		case *syn.ProtoList:
 			branchRule = 2
-			if len(cval.List) == 0 {
+			if len(cval.List()) == 0 {
 				tag = 1
 			} else {
 				tag = 0
-				firstArg = m.allocConstant(cval.List[0])
-				tail := m.allocProtoListConstant(cval.LTyp, cval.List[1:])
+				firstArg = m.allocConstant(cval.List()[0])
+				tail := m.allocProtoListConstant(cval.LTyp, cval.List()[1:])
 				secondArg = m.allocConstant(tail)
 			}
 		case *syn.ProtoPair:

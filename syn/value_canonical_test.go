@@ -263,10 +263,8 @@ func valueEntryForTest(policyID []byte, tokens ...IConstant) IConstant {
 		FstType: valueEntryType.First,
 		SndType: valueEntryType.Second,
 		First:   &ByteString{Inner: policyID},
-		Second: &ProtoList{
-			LTyp: valueEntryType.Second.(*TList).Typ,
-			List: tokens,
-		},
+		Second: WrapProtoList(valueEntryType.Second.(*TList).Typ,
+			tokens),
 	}
 }
 
@@ -369,11 +367,11 @@ func TestValueValidationAllocationBound(t *testing.T) {
 	for i := range entries {
 		entries[i] = &ProtoPair{
 			First: &ByteString{Inner: []byte{byte(i >> 8), byte(i)}},
-			Second: &ProtoList{List: []IConstant{&ProtoPair{
+			Second: WrapProtoList(nil, []IConstant{&ProtoPair{
 				First: &ByteString{
 					Inner: []byte{1},
 				}, Second: newInteger(big.NewInt(1)),
-			}}},
+			}}),
 		}
 	}
 	allocs := testing.AllocsPerRun(10, func() {

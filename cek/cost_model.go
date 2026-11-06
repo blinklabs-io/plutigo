@@ -159,7 +159,7 @@ func iconstantExMem(c syn.IConstant) func() ExMem {
 		case *syn.Unit:
 			ex = unitExMem()
 		case *syn.ProtoList:
-			ex = listExMem(x.List)
+			ex = listExMem(x.List())
 		case *syn.ProtoArray:
 			ex = listLengthExMem(x.Array)
 		case *syn.Value:
@@ -358,7 +358,7 @@ func valueTokenCount(l []syn.IConstant) int {
 		if !ok {
 			continue
 		}
-		innerCount += len(innerList.List)
+		innerCount += len(innerList.List())
 	}
 	return innerCount
 }
@@ -377,8 +377,8 @@ func valueMaxInnerCount(l []syn.IConstant) int {
 		if !ok {
 			continue
 		}
-		if len(innerList.List) > maxInner {
-			maxInner = len(innerList.List)
+		if len(innerList.List()) > maxInner {
+			maxInner = len(innerList.List())
 		}
 	}
 	return maxInner
@@ -407,7 +407,7 @@ func valueMaxCountExMem(l []syn.IConstant) func() ExMem {
 			if !ok {
 				continue
 			}
-			innerCount += len(innerList.List)
+			innerCount += len(innerList.List())
 		}
 		if outerCount > innerCount {
 			return ExMem(outerCount)

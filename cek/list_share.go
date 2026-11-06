@@ -269,7 +269,7 @@ func (l *listShare) dataListConstant(
 	items []data.PlutusData,
 ) *syn.ProtoList {
 	list, _ := convertList(&l.fromData, owner, items, dataItemConstant)
-	return &syn.ProtoList{LTyp: sharedDataType, List: list}
+	return syn.WrapProtoList(sharedDataType, list)
 }
 
 // dataMapConstant is materializeDataMapConstant through the caches.
@@ -278,5 +278,5 @@ func (l *listShare) dataMapConstant(
 	items [][2]data.PlutusData,
 ) *syn.ProtoList {
 	list, _ := convertList(&l.fromPairs, owner, items, dataPairConstant)
-	return &syn.ProtoList{LTyp: sharedPairDataType, List: list}
+	return syn.WrapProtoList(sharedPairDataType, list)
 }

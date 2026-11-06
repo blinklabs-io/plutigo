@@ -33,7 +33,7 @@ func callMultiIndexArray(
 		&Constant{&syn.ProtoArray{ATyp: &syn.TInteger{}, Array: array}},
 	)
 	b = b.ApplyArg(
-		&Constant{&syn.ProtoList{LTyp: &syn.TInteger{}, List: indices}},
+		&Constant{syn.WrapProtoList(&syn.TInteger{}, indices)},
 	)
 	return multiIndexArray(newTestMachineV4(), b)
 }
@@ -58,15 +58,14 @@ func TestMultiIndexArrayReferenceVectors(t *testing.T) {
 			&syn.Integer{Inner: big.NewInt(30)},
 		},
 	}}
-	indices := &Constant{&syn.ProtoList{
-		LTyp: &syn.TInteger{},
-		List: []syn.IConstant{
+	indices := &Constant{syn.WrapProtoList(&syn.TInteger{},
+		[]syn.IConstant{
 			&syn.Integer{Inner: big.NewInt(2)},
 			&syn.Integer{Inner: big.NewInt(0)},
 			&syn.Integer{Inner: big.NewInt(0)},
 			&syn.Integer{Inner: big.NewInt(1)},
-		},
-	}}
+		}),
+	}
 
 	b := newTestBuiltin(fn)
 	b = b.ApplyArg(array)
@@ -84,10 +83,10 @@ func TestMultiIndexArrayReferenceVectors(t *testing.T) {
 		)
 	}
 	want := []int64{30, 10, 10, 20}
-	if len(result.List) != len(want) {
-		t.Fatalf("result length = %d, want %d", len(result.List), len(want))
+	if len(result.List()) != len(want) {
+		t.Fatalf("result length = %d, want %d", len(result.List()), len(want))
 	}
-	for i, got := range result.List {
+	for i, got := range result.List() {
 		gotInt, ok := got.(*syn.Integer)
 		if !ok {
 			t.Fatalf("result[%d] has type %T, want integer", i, got)
@@ -119,10 +118,9 @@ func TestMultiIndexArrayRejectsMoreThanMaximumIndices(t *testing.T) {
 	}}
 	b := newTestBuiltin(fn)
 	b = b.ApplyArg(array)
-	b = b.ApplyArg(&Constant{&syn.ProtoList{
-		LTyp: &syn.TInteger{},
-		List: indices,
-	}})
+	b = b.ApplyArg(&Constant{syn.WrapProtoList(&syn.TInteger{},
+		indices),
+	})
 	_, err := multiIndexArray(newTestMachineV4(), b)
 	if err == nil {
 		t.Fatal("multiIndexArray accepted more than 1024 indices")
@@ -158,10 +156,9 @@ func TestMultiIndexArrayAcceptsMaximumIndices(t *testing.T) {
 		ATyp:  &syn.TInteger{},
 		Array: []syn.IConstant{&syn.Integer{Inner: big.NewInt(42)}},
 	}})
-	b = b.ApplyArg(&Constant{&syn.ProtoList{
-		LTyp: &syn.TInteger{},
-		List: indices,
-	}})
+	b = b.ApplyArg(&Constant{syn.WrapProtoList(&syn.TInteger{},
+		indices),
+	})
 	value, err := multiIndexArray(newTestMachineV4(), b)
 	if err != nil {
 		t.Fatalf("multiIndexArray rejected the maximum index count: %v", err)
@@ -173,10 +170,10 @@ func TestMultiIndexArrayAcceptsMaximumIndices(t *testing.T) {
 			expectConstant(t, value).Constant,
 		)
 	}
-	if len(result.List) != multiIndexArrayMaximumIndexCount {
+	if len(result.List()) != multiIndexArrayMaximumIndexCount {
 		t.Fatalf(
 			"result length = %d, want %d",
-			len(result.List),
+			len(result.List()),
 			multiIndexArrayMaximumIndexCount,
 		)
 	}
@@ -397,13 +394,11 @@ func testValueEntry(policy string, tokenNames ...string) syn.IConstant {
 			Second: &syn.TInteger{},
 		}},
 		First: &syn.ByteString{Inner: []byte(policy)},
-		Second: &syn.ProtoList{
-			LTyp: &syn.TPair{
-				First:  &syn.TByteString{},
-				Second: &syn.TInteger{},
-			},
-			List: tokens,
+		Second: syn.WrapProtoList(&syn.TPair{
+			First:  &syn.TByteString{},
+			Second: &syn.TInteger{},
 		},
+			tokens),
 	}
 }
 
@@ -431,16 +426,16 @@ func TestPoliciesAndAssetCountMatchValueSemantics(t *testing.T) {
 			expectConstant(t, policyValue).Constant,
 		)
 	}
-	if len(policyList.List) != 2 {
-		t.Fatalf("policies result length = %d, want 2", len(policyList.List))
+	if len(policyList.List()) != 2 {
+		t.Fatalf("policies result length = %d, want 2", len(policyList.List()))
 	}
 	for i, want := range []string{"alpha", "zeta"} {
-		got, ok := policyList.List[i].(*syn.ByteString)
+		got, ok := policyList.List()[i].(*syn.ByteString)
 		if !ok {
 			t.Fatalf(
 				"policies result[%d] type = %T, want *syn.ByteString",
 				i,
-				policyList.List[i],
+				policyList.List()[i],
 			)
 		}
 		if string(got.Inner) != want {

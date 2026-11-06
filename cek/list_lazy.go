@@ -205,7 +205,7 @@ func (l *consConstList[T]) lazyDrop(m *Machine[T], k int) Value[T] {
 
 func (l *consConstList[T]) flatten() Value[T] {
 	flat, _ := l.cell.flatten()
-	return &Constant{Constant: &syn.ProtoList{LTyp: l.typ, List: flat}}
+	return &Constant{Constant: syn.WrapProtoList(l.typ, flat)}
 }
 
 type consDataList[T syn.Eval] struct {

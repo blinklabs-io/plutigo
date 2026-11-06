@@ -50,16 +50,14 @@ func ownershipProgram(seed byte) *Program[DeBruijn] {
 								Inner: new(big.Int).Lsh(big.NewInt(n+1), 90),
 							},
 						},
-						&Constant{Con: &ProtoList{
-							LTyp: &TInteger{},
-							List: []IConstant{
+						&Constant{Con: WrapProtoList(&TInteger{},
+							[]IConstant{
 								&Integer{Inner: big.NewInt(n)},
 								&Integer{Inner: big.NewInt(n + 100)},
-							},
-						}},
-						&Constant{Con: &ProtoList{
-							LTyp: &TPair{First: &TInteger{}, Second: &TData{}},
-							List: []IConstant{&ProtoPair{
+							}),
+						},
+						&Constant{Con: WrapProtoList(&TPair{First: &TInteger{}, Second: &TData{}},
+							[]IConstant{&ProtoPair{
 								FstType: &TInteger{},
 								SndType: &TData{},
 								First:   &Integer{Inner: big.NewInt(-n)},
@@ -74,8 +72,8 @@ func ownershipProgram(seed byte) *Program[DeBruijn] {
 										}),
 									}),
 								},
-							}},
-						}},
+							}}),
+						},
 					},
 				},
 			},

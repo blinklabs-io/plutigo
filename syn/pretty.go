@@ -417,7 +417,7 @@ func (pp *PrettyPrinter) printConstant(c *Constant, inCollection bool) {
 			pp.write(") ")
 		}
 
-		pp.printConstantCollection(con.List)
+		pp.printConstantCollection(con.List())
 	case *ProtoArray:
 		if !inCollection {
 			pp.write("(array ")

@@ -100,9 +100,7 @@ func TestFlatDecodeCollectionWidthLimit(t *testing.T) {
 			Constr:   &Error{},
 			Branches: errorFields(tooWide),
 		},
-		"constant list": &Constant{Con: &ProtoList{
-			LTyp: &TInteger{}, List: ints,
-		}},
+		"constant list": &Constant{Con: WrapProtoList(&TInteger{}, ints)},
 	}
 	for name, term := range tests {
 		encoded := encodeV110(t, term)
@@ -374,9 +372,7 @@ func TestFlatDecodeAcceptsTransactionSizedUnitList(t *testing.T) {
 	for i := range items {
 		items[i] = &Unit{}
 	}
-	encoded := encodeV110(t, &Constant{Con: &ProtoList{
-		LTyp: &TUnit{}, List: items,
-	}})
+	encoded := encodeV110(t, &Constant{Con: WrapProtoList(&TUnit{}, items)})
 	for path, err := range decodeAll(encoded) {
 		if err != nil {
 			t.Errorf("%s: %v", path, err)
@@ -536,7 +532,7 @@ func TestPrettyRecursiveDepth(t *testing.T) {
 		term = &Case[DeBruijn]{Constr: term}
 	}
 	for name, node := range map[string]Term[DeBruijn]{
-		"pair values":     &Constant{Con: &ProtoList{LTyp: &TUnit{}, List: []IConstant{pair}}},
+		"pair values":     &Constant{Con: WrapProtoList(&TUnit{}, []IConstant{pair})},
 		"types":           &Constant{Con: &ProtoList{LTyp: typ}},
 		"data":            &Constant{Con: &Data{Inner: datum}},
 		"case scrutinees": term,
@@ -587,9 +583,7 @@ func TestPrettyDataConstrTagAllocationBound(t *testing.T) {
 func TestPrettyStopsBeforeNextConstant(t *testing.T) {
 	// The nil integer would panic if a sibling were visited after the first
 	// item exhausts the output allowance.
-	out, err := PrettyTermWithLimits[DeBruijn](&Constant{Con: &ProtoList{
-		LTyp: &TByteString{}, List: []IConstant{&ByteString{Inner: make([]byte, 100)}, (*Integer)(nil)},
-	}}, PrettyLimits{MaxOutputBytes: 40})
+	out, err := PrettyTermWithLimits[DeBruijn](&Constant{Con: WrapProtoList(&TByteString{}, []IConstant{&ByteString{Inner: make([]byte, 100)}, (*Integer)(nil)})}, PrettyLimits{MaxOutputBytes: 40})
 	requireErrContains(t, "PrettyTermWithLimits", err, "output")
 	if out != "" {
 		t.Errorf("output on failure: %q", out)

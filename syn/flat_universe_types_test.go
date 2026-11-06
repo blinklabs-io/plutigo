@@ -43,8 +43,8 @@ func TestDecodeFlatUniverseTypes(t *testing.T) {
 						list.LTyp,
 					)
 				}
-				if len(list.List) != 0 {
-					t.Fatalf("list length = %d, want 0", len(list.List))
+				if len(list.List()) != 0 {
+					t.Fatalf("list length = %d, want 0", len(list.List()))
 				}
 			},
 		},
@@ -63,8 +63,8 @@ func TestDecodeFlatUniverseTypes(t *testing.T) {
 						list.LTyp,
 					)
 				}
-				if len(list.List) != 0 {
-					t.Fatalf("list length = %d, want 0", len(list.List))
+				if len(list.List()) != 0 {
+					t.Fatalf("list length = %d, want 0", len(list.List()))
 				}
 			},
 		},
@@ -83,8 +83,8 @@ func TestDecodeFlatUniverseTypes(t *testing.T) {
 						list.LTyp,
 					)
 				}
-				if len(list.List) != 0 {
-					t.Fatalf("list length = %d, want 0", len(list.List))
+				if len(list.List()) != 0 {
+					t.Fatalf("list length = %d, want 0", len(list.List()))
 				}
 			},
 		},

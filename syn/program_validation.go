@@ -329,10 +329,10 @@ func constantHasValueData(con IConstant, items *int) (bool, error) {
 				item, dataRoot, dataNodes = k.Inner, k.Inner, 0
 			case *ProtoList:
 				if k != nil {
-					collection = k.List
+					collection = k.List()
 				}
 			case ProtoList:
-				collection = k.List
+				collection = k.List()
 			case *ProtoArray:
 				if k != nil {
 					collection = k.Array

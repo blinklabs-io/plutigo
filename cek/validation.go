@@ -655,7 +655,7 @@ func validateConstantStructureWithBudget(
 					return err
 				}
 			}
-			for _, child := range c.List {
+			for _, child := range c.List() {
 				if !budget.skipConstantTypes && !constantHasType(child, c.LTyp) {
 					return malformedASTError("list constant element %T does not have the list's element type", child)
 				}

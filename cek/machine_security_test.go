@@ -128,10 +128,9 @@ func TestDischargeSharesConstantCloneWorkBudget(t *testing.T) {
 		&syn.Integer{Inner: big.NewInt(2)},
 		&syn.Integer{Inner: big.NewInt(3)},
 	}
-	constant := &Constant{Constant: &syn.ProtoList{
-		LTyp: &syn.TInteger{},
-		List: items,
-	}}
+	constant := &Constant{Constant: syn.WrapProtoList(&syn.TInteger{},
+		items),
+	}
 	result := &Constr[syn.DeBruijn]{
 		Fields: []Value[syn.DeBruijn]{constant, constant},
 	}
@@ -185,10 +184,9 @@ func TestRunBoundsRepeatedScalarResultCopies(t *testing.T) {
 	for i := range items {
 		items[i] = shared
 	}
-	term := &syn.Constant{Con: &syn.ProtoList{
-		LTyp: &syn.TByteString{},
-		List: items,
-	}}
+	term := &syn.Constant{Con: syn.WrapProtoList(&syn.TByteString{},
+		items),
+	}
 
 	_, err := newTestMachineFlow().Run(term)
 	var budgetErr *BudgetError
