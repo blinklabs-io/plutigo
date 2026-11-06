@@ -23,8 +23,13 @@ import (
 )
 
 // termInterfaceDeBruijn mirrors Go's runtime layout for an interface value
-// holding a syn.Term[syn.DeBruijn]. Its itab pointer supports fast dispatch in
-// the evaluator loop and in immediate-term checks.
+// holding a syn.Term[syn.DeBruijn]. Comparing its itab pointer against the
+// itabs recorded below dispatches the evaluator loop and the immediate-term
+// checks; a type switch in its place costs about 5% of evaluation time. The
+// data pointer is reinterpreted only after its itab matched exactly, so a
+// term whose itab is not one of these (another binary's copy, say) reaches
+// the unknown-term case and fails with an InternalError instead of being
+// misread.
 type termInterfaceDeBruijn struct {
 	tab  unsafe.Pointer
 	data unsafe.Pointer
