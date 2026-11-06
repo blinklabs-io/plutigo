@@ -2880,17 +2880,19 @@ func bls12381G1Uncompress[T syn.Eval](
 		}
 	}
 
-	uncompressed := new(bls.G1Affine)
-
-	_, err = uncompressed.SetBytes(arg1)
-	if err != nil {
-		return nil, err
+	key := blsG1UncompressKey(arg1)
+	jac, cached := blsG1UncompressCache.get(&key)
+	if !cached {
+		var uncompressed bls.G1Affine
+		if _, err := uncompressed.SetBytes(arg1); err != nil {
+			return nil, err
+		}
+		jac.FromAffine(&uncompressed)
+		blsG1UncompressCache.store(&key, jac)
 	}
 
-	jac := new(bls.G1Jac).FromAffine(uncompressed)
-
 	value := &Constant{&syn.Bls12_381G1Element{
-		Inner: jac,
+		Inner: &jac,
 	}}
 
 	return value, nil
