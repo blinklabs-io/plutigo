@@ -183,8 +183,9 @@ func isHexDigit(ch rune) bool {
 
 // readString reads a string literal after its opening quote, as the
 // reference parser's conText does with Text.Megaparsec.Char.Lexer.charLiteral:
-// an escape is decoded by readLitChar from at most escapeWindow characters
-// starting at the backslash.
+// each character is read by readLitChar from at most escapeWindow characters
+// starting at it, so an escape and the empty escapes (\&) that follow a
+// character end within that window.
 func (l *Lexer) readString() (string, error) {
 	var sb strings.Builder
 	var window [escapeWindow]rune
@@ -198,15 +199,21 @@ func (l *Lexer) readString() (string, error) {
 
 			return sb.String(), nil
 		}
-		if l.ch != '\\' {
+		if l.ch != '\\' && l.peekChar() != '\\' {
 			sb.WriteRune(l.ch)
 
 			continue
 		}
-		r, n, err := readEscape(l.lookahead(window[:0]))
-		if err != nil {
-			return "", fmt.Errorf("%w at position %d", err, l.pos)
+		w := l.lookahead(window[:0])
+		r, n := l.ch, 1
+		if l.ch == '\\' {
+			var err error
+			r, n, err = readEscape(w)
+			if err != nil {
+				return "", fmt.Errorf("%w at position %d", err, l.pos)
+			}
 		}
+		n = skipEmptyEscapes(w, n)
 		// Data.Text replaces a surrogate code point with U+FFFD, as
 		// WriteRune does.
 		sb.WriteRune(r)

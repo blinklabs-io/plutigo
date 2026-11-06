@@ -102,9 +102,9 @@ func readEscape(w []rune) (rune, int, error) {
 	}
 	if start == 2 || isDigitIn(c, 10) {
 		end := start
-		value := 0
+		var value int64
 		for end < len(w) && isDigitIn(w[end], base) {
-			value = value*base + digitValue(w[end])
+			value = value*int64(base) + int64(digitValue(w[end]))
 			end++
 		}
 		if end > start {
@@ -130,6 +130,15 @@ func readEscape(w []rune) (rune, int, error) {
 		end++
 	}
 	return 0, 0, fmt.Errorf("unknown escape sequence: %s", string(w[:end]))
+}
+
+// skipEmptyEscapes returns the end of the empty escapes (\&) that start at
+// w[n], as GHC's lexChar consumes them after a character.
+func skipEmptyEscapes(w []rune, n int) int {
+	for n+1 < len(w) && w[n] == '\\' && w[n+1] == '&' {
+		n += 2
+	}
+	return n
 }
 
 func isDigitIn(r rune, base int) bool {

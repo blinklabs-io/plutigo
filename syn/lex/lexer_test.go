@@ -208,6 +208,10 @@ func TestLexerStringNumericEscapes(t *testing.T) {
 		{"control escape", `"\^["`, "\x1b"},
 		{"control underscore", `"\^_"`, "\x1f"},
 		{"single quote", `"\'"`, "'"},
+		{"empty escape after a character", `"a\&b"`, "ab"},
+		{"empty escapes after a character", `"a\&\&b"`, "ab"},
+		{"empty escape ends a numeric escape", `"\65\&5"`, "A5"},
+		{"empty escape ends SO", `"\SO\&H"`, "\x0eH"},
 	}
 
 	for _, tt := range tests {
@@ -253,6 +257,8 @@ func TestLexerStringNumericEscapeErrors(t *testing.T) {
 		{"octal no digits", `"\o8"`},
 		{"control lowercase", `"\^a"`},
 		{"empty escape", `"\&"`},
+		{"hex beyond 32 bits", `"\x80000000"`},
+		{"hex largest window value", `"\xFFFFFFFF"`},
 		{"unknown letter", `"\q"`},
 		{"escape at end of input", `"\`},
 	}
@@ -271,6 +277,18 @@ func TestLexerStringNumericEscapeErrors(t *testing.T) {
 				)
 			}
 		})
+	}
+}
+
+// TestLexerStringEscapeErrorPosition checks that an escape error reports the
+// escape's position in runes.
+func TestLexerStringEscapeErrorPosition(t *testing.T) {
+	token := NewLexer(`"éé\q"`).NextToken()
+	if token.Type != TokenError {
+		t.Fatalf("expected TokenError, got %v (literal %q)", token.Type, token.Literal)
+	}
+	if !strings.Contains(token.Literal, "at position 3") {
+		t.Fatalf("error %q does not report position 3", token.Literal)
 	}
 }
 
