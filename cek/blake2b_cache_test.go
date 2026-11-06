@@ -42,11 +42,16 @@ func TestBlake2bCachePreservesBytesAndCharges(t *testing.T) {
 	m := newTestMachine()
 	budget := ExBudget{Cpu: 1 << 60, Mem: 1 << 60}
 	input := bytes.Repeat([]byte{0x5a}, 64<<10)
+	original := bytes.Clone(input)
 	expected := blake2b.Sum256(input)
 	var remaining ExBudget
 	for i := range 2 {
 		m.ExBudget = budget
-		out, err := evalCachedBlake(m, bytes.Clone(input))
+		argument := input
+		if i != 0 {
+			argument = bytes.Clone(input)
+		}
+		out, err := evalCachedBlake(m, argument)
 		if err != nil || !bytes.Equal(out, expected[:]) {
 			t.Fatalf("hash %d changed: %v", i, err)
 		}
@@ -69,6 +74,9 @@ func TestBlake2bCachePreservesBytesAndCharges(t *testing.T) {
 	}
 	// The key must own a copy even when the input's backing array changes.
 	input[0] ^= 0xff
+	if m.blake2bCache.keys[m.blake2bCache.head] != string(original) {
+		t.Fatal("mutating admitted input changed the retained cache key")
+	}
 	m.ExBudget = budget
 	out, err := evalCachedBlake(m, input)
 	expected = blake2b.Sum256(input)
