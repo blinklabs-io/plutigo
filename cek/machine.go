@@ -116,6 +116,7 @@ type Machine[T syn.Eval] struct {
 	builtins           *Builtins[T]
 	builtinNoArgValues *[builtin.TotalBuiltinCount][3]*Builtin[T]
 	costCaches         *builtinCostCaches
+	blake2bCache       *blake2bCache
 	// available is shared by every machine with the same language and
 	// protocol major; it must never be written through.
 	available  *[builtin.TotalBuiltinCount]bool
@@ -1710,6 +1711,7 @@ func (m *Machine[T]) runContext(
 		m.activeContext = nil
 	}
 	defer func() { m.activeContext = nil }()
+	defer func() { m.blake2bCache.reset() }()
 	if !skipTermValidation {
 		if err := validateTermStructure[T](
 			ctx,

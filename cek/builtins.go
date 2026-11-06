@@ -1550,7 +1550,7 @@ func blake2B256[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	res := blake2b.Sum256(arg1)
+	res := m.blake2b256(arg1)
 
 	con := &syn.ByteString{
 		Inner: res[:],
