@@ -1030,10 +1030,7 @@ func TestUnConstrDataBuiltin(t *testing.T) {
 	}
 
 	// Create a constr data
-	constr := &data.Constr{
-		Tag:    big.NewInt(1),
-		Fields: []data.PlutusData{&data.Integer{Inner: big.NewInt(99)}},
-	}
+	constr := data.WrapConstr(big.NewInt(1), []data.PlutusData{&data.Integer{Inner: big.NewInt(99)}})
 	d := &syn.Data{Inner: constr}
 
 	v1 := &Constant{d}
@@ -1076,13 +1073,13 @@ func TestUnConstrDataBuiltin(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ProtoList fields, got %T", pair.Second)
 	}
-	if len(fieldsConst.List) != 1 {
-		t.Fatalf("expected 1 field, got %d", len(fieldsConst.List))
+	if len(fieldsConst.List()) != 1 {
+		t.Fatalf("expected 1 field, got %d", len(fieldsConst.List()))
 	}
 
-	fieldData, ok := fieldsConst.List[0].(*syn.Data)
+	fieldData, ok := fieldsConst.List()[0].(*syn.Data)
 	if !ok {
-		t.Fatalf("expected Data field, got %T", fieldsConst.List[0])
+		t.Fatalf("expected Data field, got %T", fieldsConst.List()[0])
 	}
 	fieldInt, ok := fieldData.Inner.(*data.Integer)
 	if !ok {
@@ -1304,13 +1301,11 @@ func TestHeadListBuiltin(t *testing.T) {
 	}
 
 	// Create a list with two integers: [1, 2]
-	list := &syn.ProtoList{
-		LTyp: &syn.TInteger{},
-		List: []syn.IConstant{
+	list := syn.WrapProtoList(&syn.TInteger{},
+		[]syn.IConstant{
 			&syn.Integer{Inner: big.NewInt(1)},
 			&syn.Integer{Inner: big.NewInt(2)},
-		},
-	}
+		})
 
 	v1 := &Constant{list}
 	b = b.ApplyArg(v1)
@@ -1339,13 +1334,11 @@ func TestHeadListBuiltinOnConstantDataList(t *testing.T) {
 	m := newTestMachine()
 	b := newTestBuiltin(builtin.HeadList)
 
-	list := &syn.ProtoList{
-		LTyp: &syn.TData{},
-		List: []syn.IConstant{
+	list := syn.WrapProtoList(&syn.TData{},
+		[]syn.IConstant{
 			&syn.Data{Inner: &data.Integer{Inner: big.NewInt(1)}},
 			&syn.Data{Inner: &data.Integer{Inner: big.NewInt(2)}},
-		},
-	}
+		})
 
 	b = b.ApplyArg(&Constant{list})
 
@@ -1370,14 +1363,12 @@ func TestTailListBuiltin(t *testing.T) {
 	}
 
 	// Create a list with three integers: [1, 2, 3]
-	list := &syn.ProtoList{
-		LTyp: &syn.TInteger{},
-		List: []syn.IConstant{
+	list := syn.WrapProtoList(&syn.TInteger{},
+		[]syn.IConstant{
 			&syn.Integer{Inner: big.NewInt(1)},
 			&syn.Integer{Inner: big.NewInt(2)},
 			&syn.Integer{Inner: big.NewInt(3)},
-		},
-	}
+		})
 
 	v1 := &Constant{list}
 	b = b.ApplyArg(v1)
@@ -1397,21 +1388,21 @@ func TestTailListBuiltin(t *testing.T) {
 		t.Fatalf("expected ProtoList constant, got %T", constVal.Constant)
 	}
 
-	if len(tailList.List) != 2 {
-		t.Fatalf("expected list with 2 elements, got %d", len(tailList.List))
+	if len(tailList.List()) != 2 {
+		t.Fatalf("expected list with 2 elements, got %d", len(tailList.List()))
 	}
 
-	elem1, ok := tailList.List[0].(*syn.Integer)
+	elem1, ok := tailList.List()[0].(*syn.Integer)
 	if !ok {
-		t.Fatalf("expected Integer element, got %T", tailList.List[0])
+		t.Fatalf("expected Integer element, got %T", tailList.List()[0])
 	}
 	if elem1.Inner.Int64() != 2 {
 		t.Fatalf("expected first element to be 2, got %v", elem1.Inner)
 	}
 
-	elem2, ok := tailList.List[1].(*syn.Integer)
+	elem2, ok := tailList.List()[1].(*syn.Integer)
 	if !ok {
-		t.Fatalf("expected Integer element, got %T", tailList.List[1])
+		t.Fatalf("expected Integer element, got %T", tailList.List()[1])
 	}
 	if elem2.Inner.Int64() != 3 {
 		t.Fatalf("expected second element to be 3, got %v", elem2.Inner)
@@ -1428,12 +1419,10 @@ func TestNullListBuiltin(t *testing.T) {
 		Forces:   0,
 	}
 
-	list := &syn.ProtoList{
-		LTyp: &syn.TInteger{},
-		List: []syn.IConstant{
+	list := syn.WrapProtoList(&syn.TInteger{},
+		[]syn.IConstant{
 			&syn.Integer{Inner: big.NewInt(1)},
-		},
-	}
+		})
 
 	v1 := &Constant{list}
 	b = b.ApplyArg(v1)
@@ -1464,10 +1453,8 @@ func TestNullListBuiltin(t *testing.T) {
 		Forces:   0,
 	}
 
-	emptyList := &syn.ProtoList{
-		LTyp: &syn.TInteger{},
-		List: []syn.IConstant{},
-	}
+	emptyList := syn.WrapProtoList(&syn.TInteger{},
+		[]syn.IConstant{})
 
 	v2 := &Constant{emptyList}
 	b2 = b2.ApplyArg(v2)
@@ -1770,12 +1757,11 @@ func TestConstrDataBuiltin(t *testing.T) {
 
 	// ConstrData takes a constructor index and a list of data arguments
 	index := &Constant{&syn.Integer{Inner: big.NewInt(0)}}
-	dataList := &syn.ProtoList{
-		LTyp: &syn.TData{},
-		List: []syn.IConstant{
+	dataList := syn.WrapProtoList(&syn.TData{},
+		[]syn.IConstant{
 			&syn.Data{Inner: &data.Integer{Inner: big.NewInt(42)}},
-		},
-	}
+		})
+
 	listArg := &Constant{dataList}
 
 	b = b.ApplyArg(index)
@@ -2014,13 +2000,12 @@ func TestListDataBuiltin(t *testing.T) {
 	}
 
 	// Create a list of data values
-	dataList := &syn.ProtoList{
-		LTyp: &syn.TData{},
-		List: []syn.IConstant{
+	dataList := syn.WrapProtoList(&syn.TData{},
+		[]syn.IConstant{
 			&syn.Data{Inner: &data.Integer{Inner: big.NewInt(1)}},
 			&syn.Data{Inner: &data.Integer{Inner: big.NewInt(2)}},
-		},
-	}
+		})
+
 	listArg := &Constant{dataList}
 
 	b = b.ApplyArg(listArg)
@@ -2038,8 +2023,8 @@ func TestListDataBuiltin(t *testing.T) {
 		t.Fatalf("expected List data, got %T", dataConst.Inner)
 	}
 
-	if len(listData.Items) != 2 {
-		t.Fatalf("expected 2 items, got %d", len(listData.Items))
+	if len(listData.Items()) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(listData.Items()))
 	}
 }
 
@@ -2089,13 +2074,12 @@ func TestMkConsBuiltin(t *testing.T) {
 
 	// MkCons takes an element and a list, returns a new list with the element prepended
 	elem := &Constant{&syn.Integer{Inner: big.NewInt(0)}}
-	list := &syn.ProtoList{
-		LTyp: &syn.TInteger{},
-		List: []syn.IConstant{
+	list := syn.WrapProtoList(&syn.TInteger{},
+		[]syn.IConstant{
 			&syn.Integer{Inner: big.NewInt(1)},
 			&syn.Integer{Inner: big.NewInt(2)},
-		},
-	}
+		})
+
 	listArg := &Constant{list}
 
 	b = b.ApplyArg(elem)
@@ -2120,14 +2104,14 @@ func TestMkConsBuiltin(t *testing.T) {
 		t.Fatalf("expected ProtoList constant, got %T", constVal.Constant)
 	}
 
-	if len(resultList.List) != 3 {
-		t.Fatalf("expected list with 3 elements, got %d", len(resultList.List))
+	if len(resultList.List()) != 3 {
+		t.Fatalf("expected list with 3 elements, got %d", len(resultList.List()))
 	}
 
 	// Check that 0 was prepended
-	firstElem, ok := resultList.List[0].(*syn.Integer)
+	firstElem, ok := resultList.List()[0].(*syn.Integer)
 	if !ok {
-		t.Fatalf("expected Integer element, got %T", resultList.List[0])
+		t.Fatalf("expected Integer element, got %T", resultList.List()[0])
 	}
 	if firstElem.Inner.Int64() != 0 {
 		t.Fatalf("expected first element to be 0, got %v", firstElem.Inner)
@@ -3155,12 +3139,10 @@ func TestTypedErrorsBuiltinValidation(t *testing.T) {
 
 		bs := []byte{0xFF}
 		// Create a list containing a non-integer element (a ByteString instead)
-		indices := &syn.ProtoList{
-			LTyp: &syn.TInteger{},
-			List: []syn.IConstant{
+		indices := syn.WrapProtoList(&syn.TInteger{},
+			[]syn.IConstant{
 				&syn.ByteString{Inner: []byte{0x01}}, // wrong type!
-			},
-		}
+			})
 
 		b = b.ApplyArg(&Constant{&syn.ByteString{Inner: bs}})
 		b = b.ApplyArg(&Constant{indices})
@@ -3712,7 +3694,7 @@ func TestChooseListBuiltin(t *testing.T) {
 		m := newTestMachine()
 		b := newTestBuiltin(builtin.ChooseList)
 
-		emptyList := &Constant{&syn.ProtoList{List: []syn.IConstant{}}}
+		emptyList := &Constant{syn.WrapProtoList(nil, []syn.IConstant{})}
 		v1 := emptyList
 		v2 := emptyBranch
 		v3 := otherwiseBranch
@@ -3731,11 +3713,7 @@ func TestChooseListBuiltin(t *testing.T) {
 		m := newTestMachine()
 		b := newTestBuiltin(builtin.ChooseList)
 
-		nonEmptyList := &Constant{
-			&syn.ProtoList{
-				List: []syn.IConstant{&syn.Integer{Inner: big.NewInt(1)}},
-			},
-		}
+		nonEmptyList := &Constant{syn.WrapProtoList(nil, []syn.IConstant{&syn.Integer{Inner: big.NewInt(1)}})}
 		v1 := nonEmptyList
 		v2 := emptyBranch
 		v3 := otherwiseBranch
@@ -3797,8 +3775,8 @@ func TestMkNilDataBuiltin(t *testing.T) {
 	val := evalBuiltin(t, m, b)
 	list := expectMaterializedProtoList(t, val)
 
-	if len(list.List) != 0 {
-		t.Errorf("expected empty list, got %d elements", len(list.List))
+	if len(list.List()) != 0 {
+		t.Errorf("expected empty list, got %d elements", len(list.List()))
 	}
 
 	// Check that it's a data list
@@ -3818,8 +3796,8 @@ func TestMkNilPairDataBuiltin(t *testing.T) {
 	val := evalBuiltin(t, m, b)
 	list := expectMaterializedProtoList(t, val)
 
-	if len(list.List) != 0 {
-		t.Errorf("expected empty list, got %d elements", len(list.List))
+	if len(list.List()) != 0 {
+		t.Errorf("expected empty list, got %d elements", len(list.List()))
 	}
 
 	// Check that it's a pair[data,data] list
@@ -3965,13 +3943,12 @@ func TestUnListDataBuiltin(t *testing.T) {
 	b := newTestBuiltin(builtin.UnListData)
 
 	// Create a data value containing a list
-	list := &data.List{
-		Items: []data.PlutusData{
-			&data.Integer{Inner: big.NewInt(1)},
-			&data.Integer{Inner: big.NewInt(2)},
-			&data.Integer{Inner: big.NewInt(3)},
-		},
-	}
+	list := data.WrapList([]data.PlutusData{
+		&data.Integer{Inner: big.NewInt(1)},
+		&data.Integer{Inner: big.NewInt(2)},
+		&data.Integer{Inner: big.NewInt(3)},
+	})
+
 	dataVal := &syn.Data{Inner: list}
 
 	v1 := &Constant{dataVal}
@@ -3991,12 +3968,12 @@ func TestUnListDataBuiltin(t *testing.T) {
 		t.Fatalf("expected ProtoList constant, got %T", constVal)
 	}
 
-	if len(protoList.List) != 3 {
-		t.Errorf("expected list of length 3, got %d", len(protoList.List))
+	if len(protoList.List()) != 3 {
+		t.Errorf("expected list of length 3, got %d", len(protoList.List()))
 	}
 
 	// Check first element
-	if data1, ok := protoList.List[0].(*syn.Data); ok {
+	if data1, ok := protoList.List()[0].(*syn.Data); ok {
 		if intData, ok := data1.Inner.(*data.Integer); ok {
 			if intData.Inner.Cmp(big.NewInt(1)) != 0 {
 				t.Errorf("expected first element 1, got %v", intData.Inner)
@@ -4005,7 +3982,7 @@ func TestUnListDataBuiltin(t *testing.T) {
 			t.Errorf("expected first element to be Integer, got %T", data1.Inner)
 		}
 	} else {
-		t.Errorf("expected first element to be Data, got %T", protoList.List[0])
+		t.Errorf("expected first element to be Data, got %T", protoList.List()[0])
 	}
 }
 
@@ -4014,18 +3991,17 @@ func TestUnMapDataBuiltin(t *testing.T) {
 	b := newTestBuiltin(builtin.UnMapData)
 
 	// Create a data value containing a map
-	dataMap := &data.Map{
-		Pairs: [][2]data.PlutusData{
-			{
-				&data.Integer{Inner: big.NewInt(1)},
-				&data.ByteString{Inner: []byte("one")},
-			},
-			{
-				&data.Integer{Inner: big.NewInt(2)},
-				&data.ByteString{Inner: []byte("two")},
-			},
+	dataMap := data.WrapMap([][2]data.PlutusData{
+		{
+			&data.Integer{Inner: big.NewInt(1)},
+			&data.ByteString{Inner: []byte("one")},
 		},
-	}
+		{
+			&data.Integer{Inner: big.NewInt(2)},
+			&data.ByteString{Inner: []byte("two")},
+		},
+	})
+
 	dataVal := &syn.Data{Inner: dataMap}
 
 	v1 := &Constant{dataVal}
@@ -4045,12 +4021,12 @@ func TestUnMapDataBuiltin(t *testing.T) {
 		t.Fatalf("expected ProtoList constant, got %T", constVal)
 	}
 
-	if len(protoList.List) != 2 {
-		t.Errorf("expected list of length 2, got %d", len(protoList.List))
+	if len(protoList.List()) != 2 {
+		t.Errorf("expected list of length 2, got %d", len(protoList.List()))
 	}
 
 	// Check first pair
-	if pair, ok := protoList.List[0].(*syn.ProtoPair); ok {
+	if pair, ok := protoList.List()[0].(*syn.ProtoPair); ok {
 		if keyData, ok := pair.First.(*syn.Data); ok {
 			if keyInt, ok := keyData.Inner.(*data.Integer); ok {
 				if keyInt.Inner.Cmp(big.NewInt(1)) != 0 {
@@ -4078,7 +4054,7 @@ func TestUnMapDataBuiltin(t *testing.T) {
 			t.Errorf("expected second to be Data, got %T", pair.Second)
 		}
 	} else {
-		t.Errorf("expected first element to be ProtoPair, got %T", protoList.List[0])
+		t.Errorf("expected first element to be ProtoPair, got %T", protoList.List()[0])
 	}
 }
 
@@ -4097,12 +4073,12 @@ func TestMkConsBuiltinOnDataListValue(t *testing.T) {
 
 	val := evalBuiltin(t, m, b)
 	protoList := expectMaterializedProtoList(t, val)
-	if len(protoList.List) != 3 {
-		t.Fatalf("expected list with 3 elements, got %d", len(protoList.List))
+	if len(protoList.List()) != 3 {
+		t.Fatalf("expected list with 3 elements, got %d", len(protoList.List()))
 	}
-	first, ok := protoList.List[0].(*syn.Data)
+	first, ok := protoList.List()[0].(*syn.Data)
 	if !ok {
-		t.Fatalf("expected first element Data, got %T", protoList.List[0])
+		t.Fatalf("expected first element Data, got %T", protoList.List()[0])
 	}
 	firstInt, ok := first.Inner.(*data.Integer)
 	if !ok {
@@ -4124,13 +4100,13 @@ func TestMkConsDataValueOntoConstantList(t *testing.T) {
 	head := m.allocDataValue(&data.Integer{Inner: big.NewInt(42)})
 
 	// Right: a regular Constant ProtoList of Data
-	tail := &Constant{&syn.ProtoList{
-		LTyp: &syn.TData{},
-		List: []syn.IConstant{
-			&syn.Data{Inner: &data.Integer{Inner: big.NewInt(1)}},
-			&syn.Data{Inner: &data.Integer{Inner: big.NewInt(2)}},
-		},
-	}}
+	tail := &Constant{
+		syn.WrapProtoList(&syn.TData{},
+			[]syn.IConstant{
+				&syn.Data{Inner: &data.Integer{Inner: big.NewInt(1)}},
+				&syn.Data{Inner: &data.Integer{Inner: big.NewInt(2)}},
+			}),
+	}
 
 	b = b.ApplyArg(head)
 	b = b.ApplyArg(tail)
@@ -4139,21 +4115,21 @@ func TestMkConsDataValueOntoConstantList(t *testing.T) {
 	resultList := expectMaterializedProtoList(t, val)
 
 	expectedValues := []int64{42, 1, 2}
-	if len(resultList.List) != len(expectedValues) {
+	if len(resultList.List()) != len(expectedValues) {
 		t.Fatalf(
 			"expected list with %d elements, got %d",
 			len(expectedValues),
-			len(resultList.List),
+			len(resultList.List()),
 		)
 	}
 
 	for i, expectedValue := range expectedValues {
-		dataElem, ok := resultList.List[i].(*syn.Data)
+		dataElem, ok := resultList.List()[i].(*syn.Data)
 		if !ok {
 			t.Fatalf(
 				"expected element %d to be Data, got %T",
 				i,
-				resultList.List[i],
+				resultList.List()[i],
 			)
 		}
 		intElem, ok := dataElem.Inner.(*data.Integer)
@@ -4239,13 +4215,13 @@ func TestTailListBuiltinOnDataMapValue(t *testing.T) {
 
 	val := evalBuiltin(t, m, b)
 	protoList := expectMaterializedProtoList(t, val)
-	if len(protoList.List) != 1 {
-		t.Fatalf("expected tail list of length 1, got %d", len(protoList.List))
+	if len(protoList.List()) != 1 {
+		t.Fatalf("expected tail list of length 1, got %d", len(protoList.List()))
 	}
 
-	pair, ok := protoList.List[0].(*syn.ProtoPair)
+	pair, ok := protoList.List()[0].(*syn.ProtoPair)
 	if !ok {
-		t.Fatalf("expected pair element, got %T", protoList.List[0])
+		t.Fatalf("expected pair element, got %T", protoList.List()[0])
 	}
 	keyData, ok := pair.First.(*syn.Data)
 	if !ok {
@@ -4283,13 +4259,13 @@ func TestMapDataBuiltinOnDataMapValue(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Data Map, got %T", dataConst.Inner)
 	}
-	if len(dataMap.Pairs) != 2 {
-		t.Fatalf("expected map with 2 pairs, got %d", len(dataMap.Pairs))
+	if len(dataMap.Pairs()) != 2 {
+		t.Fatalf("expected map with 2 pairs, got %d", len(dataMap.Pairs()))
 	}
 
-	keyInt, ok := dataMap.Pairs[0][0].(*data.Integer)
+	keyInt, ok := dataMap.Pairs()[0][0].(*data.Integer)
 	if !ok {
-		t.Fatalf("expected first key Integer, got %T", dataMap.Pairs[0][0])
+		t.Fatalf("expected first key Integer, got %T", dataMap.Pairs()[0][0])
 	}
 	if keyInt.Inner.Cmp(big.NewInt(1)) != 0 {
 		t.Fatalf("expected first key 1, got %v", keyInt.Inner)
@@ -4314,13 +4290,11 @@ func TestMapDataBuiltin(t *testing.T) {
 		Second:  &syn.Data{Inner: &data.ByteString{Inner: []byte("two")}},
 	}
 
-	protoList := &syn.ProtoList{
-		LTyp: &syn.TPair{
-			First:  &syn.TData{},
-			Second: &syn.TData{},
-		},
-		List: []syn.IConstant{pair1, pair2},
-	}
+	protoList := syn.WrapProtoList(&syn.TPair{
+		First:  &syn.TData{},
+		Second: &syn.TData{},
+	},
+		[]syn.IConstant{pair1, pair2})
 
 	v1 := &Constant{protoList}
 
@@ -4333,16 +4307,16 @@ func TestMapDataBuiltin(t *testing.T) {
 		t.Fatalf("expected Map, got %T", resultData.Inner)
 	}
 
-	if len(resultMap.Pairs) != 2 {
-		t.Errorf("expected map with 2 pairs, got %d", len(resultMap.Pairs))
+	if len(resultMap.Pairs()) != 2 {
+		t.Errorf("expected map with 2 pairs, got %d", len(resultMap.Pairs()))
 	}
 
 	// Check first pair
-	keyInt, ok := resultMap.Pairs[0][0].(*data.Integer)
+	keyInt, ok := resultMap.Pairs()[0][0].(*data.Integer)
 	if !ok {
 		t.Fatalf(
 			"expected *data.Integer for key, got %T",
-			resultMap.Pairs[0][0],
+			resultMap.Pairs()[0][0],
 		)
 	}
 	if keyInt.Inner.Cmp(big.NewInt(1)) != 0 {
@@ -4351,11 +4325,11 @@ func TestMapDataBuiltin(t *testing.T) {
 			keyInt.Inner,
 		)
 	}
-	valBS, ok := resultMap.Pairs[0][1].(*data.ByteString)
+	valBS, ok := resultMap.Pairs()[0][1].(*data.ByteString)
 	if !ok {
 		t.Fatalf(
 			"expected *data.ByteString for value, got %T",
-			resultMap.Pairs[0][1],
+			resultMap.Pairs()[0][1],
 		)
 	}
 	if string(valBS.Inner) != "one" {
@@ -5285,17 +5259,17 @@ func TestBLSMultiScalarMulValidatesUnpairedScalar(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			evaluate := func(secondScalar syn.IConstant) (Value[syn.DeBruijn], error) {
 				b := newTestBuiltin(tt.builtinFunc)
-				b = b.ApplyArg(&Constant{&syn.ProtoList{
-					LTyp: &syn.TInteger{},
-					List: []syn.IConstant{
-						&syn.Integer{Inner: big.NewInt(1)},
-						secondScalar,
-					},
-				}})
-				b = b.ApplyArg(&Constant{&syn.ProtoList{
-					LTyp: tt.elemType,
-					List: []syn.IConstant{tt.elem},
-				}})
+				b = b.ApplyArg(&Constant{
+					syn.WrapProtoList(&syn.TInteger{},
+						[]syn.IConstant{
+							&syn.Integer{Inner: big.NewInt(1)},
+							secondScalar,
+						}),
+				})
+				b = b.ApplyArg(&Constant{
+					syn.WrapProtoList(tt.elemType,
+						[]syn.IConstant{tt.elem}),
+				})
 				return evalBuiltinWithError(t, newTestMachineV4(), b)
 			}
 
@@ -5367,16 +5341,16 @@ func TestDataBuiltinsRejectMalformedElements(t *testing.T) {
 	intElem := &syn.Integer{Inner: big.NewInt(1)}
 
 	// list declared as (list data) but containing an integer element
-	badDataList := &Constant{&syn.ProtoList{
-		LTyp: &syn.TData{},
-		List: []syn.IConstant{intElem},
-	}}
+	badDataList := &Constant{
+		syn.WrapProtoList(&syn.TData{},
+			[]syn.IConstant{intElem}),
+	}
 
 	// list declared as (list (pair data data)) but containing an integer element
-	badPairList := &Constant{&syn.ProtoList{
-		LTyp: &syn.TPair{First: &syn.TData{}, Second: &syn.TData{}},
-		List: []syn.IConstant{intElem},
-	}}
+	badPairList := &Constant{
+		syn.WrapProtoList(&syn.TPair{First: &syn.TData{}, Second: &syn.TData{}},
+			[]syn.IConstant{intElem}),
+	}
 
 	tests := []struct {
 		name        string
@@ -5452,13 +5426,11 @@ func newValueDataBoundaryInput(tokenCount int) *Constant {
 				Second: &syn.TInteger{},
 			}},
 			First: &syn.ByteString{Inner: []byte{}},
-			Second: &syn.ProtoList{
-				LTyp: &syn.TPair{
-					First:  &syn.TByteString{},
-					Second: &syn.TInteger{},
-				},
-				List: tokens,
+			Second: syn.WrapProtoList(&syn.TPair{
+				First:  &syn.TByteString{},
+				Second: &syn.TInteger{},
 			},
+				tokens),
 		},
 	})
 	if err != nil {
@@ -5524,24 +5496,24 @@ func TestValueDataEntryLimit(t *testing.T) {
 			if !ok {
 				t.Fatalf("expected data map, got %T", result.Inner)
 			}
-			if len(resultMap.Pairs) != 1 {
+			if len(resultMap.Pairs()) != 1 {
 				t.Fatalf(
 					"expected one policy entry, got %d",
-					len(resultMap.Pairs),
+					len(resultMap.Pairs()),
 				)
 			}
-			tokens, ok := resultMap.Pairs[0][1].(*data.Map)
+			tokens, ok := resultMap.Pairs()[0][1].(*data.Map)
 			if !ok {
 				t.Fatalf(
 					"expected token data map, got %T",
-					resultMap.Pairs[0][1],
+					resultMap.Pairs()[0][1],
 				)
 			}
-			if len(tokens.Pairs) != tt.wantOutput {
+			if len(tokens.Pairs()) != tt.wantOutput {
 				t.Fatalf(
 					"expected %d token entries, got %d",
 					tt.wantOutput,
-					len(tokens.Pairs),
+					len(tokens.Pairs()),
 				)
 			}
 		})
@@ -6503,7 +6475,7 @@ func TestMkConsOntoEmptyDataListStartsDataList(t *testing.T) {
 	dataType := &syn.TData{}
 	pairType := &syn.TPair{First: &syn.TData{}, Second: &syn.TData{}}
 	emptyOf := func(typ syn.Typ) *Constant {
-		return &Constant{&syn.ProtoList{LTyp: typ, List: []syn.IConstant{}}}
+		return &Constant{syn.WrapProtoList(typ, []syn.IConstant{})}
 	}
 	one := &data.Integer{Inner: big.NewInt(1)}
 	two := &data.Integer{Inner: big.NewInt(2)}
@@ -6537,10 +6509,10 @@ func TestMkConsOntoEmptyDataListStartsDataList(t *testing.T) {
 				t.Fatalf("list type %T", list.LTyp)
 			}
 			if want := []syn.IConstant{&syn.Data{Inner: two}, &syn.Data{Inner: one}}; !reflect.DeepEqual(
-				list.List,
+				list.List(),
 				want,
 			) {
-				t.Fatalf("list = %v, want %v", list.List, want)
+				t.Fatalf("list = %v, want %v", list.List(), want)
 			}
 		}
 	})
@@ -6562,12 +6534,12 @@ func TestMkConsOntoEmptyDataListStartsDataList(t *testing.T) {
 				t.Fatalf("got %T, want a data map", val)
 			}
 			list := expectMaterializedProtoList(t, val)
-			if len(list.List) != 1 {
-				t.Fatalf("list has %d items, want 1", len(list.List))
+			if len(list.List()) != 1 {
+				t.Fatalf("list has %d items, want 1", len(list.List()))
 			}
-			pair, ok := list.List[0].(*syn.ProtoPair)
+			pair, ok := list.List()[0].(*syn.ProtoPair)
 			if !ok {
-				t.Fatalf("item is %T, want a pair", list.List[0])
+				t.Fatalf("item is %T, want a pair", list.List()[0])
 			}
 			if !reflect.DeepEqual(
 				pair.First,

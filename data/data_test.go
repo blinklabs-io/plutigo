@@ -673,14 +673,14 @@ func TestDecoderIndefiniteSmallMapUsesSinglePairArenaAllocation(t *testing.T) {
 	if !ok {
 		t.Fatalf("decoder.Decode() returned %T, want *Map", decoded)
 	}
-	if len(decodedMap.Pairs) != 4 {
-		t.Fatalf("decoded map has %d pairs, want 4", len(decodedMap.Pairs))
+	if len(decodedMap.Pairs()) != 4 {
+		t.Fatalf("decoded map has %d pairs, want 4", len(decodedMap.Pairs()))
 	}
-	if decoder.pairs.pos != len(decodedMap.Pairs) {
+	if decoder.pairs.pos != len(decodedMap.Pairs()) {
 		t.Fatalf(
 			"pair arena used %d slots for %d pairs; small-map growth should allocate once",
 			decoder.pairs.pos,
-			len(decodedMap.Pairs),
+			len(decodedMap.Pairs()),
 		)
 	}
 }
@@ -1125,7 +1125,7 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 }
 
 func TestValueRejectsNonCanonicalMapShape(t *testing.T) {
-	inner := &Map{Pairs: [][2]PlutusData{{
+	inner := &Map{pairs: [][2]PlutusData{{
 		NewByteString([]byte{0xaa}),
 		NewInteger(big.NewInt(1)),
 	}}}

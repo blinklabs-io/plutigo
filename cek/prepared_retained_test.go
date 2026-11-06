@@ -50,19 +50,14 @@ func retainedShapes(t *testing.T) map[string][]byte {
 	}
 	con := func(c syn.IConstant) syn.Term[syn.DeBruijn] { return &syn.Constant{Con: c} }
 	terms := map[string]syn.Term[syn.DeBruijn]{
-		"integer list": con(&syn.ProtoList{LTyp: &syn.TInteger{}, List: ints}),
-		"unit list":    con(&syn.ProtoList{LTyp: &syn.TUnit{}, List: units}),
-		"bool list":    con(&syn.ProtoList{LTyp: &syn.TBool{}, List: bools}),
-		"empty bytestring list": con(&syn.ProtoList{
-			LTyp: &syn.TByteString{}, List: empties,
-		}),
-		"nested empty lists": con(&syn.ProtoList{
-			LTyp: &syn.TList{Typ: &syn.TUnit{}}, List: lists,
-		}),
-		"unit pair list": con(&syn.ProtoList{
-			LTyp: &syn.TPair{First: &syn.TUnit{}, Second: &syn.TUnit{}},
-			List: pairs,
-		}),
+		"integer list":          con(syn.WrapProtoList(&syn.TInteger{}, ints)),
+		"unit list":             con(syn.WrapProtoList(&syn.TUnit{}, units)),
+		"bool list":             con(syn.WrapProtoList(&syn.TBool{}, bools)),
+		"empty bytestring list": con(syn.WrapProtoList(&syn.TByteString{}, empties)),
+		"nested empty lists":    con(syn.WrapProtoList(&syn.TList{Typ: &syn.TUnit{}}, lists)),
+		"unit pair list": con(syn.WrapProtoList(&syn.TPair{First: &syn.TUnit{}, Second: &syn.TUnit{}},
+			pairs),
+		),
 		"data list":         con(&syn.Data{Inner: data.NewList(dataItems...)}),
 		"wide constructor":  &syn.Constr[syn.DeBruijn]{Fields: fields},
 		"string":            con(&syn.String{Inner: string(make([]byte, n))}),

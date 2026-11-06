@@ -451,7 +451,7 @@ func (d *Decoder) closeFrame(
 	switch frame.kind {
 	case frameList:
 		list := d.allocList()
-		list.Items = d.copyItems(children)
+		list.items = d.copyItems(children)
 		list.useIndef = useIndefPtr(frame.indef)
 		return list, rest, nil
 	case frameConstr:
@@ -466,7 +466,7 @@ func (d *Decoder) closeFrame(
 		constr := d.allocConstr()
 		constr.Tag = d.allocBigInt().SetUint64(frame.tag)
 		d.countMagnitude(constr.Tag)
-		constr.Fields = d.copyItems(children)
+		constr.fields = d.copyItems(children)
 		constr.useIndef = useIndefPtr(frame.indef)
 		return constr, rest, nil
 	default: // frameMap, frameValue
@@ -475,7 +475,7 @@ func (d *Decoder) closeFrame(
 			pairs[i] = [2]PlutusData{children[2*i], children[2*i+1]}
 		}
 		decoded := d.allocMap()
-		decoded.Pairs = pairs
+		decoded.pairs = pairs
 		decoded.useIndef = useIndefPtr(frame.indef)
 		if frame.kind == frameMap {
 			return decoded, rest, nil

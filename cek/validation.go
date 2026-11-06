@@ -164,6 +164,19 @@ func (b *structureValidationBudget) consume(kind string) error {
 	return nil
 }
 
+// fits rejects count children of kind that cannot all be scheduled, before
+// a container built lazily by the evaluator materializes them.
+func (b *structureValidationBudget) fits(kind string, count int) error {
+	if count > b.remaining {
+		return malformedASTError(
+			"%s structure exceeds %d nodes",
+			kind,
+			maxDischargeWork,
+		)
+	}
+	return nil
+}
+
 func (b *structureValidationBudget) consumeTerms(count int) error {
 	if count > b.remaining {
 		return malformedASTError(
@@ -202,6 +215,56 @@ func scheduleValidationItem[T any](
 	}
 	*work = append(*work, item)
 	return nil
+}
+
+// constantHasType reports whether c is a constant of type t. Composite
+// constants are matched on their declared types; their elements are checked
+// against those when they are walked. A nil constant matches its kind and is
+// reported when it is walked.
+func constantHasType(c syn.IConstant, t syn.Typ) bool {
+	switch v := c.(type) {
+	case *syn.Integer:
+		_, ok := t.(*syn.TInteger)
+		return ok
+	case *syn.ByteString:
+		_, ok := t.(*syn.TByteString)
+		return ok
+	case *syn.String:
+		_, ok := t.(*syn.TString)
+		return ok
+	case *syn.Unit:
+		_, ok := t.(*syn.TUnit)
+		return ok
+	case *syn.Bool:
+		_, ok := t.(*syn.TBool)
+		return ok
+	case *syn.Data:
+		_, ok := t.(*syn.TData)
+		return ok
+	case *syn.Value:
+		_, ok := t.(*syn.TValue)
+		return ok
+	case *syn.Bls12_381G1Element:
+		_, ok := t.(*syn.TBls12_381G1Element)
+		return ok
+	case *syn.Bls12_381G2Element:
+		_, ok := t.(*syn.TBls12_381G2Element)
+		return ok
+	case *syn.Bls12_381MlResult:
+		_, ok := t.(*syn.TBls12_381MlResult)
+		return ok
+	case *syn.ProtoList:
+		lt, ok := t.(*syn.TList)
+		return ok && (v == nil || syn.EqualType(v.LTyp, lt.Typ))
+	case *syn.ProtoArray:
+		at, ok := t.(*syn.TArray)
+		return ok && (v == nil || syn.EqualType(v.ATyp, at.Typ))
+	case *syn.ProtoPair:
+		pt, ok := t.(*syn.TPair)
+		return ok && (v == nil ||
+			syn.EqualType(v.FstType, pt.First) && syn.EqualType(v.SndType, pt.Second))
+	}
+	return false
 }
 
 func malformedASTError(format string, args ...any) *TypeError {
@@ -592,7 +655,13 @@ func validateConstantStructureWithBudget(
 					return err
 				}
 			}
-			for _, child := range c.List {
+			if err := budget.fits("constant", c.Len()); err != nil {
+				return err
+			}
+			for _, child := range c.List() {
+				if !budget.skipConstantTypes && !constantHasType(child, c.LTyp) {
+					return malformedASTError("list constant element %T does not have the list's element type", child)
+				}
 				if err := scheduleValidationItem(budget, "constant", &work, constantValidationItem{constant: child, depth: nextDepth}); err != nil {
 					return err
 				}
@@ -613,6 +682,9 @@ func validateConstantStructureWithBudget(
 				}
 			}
 			for _, child := range c.Array {
+				if !budget.skipConstantTypes && !constantHasType(child, c.ATyp) {
+					return malformedASTError("array constant element %T does not have the array's element type", child)
+				}
 				if err := scheduleValidationItem(budget, "constant", &work, constantValidationItem{constant: child, depth: nextDepth}); err != nil {
 					return err
 				}
@@ -641,6 +713,10 @@ func validateConstantStructureWithBudget(
 				if err := validateTypeStructureWithBudget(c.SndType, budget); err != nil {
 					return err
 				}
+			}
+			if !budget.skipConstantTypes &&
+				(!constantHasType(c.First, c.FstType) || !constantHasType(c.Second, c.SndType)) {
+				return malformedASTError("pair constant component does not have the pair's component type")
 			}
 			if err := scheduleValidationItem(budget, "constant", &work, constantValidationItem{constant: c.First, depth: nextDepth}); err != nil {
 				return err
@@ -814,12 +890,18 @@ func validateDataStructureWithBudget(
 				if value == nil {
 					return malformedASTError("constant contains a nil PlutusData constructor")
 				}
-				fields = value.Fields
+				if err := budget.fits("PlutusData", value.NumFields()); err != nil {
+					return err
+				}
+				fields = value.Fields()
 				if value.Tag != nil {
 					tag = value.Tag
 				}
 			case data.Constr:
-				fields = value.Fields
+				if err := budget.fits("PlutusData", value.NumFields()); err != nil {
+					return err
+				}
+				fields = value.Fields()
 				if value.Tag != nil {
 					tag = value.Tag
 				}
@@ -841,9 +923,15 @@ func validateDataStructureWithBudget(
 				if value == nil {
 					return malformedASTError("constant contains a nil PlutusData map")
 				}
-				pairs = value.Pairs
+				if err := budget.fits("PlutusData", 2*value.Len()); err != nil {
+					return err
+				}
+				pairs = value.Pairs()
 			case data.Map:
-				pairs = value.Pairs
+				if err := budget.fits("PlutusData", 2*value.Len()); err != nil {
+					return err
+				}
+				pairs = value.Pairs()
 			}
 			for _, pair := range pairs {
 				if err := scheduleValidationItem(budget, "PlutusData", &work, dataValidationItem{value: pair[0], depth: nextDepth}); err != nil {
@@ -901,9 +989,15 @@ func validateDataStructureWithBudget(
 				if value == nil {
 					return malformedASTError("constant contains a nil PlutusData list")
 				}
-				items = value.Items
+				if err := budget.fits("PlutusData", value.Len()); err != nil {
+					return err
+				}
+				items = value.Items()
 			case data.List:
-				items = value.Items
+				if err := budget.fits("PlutusData", value.Len()); err != nil {
+					return err
+				}
+				items = value.Items()
 			}
 			for _, child := range items {
 				if err := scheduleValidationItem(budget, "PlutusData", &work, dataValidationItem{value: child, depth: nextDepth}); err != nil {
@@ -950,16 +1044,16 @@ func validateDataConstant(
 			if d == nil {
 				return malformedASTError("constant contains a nil PlutusData constructor")
 			}
-			work = append(work, d.Fields...)
+			work = append(work, d.Fields()...)
 		case data.Constr:
-			work = append(work, d.Fields...)
+			work = append(work, d.Fields()...)
 		case *data.Map:
 			if d == nil {
 				return malformedASTError("constant contains a nil PlutusData map")
 			}
-			work = appendDataPairs(work, d.Pairs)
+			work = appendDataPairs(work, d.Pairs())
 		case data.Map:
-			work = appendDataPairs(work, d.Pairs)
+			work = appendDataPairs(work, d.Pairs())
 		case *data.Value:
 			if d == nil {
 				return malformedASTError("constant contains a nil PlutusData Value")
@@ -988,9 +1082,9 @@ func validateDataConstant(
 			if d == nil {
 				return malformedASTError("constant contains a nil PlutusData list")
 			}
-			work = append(work, d.Items...)
+			work = append(work, d.Items()...)
 		case data.List:
-			work = append(work, d.Items...)
+			work = append(work, d.Items()...)
 		default:
 			return malformedASTError("unsupported PlutusData type %T", item)
 		}

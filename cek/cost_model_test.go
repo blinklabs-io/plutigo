@@ -244,13 +244,13 @@ func runV4ScriptBudget(
 }
 
 func TestDataNodeCountIncludesValueInner(t *testing.T) {
-	value, err := dataPkg.NewValue(&dataPkg.Map{Pairs: [][2]dataPkg.PlutusData{{
+	value, err := dataPkg.NewValue(dataPkg.WrapMap([][2]dataPkg.PlutusData{{
 		dataPkg.NewByteString([]byte{0xaa}),
-		&dataPkg.Map{Pairs: [][2]dataPkg.PlutusData{{
+		dataPkg.WrapMap([][2]dataPkg.PlutusData{{
 			dataPkg.NewByteString([]byte{0xbb}),
 			dataPkg.NewInteger(big.NewInt(1)),
-		}}},
-	}}})
+		}}),
+	}}))
 	if err != nil {
 		t.Fatalf("construct Value: %v", err)
 	}

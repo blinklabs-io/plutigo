@@ -152,26 +152,26 @@ func equalShallow(x, y PlutusData) (childFrame, childFrame, bool) {
 func equalConstr(l *Constr, y PlutusData) (childFrame, childFrame, bool) {
 	r, ok := y.(*Constr)
 	if !ok || r == nil || constrTagCmp(l.Tag, r.Tag) != 0 ||
-		len(l.Fields) != len(r.Fields) {
+		l.NumFields() != r.NumFields() {
 		return childFrame{}, childFrame{}, false
 	}
-	return childFrame{items: l.Fields}, childFrame{items: r.Fields}, true
+	return childFrame{items: l.Fields()}, childFrame{items: r.Fields()}, true
 }
 
 func equalList(l *List, y PlutusData) (childFrame, childFrame, bool) {
 	r, ok := y.(*List)
-	if !ok || r == nil || len(l.Items) != len(r.Items) {
+	if !ok || r == nil || l.Len() != r.Len() {
 		return childFrame{}, childFrame{}, false
 	}
-	return childFrame{items: l.Items}, childFrame{items: r.Items}, true
+	return childFrame{items: l.Items()}, childFrame{items: r.Items()}, true
 }
 
 func equalMap(l *Map, y PlutusData) (childFrame, childFrame, bool) {
 	r, ok := y.(*Map)
-	if !ok || r == nil || len(l.Pairs) != len(r.Pairs) {
+	if !ok || r == nil || l.Len() != r.Len() {
 		return childFrame{}, childFrame{}, false
 	}
-	return childFrame{pairs: l.Pairs}, childFrame{pairs: r.Pairs}, true
+	return childFrame{pairs: l.Pairs()}, childFrame{pairs: r.Pairs()}, true
 }
 
 func equalValue(l *Value, y PlutusData) (childFrame, childFrame, bool) {
@@ -182,10 +182,10 @@ func equalValue(l *Value, y PlutusData) (childFrame, childFrame, bool) {
 	if l.Inner == nil {
 		return childFrame{}, childFrame{}, true
 	}
-	if len(l.Inner.Pairs) != len(r.Inner.Pairs) {
+	if l.Inner.Len() != r.Inner.Len() {
 		return childFrame{}, childFrame{}, false
 	}
-	return childFrame{pairs: l.Inner.Pairs}, childFrame{pairs: r.Inner.Pairs}, true
+	return childFrame{pairs: l.Inner.Pairs()}, childFrame{pairs: r.Inner.Pairs()}, true
 }
 
 func (i Integer) equalLeaf(pd PlutusData) bool {
@@ -297,8 +297,8 @@ func copyShallow(pd PlutusData, normalize bool) (PlutusData, *copyFrame) {
 }
 
 func copyConstr(v *Constr, normalize bool) (PlutusData, *copyFrame) {
-	fields := make([]PlutusData, len(v.Fields))
-	out := &Constr{Fields: fields}
+	fields := make([]PlutusData, v.NumFields())
+	out := &Constr{fields: fields}
 	if normalize {
 		// A nil tag stays nil; MarshalCBOR treats it as zero. The tag is
 		// copied rather than aliased: big.Int is mutable.
@@ -315,31 +315,31 @@ func copyConstr(v *Constr, normalize bool) (PlutusData, *copyFrame) {
 	if len(fields) == 0 {
 		return out, nil
 	}
-	return out, &copyFrame{src: childFrame{items: v.Fields}, dstItems: fields}
+	return out, &copyFrame{src: childFrame{items: v.Fields()}, dstItems: fields}
 }
 
 func copyList(v *List, normalize bool) (PlutusData, *copyFrame) {
-	items := make([]PlutusData, len(v.Items))
-	out := &List{Items: items}
+	items := make([]PlutusData, v.Len())
+	out := &List{items: items}
 	if !normalize {
 		out.useIndef = cloneUseIndef(v.useIndef)
 	}
 	if len(items) == 0 {
 		return out, nil
 	}
-	return out, &copyFrame{src: childFrame{items: v.Items}, dstItems: items}
+	return out, &copyFrame{src: childFrame{items: v.Items()}, dstItems: items}
 }
 
 func copyMap(v *Map, normalize bool) (*Map, *copyFrame) {
-	pairs := make([][2]PlutusData, len(v.Pairs))
-	out := &Map{Pairs: pairs}
+	pairs := make([][2]PlutusData, v.Len())
+	out := &Map{pairs: pairs}
 	if !normalize {
 		out.useIndef = cloneUseIndef(v.useIndef)
 	}
 	if len(pairs) == 0 {
 		return out, nil
 	}
-	return out, &copyFrame{src: childFrame{pairs: v.Pairs}, dstPairs: pairs}
+	return out, &copyFrame{src: childFrame{pairs: v.Pairs()}, dstPairs: pairs}
 }
 
 func copyValue(v *Value, normalize bool) (PlutusData, *copyFrame) {
@@ -534,29 +534,29 @@ func containerChildren(pd PlutusData) childFrame {
 	switch v := pd.(type) {
 	case *Constr:
 		if v != nil {
-			return childFrame{items: v.Fields}
+			return childFrame{items: v.Fields()}
 		}
 	case Constr:
-		return childFrame{items: v.Fields}
+		return childFrame{items: v.Fields()}
 	case *List:
 		if v != nil {
-			return childFrame{items: v.Items}
+			return childFrame{items: v.Items()}
 		}
 	case List:
-		return childFrame{items: v.Items}
+		return childFrame{items: v.Items()}
 	case *Map:
 		if v != nil {
-			return childFrame{pairs: v.Pairs}
+			return childFrame{pairs: v.Pairs()}
 		}
 	case Map:
-		return childFrame{pairs: v.Pairs}
+		return childFrame{pairs: v.Pairs()}
 	case *Value:
 		if v != nil && v.Inner != nil {
-			return childFrame{pairs: v.Inner.Pairs}
+			return childFrame{pairs: v.Inner.Pairs()}
 		}
 	case Value:
 		if v.Inner != nil {
-			return childFrame{pairs: v.Inner.Pairs}
+			return childFrame{pairs: v.Inner.Pairs()}
 		}
 	}
 	return childFrame{}

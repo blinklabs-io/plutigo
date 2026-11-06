@@ -417,7 +417,7 @@ func (pp *PrettyPrinter) printConstant(c *Constant, inCollection bool) {
 			pp.write(") ")
 		}
 
-		pp.printConstantCollection(con.List)
+		pp.printConstantCollection(con.List())
 	case *ProtoArray:
 		if !inCollection {
 			pp.write("(array ")
@@ -575,18 +575,18 @@ func (pp *PrettyPrinter) printPlutusData(pd data.PlutusData) {
 		pp.write("B #")
 		pp.writeHex(d.Inner)
 	case *data.List:
-		if len(d.Items) == 0 {
+		if d.Len() == 0 {
 			pp.write("List []")
 		} else {
 			pp.write("List [\n")
 			pp.increaseIndent()
-			for i, item := range d.Items {
+			for i, item := range d.Items() {
 				if pp.err != nil {
 					break
 				}
 				pp.writeIndent()
 				pp.printPlutusData(item)
-				if i < len(d.Items)-1 {
+				if i < d.Len()-1 {
 					pp.write(",")
 				}
 				pp.write("\n")
@@ -596,12 +596,12 @@ func (pp *PrettyPrinter) printPlutusData(pd data.PlutusData) {
 			pp.write("]")
 		}
 	case *data.Map:
-		if len(d.Pairs) == 0 {
+		if d.Len() == 0 {
 			pp.write("Map []")
 		} else {
 			pp.write("Map [\n")
 			pp.increaseIndent()
-			for i, pair := range d.Pairs {
+			for i, pair := range d.Pairs() {
 				if pp.err != nil {
 					break
 				}
@@ -611,7 +611,7 @@ func (pp *PrettyPrinter) printPlutusData(pd data.PlutusData) {
 				pp.write(", ")
 				pp.printPlutusData(pair[1])
 				pp.write(")")
-				if i < len(d.Pairs)-1 {
+				if i < d.Len()-1 {
 					pp.write(",")
 				}
 				pp.write("\n")
@@ -626,18 +626,18 @@ func (pp *PrettyPrinter) printPlutusData(pd data.PlutusData) {
 		pp.write("Constr ")
 		pp.writeInteger(d.Tag)
 		pp.write(" ")
-		if len(d.Fields) == 0 {
+		if d.NumFields() == 0 {
 			pp.write("[]")
 		} else {
 			pp.write("[\n")
 			pp.increaseIndent()
-			for i, field := range d.Fields {
+			for i, field := range d.Fields() {
 				if pp.err != nil {
 					break
 				}
 				pp.writeIndent()
 				pp.printPlutusData(field)
-				if i < len(d.Fields)-1 {
+				if i < d.NumFields()-1 {
 					pp.write(",")
 				}
 				pp.write("\n")
@@ -658,20 +658,20 @@ func (pp *PrettyPrinter) printPlutusValue(value *data.Value) {
 	if value.Inner != nil {
 		allowance := pp.maxBytes - pp.builder.Len()
 		remaining := allowance
-		if len(value.Inner.Pairs) > remaining/7 {
+		if value.Inner.Len() > remaining/7 {
 			pp.reserve(allowance + 1)
 			return
 		}
 		// Even empty keys need seven bytes per policy and six per token.
 		// Check this lower bound before Validate walks every token.
-		remaining -= len(value.Inner.Pairs) * 7
-		for _, policy := range value.Inner.Pairs {
+		remaining -= value.Inner.Len() * 7
+		for _, policy := range value.Inner.Pairs() {
 			if tokens, ok := policy[1].(*data.Map); ok && tokens != nil {
-				if len(tokens.Pairs) > remaining/6 {
+				if tokens.Len() > remaining/6 {
 					pp.reserve(allowance + 1)
 					return
 				}
-				remaining -= len(tokens.Pairs) * 6
+				remaining -= tokens.Len() * 6
 			}
 		}
 	}
@@ -681,7 +681,7 @@ func (pp *PrettyPrinter) printPlutusValue(value *data.Value) {
 	}
 	pp.write("V [")
 	if value.Inner != nil {
-		for i, policy := range value.Inner.Pairs {
+		for i, policy := range value.Inner.Pairs() {
 			if pp.err != nil {
 				break
 			}
@@ -692,7 +692,7 @@ func (pp *PrettyPrinter) printPlutusValue(value *data.Value) {
 			pp.printValueAtom(policy[0])
 			pp.write(", [")
 			tokens := policy[1].(*data.Map)
-			for j, token := range tokens.Pairs {
+			for j, token := range tokens.Pairs() {
 				if pp.err != nil {
 					break
 				}

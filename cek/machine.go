@@ -708,8 +708,7 @@ func (m *Machine[T]) allocProtoListConstant(
 		&m.protoListChunkPos,
 		valueColdChunkSize,
 	)
-	listConstant.LTyp = typ
-	listConstant.List = list
+	*listConstant = *syn.WrapProtoList(typ, list)
 	return listConstant
 }
 
@@ -775,7 +774,7 @@ func (m *Machine[T]) unConstrDataValue(constr *data.Constr) *pairValue[T] {
 	}
 	value := m.allocPairValue(
 		m.allocConstant(m.allocIntegerConstant(tag)),
-		m.allocDataListValue(constr.Fields),
+		m.dataFieldsValue(constr),
 	)
 	m.lastUnConstrData = constr
 	m.lastUnConstrValue = value
@@ -2141,7 +2140,7 @@ func (m *Machine[T]) checkCaseOnBuiltin(value Value[T]) error {
 func (m *Machine[T]) caseOnData(
 	item data.PlutusData,
 	branches int,
-) (int, []data.PlutusData, error) {
+) (int, *data.Constr, error) {
 	if m.protoMajor != 0 && m.protoMajor < dijkstraProtoMajorVersion {
 		return 0, nil, &ScriptError{
 			Code:    ErrCodeCaseOnBuiltinUnavailable,
@@ -2162,7 +2161,7 @@ func (m *Machine[T]) caseOnData(
 			Message: "MissingCaseBranch",
 		}
 	}
-	return int(constr.Tag.Int64()), constr.Fields, nil
+	return int(constr.Tag.Int64()), constr, nil
 }
 
 func (m *Machine[T]) caseEvaluate(
@@ -2224,21 +2223,21 @@ func (m *Machine[T]) caseEvaluate(
 			return nil, &ScriptError{Code: ErrCodeCaseOnByteString, Message: "case on bytestring constant not allowed"}
 		case *syn.ProtoList:
 			branchRule = 2
-			if len(cval.List) == 0 {
+			if len(cval.List()) == 0 {
 				tag = 1
 			} else {
 				tag = 0
 				args = m.allocValueElems(2)
-				args[0] = m.allocConstant(cval.List[0])
-				tail := m.allocProtoListConstant(cval.LTyp, cval.List[1:])
+				args[0] = m.elementValue(cval.List()[0])
+				tail := m.allocProtoListConstant(cval.LTyp, cval.List()[1:])
 				args[1] = m.allocConstant(tail)
 			}
 		case *syn.ProtoPair:
 			branchRule = 1
 			tag = 0
 			args = m.allocValueElems(2)
-			args[0] = m.allocConstant(cval.First)
-			args[1] = m.allocConstant(cval.Second)
+			args[0] = m.elementValue(cval.First)
+			args[1] = m.elementValue(cval.Second)
 		case *syn.Data:
 			return m.caseEvaluateData(env, branches, context, cval.Inner)
 		default:
@@ -2360,12 +2359,12 @@ func (m *Machine[T]) caseEvaluateData(
 	context MachineContext[T],
 	item data.PlutusData,
 ) (MachineState[T], error) {
-	tag, fields, err := m.caseOnData(item, len(branches))
+	tag, constr, err := m.caseOnData(item, len(branches))
 	if err != nil {
 		return nil, err
 	}
 	args := m.allocValueElems(1)
-	args[0] = m.allocDataListValue(fields)
+	args[0] = m.dataFieldsValue(constr)
 	comp := m.getCompute()
 	comp.Ctx = m.transferArgStack(args, context)
 	comp.Env = env

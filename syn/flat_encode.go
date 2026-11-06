@@ -511,7 +511,7 @@ func encodeConstantValue(e *encoder, constant IConstant) error {
 			e.zero()
 		}
 	case *ProtoList:
-		return EncodeList(e, c.List, func(e *encoder, item IConstant) error {
+		return EncodeList(e, c.List(), func(e *encoder, item IConstant) error {
 			return encodeConstantValue(e, item)
 		})
 	case *ProtoArray:

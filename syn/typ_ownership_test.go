@@ -87,13 +87,11 @@ func decodedConstants(program *Program[DeBruijn]) []IConstant {
 
 func TestDecodedCompositeConstantTypesAreNotShared(t *testing.T) {
 	listOfIntLists := func() IConstant {
-		return &ProtoList{LTyp: &TList{Typ: &TInteger{}}, List: []IConstant{}}
+		return WrapProtoList(&TList{Typ: &TInteger{}}, []IConstant{})
 	}
 	listOfDataPairs := func() IConstant {
-		return &ProtoList{
-			LTyp: &TPair{First: &TData{}, Second: &TData{}},
-			List: []IConstant{},
-		}
+		return WrapProtoList(&TPair{First: &TData{}, Second: &TData{}},
+			[]IConstant{})
 	}
 	encoded := encodeConstantsProgram(
 		t,

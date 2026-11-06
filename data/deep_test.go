@@ -240,8 +240,8 @@ func TestCheckTreeRejectsSharedChildren(t *testing.T) {
 	) {
 		t.Fatalf("CheckTree on shared children = %v, want ErrSharedNodes", err)
 	}
-	cyclic := &List{Items: make([]PlutusData, 1)}
-	cyclic.Items[0] = cyclic
+	cyclic := &List{items: make([]PlutusData, 1)}
+	cyclic.items[0] = cyclic
 	if err := CheckTree(cyclic); !errors.Is(err, ErrSharedNodes) {
 		t.Fatalf("CheckTree on a cycle = %v, want ErrSharedNodes", err)
 	}

@@ -125,10 +125,6 @@ type listAttack struct {
 	proto uint
 	// prog builds a program performing O(n) list operations.
 	prog func(n int) string
-	// residual marks patterns that are still O(n) per call by design (the
-	// result must be a distinct contiguous data.List); they are measured but
-	// carry no regression bound.
-	residual bool
 }
 
 func listAttacks() []listAttack {
@@ -570,10 +566,106 @@ func listAttacks() []listAttack {
 			},
 		},
 		{
-			// Each branch k : t is a distinct list; listData must produce a
-			// distinct contiguous data.List, so this stays O(n) per call.
-			name:     "listData-branches-of-one-tail",
-			residual: true,
+			// Each branch k : t is a distinct list sharing t.
+			name: "listData-branches-of-one-tail",
+			prog: func(n int) string {
+				return branchesOfOneTail(n, uBuild(n, uNilData, uIData), func(c string) string {
+					return fmt.Sprintf("[(builtin listData) %s]", c)
+				})
+			},
+		},
+		{
+			name: "listData-branches-of-a-literal-tail",
+			prog: func(n int) string {
+				return branchesOfOneTail(n, dataLiteral(0, n), func(c string) string {
+					return fmt.Sprintf("[(builtin listData) %s]", c)
+				})
+			},
+		},
+		{
+			// The tail is a list taken out of a data value, as a datum is.
+			name: "listData-branches-of-an-unListData-tail",
+			prog: func(n int) string {
+				tail := fmt.Sprintf(
+					"[(builtin unListData) [(builtin listData) %s]]",
+					dataLiteral(0, n),
+				)
+				return branchesOfOneTail(n, tail, func(c string) string {
+					return fmt.Sprintf("[(builtin listData) %s]", c)
+				})
+			},
+		},
+		{
+			// Each branch k : t becomes an element of a list of lists.
+			name: "list-of-lists-branches-of-one-tail",
+			prog: func(n int) string {
+				return listOfListsBranches(n, uBuild(n, uNilInt, uIdent), "uIdent", "(con (list (list integer)) [])", func(acc string) string {
+					return uHead(uHead(acc))
+				})
+			},
+		},
+		{
+			name: "list-of-data-lists-branches-of-an-unListData-tail",
+			prog: func(n int) string {
+				tail := fmt.Sprintf("[(builtin unListData) [(builtin listData) %s]]", dataLiteral(0, n))
+				return listOfListsBranches(n, tail, "uIData", "(con (list (list data)) [])", func(acc string) string {
+					return fmt.Sprintf("[(builtin unIData) %s]", uHead(uHead(acc)))
+				})
+			},
+		},
+		{
+			name: "list-of-maps-branches-of-one-tail",
+			prog: func(n int) string {
+				return listOfListsBranches(n, uBuild(n, uNilPair, uPairData), "uPairData", "(con (list (list (pair data data))) [])", func(acc string) string {
+					return fmt.Sprintf(
+						"[(builtin unIData) [(force (force (builtin fstPair))) %s]]",
+						uHead(uHead(acc)),
+					)
+				})
+			},
+		},
+		{
+			// Each branch is taken back out of the list of lists and read.
+			name: "list-of-lists-branches-read-back",
+			prog: func(n int) string {
+				return listOfListsReadBack(n, func(acc string) string {
+					return uHead(uHead(acc))
+				})
+			},
+		},
+		{
+			// case on a list of lists hands its head to the branch.
+			name:  "case-on-list-of-lists-branches",
+			proto: 11,
+			prog: func(n int) string {
+				return listOfListsReadBack(n, func(acc string) string {
+					return fmt.Sprintf("(case %s (lam h (lam tl %s)))", acc, uHead("h"))
+				})
+			},
+		},
+		{
+			// equalsData is costed by the smaller argument, so sizing a
+			// branch against an empty list must not build the branch.
+			name: "equalsData-branches-against-empty",
+			prog: func(n int) string {
+				return branchesOfOneTail(n, uBuild(n, uNilData, uIData), func(c string) string {
+					return fmt.Sprintf(
+						"[(builtin equalsData) [(builtin listData) %s] (con data (List []))]",
+						c,
+					)
+				})
+			},
+		},
+		{
+			name: "constrData-branches-of-one-tail",
+			prog: func(n int) string {
+				return branchesOfOneTail(n, uBuild(n, uNilData, uIData), func(c string) string {
+					return fmt.Sprintf("[(builtin constrData) (con integer 0) %s]", c)
+				})
+			},
+		},
+		{
+			name: "mapData-branches-of-one-tail",
 			prog: func(n int) string {
 				loop := uLoop(
 					[]string{"t", "acc"},
@@ -581,9 +673,40 @@ func listAttacks() []listAttack {
 						uIsZero("k"),
 						"(con integer 0)",
 						fmt.Sprintf(
-							"[self %s t [(builtin listData) %s]]",
+							"[self %s t [(builtin mapData) %s]]",
 							uSub1("k"),
-							uCons(uIData("k"), "t"),
+							uCons(uPairData("k"), "t"),
+						),
+					),
+				)
+				return uProgram(
+					fmt.Sprintf(
+						"[%s %s %s %s]",
+						loop,
+						uInt(n),
+						uBuild(n, uNilPair, uPairData),
+						uIData("(con integer 0)"),
+					),
+				)
+			},
+		},
+		{
+			// The branches are kept: each listData result becomes an item of
+			// a growing data list, and is taken apart again.
+			name: "listData-branches-kept-and-unwrapped",
+			prog: func(n int) string {
+				loop := uLoop(
+					[]string{"t", "acc"},
+					uIte(
+						uIsZero("k"),
+						fmt.Sprintf(
+							"[(builtin unIData) %s]",
+							uHead(fmt.Sprintf("[(builtin unListData) %s]", uHead("acc"))),
+						),
+						fmt.Sprintf(
+							"[self %s t %s]",
+							uSub1("k"),
+							uCons(fmt.Sprintf("[(builtin listData) %s]", uCons(uIData("k"), "t")), "acc"),
 						),
 					),
 				)
@@ -593,12 +716,69 @@ func listAttacks() []listAttack {
 						loop,
 						uInt(n),
 						uBuild(n, uNilData, uIData),
-						uIData("(con integer 0)"),
+						uNilData,
 					),
 				)
 			},
 		},
 	}
+}
+
+// listOfListsBranches loops n times consing k : tail onto a list of lists,
+// then applies result to it. elem names the helper that turns k into an
+// element of tail.
+func listOfListsBranches(n int, tail, elem, nilTerm string, result func(string) string) string {
+	elems := map[string]func(string) string{"uIdent": uIdent, "uIData": uIData, "uPairData": uPairData}
+	loop := uLoop(
+		[]string{"t", "acc"},
+		uIte(
+			uIsZero("k"),
+			result("acc"),
+			fmt.Sprintf("[self %s t %s]", uSub1("k"), uCons(uCons(elems[elem]("k"), "t"), "acc")),
+		),
+	)
+	return uProgram(fmt.Sprintf("[%s %s %s %s]", loop, uInt(n), tail, nilTerm))
+}
+
+// listOfListsReadBack loops n times consing k : t onto a list of lists and
+// reading the new branch back out with read.
+func listOfListsReadBack(n int, read func(string) string) string {
+	acc := uCons(uCons("k", "t"), "acc")
+	loop := uLoop(
+		[]string{"t", "acc"},
+		uIte(
+			uIsZero("k"),
+			"(con integer 0)",
+			fmt.Sprintf(
+				"[(lam next (lam x [self %s t next])) %s %s]",
+				uSub1("k"),
+				acc,
+				read(acc),
+			),
+		),
+	)
+	return uProgram(fmt.Sprintf(
+		"[%s %s %s (con (list (list integer)) [])]",
+		loop,
+		uInt(n),
+		uBuild(n, uNilInt, uIdent),
+	))
+}
+
+// branchesOfOneTail loops n times applying wrap to k : tail, each a distinct
+// list sharing tail.
+func branchesOfOneTail(n int, tail string, wrap func(string) string) string {
+	loop := uLoop(
+		[]string{"t", "acc"},
+		uIte(
+			uIsZero("k"),
+			"(con integer 0)",
+			fmt.Sprintf("[self %s t %s]", uSub1("k"), wrap(uCons(uIData("k"), "t"))),
+		),
+	)
+	return uProgram(
+		fmt.Sprintf("[%s %s %s %s]", loop, uInt(n), tail, uIData("(con integer 0)")),
+	)
 }
 
 // evalV3 evaluates a textual program as Plutus V3 at protocol version proto
@@ -654,9 +834,6 @@ func TestListAttacksAreNotQuadratic(t *testing.T) {
 	// (128KB) per iteration here.
 	const perIterBound = 4 << 10
 	for _, a := range listAttacks() {
-		if a.residual {
-			continue
-		}
 		t.Run(a.name, func(t *testing.T) {
 			if alloc := evalAlloc(t, a.prog(n), a.proto); alloc > uint64(
 				perIterBound*n,

@@ -23,6 +23,7 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/blinklabs-io/plutigo/internal/lazydata"
 	"github.com/fxamacker/cbor/v2"
 )
 
@@ -68,10 +69,30 @@ func useIndefPtr(useIndef bool) *bool {
 
 // Constr
 
+// Constr is a constructor application. Its fields are reached through
+// Fields and NumFields.
 type Constr struct {
 	Tag      *big.Int
-	Fields   []PlutusData
+	fields   []PlutusData
+	lazy     lazydata.Source[PlutusData]
 	useIndef *bool
+}
+
+// Fields returns the constructor's fields. The caller must not modify the
+// returned slice, which may be shared with other values.
+func (c Constr) Fields() []PlutusData {
+	if c.lazy != nil {
+		return c.lazy.Materialize()
+	}
+	return c.fields
+}
+
+// NumFields returns the number of fields.
+func (c Constr) NumFields() int {
+	if c.lazy != nil {
+		return c.lazy.Len()
+	}
+	return len(c.fields)
 }
 
 func (Constr) isPlutusData() {}
@@ -116,7 +137,7 @@ func (c Constr) appendCBORHead(buf *bytes.Buffer) (*encodeFrame, error) {
 	// Determine whether to use indefinite-length encoding for fields.
 	// If useIndef is explicitly set, honor it; otherwise default to
 	// Haskell's cborg behavior: indefinite for non-empty, definite for empty.
-	useIndef := len(c.Fields) > 0
+	useIndef := c.NumFields() > 0
 	if c.useIndef != nil {
 		useIndef = *c.useIndef
 	}
@@ -138,7 +159,7 @@ func (c Constr) appendCBORHead(buf *bytes.Buffer) (*encodeFrame, error) {
 		}
 		buf.Write(encodedTag)
 	}
-	return arrayFrame(buf, c.Fields, useIndef, "Constr field"), nil
+	return arrayFrame(buf, c.Fields(), useIndef, "Constr field"), nil
 }
 
 func (c Constr) Clone() PlutusData {
@@ -161,7 +182,7 @@ func NewConstr(tag uint64, fields ...PlutusData) PlutusData {
 	copy(tmpFields, fields)
 	return &Constr{
 		Tag:    new(big.Int).SetUint64(tag),
-		Fields: tmpFields,
+		fields: tmpFields,
 	}
 }
 
@@ -174,7 +195,7 @@ func NewConstrFromBigInt(tag *big.Int, fields ...PlutusData) PlutusData {
 	if tag != nil {
 		tmpTag.Set(tag)
 	}
-	return &Constr{Tag: tmpTag, Fields: tmpFields}
+	return &Constr{Tag: tmpTag, fields: tmpFields}
 }
 
 // NewConstrDefIndef creates a Constr with the ability to specify whether it should use definite- or indefinite-length encoding
@@ -187,7 +208,7 @@ func NewConstrDefIndef(
 	copy(tmpFields, fields)
 	return &Constr{
 		Tag:      new(big.Int).SetUint64(tag),
-		Fields:   tmpFields,
+		fields:   tmpFields,
 		useIndef: useIndefPtr(useIndef),
 	}
 }
@@ -264,9 +285,28 @@ func decodeAs[P PlutusData](data []byte, allowValue bool) (P, error) {
 
 // Map
 
+// Map is a list of key-value pairs, reached through Pairs and Len.
 type Map struct {
-	Pairs    [][2]PlutusData // Each pair is [key, value]
+	pairs    [][2]PlutusData
+	lazy     lazydata.Source[[2]PlutusData]
 	useIndef *bool
+}
+
+// Pairs returns the map's pairs, each [key, value]. The caller must not
+// modify the returned slice, which may be shared with other values.
+func (m Map) Pairs() [][2]PlutusData {
+	if m.lazy != nil {
+		return m.lazy.Materialize()
+	}
+	return m.pairs
+}
+
+// Len returns the number of pairs.
+func (m Map) Len() int {
+	if m.lazy != nil {
+		return m.lazy.Len()
+	}
+	return len(m.pairs)
 }
 
 func (Map) isPlutusData() {}
@@ -296,10 +336,10 @@ func (m Map) appendCBORHead(buf *bytes.Buffer) *encodeFrame {
 	if useIndef {
 		buf.WriteByte(CborTypeMap | CborIndefFlag)
 	} else {
-		appendCBORHead(buf, CborTypeMap, uint64(len(m.Pairs)))
+		appendCBORHead(buf, CborTypeMap, uint64(m.Len()))
 	}
 	return &encodeFrame{
-		children: childFrame{pairs: m.Pairs},
+		children: childFrame{pairs: m.Pairs()},
 		indef:    useIndef,
 		desc:     "map",
 	}
@@ -323,14 +363,14 @@ func (m Map) String() string {
 func NewMap(pairs [][2]PlutusData) PlutusData {
 	tmpPairs := make([][2]PlutusData, len(pairs))
 	copy(tmpPairs, pairs)
-	return &Map{Pairs: tmpPairs}
+	return &Map{pairs: tmpPairs}
 }
 
 // NewMapDefIndef creates a new Map with the ability to specify whether it should use definite- or indefinite-length encoding
 func NewMapDefIndef(useIndef bool, pairs [][2]PlutusData) PlutusData {
 	tmpPairs := make([][2]PlutusData, len(pairs))
 	copy(tmpPairs, pairs)
-	return &Map{Pairs: tmpPairs, useIndef: useIndefPtr(useIndef)}
+	return &Map{pairs: tmpPairs, useIndef: useIndefPtr(useIndef)}
 }
 
 // Value is the Plutus V4 Data constructor for the built-in Value type.
@@ -406,7 +446,7 @@ func (v Value) Validate() error {
 		return errors.New("Value must contain a map")
 	}
 	var prevPolicy []byte
-	for i, policy := range v.Inner.Pairs {
+	for i, policy := range v.Inner.Pairs() {
 		policyKey, ok := policy[0].(*ByteString)
 		if !ok || policyKey == nil {
 			return fmt.Errorf(
@@ -425,11 +465,11 @@ func (v Value) Validate() error {
 				policy[1],
 			)
 		}
-		if err := CheckValueTokenCount(i, len(tokens.Pairs)); err != nil {
+		if err := CheckValueTokenCount(i, tokens.Len()); err != nil {
 			return err
 		}
 		var prevToken []byte
-		for j, token := range tokens.Pairs {
+		for j, token := range tokens.Pairs() {
 			tokenKey, ok := token[0].(*ByteString)
 			if !ok || tokenKey == nil {
 				return fmt.Errorf(
@@ -720,9 +760,28 @@ func NewByteString(value []byte) PlutusData {
 
 // List
 
+// List is a list of data items, reached through Items and Len.
 type List struct {
-	Items    []PlutusData
+	items    []PlutusData
+	lazy     lazydata.Source[PlutusData]
 	useIndef *bool
+}
+
+// Items returns the list's items. The caller must not modify the returned
+// slice, which may be shared with other values.
+func (l List) Items() []PlutusData {
+	if l.lazy != nil {
+		return l.lazy.Materialize()
+	}
+	return l.items
+}
+
+// Len returns the number of items.
+func (l List) Len() int {
+	if l.lazy != nil {
+		return l.lazy.Len()
+	}
+	return len(l.items)
 }
 
 func (List) isPlutusData() {}
@@ -749,11 +808,11 @@ func (l List) appendCBORHead(buf *bytes.Buffer) *encodeFrame {
 	// Determine whether to use indefinite-length encoding.
 	// If useIndef is explicitly set, honor it; otherwise default to
 	// Haskell's cborg behavior: indefinite for non-empty, definite for empty.
-	useIndef := len(l.Items) > 0
+	useIndef := l.Len() > 0
 	if l.useIndef != nil {
 		useIndef = *l.useIndef
 	}
-	return arrayFrame(buf, l.Items, useIndef, "list item")
+	return arrayFrame(buf, l.Items(), useIndef, "list item")
 }
 
 func (l List) Clone() PlutusData {
@@ -774,14 +833,14 @@ func (l List) String() string {
 func NewList(items ...PlutusData) PlutusData {
 	tmpItems := make([]PlutusData, len(items))
 	copy(tmpItems, items)
-	return &List{Items: tmpItems}
+	return &List{items: tmpItems}
 }
 
 // NewListDefIndef creates a list with the ability to specify whether it should use definite- or indefinite-length encoding
 func NewListDefIndef(useIndef bool, items ...PlutusData) PlutusData {
 	tmpItems := make([]PlutusData, len(items))
 	copy(tmpItems, items)
-	return &List{Items: tmpItems, useIndef: useIndefPtr(useIndef)}
+	return &List{items: tmpItems, useIndef: useIndefPtr(useIndef)}
 }
 
 func cloneUseIndef(useIndef *bool) *bool {

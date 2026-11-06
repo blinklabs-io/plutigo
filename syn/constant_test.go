@@ -32,15 +32,13 @@ func testValueEntries() []IConstant {
 			Second: &TInteger{},
 		}},
 		First: &ByteString{Inner: []byte{1}},
-		Second: &ProtoList{
-			LTyp: &TPair{First: &TByteString{}, Second: &TInteger{}},
-			List: []IConstant{&ProtoPair{
+		Second: WrapProtoList(&TPair{First: &TByteString{}, Second: &TInteger{}},
+			[]IConstant{&ProtoPair{
 				FstType: &TByteString{},
 				SndType: &TInteger{},
 				First:   &ByteString{Inner: []byte{2}},
 				Second:  &Integer{Inner: big.NewInt(3)},
-			}},
-		},
+			}}),
 	}}
 }
 
@@ -63,8 +61,8 @@ func TestValueSnapshotPreservesCachedShape(t *testing.T) {
 	inputPolicy := input[0].(*ProtoPair)
 	inputPolicy.First.(*ByteString).Inner[0] = 9
 	inputTokens := inputPolicy.Second.(*ProtoList)
-	inputTokens.List[0].(*ProtoPair).Second.(*Integer).Inner.SetInt64(99)
-	inputTokens.List = append(inputTokens.List, inputTokens.List[0])
+	inputTokens.List()[0].(*ProtoPair).Second.(*Integer).Inner.SetInt64(99)
+	inputTokens.list = append(inputTokens.List(), inputTokens.List()[0])
 
 	returned := value.Entries()
 	if len(returned) != 1 {
@@ -73,8 +71,8 @@ func TestValueSnapshotPreservesCachedShape(t *testing.T) {
 	returnedPolicy := returned[0].(*ProtoPair)
 	returnedPolicy.First.(*ByteString).Inner[0] = 8
 	returnedTokens := returnedPolicy.Second.(*ProtoList)
-	returnedTokens.List[0].(*ProtoPair).Second.(*Integer).Inner.SetInt64(88)
-	returnedTokens.List = nil
+	returnedTokens.List()[0].(*ProtoPair).Second.(*Integer).Inner.SetInt64(88)
+	returnedTokens.list = nil
 
 	total, outer, maxInner, ok := value.Sizes()
 	if !ok || total != 1 || outer != 1 || maxInner != 1 {
@@ -100,7 +98,7 @@ func TestValueSnapshotPreservesCachedShape(t *testing.T) {
 	) {
 		t.Fatalf("policy ID = %x, want 01", got)
 	}
-	gotTokens := gotPolicy.Second.(*ProtoList).List
+	gotTokens := gotPolicy.Second.(*ProtoList).List()
 	if len(gotTokens) != 1 {
 		t.Fatalf("token count = %d, want 1", len(gotTokens))
 	}
@@ -140,10 +138,8 @@ func TestNewValueRejectsTypedNilEntries(t *testing.T) {
 			Second: nilTokens,
 		}},
 		"token": {&ProtoPair{
-			First: &ByteString{Inner: []byte{1}},
-			Second: &ProtoList{
-				List: []IConstant{nilToken},
-			},
+			First:  &ByteString{Inner: []byte{1}},
+			Second: WrapProtoList(nil, []IConstant{nilToken}),
 		}},
 	}
 	for name, entries := range tests {
@@ -168,7 +164,7 @@ func TestValueNarrowReadsReturnCopies(t *testing.T) {
 	entries := testValueEntries()
 	second := testValueEntries()[0].(*ProtoPair)
 	second.First.(*ByteString).Inner[0] = 4
-	secondToken := second.Second.(*ProtoList).List[0].(*ProtoPair)
+	secondToken := second.Second.(*ProtoList).List()[0].(*ProtoPair)
 	secondToken.First.(*ByteString).Inner[0] = 5
 	secondToken.Second.(*Integer).Inner.SetInt64(6)
 	entries = append(entries, second)
@@ -312,13 +308,11 @@ func TestBoolTyp(t *testing.T) {
 
 func TestProtoListTyp(t *testing.T) {
 	elementType := &TInteger{}
-	protoList := ProtoList{
-		LTyp: elementType,
-		List: []IConstant{
+	protoList := *WrapProtoList(elementType,
+		[]IConstant{
 			&Integer{Inner: big.NewInt(1)},
 			&Integer{Inner: big.NewInt(2)},
-		},
-	}
+		})
 
 	typ := protoList.Typ()
 

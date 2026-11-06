@@ -80,7 +80,8 @@ func (l *List) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	l.Items = decoded.Items
+	l.items = decoded.Items()
+	l.lazy = nil
 	return nil
 }
 
@@ -95,7 +96,8 @@ func (m *Map) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	m.Pairs = decoded.Pairs
+	m.pairs = decoded.Pairs()
+	m.lazy = nil
 	return nil
 }
 
@@ -111,7 +113,8 @@ func (c *Constr) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	c.Tag = decoded.Tag
-	c.Fields = decoded.Fields
+	c.fields = decoded.Fields()
+	c.lazy = nil
 	return nil
 }
 
@@ -312,12 +315,12 @@ func appendByteStringJSON(buf *bytes.Buffer, b []byte) {
 
 func openListJSON(buf *bytes.Buffer, l *List) *jsonFrame {
 	buf.WriteString(`{"list":[`)
-	return &jsonFrame{children: childFrame{items: l.Items}, label: "List item"}
+	return &jsonFrame{children: childFrame{items: l.Items()}, label: "List item"}
 }
 
 func openMapJSON(buf *bytes.Buffer, m *Map) *jsonFrame {
 	buf.WriteString(`{"map":[`)
-	return &jsonFrame{children: childFrame{pairs: m.Pairs}, isMap: true}
+	return &jsonFrame{children: childFrame{pairs: m.Pairs()}, isMap: true}
 }
 
 func openConstrJSON(buf *bytes.Buffer, c *Constr) *jsonFrame {
@@ -325,7 +328,7 @@ func openConstrJSON(buf *bytes.Buffer, c *Constr) *jsonFrame {
 	buf.WriteString(constrTagString(c.Tag))
 	buf.WriteString(`,"fields":[`)
 	return &jsonFrame{
-		children: childFrame{items: c.Fields},
+		children: childFrame{items: c.Fields()},
 		label:    "Constr field",
 	}
 }
@@ -1266,7 +1269,7 @@ func decodePlutusDataJSONValue(
 		if err != nil {
 			return nil, wrapJSONError(err, "failed to unmarshal List value")
 		}
-		return &List{Items: items}, nil
+		return &List{items: items}, nil
 	case jsonKeyMap:
 		if member.kind == jsonKindNull {
 			return nil, errors.New("null \"map\" value in Map JSON")
@@ -1275,7 +1278,7 @@ func decodePlutusDataJSONValue(
 		if err != nil {
 			return nil, wrapJSONError(err, "failed to unmarshal Map value")
 		}
-		return &Map{Pairs: pairs}, nil
+		return &Map{pairs: pairs}, nil
 	default: // jsonKeyConstructor
 		return decodePlutusDataJSONConstr(data, t, v, member, st)
 	}
@@ -1319,7 +1322,7 @@ func decodePlutusDataJSONConstr(
 	if err != nil {
 		return nil, wrapJSONError(err, "failed to unmarshal Constr fields")
 	}
-	return &Constr{Tag: tag, Fields: fields}, nil
+	return &Constr{Tag: tag, fields: fields}, nil
 }
 
 // decodeJSONHexString decodes the JSON value v, which must be a string of
