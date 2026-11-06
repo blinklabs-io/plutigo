@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -182,190 +181,51 @@ func isHexDigit(ch rune) bool {
 		(ch >= 'A' && ch <= 'F')
 }
 
+// readString reads a string literal after its opening quote, as the
+// reference parser's conText does with Text.Megaparsec.Char.Lexer.charLiteral:
+// an escape is decoded by readLitChar from at most escapeWindow characters
+// starting at the backslash.
 func (l *Lexer) readString() (string, error) {
 	var sb strings.Builder
-	leftoverChar := false
+	var window [escapeWindow]rune
 	for {
-		if !leftoverChar {
-			l.readChar()
-		}
-		leftoverChar = false
-
+		l.readChar()
 		if l.atEOF() {
 			return "", fmt.Errorf("unterminated string at position %d", l.pos)
 		}
-
-		if l.ch == '\\' {
-			// Read next character to determine escape sequence type
-			l.readChar()
-			// Check for simple one-char escapes (like \" and \\\)
-			tmpEscape := `\` + string(l.ch)
-			if val, ok := escapeMap[tmpEscape]; ok {
-				sb.WriteString(val)
-				continue
-			}
-			// Unicode escape
-			if tmpEscape == `\u` {
-				var unicodeHex string
-				for {
-					l.readChar()
-					if !isHexDigit(l.ch) {
-						leftoverChar = true
-						break
-					}
-					unicodeHex += string(l.ch)
-					if len(unicodeHex) >= 4 {
-						break
-					}
-				}
-				if len(unicodeHex) < 2 {
-					return "", fmt.Errorf(
-						"unicode escape sequence too short: \\u%s",
-						unicodeHex,
-					)
-				}
-				// The hex digits denote a Unicode code point, not raw
-				// bytes, so the result must be UTF-8 encoded
-				codepoint, err := strconv.ParseUint(unicodeHex, 16, 32)
-				if err != nil {
-					return "", fmt.Errorf(
-						"invalid unicode escape sequence: \\u%s",
-						unicodeHex,
-					)
-				}
-				if codepoint > unicode.MaxRune {
-					return "", fmt.Errorf(
-						"invalid unicode escape sequence: \\u%s",
-						unicodeHex,
-					)
-				}
-				sb.WriteRune(rune(codepoint))
-				continue
-			}
-			// Hex escape
-			if tmpEscape == `\x` {
-				var hexStr string
-				for {
-					l.readChar()
-					if !isHexDigit(l.ch) {
-						leftoverChar = true
-						break
-					}
-					hexStr += string(l.ch)
-					if len(hexStr) >= 4 {
-						break
-					}
-				}
-				if len(hexStr) < 2 {
-					return "", fmt.Errorf(
-						"hex escape sequence too short: \\x%s",
-						hexStr,
-					)
-				}
-				// The hex digits denote a Unicode code point, not raw
-				// bytes, so the result must be UTF-8 encoded
-				codepoint, err := strconv.ParseUint(hexStr, 16, 32)
-				if err != nil {
-					return "", fmt.Errorf(
-						"invalid hex escape sequence: \\x%s",
-						hexStr,
-					)
-				}
-				if codepoint > unicode.MaxRune {
-					return "", fmt.Errorf(
-						"invalid hex escape sequence: \\x%s",
-						hexStr,
-					)
-				}
-				sb.WriteRune(rune(codepoint))
-				continue
-			}
-			// Octal escape
-			if tmpEscape == `\o` {
-				var octalStr string
-				for {
-					l.readChar()
-					if l.ch > unicode.MaxASCII || !unicode.IsDigit(l.ch) {
-						leftoverChar = true
-						break
-					}
-					octalStr += string(l.ch)
-					if len(octalStr) >= 3 {
-						break
-					}
-				}
-				tmpOctal, err := strconv.ParseUint(octalStr, 8, 16)
-				if err != nil {
-					return "", fmt.Errorf(
-						"invalid octal escape sequence: \\o%s",
-						octalStr,
-					)
-				}
-				sb.WriteRune(rune(tmpOctal))
-				continue
-			}
-			// Handle named escapes (e.g., \DEL) after specific sequences
-			if unicode.IsLetter(l.ch) {
-				// Read consecutive letters to form the full name (e.g., DEL)
-				name := string(l.ch)
-				var nameSb strings.Builder
-				for {
-					l.readChar()
-					if !unicode.IsLetter(l.ch) {
-						// we've read one character too far; mark leftover and stop
-						leftoverChar = true
-						break
-					}
-					nameSb.WriteRune(l.ch)
-				}
-				name += nameSb.String()
-
-				key := `\` + name
-				if val, ok := escapeMap[key]; ok {
-					sb.WriteString(val)
-					continue
-				}
-
-				// no valid named escape found; return an error that includes the
-				// full name (e.g., \INVALID) so error messages are clear.
-				return "", fmt.Errorf("unknown escape sequence: %s", key)
-			}
-			// Check for unknown non-numeric escape
-			if l.ch > unicode.MaxASCII || !unicode.IsDigit(l.ch) {
-				return "", fmt.Errorf("unknown escape sequence: %s", tmpEscape)
-			}
-			// Decimal escape
-			decStr := string(l.ch)
-			for {
-				l.readChar()
-				if l.ch > unicode.MaxASCII || !unicode.IsDigit(l.ch) {
-					leftoverChar = true
-					break
-				}
-				decStr += string(l.ch)
-				if len(decStr) >= 4 {
-					break
-				}
-			}
-			tmpDec, err := strconv.ParseUint(decStr, 10, 16)
-			if err != nil {
-				return "", fmt.Errorf(
-					"invalid decimal escape sequence: \\%s",
-					decStr,
-				)
-			}
-			sb.WriteRune(rune(tmpDec))
-			continue
-		}
-
 		if l.ch == '"' {
 			l.readChar() // Consume closing quote
 
 			return sb.String(), nil
 		}
+		if l.ch != '\\' {
+			sb.WriteRune(l.ch)
 
-		sb.WriteRune(l.ch)
+			continue
+		}
+		r, n, err := readEscape(l.lookahead(window[:0]))
+		if err != nil {
+			return "", fmt.Errorf("%w at position %d", err, l.pos)
+		}
+		// Data.Text replaces a surrogate code point with U+FFFD, as
+		// WriteRune does.
+		sb.WriteRune(r)
+		for range n - 1 {
+			l.readChar()
+		}
 	}
+}
+
+// lookahead appends to buf the current character and those after it, up to
+// cap(buf) characters or the end of input, without consuming them.
+func (l *Lexer) lookahead(buf []rune) []rune {
+	buf = append(buf, l.ch)
+	for i := l.byteNext; len(buf) < cap(buf) && i < len(l.input); {
+		r, w := l.decodeAt(i)
+		buf = append(buf, r)
+		i += w
+	}
+	return buf
 }
 
 func (l *Lexer) readByteString() (string, error) {

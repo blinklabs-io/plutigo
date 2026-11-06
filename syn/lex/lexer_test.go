@@ -168,40 +168,46 @@ func TestLexerStrings(t *testing.T) {
 	}
 }
 
+// TestLexerStringNumericEscapes pins string escapes to GHC's readLitChar as
+// Text.Megaparsec.Char.Lexer.charLiteral applies it: numeric escapes take
+// every digit within ten characters of the backslash.
 func TestLexerStringNumericEscapes(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
 		expected string
 	}{
-		// \u escapes denote Unicode code points, not raw bytes
-		{"unicode ascii 4 digits", `"\u0041"`, "A"},
-		{"unicode ascii 2 digits", `"\u41"`, "A"},
-		{"unicode latin1", `"\u00e9"`, "é"},
-		{"unicode bmp", `"\u20ac"`, "€"},
-		{"unicode nul", `"\u0000"`, "\x00"},
-		// \x escapes denote Unicode code points, not raw bytes.
-		// Leading zeros are insignificant digits of the same number, so
-		// \x0041 is the single character A, not a NUL byte followed by A.
 		{"hex ascii", `"\x41"`, "A"},
 		{"hex ascii leading zeros", `"\x0041"`, "A"},
+		{"hex one digit", `"\x9"`, "\t"},
 		{"hex latin1", `"\xe9"`, "é"},
 		{"hex bmp", `"\x20AC"`, "€"},
+		{"hex beyond the bmp", `"\x1F600"`, "\U0001F600"},
 		{"hex nul", `"\x00"`, "\x00"},
-		// Digit collection stops at 4 hex digits; the rest is literal text
-		{"unicode greedy 4 digit cap", `"\u0041BC"`, "ABC"},
-		// Digit collection stops at the first non-hex character
-		{"unicode stops at non-hex", `"\ue9z"`, "éz"},
 		{"hex stops at non-hex", `"\x41!"`, "A!"},
-		// Escapes embedded in surrounding text
-		{"unicode in text", `"caf\u00e9"`, "café"},
+		{"hex stops at the window", `"\x0000000041"`, "\x0041"},
 		{"hex in text", `"caf\xe9"`, "café"},
+		{"decimal", `"\233"`, "é"},
+		{"decimal six digits", `"\128512"`, "\U0001F600"},
+		{"decimal largest code point", `"\1114111"`, "\U0010FFFF"},
+		{"decimal stops at the window", `"\0000000065"`, "\x065"},
+		{"octal", `"\o351"`, "é"},
+		{"octal seven digits", `"\o1750000"`, "\U0007D000"},
+		{"octal stops at non-octal", `"\o18"`, "\x018"},
 		// Surrogate code points cannot be encoded in UTF-8; they become
 		// U+FFFD, matching Data.Text's replacement behavior
-		{"unicode surrogate", `"\ud800"`, "�"},
-		// Decimal and octal escapes already used code point semantics
-		{"decimal", `"\233"`, "é"},
-		{"octal", `"\o351"`, "é"},
+		{"decimal surrogate", `"\55296"`, "\uFFFD"},
+		{"named", `"\NUL\BEL\DEL"`, "\x00\a\x7f"},
+		{"named SOH before SO", `"\SOH"`, "\x01"},
+		{"named SO", `"\SO"`, "\x0e"},
+		{"named SO then a letter", `"\SOX"`, "\x0eX"},
+		{"named followed by letters", `"\DELx\SOHH"`, "\x7fx\x01H"},
+		{"named space", `"\SP"`, " "},
+		{"control at", `"\^@"`, "\x00"},
+		{"control letter", `"\^A"`, "\x01"},
+		{"control escape", `"\^["`, "\x1b"},
+		{"control underscore", `"\^_"`, "\x1f"},
+		{"single quote", `"\'"`, "'"},
 	}
 
 	for _, tt := range tests {
@@ -240,10 +246,15 @@ func TestLexerStringNumericEscapeErrors(t *testing.T) {
 		name  string
 		input string
 	}{
-		{"unicode no digits", `"\uzz"`},
-		{"unicode one digit", `"\u9"`},
+		{"unicode escape", `"\u0041"`},
 		{"hex no digits", `"\xzz"`},
-		{"hex one digit", `"\x9"`},
+		{"hex out of range", `"\x110000"`},
+		{"decimal out of range", `"\1114112"`},
+		{"octal no digits", `"\o8"`},
+		{"control lowercase", `"\^a"`},
+		{"empty escape", `"\&"`},
+		{"unknown letter", `"\q"`},
+		{"escape at end of input", `"\`},
 	}
 
 	for _, tt := range tests {
