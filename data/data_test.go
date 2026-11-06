@@ -19,7 +19,6 @@ import (
 	"encoding/hex"
 	"math/big"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/fxamacker/cbor/v2"
@@ -319,41 +318,54 @@ var testDefs = []struct {
 	},
 }
 
+// TestConstrIntegerTagCBOR pins PlutusCore.Data.encodeData for tags outside
+// the short forms: the tag goes in a tag-102 pair as a CBOR integer, a
+// bignum once it leaves the 64-bit heads. Only Word64 tags decode again.
 func TestConstrIntegerTagCBOR(t *testing.T) {
 	tests := []struct {
 		name    string
 		tag     *big.Int
 		wantHex string
-		wantErr string
+		decodes bool
 	}{
 		{
 			name:    "Word64 max",
 			tag:     new(big.Int).SetUint64(^uint64(0)),
 			wantHex: "d866821bffffffffffffffff80",
+			decodes: true,
 		},
 		{
 			name:    "negative",
 			tag:     big.NewInt(-1),
-			wantErr: "outside the Word64 CBOR range",
+			wantHex: "d8668220" + "80",
+		},
+		{
+			name:    "negative short form range",
+			tag:     big.NewInt(-7),
+			wantHex: "d8668226" + "80",
+		},
+		{
+			name:    "most negative 64-bit head",
+			tag:     new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), 64)),
+			wantHex: "d866823bffffffffffffffff80",
 		},
 		{
 			name:    "above Word64",
 			tag:     new(big.Int).Lsh(big.NewInt(1), 64),
-			wantErr: "outside the Word64 CBOR range",
+			wantHex: "d86682c249010000000000000000" + "80",
+		},
+		{
+			name: "below the negative 64-bit head",
+			tag: new(big.Int).Sub(
+				new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), 64)),
+				big.NewInt(1),
+			),
+			wantHex: "d86682c349010000000000000000" + "80",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			encoded, err := Encode(NewConstrFromBigInt(tt.tag))
-			if tt.wantErr != "" {
-				if err == nil {
-					t.Fatalf("Encode returned nil error, want %q", tt.wantErr)
-				}
-				if !strings.Contains(err.Error(), tt.wantErr) {
-					t.Fatalf("Encode error = %q, want text %q", err, tt.wantErr)
-				}
-				return
-			}
 			if err != nil {
 				t.Fatalf("Encode returned error: %v", err)
 			}
@@ -361,6 +373,16 @@ func TestConstrIntegerTagCBOR(t *testing.T) {
 				t.Fatalf("encoded CBOR = %s, want %s", got, tt.wantHex)
 			}
 			decoded, err := Decode(encoded)
+			arenaDecoded, arenaErr := NewDecoder().Decode(encoded)
+			if !tt.decodes {
+				if err == nil {
+					t.Fatalf("Decode accepted tag %s, want an error", tt.tag)
+				}
+				if arenaErr == nil {
+					t.Fatalf("arena Decode accepted tag %s, want an error", tt.tag)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("Decode returned error: %v", err)
 			}
@@ -371,10 +393,8 @@ func TestConstrIntegerTagCBOR(t *testing.T) {
 					tt.tag,
 				)
 			}
-
-			arenaDecoded, err := NewDecoder().Decode(encoded)
-			if err != nil {
-				t.Fatalf("arena Decode returned error: %v", err)
+			if arenaErr != nil {
+				t.Fatalf("arena Decode returned error: %v", arenaErr)
 			}
 			if !arenaDecoded.Equal(NewConstrFromBigInt(tt.tag)) {
 				t.Fatalf(

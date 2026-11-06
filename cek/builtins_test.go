@@ -1944,6 +1944,66 @@ func TestConstrDataTagSemantics(t *testing.T) {
 	}
 }
 
+// TestSerialiseDataOutOfRangeConstrTag checks that serialiseData encodes a
+// constructor whose tag constrData accepted outside the Word64 range, as
+// PlutusCore.Data.encodeData does, instead of failing the script.
+func TestSerialiseDataOutOfRangeConstrTag(t *testing.T) {
+	tests := []struct {
+		name      string
+		semantics SemanticsVariant
+		tag       *big.Int
+		wantHex   string
+	}{
+		{"variant A negative", SemanticsVariantA, big.NewInt(-1), "d866822080"},
+		{"variant B negative", SemanticsVariantB, big.NewInt(-1), "d866822080"},
+		{"variant C negative", SemanticsVariantC, big.NewInt(-1), "d866822080"},
+		{
+			"variant C above Word64",
+			SemanticsVariantC,
+			new(big.Int).Lsh(big.NewInt(1), 64),
+			"d86682c24901000000000000000080",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := &EvalContext{
+				CostModel:        DefaultCostModel,
+				SemanticsVariant: tt.semantics,
+			}
+			m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, ctx)
+			term := &syn.Apply[syn.DeBruijn]{
+				Function: &syn.Builtin{DefaultFunction: builtin.SerialiseData},
+				Argument: &syn.Apply[syn.DeBruijn]{
+					Function: &syn.Apply[syn.DeBruijn]{
+						Function: &syn.Builtin{DefaultFunction: builtin.ConstrData},
+						Argument: &syn.Constant{
+							Con: &syn.Integer{Inner: new(big.Int).Set(tt.tag)},
+						},
+					},
+					Argument: &syn.Constant{
+						Con: &syn.ProtoList{LTyp: &syn.TData{}},
+					},
+				},
+			}
+			value, err := m.Run(term)
+			if err != nil {
+				t.Fatalf("Run returned error: %v", err)
+			}
+			constant, ok := value.(*syn.Constant)
+			if !ok {
+				t.Fatalf("Run result has type %T, want *syn.Constant", value)
+			}
+			bs, ok := constant.Con.(*syn.ByteString)
+			if !ok {
+				t.Fatalf("Run constant has type %T, want *syn.ByteString", constant.Con)
+			}
+			if got := hex.EncodeToString(bs.Inner); got != tt.wantHex {
+				t.Fatalf("serialiseData = %s, want %s", got, tt.wantHex)
+			}
+		})
+	}
+}
+
 func TestIDataBuiltin(t *testing.T) {
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 
