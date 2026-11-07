@@ -284,3 +284,52 @@ func TestTrustedIllTypedListConstantIsTypeError(t *testing.T) {
 		})
 	}
 }
+
+// TestConsOntoCheckedTailChecksNewHead checks that a cell consed onto a list
+// already checked by mapData is itself checked, so a malformed head is a
+// TypeError as it is over the same list without the earlier check.
+func TestConsOntoCheckedTailChecksNewHead(t *testing.T) {
+	cons := &syn.Force[syn.DeBruijn]{Term: &syn.Builtin{DefaultFunction: builtin.MkCons}}
+	app := func(f syn.Term[syn.DeBruijn], a syn.Term[syn.DeBruijn]) syn.Term[syn.DeBruijn] {
+		return &syn.Apply[syn.DeBruijn]{Function: f, Argument: a}
+	}
+	dataHead := &syn.Constant{Con: &syn.Data{Inner: data.NewInteger(big.NewInt(0))}}
+	goodPair := app(app(&syn.Builtin{DefaultFunction: builtin.MkPairData}, dataHead), dataHead)
+	pairType := &syn.TPair{First: &syn.TData{}, Second: &syn.TData{}}
+	goodPairs := &syn.Constant{Con: syn.WrapProtoList(pairType, []syn.IConstant{
+		&syn.ProtoPair{
+			FstType: &syn.TData{}, SndType: &syn.TData{},
+			First:  &syn.Data{Inner: data.NewInteger(big.NewInt(1))},
+			Second: &syn.Data{Inner: data.NewInteger(big.NewInt(2))},
+		},
+	})}
+	badPair := &syn.Constant{Con: &syn.ProtoPair{
+		FstType: &syn.TData{}, SndType: &syn.TData{},
+		First:  &syn.Integer{Inner: big.NewInt(1)},
+		Second: &syn.Data{Inner: data.NewInteger(big.NewInt(2))},
+	}}
+	mapData := &syn.Builtin{DefaultFunction: builtin.MapData}
+	shared := &syn.Var[syn.DeBruijn]{Name: 1}
+	sharedInner := &syn.Var[syn.DeBruijn]{Name: 2}
+	checkedFirst := app(
+		&syn.Lambda[syn.DeBruijn]{Body: app(
+			&syn.Lambda[syn.DeBruijn]{Body: app(mapData, app(app(cons, badPair), sharedInner))},
+			app(mapData, shared),
+		)},
+		app(app(cons, goodPair), goodPairs),
+	)
+	unchecked := app(mapData, app(app(cons, badPair), app(app(cons, goodPair), goodPairs)))
+	for name, term := range map[string]syn.Term[syn.DeBruijn]{
+		"checked tail":   checkedFirst,
+		"unchecked tail": unchecked,
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+			_, err := m.runContext(context.Background(), false, term, nil, true)
+			var typeErr *TypeError
+			if !errors.As(err, &typeErr) {
+				t.Fatalf("runContext = %v, want a TypeError", err)
+			}
+		})
+	}
+}

@@ -40,9 +40,10 @@ type consCell[E any] struct {
 
 // consOntoCell prepends head to the list starting at cell t in O(1)
 // amortised. The result stays contiguous when t is the front of its buffer.
-// It initialises c, which the caller allocates together with its value.
+// It initialises c, which the caller allocates together with its value. The
+// new cell starts unchecked: its head has not been converted even when t has.
 func consOntoCell[E any](c *consCell[E], head E, t *consCell[E]) {
-	*c = consCell[E]{head: head, next: t, n: t.n + 1, checked: t.checked}
+	*c = consCell[E]{head: head, next: t, n: t.n + 1}
 	if t.flat != nil && t.buf != nil && t.buf.isFront(t.flat) {
 		c.flat, c.buf = consInto(t.buf, head, t.flat, 0)
 	}
