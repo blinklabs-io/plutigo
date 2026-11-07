@@ -88,8 +88,8 @@ func (s *convCellSource[S, D]) Materialize() []D {
 			out, err = convertSuffix(&convBuf[D]{}, flat, s.conv)
 		}
 		if err != nil {
-			// Every element was type-checked: the cells by mkCons, the
-			// list they extend by structure validation.
+			// lazyDataItems and lazyDataPairs convert every element
+			// before building the source, so this cannot fail.
 			panic(err)
 		}
 		s.out = out
@@ -103,45 +103,79 @@ func (*convCellSource[S, D]) Seal(lazydata.Token) {}
 // mkCons; its elements are converted on first use.
 type constCellSource[D any] = convCellSource[syn.IConstant, D]
 
-// lazyDataItems returns a source over value when it is a list of data built
-// by mkCons, or nil.
-func lazyDataItems[T syn.Eval](
-	value Value[T],
-	conv func(syn.IConstant) (data.PlutusData, error),
-) lazydata.Source[data.PlutusData] {
-	switch v := value.(type) {
-	case *consDataList[T]:
-		return &dataCellSource{cell: v.cell}
-	case *consConstList[T]:
-		if syn.EqualType(v.typ, sharedDataType) {
-			return &constCellSource[data.PlutusData]{
-				typ:  v.typ,
-				cell: v.cell,
-				conv: conv,
+// checkConstCells converts every element of the list starting at cell with
+// conv, so that a later lazy conversion cannot fail. Cells found converted
+// are skipped, and the cells walked are marked once the whole list passes,
+// so a chain built by mkCons is checked once.
+func checkConstCells[D any](
+	cell *consCell[syn.IConstant],
+	conv func(syn.IConstant) (D, error),
+) error {
+	for c := cell; c != nil && !c.checked; c = c.next {
+		if _, err := conv(c.head); err != nil {
+			return err
+		}
+		if c.next == nil {
+			for _, item := range c.base {
+				if _, err := conv(item); err != nil {
+					return err
+				}
 			}
 		}
+	}
+	for c := cell; c != nil && !c.checked; c = c.next {
+		c.checked = true
 	}
 	return nil
 }
 
+// lazyDataItems returns a source over value when it is a list of data built
+// by mkCons, or nil. The elements of a constant list are converted first so
+// that an element of the wrong type is reported as the eager path reports it.
+func lazyDataItems[T syn.Eval](
+	value Value[T],
+	conv func(syn.IConstant) (data.PlutusData, error),
+) (lazydata.Source[data.PlutusData], error) {
+	switch v := value.(type) {
+	case *consDataList[T]:
+		return &dataCellSource{cell: v.cell}, nil
+	case *consConstList[T]:
+		if syn.EqualType(v.typ, sharedDataType) {
+			if err := checkConstCells(v.cell, conv); err != nil {
+				return nil, err
+			}
+			return &constCellSource[data.PlutusData]{
+				typ:  v.typ,
+				cell: v.cell,
+				conv: conv,
+			}, nil
+		}
+	}
+	return nil, nil
+}
+
 // lazyDataPairs returns a source over value when it is a list of data pairs
-// built by mkCons, or nil.
+// built by mkCons, or nil. Like lazyDataItems it converts the elements of a
+// constant list first.
 func lazyDataPairs[T syn.Eval](
 	value Value[T],
-) lazydata.Source[[2]data.PlutusData] {
+) (lazydata.Source[[2]data.PlutusData], error) {
 	switch v := value.(type) {
 	case *consDataMap[T]:
-		return &pairCellSource{cell: v.cell}
+		return &pairCellSource{cell: v.cell}, nil
 	case *consConstList[T]:
 		if syn.EqualType(v.typ, sharedPairDataType) {
+			if err := checkConstCells(v.cell, mapDataElem); err != nil {
+				return nil, err
+			}
 			return &constCellSource[[2]data.PlutusData]{
 				typ:  v.typ,
 				cell: v.cell,
 				conv: mapDataElem,
-			}
+			}, nil
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 func newLazyList(src lazydata.Source[data.PlutusData]) *data.List {

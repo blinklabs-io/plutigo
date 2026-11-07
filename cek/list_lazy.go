@@ -33,13 +33,16 @@ type consCell[E any] struct {
 	n    int // length of the list starting at this cell (>= 1)
 	flat []E
 	buf  *frontBuf[E]
+	// checked is set once every element from this cell down has been
+	// converted without error by checkConstCells.
+	checked bool
 }
 
 // consOntoCell prepends head to the list starting at cell t in O(1)
 // amortised. The result stays contiguous when t is the front of its buffer.
 // It initialises c, which the caller allocates together with its value.
 func consOntoCell[E any](c *consCell[E], head E, t *consCell[E]) {
-	*c = consCell[E]{head: head, next: t, n: t.n + 1}
+	*c = consCell[E]{head: head, next: t, n: t.n + 1, checked: t.checked}
 	if t.flat != nil && t.buf != nil && t.buf.isFront(t.flat) {
 		c.flat, c.buf = consInto(t.buf, head, t.flat, 0)
 	}

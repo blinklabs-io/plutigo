@@ -2401,7 +2401,11 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	if src := lazyDataItems[T](m.argHolder[1], constrDataElem); src != nil {
+	src, err := lazyDataItems[T](m.argHolder[1], constrDataElem)
+	if err != nil {
+		return nil, err
+	}
+	if src != nil {
 		err = m.CostTwo(&b.Func, bigIntExMem(arg1), valueExMem[T](m.argHolder[1]))
 		if err != nil {
 			return nil, err
@@ -2459,7 +2463,11 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	if src := lazyDataPairs[T](m.argHolder[0]); src != nil {
+	src, err := lazyDataPairs[T](m.argHolder[0])
+	if err != nil {
+		return nil, err
+	}
+	if src != nil {
 		if err := m.CostOne(&b.Func, valueExMem[T](m.argHolder[0])); err != nil {
 			return nil, err
 		}
@@ -2506,7 +2514,11 @@ func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
 
-	if src := lazyDataItems[T](m.argHolder[0], listDataElem); src != nil {
+	src, err := lazyDataItems[T](m.argHolder[0], listDataElem)
+	if err != nil {
+		return nil, err
+	}
+	if src != nil {
 		if err := m.CostOne(&b.Func, valueExMem[T](m.argHolder[0])); err != nil {
 			return nil, err
 		}

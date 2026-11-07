@@ -243,3 +243,44 @@ func TestLazyListConstantResultIsPlain(t *testing.T) {
 		t.Fatal("result element holds evaluator storage")
 	}
 }
+
+// TestTrustedIllTypedListConstantIsTypeError checks that data builtins over a
+// list made by mkCons onto an ill-typed constant report a TypeError, as they
+// do over the same list unwrapped, when term validation is skipped.
+func TestTrustedIllTypedListConstantIsTypeError(t *testing.T) {
+	apply := func(f syn.Term[syn.DeBruijn], args ...syn.Term[syn.DeBruijn]) syn.Term[syn.DeBruijn] {
+		for _, a := range args {
+			f = &syn.Apply[syn.DeBruijn]{Function: f, Argument: a}
+		}
+		return f
+	}
+	cons := &syn.Force[syn.DeBruijn]{Term: &syn.Builtin{DefaultFunction: builtin.MkCons}}
+	dataHead := &syn.Constant{Con: &syn.Data{Inner: data.NewInteger(big.NewInt(0))}}
+	pairHead := apply(
+		&syn.Builtin{DefaultFunction: builtin.MkPairData}, dataHead, dataHead)
+	intItem := &syn.Integer{Inner: big.NewInt(1)}
+	badData := &syn.Constant{Con: syn.WrapProtoList(&syn.TData{}, []syn.IConstant{intItem})}
+	pairType := &syn.TPair{First: &syn.TData{}, Second: &syn.TData{}}
+	badPairs := &syn.Constant{Con: syn.WrapProtoList(pairType, []syn.IConstant{intItem})}
+	tag := &syn.Constant{Con: &syn.Integer{Inner: big.NewInt(0)}}
+
+	listOf := apply(cons, dataHead, badData)
+	tests := map[string]syn.Term[syn.DeBruijn]{
+		"listData":   apply(&syn.Builtin{DefaultFunction: builtin.ListData}, listOf),
+		"constrData": apply(&syn.Builtin{DefaultFunction: builtin.ConstrData}, tag, listOf),
+		"mapData": apply(&syn.Builtin{DefaultFunction: builtin.MapData},
+			apply(cons, pairHead, badPairs)),
+		"listData two cells": apply(&syn.Builtin{DefaultFunction: builtin.ListData},
+			apply(cons, dataHead, listOf)),
+	}
+	for name, term := range tests {
+		t.Run(name, func(t *testing.T) {
+			m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
+			_, err := m.runContext(context.Background(), false, term, nil, true)
+			var typeErr *TypeError
+			if !errors.As(err, &typeErr) {
+				t.Fatalf("runContext = %v, want a TypeError", err)
+			}
+		})
+	}
+}
