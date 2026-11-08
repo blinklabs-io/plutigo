@@ -577,23 +577,23 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 		if err != nil {
 			return nil, true, err
 		}
-		if err := m.CostOne(&fn, listExMem(list.List)); err != nil {
+		if err := m.CostOne(&fn, listExMem(list.List())); err != nil {
 			return nil, true, err
 		}
-		if len(list.List) == 0 {
+		if len(list.List()) == 0 {
 			return nil, true, &BuiltinError{
 				Code:    ErrCodeOutOfBounds,
 				Builtin: "headList",
 				Message: "headList on an empty list",
 			}
 		}
-		if list.List[0] == nil {
+		if list.List()[0] == nil {
 			return nil, true, &InternalError{
 				Code:    ErrCodeInternalError,
 				Message: "headList returned nil constant",
 			}
 		}
-		return dataAwareConstantValue(m, list.List[0]), true, nil
+		return dataAwareConstantValue(m, list.List()[0]), true, nil
 	case builtin.TailList:
 		if dataList, ok := arg.(*dataListValue[T]); ok {
 			if err := m.CostOne(&fn, valueExMem[T](arg)); err != nil {
@@ -631,10 +631,10 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 		if err != nil {
 			return nil, true, err
 		}
-		if err := m.CostOne(&fn, listExMem(list.List)); err != nil {
+		if err := m.CostOne(&fn, listExMem(list.List())); err != nil {
 			return nil, true, err
 		}
-		if len(list.List) == 0 {
+		if len(list.List()) == 0 {
 			return nil, true, &BuiltinError{
 				Code:    ErrCodeOutOfBounds,
 				Builtin: "tailList",
@@ -642,7 +642,7 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 			}
 		}
 		return m.allocConstant(
-			m.allocProtoListConstant(list.LTyp, list.List[1:]),
+			m.allocProtoListConstant(list.LTyp, list.List()[1:]),
 		), true, nil
 	case builtin.NullList:
 		if v, ok := arg.(*dataListValue[T]); ok {
@@ -667,10 +667,10 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 		if err != nil {
 			return nil, true, err
 		}
-		if err := m.CostOne(&fn, listExMem(list.List)); err != nil {
+		if err := m.CostOne(&fn, listExMem(list.List())); err != nil {
 			return nil, true, err
 		}
-		return boolConstant(len(list.List) == 0), true, nil
+		return boolConstant(len(list.List()) == 0), true, nil
 	case builtin.UnConstrData:
 		datum, err := unwrapData[T](arg)
 		if err != nil {
@@ -704,7 +704,7 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 				Message: "data is not a map",
 			}
 		}
-		return m.allocDataMapValue(dataMap.Pairs), true, nil
+		return m.dataPairsValue(dataMap), true, nil
 	case builtin.UnListData:
 		datum, err := unwrapData[T](arg)
 		if err != nil {
@@ -721,7 +721,7 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 				Message: "data is not a list",
 			}
 		}
-		return m.allocDataListValue(dataList.Items), true, nil
+		return m.dataItemsValue(dataList), true, nil
 	case builtin.UnIData:
 		datum, err := unwrapData[T](arg)
 		if err != nil {
@@ -877,7 +877,7 @@ func (m *Machine[T]) mkConsFast(
 		// A data list or map is usually built by consing onto an empty
 		// list constant. Starting it as a data list here keeps every later
 		// cons on the data path instead of wrapping each head as a constant.
-		if list, ok := tail.Constant.(*syn.ProtoList); ok && len(list.List) == 0 {
+		if list, ok := tail.Constant.(*syn.ProtoList); ok && len(list.List()) == 0 {
 			switch typ := list.LTyp.(type) {
 			case *syn.TData:
 				isData = isDataHead[T](leftVal)
@@ -950,11 +950,11 @@ func (m *Machine[T]) mkConsFast(
 	if err != nil {
 		return nil, true, err
 	}
-	if err := m.CostTwo(&fn, valueExMem[T](head), listExMem(tail.List)); err != nil {
+	if err := m.CostTwo(&fn, valueExMem[T](head), listExMem(tail.List())); err != nil {
 		return nil, true, err
 	}
 	a := newConstListAlloc[T](typ)
-	consOntoSlice(&a.c, head.Constant, tail.List)
+	consOntoSlice(&a.c, head.Constant, tail.List())
 	return &a.v, true, nil
 }
 
@@ -1074,10 +1074,10 @@ func (m *Machine[T]) evalTernaryBuiltinFast(
 		if err != nil {
 			return nil, true, err
 		}
-		if err := m.CostThree(&fn, listExMem(list.List), valueExMem[T](secondVal), valueExMem[T](thirdVal)); err != nil {
+		if err := m.CostThree(&fn, listExMem(list.List()), valueExMem[T](secondVal), valueExMem[T](thirdVal)); err != nil {
 			return nil, true, err
 		}
-		if len(list.List) == 0 {
+		if len(list.List()) == 0 {
 			return secondVal, true, nil
 		}
 		return thirdVal, true, nil
@@ -2335,7 +2335,7 @@ func flattenListArg[T syn.Eval](
 	if list, ok := value.(*consConstList[T]); ok {
 		flat, buf := list.cell.flatten()
 		return &Constant{
-			Constant: &syn.ProtoList{LTyp: list.typ, List: flat},
+			Constant: syn.WrapProtoList(list.typ, flat),
 		}, buf
 	}
 	return flattenLazyList[T](value), nil
@@ -2401,8 +2401,22 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	// A cons-cell list must become one contiguous slice; flattening is
-	// memoised per cell and O(1) amortised for lists built by chained mkCons.
+	src, err := lazyDataItems[T](m.argHolder[1], constrDataElem)
+	if err != nil {
+		return nil, err
+	}
+	if src != nil {
+		err = m.CostTwo(&b.Func, bigIntExMem(arg1), valueExMem[T](m.argHolder[1]))
+		if err != nil {
+			return nil, err
+		}
+		tag, tagErr := validateConstrTag(m.semantics, arg1)
+		if tagErr != nil {
+			return nil, tagErr
+		}
+		return m.allocDataValue(newLazyConstr(tag, src)), nil
+	}
+
 	listArg, owner := flattenListArg[T](m.argHolder[1])
 	if arg2, ok := listArg.(*dataListValue[T]); ok {
 		err = m.CostTwo(&b.Func, bigIntExMem(arg1), valueExMem[T](arg2))
@@ -2415,10 +2429,7 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 			return nil, tagErr
 		}
 
-		return m.allocDataValue(&data.Constr{
-			Tag:    tag,
-			Fields: arg2.items,
-		}), nil
+		return m.allocDataValue(data.WrapConstr(tag, arg2.items)), nil
 	}
 
 	arg2, err := unwrapList[T](&syn.TData{}, listArg)
@@ -2426,7 +2437,7 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	err = m.CostTwo(&b.Func, bigIntExMem(arg1), listExMem(arg2.List))
+	err = m.CostTwo(&b.Func, bigIntExMem(arg1), listExMem(arg2.List()))
 	if err != nil {
 		return nil, err
 	}
@@ -2434,7 +2445,7 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	dataList, err := convertList(
 		&m.listShare.toData,
 		owner,
-		arg2.List,
+		arg2.List(),
 		constrDataElem,
 	)
 	if err != nil {
@@ -2446,14 +2457,22 @@ func constrData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, tagErr
 	}
 
-	return m.allocDataValue(&data.Constr{
-		Tag:    tag,
-		Fields: dataList,
-	}), nil
+	return m.allocDataValue(data.WrapConstr(tag, dataList)), nil
 }
 
 func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	src, err := lazyDataPairs[T](m.argHolder[0])
+	if err != nil {
+		return nil, err
+	}
+	if src != nil {
+		if err := m.CostOne(&b.Func, valueExMem[T](m.argHolder[0])); err != nil {
+			return nil, err
+		}
+		return m.allocDataValue(newLazyMap(src)), nil
+	}
 
 	listArg, owner := flattenListArg[T](m.argHolder[0])
 	if arg1, ok := listArg.(*dataMapValue[T]); ok {
@@ -2461,9 +2480,7 @@ func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		if err != nil {
 			return nil, err
 		}
-		return m.allocDataValue(&data.Map{
-			Pairs: arg1.items,
-		}), nil
+		return m.allocDataValue(data.WrapMap(arg1.items)), nil
 	}
 
 	pairType := &syn.TPair{
@@ -2476,7 +2493,7 @@ func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	err = m.CostOne(&b.Func, listExMem(arg1.List))
+	err = m.CostOne(&b.Func, listExMem(arg1.List()))
 	if err != nil {
 		return nil, err
 	}
@@ -2484,20 +2501,29 @@ func mapData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	dataList, err := convertList(
 		&m.listShare.toPairs,
 		owner,
-		arg1.List,
+		arg1.List(),
 		mapDataElem,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return m.allocDataValue(&data.Map{
-		Pairs: dataList,
-	}), nil
+	return m.allocDataValue(data.WrapMap(dataList)), nil
 }
 
 func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	b.Args.Extract(&m.argHolder, b.ArgCount)
+
+	src, err := lazyDataItems[T](m.argHolder[0], listDataElem)
+	if err != nil {
+		return nil, err
+	}
+	if src != nil {
+		if err := m.CostOne(&b.Func, valueExMem[T](m.argHolder[0])); err != nil {
+			return nil, err
+		}
+		return m.allocDataValue(newLazyList(src)), nil
+	}
 
 	listArg, owner := flattenListArg[T](m.argHolder[0])
 	if arg1, ok := listArg.(*dataListValue[T]); ok {
@@ -2505,9 +2531,7 @@ func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		if err != nil {
 			return nil, err
 		}
-		return m.allocDataValue(&data.List{
-			Items: arg1.items,
-		}), nil
+		return m.allocDataValue(data.WrapList(arg1.items)), nil
 	}
 
 	arg1, err := unwrapList[T](&syn.TData{}, listArg)
@@ -2515,7 +2539,7 @@ func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 
-	err = m.CostOne(&b.Func, listExMem(arg1.List))
+	err = m.CostOne(&b.Func, listExMem(arg1.List()))
 	if err != nil {
 		return nil, err
 	}
@@ -2523,16 +2547,14 @@ func listData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	dataList, err := convertList(
 		&m.listShare.toData,
 		owner,
-		arg1.List,
+		arg1.List(),
 		listDataElem,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return m.allocDataValue(&data.List{
-		Items: dataList,
-	}), nil
+	return m.allocDataValue(data.WrapList(dataList)), nil
 }
 
 func iData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -3051,20 +3073,20 @@ func bls12381G1MultiScalarMul[T syn.Eval](
 	// Charge cost based on lengths of the lists
 	err = m.CostTwo(
 		&b.Func,
-		listLengthExMem(ints.List),
-		listLengthExMem(elems.List),
+		listLengthExMem(ints.List()),
+		listLengthExMem(elems.List()),
 	)
 	if err != nil {
 		return nil, m.overdrawTwo(
 			&b.Func,
-			listChunksOf(len(ints.List)),
-			listChunksOf(len(elems.List)),
+			listChunksOf(len(ints.List())),
+			listChunksOf(len(elems.List())),
 			err,
 		)
 	}
 	if err := validateBLSMSMScalars(
 		m,
-		ints.List,
+		ints.List(),
 		"bls12_381_G1_multiScalarMul",
 	); err != nil {
 		return nil, err
@@ -3073,13 +3095,13 @@ func bls12381G1MultiScalarMul[T syn.Eval](
 	// Compute multi-scalar multiplication: sum_i (n_i * p_i)
 	res := new(bls.G1Jac)
 
-	n := min(len(elems.List), len(ints.List))
+	n := min(len(elems.List()), len(ints.List()))
 
 	for i := range n {
 		if err := m.checkBuiltinCancellation(); err != nil {
 			return nil, err
 		}
-		ni, ok := ints.List[i].(*syn.Integer)
+		ni, ok := ints.List()[i].(*syn.Integer)
 		if !ok {
 			return nil, &BuiltinError{
 				Code:    ErrCodeInvalidArgument,
@@ -3087,7 +3109,7 @@ func bls12381G1MultiScalarMul[T syn.Eval](
 				Message: "expected integer list",
 			}
 		}
-		pi, ok := elems.List[i].(*syn.Bls12_381G1Element)
+		pi, ok := elems.List()[i].(*syn.Bls12_381G1Element)
 		if !ok {
 			return nil, &BuiltinError{
 				Code:    ErrCodeInvalidArgument,
@@ -3128,20 +3150,20 @@ func bls12381G2MultiScalarMul[T syn.Eval](
 	// Charge cost based on lengths of the lists
 	err = m.CostTwo(
 		&b.Func,
-		listLengthExMem(ints.List),
-		listLengthExMem(elems.List),
+		listLengthExMem(ints.List()),
+		listLengthExMem(elems.List()),
 	)
 	if err != nil {
 		return nil, m.overdrawTwo(
 			&b.Func,
-			listChunksOf(len(ints.List)),
-			listChunksOf(len(elems.List)),
+			listChunksOf(len(ints.List())),
+			listChunksOf(len(elems.List())),
 			err,
 		)
 	}
 	if err := validateBLSMSMScalars(
 		m,
-		ints.List,
+		ints.List(),
 		"bls12_381_G2_multiScalarMul",
 	); err != nil {
 		return nil, err
@@ -3150,13 +3172,13 @@ func bls12381G2MultiScalarMul[T syn.Eval](
 	// Compute multi-scalar multiplication: sum_i (n_i * p_i)
 	res := new(bls.G2Jac)
 
-	n := min(len(elems.List), len(ints.List))
+	n := min(len(elems.List()), len(ints.List()))
 
 	for i := range n {
 		if err := m.checkBuiltinCancellation(); err != nil {
 			return nil, err
 		}
-		ni, ok := ints.List[i].(*syn.Integer)
+		ni, ok := ints.List()[i].(*syn.Integer)
 		if !ok {
 			return nil, &BuiltinError{
 				Code:    ErrCodeInvalidArgument,
@@ -3164,7 +3186,7 @@ func bls12381G2MultiScalarMul[T syn.Eval](
 				Message: "expected integer list",
 			}
 		}
-		pi, ok := elems.List[i].(*syn.Bls12_381G2Element)
+		pi, ok := elems.List()[i].(*syn.Bls12_381G2Element)
 		if !ok {
 			return nil, &BuiltinError{
 				Code:    ErrCodeInvalidArgument,
@@ -4009,7 +4031,7 @@ func writeBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	err = m.CostThree(
 		&b.Func,
 		byteArrayExMem(bytes),
-		listLengthExMem(indices.List),
+		listLengthExMem(indices.List()),
 		boolExMem(setBit),
 	)
 	if err != nil {
@@ -4017,7 +4039,7 @@ func writeBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, m.overdrawThree(
 			&b.Func,
 			singleChunkOf(byteArrayExMem(bytes)()),
-			listChunksOf(len(indices.List)),
+			listChunksOf(len(indices.List())),
 			singleChunkOf(boolExMem(setBit)()),
 			err,
 		)
@@ -4040,7 +4062,7 @@ func writeBits[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	copy(result, bytes)
 
 	// Process each bit index
-	for _, index := range indices.List {
+	for _, index := range indices.List() {
 		// Unwrap integer from list element
 		bitIndex, ok := index.(*syn.Integer)
 		if !ok {
@@ -4728,8 +4750,8 @@ func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		m,
 		b,
 		nVal,
-		len(lst.List),
-		func() ExMem { return listExMem(lst.List)() },
+		len(lst.List()),
+		func() ExMem { return listExMem(lst.List())() },
 	)
 	if err != nil {
 		return nil, err
@@ -4737,9 +4759,9 @@ func dropList[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 	// Build resulting list
 	// Lists are immutable, so share the retained tail instead of copying it.
-	newList := lst.List[start:len(lst.List):len(lst.List)]
+	newList := lst.List()[start:len(lst.List()):len(lst.List())]
 
-	return &Constant{&syn.ProtoList{LTyp: lst.LTyp, List: newList}}, nil
+	return &Constant{syn.WrapProtoList(lst.LTyp, newList)}, nil
 }
 
 // ============================================================================
@@ -4790,10 +4812,10 @@ func listToArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		return nil, err
 	}
 	// Charge based on list length rather than full constant ExMem to match cost model intent
-	if err := m.CostOne(&b.Func, func() ExMem { return listLengthExMem(lst.List)() }); err != nil {
-		return nil, m.overdrawOne(&b.Func, listChunksOf(len(lst.List)), err)
+	if err := m.CostOne(&b.Func, func() ExMem { return listLengthExMem(lst.List())() }); err != nil {
+		return nil, m.overdrawOne(&b.Func, listChunksOf(len(lst.List())), err)
 	}
-	return &Constant{&syn.ProtoArray{ATyp: lst.LTyp, Array: lst.List}}, nil
+	return &Constant{&syn.ProtoArray{ATyp: lst.LTyp, Array: lst.List()}}, nil
 }
 
 func indexArray[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -4879,13 +4901,13 @@ func multiIndexArray[T syn.Eval](
 	if err := m.CostTwo(
 		&b.Func,
 		func() ExMem { return listExMem(items)() },
-		func() ExMem { return listLengthExMem(indices.List)() },
+		func() ExMem { return listLengthExMem(indices.List())() },
 	); err != nil {
 		return nil, err
 	}
 
-	result := make([]syn.IConstant, 0, len(indices.List))
-	for i, indexValue := range indices.List {
+	result := make([]syn.IConstant, 0, len(indices.List()))
+	for i, indexValue := range indices.List() {
 		if i >= multiIndexArrayMaximumIndexCount {
 			return nil, &BuiltinError{
 				Code:    ErrCodeOutOfBounds,
@@ -4936,7 +4958,7 @@ func multiIndexArray[T syn.Eval](
 		result = append(result, items[int(index64)])
 	}
 
-	return &Constant{&syn.ProtoList{LTyp: arrayType, List: result}}, nil
+	return &Constant{syn.WrapProtoList(arrayType, result)}, nil
 }
 
 // ============================================================================
@@ -4991,9 +5013,7 @@ func policies[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	for i, policyID := range policyIDs {
 		result[i] = &syn.ByteString{Inner: policyID}
 	}
-	return &Constant{
-		&syn.ProtoList{LTyp: &syn.TByteString{}, List: result},
-	}, nil
+	return &Constant{syn.WrapProtoList(&syn.TByteString{}, result)}, nil
 }
 
 func assetCount[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
@@ -5402,8 +5422,8 @@ func valueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 		}
 
 		// Build inner map for tokens
-		tokenEntries := make([][2]data.PlutusData, 0, len(tokenList.List))
-		for _, tk := range tokenList.List {
+		tokenEntries := make([][2]data.PlutusData, 0, len(tokenList.List()))
+		for _, tk := range tokenList.List() {
 			tkp, ok := tk.(*syn.ProtoPair)
 			if !ok {
 				continue
@@ -5420,11 +5440,11 @@ func valueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 
 		entries = append(entries, [2]data.PlutusData{
 			&data.ByteString{Inner: policyBs.Inner},
-			&data.Map{Pairs: tokenEntries},
+			data.WrapMap(tokenEntries),
 		})
 	}
 
-	return &Constant{&syn.Data{Inner: &data.Map{Pairs: entries}}}, nil
+	return &Constant{&syn.Data{Inner: data.WrapMap(entries)}}, nil
 }
 
 // unValueData converts a Data Map to a Value.
@@ -5469,12 +5489,12 @@ func unValueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	}
 
 	// Validate guarantees every key is a bytestring and every quantity an integer.
-	result := make([]syn.IConstant, 0, len(dmap.Pairs))
-	for _, pair := range dmap.Pairs {
+	result := make([]syn.IConstant, 0, dmap.Len())
+	for _, pair := range dmap.Pairs() {
 		policyData, _ := pair[0].(*data.ByteString)
 		tokensData, _ := pair[1].(*data.Map)
-		tokenPairs := make([]syn.IConstant, 0, len(tokensData.Pairs))
-		for _, tkPair := range tokensData.Pairs {
+		tokenPairs := make([]syn.IConstant, 0, tokensData.Len())
+		for _, tkPair := range tokensData.Pairs() {
 			tokenData, _ := tkPair[0].(*data.ByteString)
 			amtData, _ := tkPair[1].(*data.Integer)
 			tokenPairs = append(tokenPairs, &syn.ProtoPair{
@@ -5494,13 +5514,11 @@ func unValueData[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 				},
 			},
 			First: &syn.ByteString{Inner: policyData.Inner},
-			Second: &syn.ProtoList{
-				LTyp: &syn.TPair{
-					First:  &syn.TByteString{},
-					Second: &syn.TInteger{},
-				},
-				List: tokenPairs,
+			Second: syn.WrapProtoList(&syn.TPair{
+				First:  &syn.TByteString{},
+				Second: &syn.TInteger{},
 			},
+				tokenPairs),
 		})
 	}
 

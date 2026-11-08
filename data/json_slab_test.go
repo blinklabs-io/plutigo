@@ -45,7 +45,7 @@ func TestDecodeJSONIntegersAreIndependent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	items := pd.(*List).Items
+	items := pd.(*List).Items()
 	if len(items) != reps {
 		t.Fatalf("got %d items, want %d", len(items), reps)
 	}

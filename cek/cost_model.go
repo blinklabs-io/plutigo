@@ -159,7 +159,7 @@ func iconstantExMem(c syn.IConstant) func() ExMem {
 		case *syn.Unit:
 			ex = unitExMem()
 		case *syn.ProtoList:
-			ex = listExMem(x.List)
+			ex = listExMem(x.List())
 		case *syn.ProtoArray:
 			ex = listLengthExMem(x.Array)
 		case *syn.Value:
@@ -358,7 +358,7 @@ func valueTokenCount(l []syn.IConstant) int {
 		if !ok {
 			continue
 		}
-		innerCount += len(innerList.List)
+		innerCount += len(innerList.List())
 	}
 	return innerCount
 }
@@ -377,8 +377,8 @@ func valueMaxInnerCount(l []syn.IConstant) int {
 		if !ok {
 			continue
 		}
-		if len(innerList.List) > maxInner {
-			maxInner = len(innerList.List)
+		if len(innerList.List()) > maxInner {
+			maxInner = len(innerList.List())
 		}
 	}
 	return maxInner
@@ -407,7 +407,7 @@ func valueMaxCountExMem(l []syn.IConstant) func() ExMem {
 			if !ok {
 				continue
 			}
-			innerCount += len(innerList.List)
+			innerCount += len(innerList.List())
 		}
 		if outerCount > innerCount {
 			return ExMem(outerCount)
@@ -429,6 +429,9 @@ func dataExMem(x data.PlutusData) func() ExMem {
 type dataWalkFrame struct {
 	node data.PlutusData
 	next int
+	// lazy walks the children of a container built over a list made by
+	// mkCons without building its contiguous elements.
+	lazy *lazyDataCursor
 }
 
 type plutusDataWalker struct {
@@ -444,41 +447,50 @@ func newPlutusDataWalker(root data.PlutusData) plutusDataWalker {
 }
 
 func nextDataChild(frame *dataWalkFrame) (data.PlutusData, bool) {
+	if frame.lazy != nil {
+		return frame.lazy.next()
+	}
+	if frame.next == 0 {
+		if cursor := newLazyDataCursor(frame.node); cursor != nil {
+			frame.lazy = cursor
+			return cursor.next()
+		}
+	}
 	switch node := frame.node.(type) {
 	case *data.Constr:
-		if node != nil && frame.next < len(node.Fields) {
-			child := node.Fields[frame.next]
+		if node != nil && frame.next < node.NumFields() {
+			child := node.Fields()[frame.next]
 			frame.next++
 			return child, true
 		}
 	case data.Constr:
-		if frame.next < len(node.Fields) {
-			child := node.Fields[frame.next]
+		if frame.next < node.NumFields() {
+			child := node.Fields()[frame.next]
 			frame.next++
 			return child, true
 		}
 	case *data.List:
-		if node != nil && frame.next < len(node.Items) {
-			child := node.Items[frame.next]
+		if node != nil && frame.next < node.Len() {
+			child := node.Items()[frame.next]
 			frame.next++
 			return child, true
 		}
 	case data.List:
-		if frame.next < len(node.Items) {
-			child := node.Items[frame.next]
+		if frame.next < node.Len() {
+			child := node.Items()[frame.next]
 			frame.next++
 			return child, true
 		}
 	case *data.Map:
-		if node != nil && frame.next < len(node.Pairs)*2 {
-			pair := node.Pairs[frame.next/2]
+		if node != nil && frame.next < node.Len()*2 {
+			pair := node.Pairs()[frame.next/2]
 			child := pair[frame.next%2]
 			frame.next++
 			return child, true
 		}
 	case data.Map:
-		if frame.next < len(node.Pairs)*2 {
-			pair := node.Pairs[frame.next/2]
+		if frame.next < node.Len()*2 {
+			pair := node.Pairs()[frame.next/2]
 			child := pair[frame.next%2]
 			frame.next++
 			return child, true

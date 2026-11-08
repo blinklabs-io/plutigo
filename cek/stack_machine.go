@@ -744,19 +744,19 @@ func (m *Machine[T]) caseEvaluateStack(
 			}
 		case *syn.ProtoList:
 			branchRule = 2
-			if len(cval.List) == 0 {
+			if len(cval.List()) == 0 {
 				tag = 1
 			} else {
 				tag = 0
-				firstArg = m.allocConstant(cval.List[0])
-				tail := m.allocProtoListConstant(cval.LTyp, cval.List[1:])
+				firstArg = m.elementValue(cval.List()[0])
+				tail := m.allocProtoListConstant(cval.LTyp, cval.List()[1:])
 				secondArg = m.allocConstant(tail)
 			}
 		case *syn.ProtoPair:
 			branchRule = 1
 			tag = 0
-			firstArg = m.allocConstant(cval.First)
-			secondArg = m.allocConstant(cval.Second)
+			firstArg = m.elementValue(cval.First)
+			secondArg = m.elementValue(cval.Second)
 		case *syn.Data:
 			return m.caseEvaluateDataStack(env, branches, cval.Inner)
 		default:
@@ -870,10 +870,10 @@ func (m *Machine[T]) caseEvaluateDataStack(
 	branches []syn.Term[T],
 	item data.PlutusData,
 ) (syn.Term[T], *Env[T], Value[T], bool, error) {
-	tag, fields, err := m.caseOnData(item, len(branches))
+	tag, constr, err := m.caseOnData(item, len(branches))
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
-	m.pushApplyFrames([]Value[T]{m.allocDataListValue(fields)})
+	m.pushApplyFrames([]Value[T]{m.dataFieldsValue(constr)})
 	return branches[tag], env, nil, false, nil
 }

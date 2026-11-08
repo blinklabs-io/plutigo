@@ -62,10 +62,10 @@ func TestDecodedFlatUniverseConstantsEvaluate(t *testing.T) {
 						wrapped.Inner,
 					)
 				}
-				if len(valueMap.Pairs) != 0 {
+				if len(valueMap.Pairs()) != 0 {
 					t.Fatalf(
 						"result map length = %d, want 0",
-						len(valueMap.Pairs),
+						len(valueMap.Pairs()),
 					)
 				}
 			},
@@ -86,10 +86,10 @@ func TestDecodedFlatUniverseConstantsEvaluate(t *testing.T) {
 						wrapped.Inner,
 					)
 				}
-				if len(valueMap.Pairs) != 1 {
+				if len(valueMap.Pairs()) != 1 {
 					t.Fatalf(
 						"result map length = %d, want 1",
-						len(valueMap.Pairs),
+						len(valueMap.Pairs()),
 					)
 				}
 			},
@@ -221,12 +221,11 @@ func TestFlatUniverseConstantExMem(t *testing.T) {
 					Second: &syn.TInteger{},
 				}},
 				First: &syn.ByteString{Inner: []byte{1}},
-				Second: &syn.ProtoList{
-					LTyp: &syn.TPair{
-						First:  &syn.TByteString{},
-						Second: &syn.TInteger{},
-					},
-					List: []syn.IConstant{
+				Second: syn.WrapProtoList(&syn.TPair{
+					First:  &syn.TByteString{},
+					Second: &syn.TInteger{},
+				},
+					[]syn.IConstant{
 						&syn.ProtoPair{
 							FstType: &syn.TByteString{},
 							SndType: &syn.TInteger{},
@@ -239,8 +238,7 @@ func TestFlatUniverseConstantExMem(t *testing.T) {
 							First:   &syn.ByteString{Inner: []byte{2}},
 							Second:  &syn.Integer{Inner: big.NewInt(1)},
 						},
-					},
-				},
+					}),
 			},
 		})
 		if err != nil {

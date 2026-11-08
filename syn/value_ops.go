@@ -50,7 +50,7 @@ func valueNegativeCount(entries []IConstant) int {
 		if !ok || tokens == nil {
 			continue
 		}
-		for _, tok := range tokens.List {
+		for _, tok := range tokens.List() {
 			pair, ok := tok.(*ProtoPair)
 			if !ok || pair == nil {
 				continue
@@ -80,7 +80,7 @@ func valueKey(entry IConstant) []byte {
 }
 
 func valuePolicyTokens(entry IConstant) []IConstant {
-	return entry.(*ProtoPair).Second.(*ProtoList).List
+	return entry.(*ProtoPair).Second.(*ProtoList).List()
 }
 
 func valueTokenQuantity(entry IConstant) *big.Int {
@@ -110,7 +110,7 @@ func newValuePolicyPair(id []byte, tokens []IConstant) *ProtoPair {
 		FstType: valueEntryType.First,
 		SndType: valueEntryType.Second,
 		First:   &ByteString{Inner: id},
-		Second:  &ProtoList{LTyp: valueTokenType, List: tokens},
+		Second:  WrapProtoList(valueTokenType, tokens),
 	}
 }
 

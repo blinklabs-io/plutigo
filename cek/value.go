@@ -115,6 +115,10 @@ func machineConstantValue[T syn.Eval](
 	constant syn.IConstant,
 ) Value[T] {
 	switch c := constant.(type) {
+	case *syn.ProtoList:
+		if v, ok := lazyListConstantValue[T](c); ok {
+			return v
+		}
 	case *syn.Bool:
 		return boolConstant(c.Inner)
 	case *syn.Unit:
@@ -259,10 +263,8 @@ func materializeDataListConstant(items []data.PlutusData) *syn.ProtoList {
 	for i, item := range items {
 		list[i] = &syn.Data{Inner: item}
 	}
-	return &syn.ProtoList{
-		LTyp: sharedDataType,
-		List: list,
-	}
+	return syn.WrapProtoList(sharedDataType,
+		list)
 }
 
 func materializeDataMapConstant(items [][2]data.PlutusData) *syn.ProtoList {
@@ -275,10 +277,8 @@ func materializeDataMapConstant(items [][2]data.PlutusData) *syn.ProtoList {
 			Second:  &syn.Data{Inner: item[1]},
 		}
 	}
-	return &syn.ProtoList{
-		LTyp: sharedPairDataType,
-		List: list,
-	}
+	return syn.WrapProtoList(sharedPairDataType,
+		list)
 }
 
 func materializeConstantValue[T syn.Eval](
@@ -323,24 +323,14 @@ func materializeConstantValueShared[T syn.Eval](
 	if depth > maxDepth {
 		return nil, false, dischargeDepthLimitError()
 	}
-	// Flatten a list built by mkCons, keeping the buffer that owns a data
-	// list's storage so share can memoise the conversion on it.
-	var dataOwner *frontBuf[data.PlutusData]
-	var mapOwner *frontBuf[[2]data.PlutusData]
-	switch v := value.(type) {
-	case *consDataList[T]:
-		flat, buf := v.cell.flatten()
-		value, dataOwner = &dataListValue[T]{items: flat}, buf
-	case *consDataMap[T]:
-		flat, buf := v.cell.flatten()
-		value, mapOwner = &dataMapValue[T]{items: flat}, buf
-	case *consConstList[T]:
-		value = v.flatten()
-	}
 	if err := budget.consume(1); err != nil {
 		return nil, false, err
 	}
-
+	// A list built by mkCons becomes a list constant over its cells, so a
+	// list of lists keeps sharing them as the reference's lists do.
+	if list, ok := lazyListConstant[T](value); ok {
+		return list, true, nil
+	}
 	switch v := value.(type) {
 	case *Constant:
 		return v.Constant, true, nil
@@ -351,7 +341,7 @@ func materializeConstantValueShared[T syn.Eval](
 			return nil, false, err
 		}
 		if share != nil {
-			return share.dataListConstant(dataOwner, v.items), true, nil
+			return share.dataListConstant(v.items), true, nil
 		}
 		return materializeDataListConstant(v.items), true, nil
 	case *dataMapValue[T]:
@@ -359,7 +349,7 @@ func materializeConstantValueShared[T syn.Eval](
 			return nil, false, err
 		}
 		if share != nil {
-			return share.dataMapConstant(mapOwner, v.items), true, nil
+			return share.dataMapConstant(v.items), true, nil
 		}
 		return materializeDataMapConstant(v.items), true, nil
 	case *pairValue[T]:
@@ -514,23 +504,21 @@ func (m *constantCloneMemo) cloneUncached(
 		if c == nil {
 			return nil, malformedASTError("cannot clone a nil ProtoList constant")
 		}
-		items := make([]syn.IConstant, len(c.List))
-		for i := range c.List {
+		items := make([]syn.IConstant, len(c.List()))
+		for i := range c.List() {
 			var err error
 			items[i], err = m.clone(
 				ctx,
 				checkCancellation,
-				c.List[i],
+				c.List()[i],
 				depth+1,
 			)
 			if err != nil {
 				return nil, err
 			}
 		}
-		return &syn.ProtoList{
-			LTyp: c.LTyp,
-			List: items,
-		}, nil
+		return syn.WrapProtoList(c.LTyp,
+			items), nil
 	case *syn.ProtoArray:
 		if c == nil {
 			return nil, malformedASTError("cannot clone a nil ProtoArray constant")

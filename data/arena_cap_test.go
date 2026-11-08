@@ -48,19 +48,19 @@ func arenaWalk(
 	t.Helper()
 	switch v := pd.(type) {
 	case *List:
-		visit("list items", len(v.Items), cap(v.Items))
-		for _, item := range v.Items {
+		visit("list items", len(v.Items()), cap(v.Items()))
+		for _, item := range v.Items() {
 			arenaWalk(t, item, visit)
 		}
 	case *Map:
-		visit("map pairs", len(v.Pairs), cap(v.Pairs))
-		for _, p := range v.Pairs {
+		visit("map pairs", len(v.Pairs()), cap(v.Pairs()))
+		for _, p := range v.Pairs() {
 			arenaWalk(t, p[0], visit)
 			arenaWalk(t, p[1], visit)
 		}
 	case *Constr:
-		visit("constr fields", len(v.Fields), cap(v.Fields))
-		for _, f := range v.Fields {
+		visit("constr fields", len(v.Fields()), cap(v.Fields()))
+		for _, f := range v.Fields() {
 			arenaWalk(t, f, visit)
 		}
 	case *Value:
@@ -108,14 +108,14 @@ func TestArenaAppendDoesNotCorruptNeighbours(t *testing.T) {
 		t.Fatal(err)
 	}
 	list := pd.(*List)
-	first := list.Items[0].(*ByteString)
-	second := list.Items[1].(*ByteString)
-	l1 := list.Items[2].(*List)
-	l2 := list.Items[3].(*List)
+	first := list.Items()[0].(*ByteString)
+	second := list.Items()[1].(*ByteString)
+	l1 := list.Items()[2].(*List)
+	l2 := list.Items()[3].(*List)
 
 	first.Inner = append(first.Inner, 0xee, 0xee)
-	l1.Items = append(
-		l1.Items,
+	l1.items = append(
+		l1.Items(),
 		NewInteger(big.NewInt(7)),
 		NewInteger(big.NewInt(8)),
 	)

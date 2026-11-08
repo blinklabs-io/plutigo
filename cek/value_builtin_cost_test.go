@@ -56,13 +56,11 @@ func newValueCostTestInput(policyCount, tokensPerPolicy int) *Constant {
 				Second: &syn.TInteger{},
 			}},
 			First: &syn.ByteString{Inner: []byte{byte(p >> 8), byte(p)}},
-			Second: &syn.ProtoList{
-				LTyp: &syn.TPair{
-					First:  &syn.TByteString{},
-					Second: &syn.TInteger{},
-				},
-				List: tokens,
+			Second: syn.WrapProtoList(&syn.TPair{
+				First:  &syn.TByteString{},
+				Second: &syn.TInteger{},
 			},
+				tokens),
 		})
 	}
 	value, err := syn.NewValue(entries)

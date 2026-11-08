@@ -25,6 +25,17 @@
 //   - [Integer] - Arbitrary-precision integer
 //   - [ByteString] - Raw bytes
 //
+// # Elements
+//
+// The elements of a [Constr], [Map] and [List] are read through Fields,
+// Pairs and Items, which return slices the caller must not modify; they may
+// be shared with other values. [NewConstr], [NewMap] and [NewList] copy the
+// elements they are given, and [WrapConstr], [WrapMap] and [WrapList] take
+// ownership of them instead. Values built by the evaluator may hold their
+// elements in its persistent lists, which keeps listData, mapData and
+// constrData constant-time as in the reference; their slices are built on
+// first access.
+//
 // # Encoding and Decoding
 //
 //	// Decode CBOR bytes to PlutusData

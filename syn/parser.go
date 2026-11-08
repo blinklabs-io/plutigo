@@ -589,7 +589,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 		if err := p.expect(lex.TokenRParen); err != nil {
 			return nil, err
 		}
-		return &Constant{Con: &ProtoList{LTyp: ts.Typ, List: items}}, nil
+		return &Constant{Con: WrapProtoList(ts.Typ, items)}, nil
 	case *TArray:
 		items, err := p.parseConstantCollection(ts.Typ, "array")
 		if err != nil {
@@ -819,7 +819,7 @@ func (p *Parser) parseConstant() (Term[Name], error) {
 				FstType: &TByteString{},
 				SndType: &TList{Typ: &TPair{First: &TByteString{}, Second: &TInteger{}}},
 				First:   &ByteString{Inner: kb},
-				Second:  &ProtoList{LTyp: &TPair{First: &TByteString{}, Second: &TInteger{}}, List: innerItems},
+				Second:  WrapProtoList(&TPair{First: &TByteString{}, Second: &TInteger{}}, innerItems),
 			}
 
 			items = append(items, outerPair)
@@ -1016,7 +1016,7 @@ func (p *Parser) parseConstantValue(typ Typ) (IConstant, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &ProtoList{LTyp: t.Typ, List: items}, nil
+		return WrapProtoList(t.Typ, items), nil
 	case *TArray:
 		items, err := p.parseConstantCollection(t.Typ, "array")
 		if err != nil {
@@ -1374,7 +1374,7 @@ func (p *Parser) parsePlutusValue() (data.PlutusData, error) {
 	if err := p.expect(lex.TokenRBracket); err != nil {
 		return nil, err
 	}
-	value, err := data.NewValue(&data.Map{Pairs: pairs})
+	value, err := data.NewValue(data.WrapMap(pairs))
 	if err != nil {
 		return nil, err
 	}

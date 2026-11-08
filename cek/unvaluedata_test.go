@@ -25,7 +25,7 @@ import (
 )
 
 func unValueDataInput(policies ...[2]data.PlutusData) *data.Map {
-	return &data.Map{Pairs: policies}
+	return data.WrapMap(policies)
 }
 
 func unValueDataPolicy(
@@ -34,7 +34,7 @@ func unValueDataPolicy(
 ) [2]data.PlutusData {
 	return [2]data.PlutusData{
 		&data.ByteString{Inner: key},
-		&data.Map{Pairs: tokens},
+		data.WrapMap(tokens),
 	}
 }
 
@@ -59,9 +59,7 @@ func TestUnValueDataCanonicalForm(t *testing.T) {
 			unValueDataInput(
 				[2]data.PlutusData{
 					(*data.ByteString)(nil),
-					&data.Map{
-						Pairs: [][2]data.PlutusData{unValueDataToken(nil, one)},
-					},
+					data.WrapMap([][2]data.PlutusData{unValueDataToken(nil, one)}),
 				},
 			),
 			ErrCodeInvalidArgument,

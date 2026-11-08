@@ -77,10 +77,10 @@ func TestPrettyInvalidValueIsNotSilentlyRewritten(t *testing.T) {
 	program := &Program[DeBruijn]{
 		Version: lang.LanguageVersionV4,
 		Term: &Constant{Con: &Data{Inner: &data.Value{
-			Inner: &data.Map{Pairs: [][2]data.PlutusData{{
+			Inner: data.WrapMap([][2]data.PlutusData{{
 				data.NewByteString([]byte{0xaa}),
 				data.NewInteger(big.NewInt(1)),
-			}}},
+			}}),
 		}}},
 	}
 

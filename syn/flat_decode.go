@@ -1326,8 +1326,7 @@ func (a *constantArena) allocBool(inner bool) *Bool {
 
 func (a *constantArena) allocProtoList(typ Typ, items []IConstant) *ProtoList {
 	value := a.protoLists.alloc()
-	value.LTyp = typ
-	value.List = items
+	*value = ProtoList{LTyp: typ, list: items}
 	return value
 }
 
@@ -1799,10 +1798,8 @@ func decodeConstantValue(d *decoder, typ Typ) (IConstant, error) {
 		if err != nil {
 			return nil, err
 		}
-		constant = &ProtoList{
-			LTyp: t.Typ,
-			List: items,
-		}
+		constant = WrapProtoList(t.Typ,
+			items)
 
 	case *TArray:
 		items, err := DecodeList(d, func(d *decoder) (IConstant, error) {
@@ -1908,11 +1905,11 @@ func validateValueEntries(entries []IConstant) error {
 				policyIndex,
 			)
 		}
-		if err := data.CheckValueTokenCount(policyIndex, len(tokens.List)); err != nil {
+		if err := data.CheckValueTokenCount(policyIndex, len(tokens.List())); err != nil {
 			return err
 		}
 		var prevToken []byte
-		for tokenIndex, entry := range tokens.List {
+		for tokenIndex, entry := range tokens.List() {
 			token, ok := entry.(*ProtoPair)
 			if !ok || token == nil {
 				return fmt.Errorf(

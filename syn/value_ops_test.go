@@ -32,7 +32,7 @@ func toOracle(v *Value) oracleValue {
 		p := e.(*ProtoPair)
 		pol := string(p.First.(*ByteString).Inner)
 		out[pol] = map[string]*big.Int{}
-		for _, t := range p.Second.(*ProtoList).List {
+		for _, t := range p.Second.(*ProtoList).List() {
 			tp := t.(*ProtoPair)
 			out[pol][string(tp.First.(*ByteString).Inner)] = new(
 				big.Int,
@@ -60,7 +60,7 @@ func (o oracleValue) build(t testing.TB) *Value {
 		}
 		entries = append(entries, &ProtoPair{
 			First:  &ByteString{Inner: []byte(pol)},
-			Second: &ProtoList{List: tl},
+			Second: WrapProtoList(nil, tl),
 		})
 	}
 	v, err := NewValue(entries)

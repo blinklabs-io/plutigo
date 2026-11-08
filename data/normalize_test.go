@@ -175,7 +175,7 @@ func TestNormalizeDoesNotMutateInput(t *testing.T) {
 // node owns. big.Int is mutable, so aliasing the tag would let a write
 // through the normalized value reach the original.
 func TestNormalizeCopiesConstrTag(t *testing.T) {
-	original := &Constr{Tag: big.NewInt(3), Fields: []PlutusData{}}
+	original := &Constr{Tag: big.NewInt(3), fields: []PlutusData{}}
 
 	normalized, ok := Normalize(original).(*Constr)
 	if !ok {
@@ -291,7 +291,7 @@ func TestNormalizeValueFormContainers(t *testing.T) {
 			name: "constr",
 			input: Constr{
 				Tag:      big.NewInt(0),
-				Fields:   []PlutusData{&Integer{Inner: big.NewInt(1)}},
+				fields:   []PlutusData{&Integer{Inner: big.NewInt(1)}},
 				useIndef: useIndefPtr(false),
 			},
 			wantNormal: "d8799f01ff",
@@ -300,7 +300,7 @@ func TestNormalizeValueFormContainers(t *testing.T) {
 			// List defaults to indefinite when non-empty.
 			name: "list",
 			input: List{
-				Items: []PlutusData{
+				items: []PlutusData{
 					&Integer{Inner: big.NewInt(1)},
 					&Integer{Inner: big.NewInt(2)},
 				},
@@ -313,7 +313,7 @@ func TestNormalizeValueFormContainers(t *testing.T) {
 			// value form pinned indefinite must come back definite.
 			name: "map",
 			input: Map{
-				Pairs: [][2]PlutusData{{
+				pairs: [][2]PlutusData{{
 					&Integer{Inner: big.NewInt(1)},
 					&Integer{Inner: big.NewInt(2)},
 				}},
@@ -353,7 +353,7 @@ func TestNormalizeValueFormDoesNotAliasInput(t *testing.T) {
 	field := &Integer{Inner: big.NewInt(1)}
 	input := Constr{
 		Tag:      big.NewInt(2),
-		Fields:   []PlutusData{field},
+		fields:   []PlutusData{field},
 		useIndef: useIndefPtr(false),
 	}
 
@@ -362,7 +362,7 @@ func TestNormalizeValueFormDoesNotAliasInput(t *testing.T) {
 	if got := mustEncodeHex(t, input); got != "d87b8101" {
 		t.Errorf("input re-encoded as %s after Normalize, want d87b8101", got)
 	}
-	if input.Fields[0] != field {
+	if input.Fields()[0] != field {
 		t.Error("Normalize replaced a field in the caller's value")
 	}
 	if input.useIndef == nil || *input.useIndef {

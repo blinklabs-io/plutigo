@@ -55,7 +55,7 @@ func zeroWidthListConstant(depth, n int, shared bool) *syn.Constant {
 			_, items[i] = balancedUnitPair(depth)
 		}
 	}
-	return &syn.Constant{Con: &syn.ProtoList{LTyp: elemType, List: items}}
+	return &syn.Constant{Con: syn.WrapProtoList(elemType, items)}
 }
 
 func forced(fn builtin.DefaultFunction, forces int) syn.Term[syn.DeBruijn] {
@@ -231,7 +231,7 @@ func TestEvalLargeZeroWidthListConstant(t *testing.T) {
 				if name == "constant" {
 					// The result is the list itself.
 					if c, ok := gotResult.(*syn.Constant); !ok ||
-						len(c.Con.(*syn.ProtoList).List) != tc.items {
+						len(c.Con.(*syn.ProtoList).List()) != tc.items {
 						t.Fatalf("result is not the %d-item list", tc.items)
 					}
 					return

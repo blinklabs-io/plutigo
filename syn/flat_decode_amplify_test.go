@@ -215,7 +215,7 @@ func TestDecodeZeroWidthListOfPairs(t *testing.T) {
 		for i := range list {
 			list[i] = elem
 		}
-		want := &ProtoList{LTyp: elemType, List: list}
+		want := WrapProtoList(elemType, list)
 		input, err := Encode(&Program[DeBruijn]{
 			Version: [3]uint32{1, 1, 0},
 			Term:    &Constant{Con: want},
@@ -250,15 +250,15 @@ func TestDecodeZeroWidthListOfPairs(t *testing.T) {
 						want.LTyp,
 					)
 				}
-				if len(got.List) != tc.items {
+				if len(got.List()) != tc.items {
 					t.Fatalf(
 						"decoded %d items, want %d",
-						len(got.List),
+						len(got.List()),
 						tc.items,
 					)
 				}
-				for i, item := range got.List {
-					if i > 0 && item == got.List[0] {
+				for i, item := range got.List() {
+					if i > 0 && item == got.List()[0] {
 						continue
 					}
 					if !reflect.DeepEqual(item, elem) {
@@ -377,29 +377,29 @@ func TestDecodeConstantValueAmplificationBounded(t *testing.T) {
 func checkAmplifyList(t *testing.T, con IConstant, depth, items int) {
 	t.Helper()
 	list, ok := con.(*ProtoList)
-	if !ok || len(list.List) != items {
+	if !ok || len(list.List()) != items {
 		t.Fatalf("decoded %T, want a list of %d items", con, items)
 	}
-	checkPairChain(t, list.List[0], depth)
-	checkPairChain(t, list.List[items-1], depth)
+	checkPairChain(t, list.List()[0], depth)
+	checkPairChain(t, list.List()[items-1], depth)
 }
 
 func checkNestedAmplifyList(t *testing.T, con IConstant, depth, items int) {
 	t.Helper()
 	list, ok := con.(*ProtoList)
-	if !ok || len(list.List) != items {
+	if !ok || len(list.List()) != items {
 		t.Fatalf("decoded %T, want a list of %d items", con, items)
 	}
 	for _, i := range []int{0, items - 1} {
-		inner, ok := list.List[i].(*ProtoList)
-		if !ok || len(inner.List) != 1 {
+		inner, ok := list.List()[i].(*ProtoList)
+		if !ok || len(inner.List()) != 1 {
 			t.Fatalf(
 				"outer item %d is %T, want a singleton list",
 				i,
-				list.List[i],
+				list.List()[i],
 			)
 		}
-		checkPairChain(t, inner.List[0], depth)
+		checkPairChain(t, inner.List()[0], depth)
 	}
 }
 

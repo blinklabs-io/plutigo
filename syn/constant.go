@@ -20,6 +20,7 @@ import (
 	"sort"
 
 	"github.com/blinklabs-io/plutigo/data"
+	"github.com/blinklabs-io/plutigo/internal/lazydata"
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-381"
 )
 
@@ -139,9 +140,48 @@ func (b Bool) Typ() Typ {
 	return &TBool{}
 }
 
+// ProtoList is a list constant whose elements have type LTyp. Its elements
+// are read through List and Len.
 type ProtoList struct {
 	LTyp Typ
-	List []IConstant
+	list []IConstant
+	lazy lazydata.Source[IConstant]
+}
+
+// WrapProtoList returns a list constant over items without copying them. The
+// caller must not modify items afterwards.
+func WrapProtoList(typ Typ, items []IConstant) *ProtoList {
+	return &ProtoList{LTyp: typ, list: items}
+}
+
+// List returns the list's elements. The caller must not modify the returned
+// slice, which may be shared with other values.
+func (pl ProtoList) List() []IConstant {
+	if pl.lazy != nil {
+		return pl.lazy.Materialize()
+	}
+	return pl.list
+}
+
+// Len returns the number of elements.
+func (pl ProtoList) Len() int {
+	if pl.lazy != nil {
+		return pl.lazy.Len()
+	}
+	return len(pl.list)
+}
+
+func init() {
+	lazydata.Hooks.NewProtoList = func(typ any, src any) any {
+		t, _ := typ.(Typ)
+		return &ProtoList{LTyp: t, lazy: src.(lazydata.Source[IConstant])}
+	}
+	lazydata.Hooks.ProtoListSource = func(pl any) any {
+		if v, ok := pl.(*ProtoList); ok && v != nil && v.lazy != nil {
+			return v.lazy
+		}
+		return nil
+	}
 }
 
 func (ProtoList) isConstant() {}
@@ -286,10 +326,10 @@ func normalizeValueEntriesWithArena(
 		if !ok {
 			policyTotals = valuePolicyTotal{
 				id:     policyID.Inner,
-				tokens: make(map[string]valueTokenTotal, len(tokens.List)),
+				tokens: make(map[string]valueTokenTotal, len(tokens.List())),
 			}
 		}
-		for tokenIndex, entry := range tokens.List {
+		for tokenIndex, entry := range tokens.List() {
 			token, ok := entry.(*ProtoPair)
 			if !ok || token == nil {
 				return nil, fmt.Errorf(
@@ -396,7 +436,7 @@ func normalizeValueEntriesWithArena(
 
 		var tokenList *ProtoList
 		if arena == nil {
-			tokenList = &ProtoList{LTyp: policyListType.Typ, List: tokenEntries}
+			tokenList = WrapProtoList(policyListType.Typ, tokenEntries)
 		} else {
 			tokenList = arena.allocProtoList(policyListType.Typ, tokenEntries)
 		}
@@ -488,8 +528,8 @@ func cloneValueEntries(entries []IConstant) []IConstant {
 		policy := entry.(*ProtoPair)
 		policyID := policy.First.(*ByteString)
 		tokens := policy.Second.(*ProtoList)
-		tokenEntries := make([]IConstant, len(tokens.List))
-		for j, tokenEntry := range tokens.List {
+		tokenEntries := make([]IConstant, len(tokens.List()))
+		for j, tokenEntry := range tokens.List() {
 			token := tokenEntry.(*ProtoPair)
 			tokenID := token.First.(*ByteString)
 			quantity := token.Second.(*Integer)
@@ -509,10 +549,8 @@ func cloneValueEntries(entries []IConstant) []IConstant {
 				Second: &TInteger{},
 			}},
 			First: &ByteString{Inner: append([]byte(nil), policyID.Inner...)},
-			Second: &ProtoList{
-				LTyp: &TPair{First: &TByteString{}, Second: &TInteger{}},
-				List: tokenEntries,
-			},
+			Second: WrapProtoList(&TPair{First: &TByteString{}, Second: &TInteger{}},
+				tokenEntries),
 		}
 	}
 	return ret
@@ -529,7 +567,7 @@ func valueTotalSize(entries []IConstant) int {
 		if !ok {
 			continue
 		}
-		total += len(tokens.List)
+		total += len(tokens.List())
 	}
 	return total
 }
@@ -545,7 +583,7 @@ func valueMaxInnerSize(entries []IConstant) int {
 		if !ok || tokens == nil {
 			continue
 		}
-		maxInner = max(maxInner, len(tokens.List))
+		maxInner = max(maxInner, len(tokens.List()))
 	}
 	return maxInner
 }

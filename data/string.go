@@ -138,7 +138,7 @@ func openListString(
 	sb.WriteString("List[")
 	return append(
 		stack,
-		stringFrame{children: childFrame{items: l.Items}, closer: "]"},
+		stringFrame{children: childFrame{items: l.Items()}, closer: "]"},
 	)
 }
 
@@ -151,7 +151,7 @@ func openMapString(
 	return append(
 		stack,
 		stringFrame{
-			children: childFrame{pairs: m.Pairs},
+			children: childFrame{pairs: m.Pairs()},
 			isMap:    true,
 			closer:   "]",
 		},
@@ -168,7 +168,7 @@ func openConstrString(
 	sb.WriteString(", fields: [")
 	return append(
 		stack,
-		stringFrame{children: childFrame{items: c.Fields}, closer: "]}"},
+		stringFrame{children: childFrame{items: c.Fields()}, closer: "]}"},
 	)
 }
 

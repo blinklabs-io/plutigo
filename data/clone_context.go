@@ -95,20 +95,20 @@ func (s *cloneContextState) cloneMap(
 		}
 		s.remaining--
 	}
-	if len(source.Pairs) > s.remaining/2 {
+	if source.Len() > s.remaining/2 {
 		return &DecodeLimitError{
 			Limit:  "clone node count",
 			Max:    s.maxNodes,
 			Actual: s.maxNodes + 1,
 		}
 	}
-	target.Pairs = make([][2]PlutusData, len(source.Pairs))
+	target.pairs = make([][2]PlutusData, source.Len())
 	target.useIndef = cloneUseIndef(source.useIndef)
-	for i := len(source.Pairs) - 1; i >= 0; i-- {
-		if err := s.schedule(source.Pairs[i][1], &target.Pairs[i][1], depth+1); err != nil {
+	for i := source.Len() - 1; i >= 0; i-- {
+		if err := s.schedule(source.Pairs()[i][1], &target.pairs[i][1], depth+1); err != nil {
 			return err
 		}
-		if err := s.schedule(source.Pairs[i][0], &target.Pairs[i][0], depth+1); err != nil {
+		if err := s.schedule(source.Pairs()[i][0], &target.pairs[i][0], depth+1); err != nil {
 			return err
 		}
 	}
@@ -159,7 +159,7 @@ func CloneContext(
 			if source == nil {
 				return nil, errors.New("cannot clone a nil PlutusData constructor")
 			}
-			if err := state.checkAdditionalNodes(len(source.Fields)); err != nil {
+			if err := state.checkAdditionalNodes(source.NumFields()); err != nil {
 				return nil, err
 			}
 			tag := new(big.Int)
@@ -171,12 +171,12 @@ func CloneContext(
 			}
 			cloned := &Constr{
 				Tag:      tag,
-				Fields:   make([]PlutusData, len(source.Fields)),
+				fields:   make([]PlutusData, source.NumFields()),
 				useIndef: cloneUseIndef(source.useIndef),
 			}
 			*item.target = cloned
-			for i := len(source.Fields) - 1; i >= 0; i-- {
-				if err := state.schedule(source.Fields[i], &cloned.Fields[i], item.depth+1); err != nil {
+			for i := source.NumFields() - 1; i >= 0; i-- {
+				if err := state.schedule(source.Fields()[i], &cloned.fields[i], item.depth+1); err != nil {
 					return nil, err
 				}
 			}
@@ -259,16 +259,16 @@ func CloneContext(
 			if source == nil {
 				return nil, errors.New("cannot clone a nil PlutusData list")
 			}
-			if err := state.checkAdditionalNodes(len(source.Items)); err != nil {
+			if err := state.checkAdditionalNodes(source.Len()); err != nil {
 				return nil, err
 			}
 			cloned := &List{
-				Items:    make([]PlutusData, len(source.Items)),
+				items:    make([]PlutusData, source.Len()),
 				useIndef: cloneUseIndef(source.useIndef),
 			}
 			*item.target = cloned
-			for i := len(source.Items) - 1; i >= 0; i-- {
-				if err := state.schedule(source.Items[i], &cloned.Items[i], item.depth+1); err != nil {
+			for i := source.Len() - 1; i >= 0; i-- {
+				if err := state.schedule(source.Items()[i], &cloned.items[i], item.depth+1); err != nil {
 					return nil, err
 				}
 			}

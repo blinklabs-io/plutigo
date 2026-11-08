@@ -117,10 +117,10 @@ func TestDischargeStopsDuringConstantClone(t *testing.T) {
 	_, err := dischargeValueContext[syn.DeBruijn](
 		ctx,
 		true,
-		&Constant{Constant: &syn.ProtoList{
-			LTyp: &syn.TInteger{},
-			List: items,
-		}},
+		&Constant{
+			Constant: syn.WrapProtoList(&syn.TInteger{},
+				items),
+		},
 	)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf(
@@ -140,7 +140,7 @@ func TestDischargeStopsDuringPlutusDataClone(t *testing.T) {
 	_, err := dischargeValueContext[syn.DeBruijn](
 		ctx,
 		true,
-		&Constant{Constant: &syn.Data{Inner: &data.List{Items: items}}},
+		&Constant{Constant: &syn.Data{Inner: data.WrapList(items)}},
 	)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf(

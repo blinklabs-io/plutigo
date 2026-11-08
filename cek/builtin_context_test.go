@@ -64,14 +64,14 @@ func TestBLSMultiScalarMulStopsOnCancellation(t *testing.T) {
 				elems[i] = tt.elem
 			}
 			b := newTestBuiltin(tt.builtinFunc)
-			b = b.ApplyArg(&Constant{&syn.ProtoList{
-				LTyp: &syn.TInteger{},
-				List: ints,
-			}})
-			b = b.ApplyArg(&Constant{&syn.ProtoList{
-				LTyp: tt.elemType,
-				List: elems,
-			}})
+			b = b.ApplyArg(&Constant{
+				syn.WrapProtoList(&syn.TInteger{},
+					ints),
+			})
+			b = b.ApplyArg(&Constant{
+				syn.WrapProtoList(tt.elemType,
+					elems),
+			})
 
 			_, err := evalBuiltinWithError(t, m, b)
 			if !errors.Is(err, context.Canceled) {
@@ -129,7 +129,7 @@ func TestUnionValueStopsDuringValueConversion(t *testing.T) {
 
 	value := mustValueConstant(t, []syn.IConstant{&syn.ProtoPair{
 		First: &syn.ByteString{Inner: []byte{1}},
-		Second: &syn.ProtoList{List: []syn.IConstant{
+		Second: syn.WrapProtoList(nil, []syn.IConstant{
 			&syn.ProtoPair{
 				First:  &syn.ByteString{Inner: []byte{2}},
 				Second: &syn.Integer{Inner: big.NewInt(1)},
@@ -138,7 +138,7 @@ func TestUnionValueStopsDuringValueConversion(t *testing.T) {
 				First:  &syn.ByteString{Inner: []byte{3}},
 				Second: &syn.Integer{Inner: big.NewInt(1)},
 			},
-		}},
+		}),
 	}})
 	b := newTestBuiltin(builtin.UnionValue).ApplyArg(value).ApplyArg(value)
 
@@ -159,10 +159,10 @@ func TestUnionValueStopsDuringMerge(t *testing.T) {
 	value := func(quantity *big.Int) *Constant {
 		return mustValueConstant(t, []syn.IConstant{&syn.ProtoPair{
 			First: &syn.ByteString{Inner: []byte{1}},
-			Second: &syn.ProtoList{List: []syn.IConstant{&syn.ProtoPair{
+			Second: syn.WrapProtoList(nil, []syn.IConstant{&syn.ProtoPair{
 				First:  &syn.ByteString{Inner: []byte{2}},
 				Second: &syn.Integer{Inner: quantity},
-			}}},
+			}}),
 		}})
 	}
 	maxQuantity := new(big.Int).Sub(
@@ -305,8 +305,8 @@ func TestBLSMultiScalarMulStopsAtEveryCancellationPoint(t *testing.T) {
 					elems[i] = tt.elem
 				}
 				return newTestBuiltin(tt.fn).
-					ApplyArg(&Constant{&syn.ProtoList{LTyp: &syn.TInteger{}, List: ints}}).
-					ApplyArg(&Constant{&syn.ProtoList{LTyp: tt.elemType, List: elems}})
+					ApplyArg(&Constant{syn.WrapProtoList(&syn.TInteger{}, ints)}).
+					ApplyArg(&Constant{syn.WrapProtoList(tt.elemType, elems)})
 			})
 		})
 	}

@@ -431,10 +431,7 @@ func TestRunStackLambdaImmediateFastPathSkipsLambdaArena(t *testing.T) {
 func TestMachineReusesUnConstrDataValueWithinRun(t *testing.T) {
 	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 0, testEvalContext())
 	m.ExBudget = ExBudget{Cpu: 1 << 60, Mem: 1 << 60}
-	constr := &data.Constr{
-		Tag:    big.NewInt(7),
-		Fields: []data.PlutusData{&data.Integer{Inner: big.NewInt(9)}},
-	}
+	constr := data.WrapConstr(big.NewInt(7), []data.PlutusData{&data.Integer{Inner: big.NewInt(9)}})
 	otherConstr := &data.Constr{Tag: big.NewInt(8)}
 	arg := &dataValue[syn.DeBruijn]{item: constr}
 
@@ -453,7 +450,7 @@ func TestMachineReusesUnConstrDataValueWithinRun(t *testing.T) {
 		t.Fatalf("unConstrData tag = %d, want 7", firstTag)
 	}
 	firstFields := firstPair.second.(*dataListValue[syn.DeBruijn]).items
-	if len(firstFields) != 1 || firstFields[0] != constr.Fields[0] {
+	if len(firstFields) != 1 || firstFields[0] != constr.Fields()[0] {
 		t.Fatalf(
 			"unConstrData fields = %v, want original constructor fields",
 			firstFields,

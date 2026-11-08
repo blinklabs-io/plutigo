@@ -263,10 +263,8 @@ func valueEntryForTest(policyID []byte, tokens ...IConstant) IConstant {
 		FstType: valueEntryType.First,
 		SndType: valueEntryType.Second,
 		First:   &ByteString{Inner: policyID},
-		Second: &ProtoList{
-			LTyp: valueEntryType.Second.(*TList).Typ,
-			List: tokens,
-		},
+		Second: WrapProtoList(valueEntryType.Second.(*TList).Typ,
+			tokens),
 	}
 }
 
@@ -298,14 +296,14 @@ func valueTextPrettyForTest(t testing.TB, valueText string) string {
 
 func TestEncodeRejectsNonCanonicalDataValue(t *testing.T) {
 	t.Parallel()
-	tokens := &data.Map{Pairs: [][2]data.PlutusData{{
+	tokens := data.WrapMap([][2]data.PlutusData{{
 		data.NewByteString([]byte{1}),
 		data.NewInteger(new(big.Int)),
-	}}}
-	inner := &data.Map{Pairs: [][2]data.PlutusData{{
+	}})
+	inner := data.WrapMap([][2]data.PlutusData{{
 		data.NewByteString([]byte{1}),
 		tokens,
-	}}}
+	}})
 	_, err := Encode(&Program[DeBruijn]{
 		Version: lang.LanguageVersionV4,
 		Term: &Constant{Con: &Data{
@@ -369,11 +367,11 @@ func TestValueValidationAllocationBound(t *testing.T) {
 	for i := range entries {
 		entries[i] = &ProtoPair{
 			First: &ByteString{Inner: []byte{byte(i >> 8), byte(i)}},
-			Second: &ProtoList{List: []IConstant{&ProtoPair{
+			Second: WrapProtoList(nil, []IConstant{&ProtoPair{
 				First: &ByteString{
 					Inner: []byte{1},
 				}, Second: newInteger(big.NewInt(1)),
-			}}},
+			}}),
 		}
 	}
 	allocs := testing.AllocsPerRun(10, func() {

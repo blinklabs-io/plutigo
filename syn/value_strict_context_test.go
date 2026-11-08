@@ -40,10 +40,8 @@ func rawValueEntries(policies ...[2]any) []IConstant {
 				Typ: &TPair{First: &TByteString{}, Second: &TInteger{}},
 			},
 			First: &ByteString{Inner: p[0].([]byte)},
-			Second: &ProtoList{
-				LTyp: &TPair{First: &TByteString{}, Second: &TInteger{}},
-				List: tokens,
-			},
+			Second: WrapProtoList(&TPair{First: &TByteString{}, Second: &TInteger{}},
+				tokens),
 		})
 	}
 	return out
