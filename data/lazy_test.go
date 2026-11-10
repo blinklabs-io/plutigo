@@ -59,9 +59,9 @@ func TestCloneContextBoundsLazyElementsBeforeBuildingThem(t *testing.T) {
 		pd    PlutusData
 		count *int
 	}{
-		"list":   {&List{lazy: items}, &items.materialize},
-		"constr": {&Constr{Tag: new(big.Int), lazy: fields}, &fields.materialize},
-		"map":    {&Map{lazy: pairs}, &pairs.materialize},
+		"list":   {&List{hdr: &itemsHeader{src: items}}, &items.materialize},
+		"constr": {&Constr{Tag: new(big.Int), hdr: &itemsHeader{src: fields}}, &fields.materialize},
+		"map":    {&Map{hdr: &pairsHeader{src: pairs}}, &pairs.materialize},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {

@@ -30,9 +30,13 @@ type consCell[E any] struct {
 	head E
 	next *consCell[E]
 	base []E
-	n    int // length of the list starting at this cell (>= 1)
 	flat []E
 	buf  *frontBuf[E]
+	// n is the length of the list starting at this cell (>= 1). It is an
+	// int32, sharing a word with checked, so that a cell of data, the most
+	// common, fits a smaller size class; no list within a budget comes near
+	// its range.
+	n int32
 	// checked is set once every element from this cell down has been
 	// converted without error by checkConstCells.
 	checked bool
@@ -53,7 +57,7 @@ func consOntoCell[E any](c *consCell[E], head E, t *consCell[E]) {
 // copied (bounded work) so chains started from them stay contiguous; longer
 // ones are only referenced.
 func consOntoSlice[E any](c *consCell[E], head E, s []E) {
-	*c = consCell[E]{head: head, base: s, n: len(s) + 1}
+	*c = consCell[E]{head: head, base: s, n: int32(len(s)) + 1}
 	if len(s) <= consSmallCopy {
 		c.flat, c.buf = consInto(nil, head, s, 0)
 	}
@@ -175,7 +179,7 @@ func (l *consConstList[T]) toExMem() ExMem {
 	return ExMem(NilCost) + acc
 }
 
-func (l *consConstList[T]) lazyLen() int { return l.cell.n }
+func (l *consConstList[T]) lazyLen() int { return int(l.cell.n) }
 
 func (l *consConstList[T]) lazyHead(m *Machine[T]) Value[T] {
 	return dataAwareConstantValue(m, l.cell.head)
@@ -232,7 +236,7 @@ func (l *consDataList[T]) toExMem() ExMem {
 	return acc
 }
 
-func (l *consDataList[T]) lazyLen() int { return l.cell.n }
+func (l *consDataList[T]) lazyLen() int { return int(l.cell.n) }
 
 func (l *consDataList[T]) lazyHead(m *Machine[T]) Value[T] {
 	return m.allocDataValue(l.cell.head)
@@ -295,7 +299,7 @@ func (l *consDataMap[T]) toExMem() ExMem {
 	return acc
 }
 
-func (l *consDataMap[T]) lazyLen() int { return l.cell.n }
+func (l *consDataMap[T]) lazyLen() int { return int(l.cell.n) }
 
 func (l *consDataMap[T]) lazyHead(m *Machine[T]) Value[T] {
 	return m.allocDataPairValue(l.cell.head[0], l.cell.head[1])

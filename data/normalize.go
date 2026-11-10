@@ -112,14 +112,14 @@ func isNormalized(pd PlutusData) bool {
 		switch v := node.(type) {
 		case *Constr:
 			if v != nil {
-				if v.NumFields() > 0 && v.useIndef != nil && !*v.useIndef {
+				if indef := v.hdr.useIndef(); v.NumFields() > 0 && indef != nil && !*indef {
 					return false
 				}
 				stack = append(stack, normalizeFrame{items: v.Fields()})
 			}
 		case *List:
 			if v != nil {
-				if v.Len() > 0 && v.useIndef != nil && !*v.useIndef {
+				if indef := v.hdr.useIndef(); v.Len() > 0 && indef != nil && !*indef {
 					return false
 				}
 				stack = append(stack, normalizeFrame{items: v.Items()})
@@ -157,5 +157,6 @@ func isNormalized(pd PlutusData) bool {
 }
 
 func mapIsNormalized(m *Map) bool {
-	return m.useIndef == nil || !*m.useIndef
+	indef := m.hdr.useIndef()
+	return indef == nil || !*indef
 }

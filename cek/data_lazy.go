@@ -32,33 +32,41 @@ import (
 // list-valued head does the same for the list constant it stores, and
 // reading that element back yields the cells.
 
-// dataCellSource is a data list built by mkCons onto a list of data.
-type dataCellSource struct {
-	cell *consCell[data.PlutusData]
-}
+// A list of data, or of data pairs, built by mkCons is its own source: its
+// cells are immutable, so listData, mapData and constrData wrap the list value
+// itself, and unwrapping the data hands the same value back.
 
-func (s *dataCellSource) Len() int { return s.cell.n }
+func (l *consDataList[T]) Len() int { return int(l.cell.n) }
 
-func (s *dataCellSource) Materialize() []data.PlutusData {
-	flat, _ := s.cell.flatten()
+func (l *consDataList[T]) Materialize() []data.PlutusData {
+	flat, _ := l.cell.flatten()
 	return flat
 }
 
-func (*dataCellSource) Seal(lazydata.Token) {}
+func (*consDataList[T]) Seal(lazydata.Token) {}
 
-// pairCellSource is a data map built by mkCons onto a list of data pairs.
-type pairCellSource struct {
-	cell *consCell[[2]data.PlutusData]
-}
+func (l *consDataList[T]) dataCell() *consCell[data.PlutusData] { return l.cell }
 
-func (s *pairCellSource) Len() int { return s.cell.n }
+func (l *consDataMap[T]) Len() int { return int(l.cell.n) }
 
-func (s *pairCellSource) Materialize() [][2]data.PlutusData {
-	flat, _ := s.cell.flatten()
+func (l *consDataMap[T]) Materialize() [][2]data.PlutusData {
+	flat, _ := l.cell.flatten()
 	return flat
 }
 
-func (*pairCellSource) Seal(lazydata.Token) {}
+func (*consDataMap[T]) Seal(lazydata.Token) {}
+
+func (l *consDataMap[T]) pairCell() *consCell[[2]data.PlutusData] { return l.cell }
+
+// dataCellList and pairCellList find the cells behind a source of any
+// machine's value type.
+type dataCellList interface {
+	dataCell() *consCell[data.PlutusData]
+}
+
+type pairCellList interface {
+	pairCell() *consCell[[2]data.PlutusData]
+}
 
 // convCellSource is a list built by mkCons whose elements, of type S, become
 // elements of type D on first use; a nil conv means S and D are the same.
@@ -69,7 +77,7 @@ type convCellSource[S, D any] struct {
 	out  []D
 }
 
-func (s *convCellSource[S, D]) Len() int { return s.cell.n }
+func (s *convCellSource[S, D]) Len() int { return int(s.cell.n) }
 
 func (s *convCellSource[S, D]) Materialize() []D {
 	if s.out == nil {
@@ -138,7 +146,7 @@ func lazyDataItems[T syn.Eval](
 ) (lazydata.Source[data.PlutusData], error) {
 	switch v := value.(type) {
 	case *consDataList[T]:
-		return &dataCellSource{cell: v.cell}, nil
+		return v, nil
 	case *consConstList[T]:
 		if syn.EqualType(v.typ, sharedDataType) {
 			if err := checkConstCells(v.cell, conv); err != nil {
@@ -162,7 +170,7 @@ func lazyDataPairs[T syn.Eval](
 ) (lazydata.Source[[2]data.PlutusData], error) {
 	switch v := value.(type) {
 	case *consDataMap[T]:
-		return &pairCellSource{cell: v.cell}, nil
+		return v, nil
 	case *consConstList[T]:
 		if syn.EqualType(v.typ, sharedPairDataType) {
 			if err := checkConstCells(v.cell, mapDataElem); err != nil {
@@ -198,10 +206,14 @@ func newLazyConstr(
 // mkCons.
 func lazyListValueOf[T syn.Eval](pd data.PlutusData) (Value[T], bool) {
 	switch s := lazydata.Hooks.SourceOf(pd).(type) {
-	case *dataCellSource:
-		return &consDataList[T]{cell: s.cell}, true
-	case *pairCellSource:
-		return &consDataMap[T]{cell: s.cell}, true
+	case *consDataList[T]:
+		return s, true
+	case *consDataMap[T]:
+		return s, true
+	case dataCellList:
+		return &consDataList[T]{cell: s.dataCell()}, true
+	case pairCellList:
+		return &consDataMap[T]{cell: s.pairCell()}, true
 	case *constCellSource[data.PlutusData]:
 		return &consConstList[T]{typ: s.typ, cell: s.cell}, true
 	case *constCellSource[[2]data.PlutusData]:
@@ -261,61 +273,78 @@ func (it *cellIter[E]) next() (E, bool) {
 // lazyDataCursor yields the children of a data container built over a list
 // made by mkCons in order (a map's pairs as key, value), without building
 // the container's contiguous elements, so walks that size data stay
-// proportional to the nodes they visit.
-type lazyDataCursor struct {
-	items   *cellIter[data.PlutusData]
-	pairs   *cellIter[[2]data.PlutusData]
-	consts  *cellIter[syn.IConstant]
-	pending data.PlutusData
+// proportional to the nodes they visit. Each kind of list has its own small
+// cursor, so a cursor costs one small allocation.
+type lazyDataCursor interface {
+	next() (data.PlutusData, bool)
 }
 
-func newLazyDataCursor(pd data.PlutusData) *lazyDataCursor {
+func newLazyDataCursor(pd data.PlutusData) lazyDataCursor {
 	switch s := lazydata.Hooks.SourceOf(pd).(type) {
-	case *dataCellSource:
-		return &lazyDataCursor{items: &cellIter[data.PlutusData]{cell: s.cell}}
-	case *pairCellSource:
-		return &lazyDataCursor{pairs: &cellIter[[2]data.PlutusData]{cell: s.cell}}
+	case dataCellList:
+		return &itemsCursor{it: cellIter[data.PlutusData]{cell: s.dataCell()}}
+	case pairCellList:
+		return &pairsCursor{it: cellIter[[2]data.PlutusData]{cell: s.pairCell()}}
 	case *constCellSource[data.PlutusData]:
-		return &lazyDataCursor{consts: &cellIter[syn.IConstant]{cell: s.cell}}
+		return &constsCursor{it: cellIter[syn.IConstant]{cell: s.cell}}
 	case *constCellSource[[2]data.PlutusData]:
-		return &lazyDataCursor{consts: &cellIter[syn.IConstant]{cell: s.cell}}
+		return &constsCursor{it: cellIter[syn.IConstant]{cell: s.cell}}
 	}
 	return nil
 }
 
-func (c *lazyDataCursor) next() (data.PlutusData, bool) {
+type itemsCursor struct {
+	it cellIter[data.PlutusData]
+}
+
+func (c *itemsCursor) next() (data.PlutusData, bool) { return c.it.next() }
+
+type pairsCursor struct {
+	it      cellIter[[2]data.PlutusData]
+	pending data.PlutusData
+}
+
+func (c *pairsCursor) next() (data.PlutusData, bool) {
 	if c.pending != nil {
 		pd := c.pending
 		c.pending = nil
 		return pd, true
 	}
-	switch {
-	case c.items != nil:
-		return c.items.next()
-	case c.pairs != nil:
-		pair, ok := c.pairs.next()
-		if !ok {
+	pair, ok := c.it.next()
+	if !ok {
+		return nil, false
+	}
+	c.pending = pair[1]
+	return pair[0], true
+}
+
+// constsCursor walks a constant list of data, or of data pairs.
+type constsCursor struct {
+	it      cellIter[syn.IConstant]
+	pending data.PlutusData
+}
+
+func (c *constsCursor) next() (data.PlutusData, bool) {
+	if c.pending != nil {
+		pd := c.pending
+		c.pending = nil
+		return pd, true
+	}
+	item, ok := c.it.next()
+	if !ok {
+		return nil, false
+	}
+	switch v := item.(type) {
+	case *syn.Data:
+		return v.Inner, true
+	case *syn.ProtoPair:
+		first, _ := v.First.(*syn.Data)
+		second, _ := v.Second.(*syn.Data)
+		if first == nil || second == nil {
 			return nil, false
 		}
-		c.pending = pair[1]
-		return pair[0], true
-	case c.consts != nil:
-		item, ok := c.consts.next()
-		if !ok {
-			return nil, false
-		}
-		switch v := item.(type) {
-		case *syn.Data:
-			return v.Inner, true
-		case *syn.ProtoPair:
-			first, _ := v.First.(*syn.Data)
-			second, _ := v.Second.(*syn.Data)
-			if first == nil || second == nil {
-				return nil, false
-			}
-			c.pending = second.Inner
-			return first.Inner, true
-		}
+		c.pending = second.Inner
+		return first.Inner, true
 	}
 	return nil, false
 }

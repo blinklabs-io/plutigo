@@ -38,29 +38,61 @@ func WrapConstr(tag *big.Int, fields []PlutusData) *Constr {
 	return &Constr{Tag: tag, fields: fields}
 }
 
+// A lazy container is allocated together with its header.
+type (
+	lazyList struct {
+		list List
+		hdr  itemsHeader
+	}
+	lazyMap struct {
+		m   Map
+		hdr pairsHeader
+	}
+	lazyConstr struct {
+		constr Constr
+		hdr    itemsHeader
+	}
+)
+
 func init() {
 	lazydata.Hooks.NewList = func(src any) any {
-		return &List{lazy: src.(lazydata.Source[PlutusData])}
+		a := &lazyList{}
+		a.hdr.src = src.(lazydata.Source[PlutusData])
+		a.list.hdr = &a.hdr
+		return &a.list
 	}
 	lazydata.Hooks.NewMap = func(src any) any {
-		return &Map{lazy: src.(lazydata.Source[[2]PlutusData])}
+		a := &lazyMap{}
+		a.hdr.src = src.(lazydata.Source[[2]PlutusData])
+		a.m.hdr = &a.hdr
+		return &a.m
 	}
 	lazydata.Hooks.NewConstr = func(tag *big.Int, src any) any {
-		return &Constr{Tag: tag, lazy: src.(lazydata.Source[PlutusData])}
+		a := &lazyConstr{}
+		a.hdr.src = src.(lazydata.Source[PlutusData])
+		a.constr.Tag = tag
+		a.constr.hdr = &a.hdr
+		return &a.constr
 	}
 	lazydata.Hooks.SourceOf = func(pd any) any {
 		switch v := pd.(type) {
 		case *List:
-			if v != nil && v.lazy != nil {
-				return v.lazy
+			if v != nil {
+				if src := v.hdr.source(); src != nil {
+					return src
+				}
 			}
 		case *Map:
-			if v != nil && v.lazy != nil {
-				return v.lazy
+			if v != nil {
+				if src := v.hdr.source(); src != nil {
+					return src
+				}
 			}
 		case *Constr:
-			if v != nil && v.lazy != nil {
-				return v.lazy
+			if v != nil {
+				if src := v.hdr.source(); src != nil {
+					return src
+				}
 			}
 		}
 		return nil

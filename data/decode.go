@@ -452,7 +452,7 @@ func (d *Decoder) closeFrame(
 	case frameList:
 		list := d.allocList()
 		list.items = d.copyItems(children)
-		list.useIndef = useIndefPtr(frame.indef)
+		list.hdr = itemsHdr(useIndefPtr(frame.indef))
 		return list, rest, nil
 	case frameConstr:
 		if frame.outerIndef {
@@ -467,7 +467,7 @@ func (d *Decoder) closeFrame(
 		constr.Tag = d.allocBigInt().SetUint64(frame.tag)
 		d.countMagnitude(constr.Tag)
 		constr.fields = d.copyItems(children)
-		constr.useIndef = useIndefPtr(frame.indef)
+		constr.hdr = itemsHdr(useIndefPtr(frame.indef))
 		return constr, rest, nil
 	default: // frameMap, frameValue
 		pairs := d.allocPairs(len(children) / 2)
@@ -476,7 +476,7 @@ func (d *Decoder) closeFrame(
 		}
 		decoded := d.allocMap()
 		decoded.pairs = pairs
-		decoded.useIndef = useIndefPtr(frame.indef)
+		decoded.hdr = pairsHdr(useIndefPtr(frame.indef))
 		if frame.kind == frameMap {
 			return decoded, rest, nil
 		}

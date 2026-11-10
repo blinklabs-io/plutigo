@@ -290,9 +290,9 @@ func TestNormalizeValueFormContainers(t *testing.T) {
 			// form pinned definite must come back indefinite.
 			name: "constr",
 			input: Constr{
-				Tag:      big.NewInt(0),
-				fields:   []PlutusData{&Integer{Inner: big.NewInt(1)}},
-				useIndef: useIndefPtr(false),
+				Tag:    big.NewInt(0),
+				fields: []PlutusData{&Integer{Inner: big.NewInt(1)}},
+				hdr:    itemsHdr(useIndefPtr(false)),
 			},
 			wantNormal: "d8799f01ff",
 		},
@@ -304,7 +304,7 @@ func TestNormalizeValueFormContainers(t *testing.T) {
 					&Integer{Inner: big.NewInt(1)},
 					&Integer{Inner: big.NewInt(2)},
 				},
-				useIndef: useIndefPtr(false),
+				hdr: itemsHdr(useIndefPtr(false)),
 			},
 			wantNormal: "9f0102ff",
 		},
@@ -317,7 +317,7 @@ func TestNormalizeValueFormContainers(t *testing.T) {
 					&Integer{Inner: big.NewInt(1)},
 					&Integer{Inner: big.NewInt(2)},
 				}},
-				useIndef: useIndefPtr(true),
+				hdr: pairsHdr(useIndefPtr(true)),
 			},
 			wantNormal: "a10102",
 		},
@@ -352,9 +352,9 @@ func TestNormalizeValueFormContainers(t *testing.T) {
 func TestNormalizeValueFormDoesNotAliasInput(t *testing.T) {
 	field := &Integer{Inner: big.NewInt(1)}
 	input := Constr{
-		Tag:      big.NewInt(2),
-		fields:   []PlutusData{field},
-		useIndef: useIndefPtr(false),
+		Tag:    big.NewInt(2),
+		fields: []PlutusData{field},
+		hdr:    itemsHdr(useIndefPtr(false)),
 	}
 
 	normalized := Normalize(input)
@@ -365,7 +365,7 @@ func TestNormalizeValueFormDoesNotAliasInput(t *testing.T) {
 	if input.Fields()[0] != field {
 		t.Error("Normalize replaced a field in the caller's value")
 	}
-	if input.useIndef == nil || *input.useIndef {
+	if indef := input.hdr.useIndef(); indef == nil || *indef {
 		t.Error("Normalize cleared useIndef on the caller's value")
 	}
 
