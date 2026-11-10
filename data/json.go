@@ -81,7 +81,7 @@ func (l *List) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	l.items = decoded.Items()
-	l.lazy = nil
+	l.hdr = itemsHdr(l.hdr.useIndef())
 	return nil
 }
 
@@ -97,7 +97,7 @@ func (m *Map) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	m.pairs = decoded.Pairs()
-	m.lazy = nil
+	m.hdr = pairsHdr(m.hdr.useIndef())
 	return nil
 }
 
@@ -114,7 +114,7 @@ func (c *Constr) UnmarshalJSON(data []byte) error {
 	}
 	c.Tag = decoded.Tag
 	c.fields = decoded.Fields()
-	c.lazy = nil
+	c.hdr = itemsHdr(c.hdr.useIndef())
 	return nil
 }
 

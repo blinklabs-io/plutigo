@@ -310,7 +310,7 @@ func copyConstr(v *Constr, normalize bool) (PlutusData, *copyFrame) {
 		if v.Tag != nil {
 			out.Tag.Set(v.Tag)
 		}
-		out.useIndef = cloneUseIndef(v.useIndef)
+		out.hdr = itemsHdr(v.hdr.useIndef())
 	}
 	if len(fields) == 0 {
 		return out, nil
@@ -322,7 +322,7 @@ func copyList(v *List, normalize bool) (PlutusData, *copyFrame) {
 	items := make([]PlutusData, v.Len())
 	out := &List{items: items}
 	if !normalize {
-		out.useIndef = cloneUseIndef(v.useIndef)
+		out.hdr = itemsHdr(v.hdr.useIndef())
 	}
 	if len(items) == 0 {
 		return out, nil
@@ -334,7 +334,7 @@ func copyMap(v *Map, normalize bool) (*Map, *copyFrame) {
 	pairs := make([][2]PlutusData, v.Len())
 	out := &Map{pairs: pairs}
 	if !normalize {
-		out.useIndef = cloneUseIndef(v.useIndef)
+		out.hdr = pairsHdr(v.hdr.useIndef())
 	}
 	if len(pairs) == 0 {
 		return out, nil

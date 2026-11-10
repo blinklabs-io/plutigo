@@ -23,7 +23,6 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/blinklabs-io/plutigo/internal/lazydata"
 	"github.com/fxamacker/cbor/v2"
 )
 
@@ -72,25 +71,24 @@ func useIndefPtr(useIndef bool) *bool {
 // Constr is a constructor application. Its fields are reached through
 // Fields and NumFields.
 type Constr struct {
-	Tag      *big.Int
-	fields   []PlutusData
-	lazy     lazydata.Source[PlutusData]
-	useIndef *bool
+	Tag    *big.Int
+	fields []PlutusData
+	hdr    *itemsHeader
 }
 
 // Fields returns the constructor's fields. The caller must not modify the
 // returned slice, which may be shared with other values.
 func (c Constr) Fields() []PlutusData {
-	if c.lazy != nil {
-		return c.lazy.Materialize()
+	if c.hdr != nil && c.hdr.src != nil {
+		return c.hdr.src.Materialize()
 	}
 	return c.fields
 }
 
 // NumFields returns the number of fields.
 func (c Constr) NumFields() int {
-	if c.lazy != nil {
-		return c.lazy.Len()
+	if c.hdr != nil && c.hdr.src != nil {
+		return c.hdr.src.Len()
 	}
 	return len(c.fields)
 }
@@ -132,8 +130,8 @@ func (c Constr) appendCBORHead(buf *bytes.Buffer) (*encodeFrame, error) {
 	// If useIndef is explicitly set, honor it; otherwise default to
 	// Haskell's cborg behavior: indefinite for non-empty, definite for empty.
 	useIndef := c.NumFields() > 0
-	if c.useIndef != nil {
-		useIndef = *c.useIndef
+	if indef := c.hdr.useIndef(); indef != nil {
+		useIndef = *indef
 	}
 
 	switch {
@@ -204,9 +202,9 @@ func NewConstrDefIndef(
 	tmpFields := make([]PlutusData, len(fields))
 	copy(tmpFields, fields)
 	return &Constr{
-		Tag:      new(big.Int).SetUint64(tag),
-		fields:   tmpFields,
-		useIndef: useIndefPtr(useIndef),
+		Tag:    new(big.Int).SetUint64(tag),
+		fields: tmpFields,
+		hdr:    itemsHdr(useIndefPtr(useIndef)),
 	}
 }
 
@@ -284,24 +282,23 @@ func decodeAs[P PlutusData](data []byte, allowValue bool) (P, error) {
 
 // Map is a list of key-value pairs, reached through Pairs and Len.
 type Map struct {
-	pairs    [][2]PlutusData
-	lazy     lazydata.Source[[2]PlutusData]
-	useIndef *bool
+	pairs [][2]PlutusData
+	hdr   *pairsHeader
 }
 
 // Pairs returns the map's pairs, each [key, value]. The caller must not
 // modify the returned slice, which may be shared with other values.
 func (m Map) Pairs() [][2]PlutusData {
-	if m.lazy != nil {
-		return m.lazy.Materialize()
+	if m.hdr != nil && m.hdr.src != nil {
+		return m.hdr.src.Materialize()
 	}
 	return m.pairs
 }
 
 // Len returns the number of pairs.
 func (m Map) Len() int {
-	if m.lazy != nil {
-		return m.lazy.Len()
+	if m.hdr != nil && m.hdr.src != nil {
+		return m.hdr.src.Len()
 	}
 	return len(m.pairs)
 }
@@ -329,7 +326,8 @@ func (m Map) MarshalCBOR() ([]byte, error) {
 func (m Map) appendCBORHead(buf *bytes.Buffer) *encodeFrame {
 	// Default to definite-length encoding to match Haskell's canonical CBOR.
 	// If useIndef is explicitly set, honor it.
-	useIndef := m.useIndef != nil && *m.useIndef
+	indef := m.hdr.useIndef()
+	useIndef := indef != nil && *indef
 	if useIndef {
 		buf.WriteByte(CborTypeMap | CborIndefFlag)
 	} else {
@@ -367,7 +365,7 @@ func NewMap(pairs [][2]PlutusData) PlutusData {
 func NewMapDefIndef(useIndef bool, pairs [][2]PlutusData) PlutusData {
 	tmpPairs := make([][2]PlutusData, len(pairs))
 	copy(tmpPairs, pairs)
-	return &Map{pairs: tmpPairs, useIndef: useIndefPtr(useIndef)}
+	return &Map{pairs: tmpPairs, hdr: pairsHdr(useIndefPtr(useIndef))}
 }
 
 // Value is the Plutus V4 Data constructor for the built-in Value type.
@@ -759,24 +757,23 @@ func NewByteString(value []byte) PlutusData {
 
 // List is a list of data items, reached through Items and Len.
 type List struct {
-	items    []PlutusData
-	lazy     lazydata.Source[PlutusData]
-	useIndef *bool
+	items []PlutusData
+	hdr   *itemsHeader
 }
 
 // Items returns the list's items. The caller must not modify the returned
 // slice, which may be shared with other values.
 func (l List) Items() []PlutusData {
-	if l.lazy != nil {
-		return l.lazy.Materialize()
+	if l.hdr != nil && l.hdr.src != nil {
+		return l.hdr.src.Materialize()
 	}
 	return l.items
 }
 
 // Len returns the number of items.
 func (l List) Len() int {
-	if l.lazy != nil {
-		return l.lazy.Len()
+	if l.hdr != nil && l.hdr.src != nil {
+		return l.hdr.src.Len()
 	}
 	return len(l.items)
 }
@@ -806,8 +803,8 @@ func (l List) appendCBORHead(buf *bytes.Buffer) *encodeFrame {
 	// If useIndef is explicitly set, honor it; otherwise default to
 	// Haskell's cborg behavior: indefinite for non-empty, definite for empty.
 	useIndef := l.Len() > 0
-	if l.useIndef != nil {
-		useIndef = *l.useIndef
+	if indef := l.hdr.useIndef(); indef != nil {
+		useIndef = *indef
 	}
 	return arrayFrame(buf, l.Items(), useIndef, "list item")
 }
@@ -837,12 +834,5 @@ func NewList(items ...PlutusData) PlutusData {
 func NewListDefIndef(useIndef bool, items ...PlutusData) PlutusData {
 	tmpItems := make([]PlutusData, len(items))
 	copy(tmpItems, items)
-	return &List{items: tmpItems, useIndef: useIndefPtr(useIndef)}
-}
-
-func cloneUseIndef(useIndef *bool) *bool {
-	if useIndef == nil {
-		return nil
-	}
-	return useIndefPtr(*useIndef)
+	return &List{items: tmpItems, hdr: itemsHdr(useIndefPtr(useIndef))}
 }

@@ -426,12 +426,18 @@ func dataExMem(x data.PlutusData) func() ExMem {
 	}
 }
 
+// dataWalkFrame holds a container being walked. Its children are resolved
+// once, when the walk enters it: a list or constructor's items, a map's
+// pairs, a value's single map, or a cursor over a list built by mkCons, so
+// each step is an index rather than a type switch.
 type dataWalkFrame struct {
-	node data.PlutusData
-	next int
+	items  []data.PlutusData
+	pairs  [][2]data.PlutusData
+	single data.PlutusData
+	next   int
 	// lazy walks the children of a container built over a list made by
 	// mkCons without building its contiguous elements.
-	lazy *lazyDataCursor
+	lazy lazyDataCursor
 }
 
 type plutusDataWalker struct {
@@ -446,65 +452,76 @@ func newPlutusDataWalker(root data.PlutusData) plutusDataWalker {
 	}
 }
 
+// openDataFrame returns the frame for walking node's children, and false
+// when node has none.
+func openDataFrame(node data.PlutusData) (dataWalkFrame, bool) {
+	switch v := node.(type) {
+	case *data.Constr:
+		if v == nil {
+			return dataWalkFrame{}, false
+		}
+		if cursor := newLazyDataCursor(v); cursor != nil {
+			return dataWalkFrame{lazy: cursor}, true
+		}
+		items := v.Fields()
+		return dataWalkFrame{items: items}, len(items) > 0
+	case *data.List:
+		if v == nil {
+			return dataWalkFrame{}, false
+		}
+		if cursor := newLazyDataCursor(v); cursor != nil {
+			return dataWalkFrame{lazy: cursor}, true
+		}
+		items := v.Items()
+		return dataWalkFrame{items: items}, len(items) > 0
+	case *data.Map:
+		if v == nil {
+			return dataWalkFrame{}, false
+		}
+		if cursor := newLazyDataCursor(v); cursor != nil {
+			return dataWalkFrame{lazy: cursor}, true
+		}
+		pairs := v.Pairs()
+		return dataWalkFrame{pairs: pairs}, len(pairs) > 0
+	case data.Constr:
+		items := v.Fields()
+		return dataWalkFrame{items: items}, len(items) > 0
+	case data.List:
+		items := v.Items()
+		return dataWalkFrame{items: items}, len(items) > 0
+	case data.Map:
+		pairs := v.Pairs()
+		return dataWalkFrame{pairs: pairs}, len(pairs) > 0
+	case *data.Value:
+		if v != nil && v.Inner != nil {
+			return dataWalkFrame{single: v.Inner}, true
+		}
+	case data.Value:
+		if v.Inner != nil {
+			return dataWalkFrame{single: v.Inner}, true
+		}
+	}
+	return dataWalkFrame{}, false
+}
+
 func nextDataChild(frame *dataWalkFrame) (data.PlutusData, bool) {
 	if frame.lazy != nil {
 		return frame.lazy.next()
 	}
-	if frame.next == 0 {
-		if cursor := newLazyDataCursor(frame.node); cursor != nil {
-			frame.lazy = cursor
-			return cursor.next()
-		}
+	if frame.next < len(frame.items) {
+		child := frame.items[frame.next]
+		frame.next++
+		return child, true
 	}
-	switch node := frame.node.(type) {
-	case *data.Constr:
-		if node != nil && frame.next < node.NumFields() {
-			child := node.Fields()[frame.next]
-			frame.next++
-			return child, true
-		}
-	case data.Constr:
-		if frame.next < node.NumFields() {
-			child := node.Fields()[frame.next]
-			frame.next++
-			return child, true
-		}
-	case *data.List:
-		if node != nil && frame.next < node.Len() {
-			child := node.Items()[frame.next]
-			frame.next++
-			return child, true
-		}
-	case data.List:
-		if frame.next < node.Len() {
-			child := node.Items()[frame.next]
-			frame.next++
-			return child, true
-		}
-	case *data.Map:
-		if node != nil && frame.next < node.Len()*2 {
-			pair := node.Pairs()[frame.next/2]
-			child := pair[frame.next%2]
-			frame.next++
-			return child, true
-		}
-	case data.Map:
-		if frame.next < node.Len()*2 {
-			pair := node.Pairs()[frame.next/2]
-			child := pair[frame.next%2]
-			frame.next++
-			return child, true
-		}
-	case *data.Value:
-		if node != nil && node.Inner != nil && frame.next == 0 {
-			frame.next++
-			return node.Inner, true
-		}
-	case data.Value:
-		if node.Inner != nil && frame.next == 0 {
-			frame.next++
-			return node.Inner, true
-		}
+	if frame.next < 2*len(frame.pairs) {
+		child := frame.pairs[frame.next/2][frame.next%2]
+		frame.next++
+		return child, true
+	}
+	if frame.single != nil {
+		child := frame.single
+		frame.single = nil
+		return child, true
 	}
 	return nil, false
 }
@@ -516,11 +533,12 @@ func (w *plutusDataWalker) next(
 		return nil, stack, false
 	}
 	node := w.nextNode
-	frame := dataWalkFrame{node: node}
-	if child, ok := nextDataChild(&frame); ok {
-		stack = append(stack, frame)
-		w.nextNode = child
-		return node, stack, true
+	if frame, ok := openDataFrame(node); ok {
+		if child, ok := nextDataChild(&frame); ok {
+			stack = append(stack, frame)
+			w.nextNode = child
+			return node, stack, true
+		}
 	}
 	for len(stack) > 0 {
 		top := &stack[len(stack)-1]
