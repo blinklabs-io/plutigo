@@ -16,6 +16,7 @@ package cek
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/syn"
@@ -42,12 +43,23 @@ type consCell[E any] struct {
 	checked bool
 }
 
+// consLength returns the length of a list with one element prepended to a
+// list of tailLen. A cell stores its length as an int32; no list within a
+// budget comes near that, so a longer one is an evaluator fault, reported as
+// an internal error by the machine's panic recovery rather than wrapped.
+func consLength(tailLen int) int32 {
+	if tailLen >= math.MaxInt32 {
+		panic(fmt.Sprintf("cek: list of %d elements is too long", tailLen+1))
+	}
+	return int32(tailLen) + 1
+}
+
 // consOntoCell prepends head to the list starting at cell t in O(1)
 // amortised. The result stays contiguous when t is the front of its buffer.
 // It initialises c, which the caller allocates together with its value. The
 // new cell starts unchecked: its head has not been converted even when t has.
 func consOntoCell[E any](c *consCell[E], head E, t *consCell[E]) {
-	*c = consCell[E]{head: head, next: t, n: t.n + 1}
+	*c = consCell[E]{head: head, next: t, n: consLength(int(t.n))}
 	if t.flat != nil && t.buf != nil && t.buf.isFront(t.flat) {
 		c.flat, c.buf = consInto(t.buf, head, t.flat, 0)
 	}
@@ -57,7 +69,7 @@ func consOntoCell[E any](c *consCell[E], head E, t *consCell[E]) {
 // copied (bounded work) so chains started from them stay contiguous; longer
 // ones are only referenced.
 func consOntoSlice[E any](c *consCell[E], head E, s []E) {
-	*c = consCell[E]{head: head, base: s, n: int32(len(s)) + 1}
+	*c = consCell[E]{head: head, base: s, n: consLength(len(s))}
 	if len(s) <= consSmallCopy {
 		c.flat, c.buf = consInto(nil, head, s, 0)
 	}

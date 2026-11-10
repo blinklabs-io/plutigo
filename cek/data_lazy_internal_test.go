@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package cek
 
 import (
+	"math"
 	"math/big"
 	"testing"
 
@@ -70,4 +70,18 @@ func TestLazyDataUnwrapsToTheSameList(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestConsLengthRejectsOverflow checks that a cell length that does not fit
+// its int32 is refused rather than wrapped.
+func TestConsLengthRejectsOverflow(t *testing.T) {
+	if got := consLength(math.MaxInt32 - 1); got != math.MaxInt32 {
+		t.Fatalf("consLength(MaxInt32-1) = %d, want %d", got, math.MaxInt32)
+	}
+	defer func() {
+		if recover() == nil {
+			t.Fatal("consLength(MaxInt32) did not panic")
+		}
+	}()
+	consLength(math.MaxInt32)
 }
