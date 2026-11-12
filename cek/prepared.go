@@ -199,7 +199,9 @@ func RunPreparedScriptContext(
 		len(arguments) <= (maxDischargeWork-program.usage.work)/3
 	machine.skipDischarge = true
 	machine.resultIsUnit = false
+	machine.programVersion = program.version
 	defer func() {
+		machine.programVersion = lang.LanguageVersion{}
 		machine.skipDischarge = false
 		machine.resultIsUnit = false
 	}()

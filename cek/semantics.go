@@ -34,6 +34,9 @@ const (
 	dijkstraProtoMajorVersion  = 12
 )
 
+// uplcVersion120 is the UPLC program version that enables casing on Data.
+var uplcVersion120 = lang.LanguageVersion{1, 2, 0}
+
 type ProtoVersion struct {
 	Major uint
 	Minor uint

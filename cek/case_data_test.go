@@ -15,9 +15,11 @@
 package cek
 
 import (
+	"context"
 	"errors"
 	"math"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/blinklabs-io/plutigo/lang"
@@ -235,5 +237,106 @@ func TestRunRejectsOpenTermsEvenWhenUnreached(t *testing.T) {
 	closed := &syn.Lambda[syn.DeBruijn]{Body: &syn.Var[syn.DeBruijn]{Name: 1}}
 	if _, err := machine.Run(closed); err != nil {
 		t.Fatalf("closed term: %v", err)
+	}
+}
+
+// TestEvaluateCaseOnDataRequiresProgramVersion pins the ledger's caser
+// selection: casing on Data needs the Dijkstra protocol version and UPLC
+// program version 1.2.0 together.
+func TestEvaluateCaseOnDataRequiresProgramVersion(t *testing.T) {
+	t.Parallel()
+
+	const body = `(case (con data (Constr 1 [I 5])) (lam fs (con integer 0)) (lam fs (con integer 1)))`
+	tests := []struct {
+		name      string
+		version   string
+		proto     uint
+		wantError string
+	}{
+		{"1.1.0 before Dijkstra", "1.1.0", 11, "protocol version 12"},
+		{"1.1.0 at Dijkstra", "1.1.0", 12, "Casing on data is not supported"},
+		{"1.2.0 before Dijkstra", "1.2.0", 11, "not available at protocol version 11"},
+		{"1.2.0 at Dijkstra", "1.2.0", 12, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			evalCtx := NewDefaultEvalContext(
+				lang.LanguageVersionV3,
+				ProtoVersion{Major: tt.proto},
+			)
+			term, _, err := EvaluateText(
+				context.Background(),
+				"(program "+tt.version+" "+body+")",
+				lang.LanguageVersionV3,
+				evalCtx,
+				DefaultExBudget,
+			)
+			if tt.wantError == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if got := syn.PrettyTerm[syn.DeBruijn](term); got != "(con integer 1)" {
+					t.Fatalf("result = %s, want (con integer 1)", got)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
+				t.Fatalf("error = %v, want %q", err, tt.wantError)
+			}
+		})
+	}
+}
+
+// TestRunPreparedScriptContextCaseOnDataRequiresProgramVersion checks that the
+// prepared-program path applies the same program-version gate as
+// EvaluateText, and does not leak the version into the machine's next run.
+func TestRunPreparedScriptContextCaseOnDataRequiresProgramVersion(t *testing.T) {
+	t.Parallel()
+
+	const body = `(case (con data (Constr 1 [I 5])) (lam fs (con integer 0)) (lam fs (con unit ())))`
+	prepare := func(version string) *PreparedProgram {
+		t.Helper()
+		named, err := syn.Parse("(program " + version + " " + body + ")")
+		if err != nil {
+			t.Fatal(err)
+		}
+		program, err := syn.NameToDeBruijn(named)
+		if err != nil {
+			t.Fatal(err)
+		}
+		flat, err := syn.Encode(program)
+		if err != nil {
+			t.Fatal(err)
+		}
+		prepared, err := PrepareProgram(flat, syn.ProgramContext{
+			LedgerLanguage: lang.LanguageVersionV3,
+			ProtocolMajor:  12,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return prepared
+	}
+	machine := NewMachine[syn.DeBruijn](
+		lang.LanguageVersionV3,
+		200,
+		NewDefaultEvalContext(lang.LanguageVersionV3, ProtoVersion{Major: 12}),
+	)
+	run := func(p *PreparedProgram) error {
+		machine.ExBudget = ExBudget{Cpu: math.MaxInt64, Mem: math.MaxInt64}
+		_, err := RunPreparedScriptContext(context.Background(), machine, p)
+		return err
+	}
+
+	err := run(prepare("1.1.0"))
+	if err == nil || !strings.Contains(err.Error(), "Casing on data is not supported") {
+		t.Fatalf("1.1.0 error = %v, want Casing on data is not supported", err)
+	}
+	if err := run(prepare("1.2.0")); err != nil {
+		t.Fatalf("1.2.0: %v", err)
+	}
+	if machine.programVersion != (lang.LanguageVersion{}) {
+		t.Fatalf("program version leaked into machine: %v", machine.programVersion)
 	}
 }

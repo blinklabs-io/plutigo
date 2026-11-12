@@ -124,8 +124,12 @@ type Machine[T syn.Eval] struct {
 	version    lang.LanguageVersion
 	semantics  SemanticsVariant
 	protoMajor uint
-	ExBudget   ExBudget
-	Logs       []string
+	// programVersion is the UPLC version of the program being run. The zero
+	// value means none was supplied and imposes no program-version
+	// restriction.
+	programVersion lang.LanguageVersion
+	ExBudget       ExBudget
+	Logs           []string
 	// activeContext is non-nil only while RunContext is evaluating. Builtin
 	// helpers that perform substantial work inside one CEK transition use it
 	// to preserve cooperative cancellation.
@@ -2127,10 +2131,31 @@ func (m *Machine[T]) checkCaseOnBuiltin(value Value[T]) error {
 	}
 }
 
+// SetProgramVersion records the UPLC version of the program the machine is
+// about to run. Casing on Data requires version 1.2.0 or later, as well as the
+// Dijkstra protocol version. A caller that evaluates through
+// [RunPreparedScriptContext] or [Evaluate] need not call it. A caller that
+// runs a bare term must, or the version gate is not applied. The zero version
+// removes the restriction.
+func (m *Machine[T]) SetProgramVersion(version lang.LanguageVersion) {
+	m.programVersion = version
+}
+
+func programVersionAtLeast(version, other lang.LanguageVersion) bool {
+	for i := range version {
+		if version[i] != other[i] {
+			return version[i] > other[i]
+		}
+	}
+	return true
+}
+
 // caseOnData selects the branch for casing on Data. Only a Constr is
 // scrutinized: its tag picks the branch, which receives the fields as a single
-// list of Data. Casing on Data is available from Dijkstra; a zero protocol
-// major means no protocol version was selected and imposes no restriction.
+// list of Data. Casing on Data needs both the Dijkstra protocol version and
+// UPLC program version 1.2.0; below either, the ledger selects the caser that
+// excludes Data. A zero protocol major or program version means none was
+// selected and imposes no restriction.
 func (m *Machine[T]) caseOnData(
 	item data.PlutusData,
 	branches int,
@@ -2139,6 +2164,13 @@ func (m *Machine[T]) caseOnData(
 		return 0, nil, &ScriptError{
 			Code:    ErrCodeCaseOnBuiltinUnavailable,
 			Message: "case on data is unavailable before protocol version 12",
+		}
+	}
+	if m.programVersion != (lang.LanguageVersion{}) &&
+		!programVersionAtLeast(m.programVersion, uplcVersion120) {
+		return 0, nil, &ScriptError{
+			Code:    ErrCodeCaseOnBuiltinUnavailable,
+			Message: "Casing on data is not supported",
 		}
 	}
 	constr, ok := item.(*data.Constr)

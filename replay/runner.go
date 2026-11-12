@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/blinklabs-io/plutigo/cek"
+	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
@@ -242,6 +243,7 @@ func runDecodedCase(
 // to its arguments, the evaluation context and the initial budget.
 type evaluation struct {
 	languageVersion cek.LanguageVersion
+	programVersion  lang.LanguageVersion
 	term            syn.Term[syn.DeBruijn]
 	evalContext     *cek.EvalContext
 	budget          cek.ExBudget
@@ -268,6 +270,7 @@ func prepareEvaluation(
 
 	return evaluation{
 		languageVersion: languageVersion,
+		programVersion:  decoded.program.Version,
 		term:            term,
 		evalContext:     decoded.evalContext,
 		budget: cek.ExBudget{
@@ -294,6 +297,7 @@ func evaluate(
 		prepared.evalContext,
 	)
 	machine.ExBudget = initialBudget
+	machine.SetProgramVersion(prepared.programVersion)
 	evalErr := runMachine(ctx, machine, prepared.term)
 	consumed := initialBudget.Sub(&machine.ExBudget)
 

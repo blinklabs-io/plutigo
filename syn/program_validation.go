@@ -36,6 +36,7 @@ type ProgramContext struct {
 var (
 	uplcVersion100 = lang.LanguageVersion{1, 0, 0}
 	uplcVersion110 = lang.LanguageVersion{1, 1, 0}
+	uplcVersion120 = lang.LanguageVersion{1, 2, 0}
 )
 
 // maxScriptConstrFields is maxConstrFields in plutus-ledger-api's
@@ -641,19 +642,27 @@ func validateLedgerLanguageAvailability(context ProgramContext) error {
 //
 // It combines two gates that upstream plutus-ledger-api applies only at
 // execution time (mkTermToEvaluate's plcVersionsAvailableIn): the UPLC
-// program version must be one of {1.0.0, 1.1.0} -- which decode-time
+// program version must be one of {1.0.0, 1.1.0, 1.2.0} -- which decode-time
 // well-formedness deliberately does not check -- and, the "van Rossem" gate,
-// UPLC 1.1.0
-// sums-of-products are only legal for Plutus V1/V2 at protocol major version
-// 11 and above.
+// UPLC 1.1.0 sums-of-products are only legal for Plutus V1/V2 at protocol
+// major version 11 and above. UPLC 1.2.0 is legal from the Dijkstra protocol
+// major version (12) for every ledger language.
 func ValidateTermVersionForExecution(
 	version lang.LanguageVersion,
 	context ProgramContext,
 ) error {
-	if version != uplcVersion100 && version != uplcVersion110 {
+	if version != uplcVersion100 && version != uplcVersion110 &&
+		version != uplcVersion120 {
 		return fmt.Errorf(
-			"unsupported UPLC program version %s; supported versions are 1.0.0 and 1.1.0",
+			"unsupported UPLC program version %s; supported versions are 1.0.0, 1.1.0 and 1.2.0",
 			formatVersion(version),
+		)
+	}
+	if version == uplcVersion120 &&
+		context.ProtocolMajor < builtin.DijkstraProtoVersion {
+		return fmt.Errorf(
+			"UPLC version 1.2.0 is not available at protocol version %d",
+			context.ProtocolMajor,
 		)
 	}
 
