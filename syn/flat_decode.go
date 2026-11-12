@@ -1380,19 +1380,21 @@ func (a *constantArena) allocBytes(n int) []byte {
 }
 
 func decodeDeBruijnBinder(d *decoder) (DeBruijn, error) {
-	if d.usedBits == 0 {
-		if d.pos < len(d.buffer) {
-			word8 := d.buffer[d.pos]
-			if word8&128 == 0 {
-				d.pos++
-				return DeBruijn(word8), nil
-			}
-		}
-	} else if d.pos+1 < len(d.buffer) {
-		word8 := (d.buffer[d.pos] << byte(d.usedBits)) |
-			(d.buffer[d.pos+1] >> (8 - byte(d.usedBits)))
+	buf := d.buffer
+	pos := d.pos
+	if pos+1 < len(buf) {
+		// Read the byte at the bit offset from a two-byte window without
+		// branching on the offset, which predicts poorly.
+		w := uint(buf[pos])<<8 | uint(buf[pos+1])
+		word8 := byte(w >> (8 - (uint(d.usedBits) & 7)))
 		if word8&128 == 0 {
-			d.pos++
+			d.pos = pos + 1
+			return DeBruijn(word8), nil
+		}
+	} else if d.usedBits == 0 && pos < len(buf) {
+		word8 := buf[pos]
+		if word8&128 == 0 {
+			d.pos = pos + 1
 			return DeBruijn(word8), nil
 		}
 	}
@@ -2376,9 +2378,12 @@ func (d *decoder) bit() (bool, error) {
 		return false, errors.New("end of buffer")
 	}
 
-	b := d.buffer[d.pos]&(128>>d.usedBits) > 0
+	used := uint(d.usedBits) & 7
+	b := d.buffer[d.pos]&(128>>used) != 0
 
-	d.incrementBufferByBit()
+	next := used + 1
+	d.usedBits = int64(next & 7)
+	d.pos += int(next >> 3)
 
 	return b, nil
 }
@@ -2576,59 +2581,45 @@ func (d *decoder) bits8(numBits byte) (byte, error) {
 }
 
 func (d *decoder) bits4() (byte, error) {
-	if d.pos >= len(d.buffer) {
+	buf := d.buffer
+	pos := d.pos
+	if pos >= len(buf) {
 		return 0, errors.New("end of buffer")
 	}
 
-	b0 := d.buffer[d.pos]
-	switch d.usedBits {
-	case 0:
-		d.usedBits = 4
-		return b0 >> 4, nil
-	case 4:
-		d.usedBits = 0
-		d.pos++
-		return b0 & 0x0f, nil
-	}
-
-	x := (b0 << byte(d.usedBits)) >> 4
-	if d.usedBits < 4 {
-		d.usedBits += 4
-		return x, nil
-	}
-	if d.pos+1 >= len(d.buffer) {
+	// Read the four bits from a two-byte window without branching on the
+	// bit offset, which varies from term to term and so predicts poorly.
+	used := uint(d.usedBits) & 7
+	w := uint(buf[pos]) << 8
+	if pos+1 < len(buf) {
+		w |= uint(buf[pos+1])
+	} else if used > 4 {
 		return 0, fmt.Errorf("NotEnoughBits(%d)", 4)
 	}
-	x |= d.buffer[d.pos+1] >> byte(12-d.usedBits)
-	d.usedBits -= 4
-	d.pos++
-	return x, nil
+	next := used + 4
+	d.usedBits = int64(next & 7)
+	d.pos = pos + int(next>>3)
+	return byte(w>>(12-used)) & 0x0f, nil
 }
 
 func (d *decoder) bits7() (byte, error) {
-	if d.pos >= len(d.buffer) {
+	buf := d.buffer
+	pos := d.pos
+	if pos >= len(buf) {
 		return 0, errors.New("end of buffer")
 	}
 
-	b0 := d.buffer[d.pos]
-	if d.usedBits == 0 {
-		d.usedBits = 7
-		return b0 >> 1, nil
-	}
-
-	unusedBits := 8 - d.usedBits
-	if unusedBits < 7 && d.pos+1 >= len(d.buffer) {
+	used := uint(d.usedBits) & 7
+	w := uint(buf[pos]) << 8
+	if pos+1 < len(buf) {
+		w |= uint(buf[pos+1])
+	} else if used > 1 {
 		return 0, fmt.Errorf("NotEnoughBits(%d)", 7)
 	}
-	x := (b0 << byte(d.usedBits)) >> 1
-	if unusedBits < 7 {
-		x |= d.buffer[d.pos+1] >> (unusedBits + 1)
-	}
-
-	allUsedBits := d.usedBits + 7
-	d.usedBits = allUsedBits % 8
-	d.pos += int(allUsedBits / 8)
-	return x, nil
+	next := used + 7
+	d.usedBits = int64(next & 7)
+	d.pos = pos + int(next>>3)
+	return byte(w>>(9-used)) & 0x7f, nil
 }
 
 func (d *decoder) dropBits(numBits uint) {
@@ -2935,18 +2926,6 @@ func unzigzagInPlace(n *big.Int) *big.Int {
 	n.Rsh(n, 1)
 	n.Add(n, bigOne)
 	return n.Neg(n)
-}
-
-// Increment used bits by 1.
-// If all 8 bits are used then increment buffer position by 1.
-func (d *decoder) incrementBufferByBit() {
-	if d.usedBits == 7 {
-		d.pos += 1
-
-		d.usedBits = 0
-	} else {
-		d.usedBits += 1
-	}
 }
 
 // Ensures the buffer has the required bytes passed in by required_bytes.
