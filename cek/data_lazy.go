@@ -224,24 +224,30 @@ func lazyListValueOf[T syn.Eval](pd data.PlutusData) (Value[T], bool) {
 
 // dataItemsValue returns the items of a data list as a list value.
 func (m *Machine[T]) dataItemsValue(list *data.List) Value[T] {
-	if v, ok := lazyListValueOf[T](list); ok {
-		return v
+	if m.consBuilt {
+		if v, ok := lazyListValueOf[T](list); ok {
+			return v
+		}
 	}
 	return m.allocDataListValue(list.Items())
 }
 
 // dataFieldsValue returns the fields of a constructor as a list value.
 func (m *Machine[T]) dataFieldsValue(constr *data.Constr) Value[T] {
-	if v, ok := lazyListValueOf[T](constr); ok {
-		return v
+	if m.consBuilt {
+		if v, ok := lazyListValueOf[T](constr); ok {
+			return v
+		}
 	}
 	return m.allocDataListValue(constr.Fields())
 }
 
 // dataPairsValue returns the pairs of a data map as a list value.
 func (m *Machine[T]) dataPairsValue(dataMap *data.Map) Value[T] {
-	if v, ok := lazyListValueOf[T](dataMap); ok {
-		return v
+	if m.consBuilt {
+		if v, ok := lazyListValueOf[T](dataMap); ok {
+			return v
+		}
 	}
 	return m.allocDataMapValue(dataMap.Pairs())
 }
@@ -401,8 +407,10 @@ func lazyListConstantValue[T syn.Eval](c syn.IConstant) (Value[T], bool) {
 
 // elementValue returns a list or pair element as a value.
 func (m *Machine[T]) elementValue(c syn.IConstant) Value[T] {
-	if v, ok := lazyListConstantValue[T](c); ok {
-		return v
+	if m.consBuilt {
+		if v, ok := lazyListConstantValue[T](c); ok {
+			return v
+		}
 	}
 	return m.allocConstant(c)
 }

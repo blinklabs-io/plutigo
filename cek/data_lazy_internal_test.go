@@ -19,7 +19,9 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/data"
+	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 )
 
@@ -84,4 +86,50 @@ func TestConsLengthRejectsOverflow(t *testing.T) {
 		}
 	}()
 	consLength(math.MaxInt32)
+}
+
+// TestSharedListLookupNeedsConsThisRun checks that a machine looks for shared
+// list storage only once the run has built a list with mkCons, and that a
+// container seen without the lookup still yields the same elements.
+func TestSharedListLookupNeedsConsThisRun(t *testing.T) {
+	items := newDataListAlloc[syn.DeBruijn]()
+	one := data.PlutusData(data.NewInteger(big.NewInt(1)))
+	consOntoSlice(&items.c, one, nil)
+	src, err := lazyDataItems[syn.DeBruijn](&items.v, nil)
+	if err != nil || src == nil {
+		t.Fatalf("lazyDataItems = %v, %v", src, err)
+	}
+	constr := newLazyConstr(big.NewInt(0), src)
+
+	m := NewMachine[syn.DeBruijn](lang.LanguageVersionV3, 200, testEvalContext())
+	m.ExBudget = DefaultExBudget
+
+	m.consBuilt = true
+	if got := m.dataFieldsValue(constr); got != Value[syn.DeBruijn](&items.v) {
+		t.Fatalf("with a cons built, dataFieldsValue = %v, want the cons list", got)
+	}
+
+	m.consBuilt = false
+	got, ok := m.dataFieldsValue(constr).(*dataListValue[syn.DeBruijn])
+	if !ok {
+		t.Fatalf("without a cons built, dataFieldsValue = %T, want *dataListValue", got)
+	}
+	if len(got.items) != 1 || got.items[0] != one {
+		t.Fatalf("dataFieldsValue items = %v, want [%v]", got.items, one)
+	}
+
+	// A run starts with no cons built, and mkCons records one.
+	m.consBuilt = true
+	if _, err := m.Run(&syn.Constant{Con: &syn.Unit{}}); err != nil {
+		t.Fatal(err)
+	}
+	if m.consBuilt {
+		t.Fatal("a run that built no cons left consBuilt set")
+	}
+	if _, _, err := m.mkConsFast(builtin.MkCons, m.allocConstant(&syn.Data{Inner: one}), &items.v); err != nil {
+		t.Fatal(err)
+	}
+	if !m.consBuilt {
+		t.Fatal("mkCons did not set consBuilt")
+	}
 }

@@ -577,23 +577,24 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 		if err != nil {
 			return nil, true, err
 		}
-		if err := m.CostOne(&fn, listExMem(list.List())); err != nil {
+		items := list.List()
+		if err := m.CostOne(&fn, listExMem(items)); err != nil {
 			return nil, true, err
 		}
-		if len(list.List()) == 0 {
+		if len(items) == 0 {
 			return nil, true, &BuiltinError{
 				Code:    ErrCodeOutOfBounds,
 				Builtin: "headList",
 				Message: "headList on an empty list",
 			}
 		}
-		if list.List()[0] == nil {
+		if items[0] == nil {
 			return nil, true, &InternalError{
 				Code:    ErrCodeInternalError,
 				Message: "headList returned nil constant",
 			}
 		}
-		return dataAwareConstantValue(m, list.List()[0]), true, nil
+		return dataAwareConstantValue(m, items[0]), true, nil
 	case builtin.TailList:
 		if dataList, ok := arg.(*dataListValue[T]); ok {
 			if err := m.CostOne(&fn, valueExMem[T](arg)); err != nil {
@@ -631,10 +632,11 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 		if err != nil {
 			return nil, true, err
 		}
-		if err := m.CostOne(&fn, listExMem(list.List())); err != nil {
+		items := list.List()
+		if err := m.CostOne(&fn, listExMem(items)); err != nil {
 			return nil, true, err
 		}
-		if len(list.List()) == 0 {
+		if len(items) == 0 {
 			return nil, true, &BuiltinError{
 				Code:    ErrCodeOutOfBounds,
 				Builtin: "tailList",
@@ -642,7 +644,7 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 			}
 		}
 		return m.allocConstant(
-			m.allocProtoListConstant(list.LTyp, list.List()[1:]),
+			m.allocProtoListConstant(list.LTyp, items[1:]),
 		), true, nil
 	case builtin.NullList:
 		if v, ok := arg.(*dataListValue[T]); ok {
@@ -667,10 +669,11 @@ func (m *Machine[T]) evalUnaryBuiltinFast(
 		if err != nil {
 			return nil, true, err
 		}
-		if err := m.CostOne(&fn, listExMem(list.List())); err != nil {
+		items := list.List()
+		if err := m.CostOne(&fn, listExMem(items)); err != nil {
 			return nil, true, err
 		}
-		return boolConstant(len(list.List()) == 0), true, nil
+		return boolConstant(len(items) == 0), true, nil
 	case builtin.UnConstrData:
 		datum, err := unwrapData[T](arg)
 		if err != nil {
@@ -859,6 +862,7 @@ func (m *Machine[T]) mkConsFast(
 	leftVal Value[T],
 	rightVal Value[T],
 ) (Value[T], bool, error) {
+	m.consBuilt = true
 	var mapTail [][2]data.PlutusData
 	var mapCell *consCell[[2]data.PlutusData]
 	var dataTail []data.PlutusData
