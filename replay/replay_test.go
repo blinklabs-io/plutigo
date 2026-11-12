@@ -335,6 +335,48 @@ func TestLoadRoundTrip(t *testing.T) {
 	}
 }
 
+// TestRunCaseGatesCaseOnDataByProgramVersion proves the replay runner passes
+// the program's UPLC version to the machine: at protocol 12 a 1.1.0 program
+// that cases on Data must fail, and a 1.2.0 program must succeed.
+func TestRunCaseGatesCaseOnDataByProgramVersion(t *testing.T) {
+	t.Parallel()
+
+	branch := func() syn.Term[syn.DeBruijn] {
+		return &syn.Lambda[syn.DeBruijn]{
+			ParameterName: syn.DeBruijn(0),
+			Body:          &syn.Constant{Con: &syn.Unit{}},
+		}
+	}
+	term := &syn.Case[syn.DeBruijn]{
+		Constr: &syn.Constant{
+			Con: &syn.Data{
+				Inner: data.NewConstr(1, data.NewInteger(big.NewInt(5))),
+			},
+		},
+		Branches: []syn.Term[syn.DeBruijn]{branch(), branch()},
+	}
+	run := func(version lang.LanguageVersion) CaseResult {
+		replayCase := baseCaseWithVersion(t, version, term, nil)
+		replayCase.Language = PlutusV3
+		replayCase.ProtocolVersion = ProtocolVersion{Major: 12}
+		replayCase.Expected = Expected{Success: true}
+		return RunCase(context.Background(), &replayCase)
+	}
+
+	old := run(lang.LanguageVersion{1, 1, 0})
+	if old.Actual.Success || old.Actual.SetupError {
+		t.Fatalf("1.1.0 actual = %+v, want an evaluation failure", old.Actual)
+	}
+	if !strings.Contains(old.Actual.Error, "Casing on data is not supported") {
+		t.Fatalf("1.1.0 error = %q, want Casing on data is not supported", old.Actual.Error)
+	}
+
+	current := run(lang.LanguageVersion{1, 2, 0})
+	if !current.Actual.Success {
+		t.Fatalf("1.2.0 failed: %+v", current.Actual)
+	}
+}
+
 func testReference() Reference {
 	return Reference{
 		Implementation: "cardano-node",

@@ -2134,7 +2134,7 @@ func (m *Machine[T]) checkCaseOnBuiltin(value Value[T]) error {
 // SetProgramVersion records the UPLC version of the program the machine is
 // about to run. Casing on Data requires version 1.2.0 or later, as well as the
 // Dijkstra protocol version. A caller that evaluates through
-// [RunPreparedScriptContext] or [Evaluate] need not call it. A caller that
+// [RunPreparedScriptContext] or [EvaluateText] need not call it. A caller that
 // runs a bare term must, or the version gate is not applied. The zero version
 // removes the restriction.
 func (m *Machine[T]) SetProgramVersion(version lang.LanguageVersion) {

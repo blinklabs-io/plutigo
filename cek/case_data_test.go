@@ -289,13 +289,13 @@ func TestEvaluateCaseOnDataRequiresProgramVersion(t *testing.T) {
 }
 
 // TestRunPreparedScriptContextCaseOnDataRequiresProgramVersion checks that the
-// prepared-program path applies the same program-version gate as
-// EvaluateText, and does not leak the version into the machine's next run.
+// prepared-program path applies the same gate as EvaluateText, and restores
+// the machine's own program version afterwards.
 func TestRunPreparedScriptContextCaseOnDataRequiresProgramVersion(t *testing.T) {
 	t.Parallel()
 
 	const body = `(case (con data (Constr 1 [I 5])) (lam fs (con integer 0)) (lam fs (con unit ())))`
-	prepare := func(version string) *PreparedProgram {
+	prepare := func(version string, protoMajor uint) *PreparedProgram {
 		t.Helper()
 		named, err := syn.Parse("(program " + version + " " + body + ")")
 		if err != nil {
@@ -311,32 +311,69 @@ func TestRunPreparedScriptContextCaseOnDataRequiresProgramVersion(t *testing.T) 
 		}
 		prepared, err := PrepareProgram(flat, syn.ProgramContext{
 			LedgerLanguage: lang.LanguageVersionV3,
-			ProtocolMajor:  12,
+			ProtocolMajor:  protoMajor,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 		return prepared
 	}
-	machine := NewMachine[syn.DeBruijn](
-		lang.LanguageVersionV3,
-		200,
-		NewDefaultEvalContext(lang.LanguageVersionV3, ProtoVersion{Major: 12}),
-	)
-	run := func(p *PreparedProgram) error {
-		machine.ExBudget = ExBudget{Cpu: math.MaxInt64, Mem: math.MaxInt64}
-		_, err := RunPreparedScriptContext(context.Background(), machine, p)
+	newMachine := func(protoMajor uint) *Machine[syn.DeBruijn] {
+		return NewMachine[syn.DeBruijn](
+			lang.LanguageVersionV3,
+			200,
+			NewDefaultEvalContext(
+				lang.LanguageVersionV3,
+				ProtoVersion{Major: protoMajor},
+			),
+		)
+	}
+	run := func(m *Machine[syn.DeBruijn], p *PreparedProgram) error {
+		m.ExBudget = ExBudget{Cpu: math.MaxInt64, Mem: math.MaxInt64}
+		_, err := RunPreparedScriptContext(context.Background(), m, p)
 		return err
 	}
 
-	err := run(prepare("1.1.0"))
-	if err == nil || !strings.Contains(err.Error(), "Casing on data is not supported") {
-		t.Fatalf("1.1.0 error = %v, want Casing on data is not supported", err)
-	}
-	if err := run(prepare("1.2.0")); err != nil {
-		t.Fatalf("1.2.0: %v", err)
-	}
-	if machine.programVersion != (lang.LanguageVersion{}) {
-		t.Fatalf("program version leaked into machine: %v", machine.programVersion)
-	}
+	t.Run("1.1.0 at protocol 12", func(t *testing.T) {
+		t.Parallel()
+		m := newMachine(12)
+		err := run(m, prepare("1.1.0", 12))
+		if err == nil || !strings.Contains(err.Error(), "Casing on data is not supported") {
+			t.Fatalf("error = %v, want Casing on data is not supported", err)
+		}
+		if m.programVersion != (lang.LanguageVersion{}) {
+			t.Fatalf("program version leaked into machine: %v", m.programVersion)
+		}
+	})
+	t.Run("1.2.0 at protocol 12", func(t *testing.T) {
+		t.Parallel()
+		m := newMachine(12)
+		if err := run(m, prepare("1.2.0", 12)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if m.programVersion != (lang.LanguageVersion{}) {
+			t.Fatalf("program version leaked into machine: %v", m.programVersion)
+		}
+	})
+	t.Run("1.2.0 at protocol 11", func(t *testing.T) {
+		t.Parallel()
+		// The decoder accepts 1.2.0 at any protocol; the protocol half of the
+		// gate must still reject casing on Data below 12.
+		err := run(newMachine(11), prepare("1.2.0", 11))
+		if err == nil || !strings.Contains(err.Error(), "before protocol version 12") {
+			t.Fatalf("error = %v, want unavailable before protocol version 12", err)
+		}
+	})
+	t.Run("preserves a version set by the caller", func(t *testing.T) {
+		t.Parallel()
+		m := newMachine(12)
+		want := lang.LanguageVersion{1, 1, 0}
+		m.SetProgramVersion(want)
+		if err := run(m, prepare("1.2.0", 12)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if m.programVersion != want {
+			t.Fatalf("program version = %v, want %v", m.programVersion, want)
+		}
+	})
 }
