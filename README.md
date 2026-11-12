@@ -207,10 +207,12 @@ make bench-pgo
 make fuzz
 ```
 
-`make bench-pgo` uses `tests/use_cases.pgo`, a CPU profile recorded from all 89
-use-case programs. The profile guides compiler optimizations for that workload;
-the target architecture and CPU features still come from the normal Go build
-settings.
+`make bench-pgo` uses `tests/mainnet.pgo`, a CPU profile recorded from the
+1360-validator recent mainnet replay corpus in `replay/`. Recording it on
+mainnet validators rather than the use-case programs keeps the benchmark from
+measuring a profile trained on itself. The profile guides compiler
+optimizations only; the target architecture and CPU features still come from
+the normal Go build settings.
 
 The profile only helps while it matches the code, so re-record it with
 `make pgo-profile` after changes to the evaluator or decoder hot paths. A build

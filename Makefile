@@ -32,14 +32,16 @@ bench: ## Run benchmarks
 	@echo "Running benchmarks..."
 	@CGO_ENABLED=0 go test -bench=. -benchtime=5s -run='^$$' ./...
 
-# This profile comes from the complete 89-script use-case corpus. Keep PGO
-# opt-in so the default build stays independent of benchmark workload choices.
+# The profile is recorded from the recent mainnet replay corpus, not from the
+# use-case programs it is benchmarked on, so the gain it shows carries over to
+# other workloads. Keep PGO opt-in so the default build stays independent of
+# workload choices.
 bench-pgo: ## Run use-case benchmarks with the checked-in PGO profile
-	@CGO_ENABLED=0 go test -pgo=tests/use_cases.pgo -bench='^BenchmarkFlatFiles$$' -benchtime=5s -run='^$$' ./tests
+	@CGO_ENABLED=0 go test -pgo=tests/mainnet.pgo -bench='^BenchmarkFlatFiles$$' -benchtime=5s -run='^$$' ./tests
 
-pgo-profile: ## Re-record the use-case PGO profile from the current code
-	@CGO_ENABLED=0 go test -bench='^BenchmarkFlatFiles$$' -benchtime=2s -run='^$$' -cpuprofile=tests/use_cases.pgo ./tests
-	@rm -f tests.test
+pgo-profile: ## Re-record the PGO profile from the mainnet replay corpus
+	@CGO_ENABLED=0 go test -bench='^BenchmarkRecentMainnetCorpus$$' -benchtime=40x -run='^$$' -cpuprofile=tests/mainnet.pgo ./replay
+	@rm -f replay.test
 
 bench-baseline: ## Run benchmarks and save as baseline
 	@echo "Running benchmarks and saving baseline..."
