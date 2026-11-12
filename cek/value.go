@@ -116,8 +116,10 @@ func machineConstantValue[T syn.Eval](
 ) Value[T] {
 	switch c := constant.(type) {
 	case *syn.ProtoList:
-		if v, ok := lazyListConstantValue[T](c); ok {
-			return v
+		if m != nil && m.consBuilt {
+			if v, ok := lazyListConstantValue[T](c); ok {
+				return v
+			}
 		}
 	case *syn.Bool:
 		return boolConstant(c.Inner)

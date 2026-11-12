@@ -203,6 +203,12 @@ type Machine[T syn.Eval] struct {
 
 	valueArenaRetentions [valueArenaCount]valueArenaRetention
 	valueArenaResetStart int
+	// consBuilt records that this run has built a list with mkCons. Only
+	// such a list can back a list, map, constr or list constant with shared
+	// storage, so until then the lookups for that storage are skipped. A
+	// skipped lookup still sees the same elements, through the container's
+	// accessors, so the flag affects speed, not results.
+	consBuilt bool
 	// skipDischarge is set by RunScriptContext: the final value is only
 	// classified (resultIsUnit), never discharged into a term.
 	skipDischarge bool
@@ -1727,6 +1733,7 @@ func (m *Machine[T]) runContext(
 		m.resetFrameStack()
 	}
 	m.Logs = m.Logs[:0]
+	m.consBuilt = false
 	if m.metrics != nil {
 		*m.metrics = Metrics{}
 	}
