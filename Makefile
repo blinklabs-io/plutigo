@@ -40,8 +40,8 @@ bench-pgo: ## Run use-case benchmarks with the checked-in PGO profile
 	@CGO_ENABLED=0 go test -pgo=tests/mainnet.pgo -bench='^BenchmarkFlatFiles$$' -benchtime=5s -run='^$$' ./tests
 
 pgo-profile: ## Re-record the PGO profile from the mainnet replay corpus
-	@CGO_ENABLED=0 go test -bench='^BenchmarkRecentMainnetCorpus$$' -benchtime=40x -run='^$$' -cpuprofile=tests/mainnet.pgo ./replay
-	@rm -f replay.test
+	@CGO_ENABLED=0 go test -bench='^BenchmarkRecentMainnetCorpus$$' -benchtime=40x -run='^$$' -cpuprofile=$(CURDIR)/tests/mainnet.pgo ./replay; \
+		status=$$?; rm -f replay.test; exit $$status
 
 bench-baseline: ## Run benchmarks and save as baseline
 	@echo "Running benchmarks and saving baseline..."
