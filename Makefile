@@ -2,7 +2,7 @@
 FUZZ_FLAGS ?= -run='^$$' -fuzztime=10s
 NILAWAY_FLAGS ?= -include-pkgs=github.com/blinklabs-io/plutigo -exclude-file-docstrings="<nilaway skip stack-machine>"
 
-.PHONY: mod-tidy test test-match test-cover bench bench-pgo bench-baseline bench-compare fuzz format golines clean download-plutus-tests validate validate-quick validate-fix nilaway
+.PHONY: mod-tidy test test-match test-cover bench bench-pgo pgo-profile bench-baseline bench-compare fuzz format golines clean download-plutus-tests validate validate-quick validate-fix nilaway
 
 mod-tidy:
 	# Needed to fetch new dependencies and add them to go.mod
@@ -32,10 +32,16 @@ bench: ## Run benchmarks
 	@echo "Running benchmarks..."
 	@CGO_ENABLED=0 go test -bench=. -benchtime=5s -run='^$$' ./...
 
-# This profile comes from the complete 89-script use-case corpus. Keep PGO
-# opt-in so the default build stays independent of benchmark workload choices.
+# The profile is recorded from the recent mainnet replay corpus, not from the
+# use-case programs it is benchmarked on, so the gain it shows carries over to
+# other workloads. Keep PGO opt-in so the default build stays independent of
+# workload choices.
 bench-pgo: ## Run use-case benchmarks with the checked-in PGO profile
-	@CGO_ENABLED=0 go test -pgo=tests/use_cases.pgo -bench='^BenchmarkFlatFiles$$' -benchtime=5s -run='^$$' ./tests
+	@CGO_ENABLED=0 go test -pgo=tests/mainnet.pgo -bench='^BenchmarkFlatFiles$$' -benchtime=5s -run='^$$' ./tests
+
+pgo-profile: ## Re-record the PGO profile from the mainnet replay corpus
+	@CGO_ENABLED=0 go test -bench='^BenchmarkRecentMainnetCorpus$$' -benchtime=40x -run='^$$' -cpuprofile=$(CURDIR)/tests/mainnet.pgo ./replay; \
+		status=$$?; rm -f replay.test; exit $$status
 
 bench-baseline: ## Run benchmarks and save as baseline
 	@echo "Running benchmarks and saving baseline..."
