@@ -50,8 +50,10 @@ func TestFixedWidthBitReadsMatchBits8(t *testing.T) {
 		v, err := f(d)
 		s := state{value: v, pos: d.pos, used: d.usedBits}
 		if err != nil {
-			// A failed read leaves the value undefined.
-			s = state{err: err.Error(), pos: pos, used: used}
+			// A failed read leaves the value undefined, but its effect on
+			// the position must still match.
+			s.value = 0
+			s.err = err.Error()
 		}
 		return s
 	}
