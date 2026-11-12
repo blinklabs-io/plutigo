@@ -212,6 +212,10 @@ use-case programs. The profile guides compiler optimizations for that workload;
 the target architecture and CPU features still come from the normal Go build
 settings.
 
+The profile only helps while it matches the code, so re-record it with
+`make pgo-profile` after changes to the evaluator or decoder hot paths. A build
+without the profile is unaffected.
+
 ### Code Quality
 
 The project maintains high code quality standards:

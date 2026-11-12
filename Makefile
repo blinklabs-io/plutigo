@@ -2,7 +2,7 @@
 FUZZ_FLAGS ?= -run='^$$' -fuzztime=10s
 NILAWAY_FLAGS ?= -include-pkgs=github.com/blinklabs-io/plutigo -exclude-file-docstrings="<nilaway skip stack-machine>"
 
-.PHONY: mod-tidy test test-match test-cover bench bench-pgo bench-baseline bench-compare fuzz format golines clean download-plutus-tests validate validate-quick validate-fix nilaway
+.PHONY: mod-tidy test test-match test-cover bench bench-pgo pgo-profile bench-baseline bench-compare fuzz format golines clean download-plutus-tests validate validate-quick validate-fix nilaway
 
 mod-tidy:
 	# Needed to fetch new dependencies and add them to go.mod
@@ -36,6 +36,10 @@ bench: ## Run benchmarks
 # opt-in so the default build stays independent of benchmark workload choices.
 bench-pgo: ## Run use-case benchmarks with the checked-in PGO profile
 	@CGO_ENABLED=0 go test -pgo=tests/use_cases.pgo -bench='^BenchmarkFlatFiles$$' -benchtime=5s -run='^$$' ./tests
+
+pgo-profile: ## Re-record the use-case PGO profile from the current code
+	@CGO_ENABLED=0 go test -bench='^BenchmarkFlatFiles$$' -benchtime=2s -run='^$$' -cpuprofile=tests/use_cases.pgo ./tests
+	@rm -f tests.test
 
 bench-baseline: ## Run benchmarks and save as baseline
 	@echo "Running benchmarks and saving baseline..."
