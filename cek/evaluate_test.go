@@ -114,10 +114,17 @@ func TestEvaluateTextRejectsProgramsFailingValidation(t *testing.T) {
 		},
 		{
 			name:      "unsupported term version",
+			src:       `(program 1.3.0 (con integer 1))`,
+			language:  lang.LanguageVersionV3,
+			proto:     12,
+			wantError: "unsupported UPLC program version",
+		},
+		{
+			name:      "1.2.0 before Dijkstra",
 			src:       `(program 1.2.0 (con integer 1))`,
 			language:  lang.LanguageVersionV3,
 			proto:     11,
-			wantError: "unsupported UPLC program version",
+			wantError: "UPLC version 1.2.0 is not available at protocol version 11",
 		},
 		{
 			name:      "language not yet introduced",

@@ -15,6 +15,7 @@
 package cek
 
 import (
+	"github.com/blinklabs-io/plutigo/builtin"
 	"github.com/blinklabs-io/plutigo/lang"
 )
 
@@ -31,8 +32,11 @@ const (
 const (
 	changProtoMajorVersion     = 9
 	vanRossemProtoMajorVersion = 11
-	dijkstraProtoMajorVersion  = 12
+	dijkstraProtoMajorVersion  = builtin.DijkstraProtoVersion
 )
+
+// uplcVersion120 is the UPLC program version that enables casing on Data.
+var uplcVersion120 = lang.LanguageVersion{1, 2, 0}
 
 type ProtoVersion struct {
 	Major uint

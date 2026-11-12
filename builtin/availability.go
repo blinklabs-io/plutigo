@@ -175,6 +175,10 @@ var builtinIntroducedIn = [TotalBuiltinCount]PlutusVersion{
 // language; it is not a global switch for every builtin.
 const VanRossemProtoVersion uint = 11
 
+// DijkstraProtoVersion is the Cardano protocol major version at which UPLC
+// program version 1.2.0 and casing on Data become available.
+const DijkstraProtoVersion uint = dijkstraProtoVersion
+
 const (
 	alonzoProtoVersion    uint = 5
 	vasilProtoVersion     uint = 7

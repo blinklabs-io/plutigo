@@ -38,10 +38,14 @@ const (
 
 func evalLazyDataProgram(t *testing.T, term string, major uint) string {
 	t.Helper()
+	version := "1.1.0"
+	if major >= 12 {
+		version = "1.2.0"
+	}
 	ec := NewDefaultEvalContext(lang.LanguageVersionV3, ProtoVersion{Major: major})
 	result, _, err := EvaluateText(
 		context.Background(),
-		"(program 1.1.0 "+term+")",
+		"(program "+version+" "+term+")",
 		lang.LanguageVersionV3,
 		ec,
 		DefaultExBudget,

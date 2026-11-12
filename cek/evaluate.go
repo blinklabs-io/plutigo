@@ -89,6 +89,7 @@ func EvaluateText(
 
 	machine := NewMachine[syn.DeBruijn](language, 0, evalCtx)
 	machine.ExBudget = budget
+	machine.SetProgramVersion(program.Version)
 	term, err := machine.RunContext(ctx, dbProgram.Term)
 	return term, budget.Sub(&machine.ExBudget), err
 }
