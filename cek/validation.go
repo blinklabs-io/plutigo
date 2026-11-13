@@ -78,6 +78,12 @@ type structureValidationBudget struct {
 	// reference evaluates such constants, so they must not be rejected.
 	seenComposites map[syn.IConstant]compositeVisit
 	seenTypes      map[syn.Typ]struct{}
+	// constantWork and typeWork keep the work stacks of the constant and
+	// type walks between the walks of one term's constants, so that each
+	// constant does not allocate a fresh stack. A walk takes the stack and
+	// gives it back empty when it completes.
+	constantWork []constantValidationItem
+	typeWork     []typeValidationItem
 }
 
 type compositeVisit struct {
@@ -326,15 +332,12 @@ func validateTermStructureUsage[T syn.Eval](
 		trustedData:       trustedData,
 	}
 	var initialWork [16]termValidationItem[T]
-	work := initialWork[:0]
-	if err := scheduleValidationItem(
-		&budget,
-		"term",
-		&work,
-		termValidationItem[T]{term: term},
-	); err != nil {
+	// The work stack is appended to locally, not through
+	// scheduleValidationItem, so that initialWork stays on the stack.
+	if err := budget.consume("term"); err != nil {
 		return err
 	}
+	work := append(initialWork[:0], termValidationItem[T]{term: term})
 	for len(work) > 0 {
 		last := len(work) - 1
 		item := work[last]
@@ -398,9 +401,10 @@ func validateTermStructureUsage[T syn.Eval](
 				return malformedASTError("term contains a nil application")
 			}
 			if budget.checkCancellation || budget.discharge != nil {
-				if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Function, depth: nextDepth, scope: item.scope}); err != nil {
+				if err := budget.consume("term"); err != nil {
 					return err
 				}
+				work = append(work, termValidationItem[T]{term: t.Function, depth: nextDepth, scope: item.scope})
 				if err := budget.consume("term"); err != nil {
 					return err
 				}
@@ -427,9 +431,10 @@ func validateTermStructureUsage[T syn.Eval](
 			scope := caseConstrScope(item.scope, fullScopeCheck)
 			if budget.checkCancellation || budget.discharge != nil {
 				for _, field := range t.Fields {
-					if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: field, depth: nextDepth, scope: scope}); err != nil {
+					if err := budget.consume("term"); err != nil {
 						return err
 					}
+					work = append(work, termValidationItem[T]{term: field, depth: nextDepth, scope: scope})
 				}
 			} else {
 				if err := budget.consumeTerms(len(t.Fields)); err != nil {
@@ -445,13 +450,15 @@ func validateTermStructureUsage[T syn.Eval](
 			}
 			scope := caseConstrScope(item.scope, fullScopeCheck)
 			if budget.checkCancellation || budget.discharge != nil {
-				if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: t.Constr, depth: nextDepth, scope: scope}); err != nil {
+				if err := budget.consume("term"); err != nil {
 					return err
 				}
+				work = append(work, termValidationItem[T]{term: t.Constr, depth: nextDepth, scope: scope})
 				for _, branch := range t.Branches {
-					if err := scheduleValidationItem(&budget, "term", &work, termValidationItem[T]{term: branch, depth: nextDepth, scope: scope}); err != nil {
+					if err := budget.consume("term"); err != nil {
 						return err
 					}
+					work = append(work, termValidationItem[T]{term: branch, depth: nextDepth, scope: scope})
 				}
 			} else {
 				if err := budget.consumeTerms(1 + len(t.Branches)); err != nil {
@@ -583,9 +590,23 @@ func validateConstantStructureWithBudget(
 			return malformedASTError("constant contains a nil BLS Miller loop result")
 		}
 		return nil
+	case *syn.Data:
+		// A Data constant has no constant children, so it needs no work
+		// stack: these are the checks the walk below applies to it.
+		if err := budget.consume("constant"); err != nil {
+			return err
+		}
+		if c == nil {
+			return malformedASTError("constant contains a nil Data")
+		}
+		if _, ok := budget.trustedData[c]; ok {
+			return nil
+		}
+		return validateDataStructureWithBudget(c.Inner, budget)
 	}
 
-	work := make([]constantValidationItem, 0, 1)
+	work := budget.constantWork[:0]
+	budget.constantWork = nil
 	if err := scheduleValidationItem(
 		budget,
 		"constant",
@@ -750,6 +771,7 @@ func validateConstantStructureWithBudget(
 			return malformedASTError("unsupported constant type %T", item.constant)
 		}
 	}
+	budget.constantWork = work
 	return nil
 }
 
@@ -760,7 +782,8 @@ func validateTypeStructureWithBudget(
 	if !budget.firstVisitType(value) {
 		return nil
 	}
-	work := make([]typeValidationItem, 0, 1)
+	work := budget.typeWork[:0]
+	budget.typeWork = nil
 	if err := scheduleValidationItem(
 		budget,
 		"constant type",
@@ -850,6 +873,7 @@ func validateTypeStructureWithBudget(
 			return malformedASTError("unsupported constant type metadata %T", item.value)
 		}
 	}
+	budget.typeWork = work
 	return nil
 }
 
