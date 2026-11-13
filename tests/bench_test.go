@@ -15,6 +15,7 @@
 package tests
 
 import (
+	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -49,6 +50,38 @@ func BenchmarkFlatFilesEval(b *testing.B) {
 
 func BenchmarkFlatFilesEvalFresh(b *testing.B) {
 	benchFlatFilesFresh(b, false, true)
+}
+
+// BenchmarkFlatFilesPrepared decodes and prepares each program before
+// timing, which checks its structure and scopes once, and times evaluating
+// the prepared program, as a node evaluates a cached script. It is the
+// counterpart of plutus-benchmark's validation benchmark, which evaluates a
+// term decoded before timing.
+func BenchmarkFlatFilesPrepared(b *testing.B) {
+	forEachBenchFile(
+		b,
+		func(b *testing.B, benchmarkName string, content []byte) {
+			prepared, err := cek.PrepareProgram(content, benchmarkProgramContext)
+			if err != nil {
+				b.Fatalf("prepare error: %v", err)
+			}
+			evalContext := benchmarkEvalContext(benchmarkLanguage)
+			b.Run(benchmarkName, func(b *testing.B) {
+				machine := cek.NewMachine[syn.DeBruijn](
+					benchmarkLanguage,
+					0,
+					evalContext,
+				)
+				ctx := context.Background()
+				for b.Loop() {
+					machine.ExBudget = cek.DefaultExBudget
+					if _, err := cek.RunPreparedScriptContext(ctx, machine, prepared); err != nil {
+						b.Fatalf("eval error: %v", err)
+					}
+				}
+			})
+		},
+	)
 }
 
 func benchFlatFiles(b *testing.B, includeDecode, includeEval bool) {
@@ -268,6 +301,18 @@ func benchmarkEvalContext(version lang.LanguageVersion) *cek.EvalContext {
 	return cek.NewDefaultEvalContext(version, cek.ProtoVersion{Major: 200})
 }
 
+// benchmarkLanguage is the ledger language the benchmarks evaluate every
+// program as, whatever its UPLC version: Plutus V3, as plutus-benchmark's
+// validation benchmarks do, so that results compare with them.
+var benchmarkLanguage = lang.LanguageVersionV3
+
+// benchmarkProgramContext is the ledger context the benchmarks decode
+// programs for.
+var benchmarkProgramContext = syn.ProgramContext{
+	LedgerLanguage: benchmarkLanguage,
+	ProtocolMajor:  200,
+}
+
 func benchmarkProgramVersion(
 	b *testing.B,
 	program *syn.Program[syn.DeBruijn],
@@ -277,7 +322,7 @@ func benchmarkProgramVersion(
 	if program == nil {
 		b.Fatal("decoded program is required when includeEval is true")
 	}
-	return program.Version
+	return benchmarkLanguage
 }
 
 // loadFile reads the entire file into a byte slice.
