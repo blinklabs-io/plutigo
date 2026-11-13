@@ -57,6 +57,10 @@ func TestRunMethodsRejectMalformedAST(t *testing.T) {
 			},
 		},
 		{
+			name: "typed nil Data constant",
+			term: &syn.Constant{Con: (*syn.Data)(nil)},
+		},
+		{
 			name: "nil PlutusData integer",
 			term: &syn.Constant{Con: &syn.Data{
 				Inner: &data.Integer{},
@@ -456,5 +460,34 @@ func TestValidateTermStructureDepthBoundary(t *testing.T) {
 			"validation beyond maximum depth = %v, want term depth TypeError",
 			err,
 		)
+	}
+}
+
+// TestDataConstantsCountAgainstStructureLimit checks that each Data constant
+// is charged as a node of the term structure, like every other constant.
+func TestDataConstantsCountAgainstStructureLimit(t *testing.T) {
+	shared := &syn.Data{Inner: &data.Integer{Inner: big.NewInt(0)}}
+	constr := func(fields int) syn.Term[syn.DeBruijn] {
+		terms := make([]syn.Term[syn.DeBruijn], fields)
+		for i := range terms {
+			terms[i] = &syn.Constant{Con: shared}
+		}
+		return &syn.Constr[syn.DeBruijn]{Fields: terms}
+	}
+	// The walk charges the constr, each field term and each constant:
+	// 1 + 2*fields nodes.
+	fits := (maxDischargeWork - 1) / 2
+	if err := validateTermStructure[syn.DeBruijn](
+		context.Background(), false, constr(fits), nil, true,
+	); err != nil {
+		t.Fatalf("%d Data fields: %v, want no error", fits, err)
+	}
+	err := validateTermStructure[syn.DeBruijn](
+		context.Background(), false, constr(fits+1), nil, true,
+	)
+	var typeErr *TypeError
+	if !errors.As(err, &typeErr) ||
+		!strings.Contains(typeErr.Message, "structure exceeds") {
+		t.Fatalf("%d Data fields: %v, want node limit rejection", fits+1, err)
 	}
 }
