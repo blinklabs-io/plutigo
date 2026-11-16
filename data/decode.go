@@ -127,9 +127,9 @@ func Decode(b []byte) (PlutusData, error) {
 }
 
 // DecodeWithValue is Decode that also admits the tag 1401 Value
-// constructor (the Plutus V4 Value data encoding of this package), which
-// Decode rejects as the reference Data decoder does. Use it only where Value
-// data is meant to be accepted.
+// constructor, an encoding of this package that the reference Data decoder
+// does not know and Decode rejects. Use it only where Value data is meant to
+// be accepted.
 func DecodeWithValue(b []byte) (PlutusData, error) {
 	return wrapDecodeError(decodeAll(nil, b, true))
 }
@@ -149,8 +149,8 @@ func isBignumHead(head byte) bool {
 // (FlatViaSerialise, through serialise's deserialiseOrFail, which discards
 // the input left after the first item). Use Decode everywhere else.
 //
-// Like DecodeWithValue, it admits the tag 1401 Value constructor: callers
-// gate Value data by ledger language (syn.ValidateProgram).
+// Like Decode, it rejects the tag 1401 Value constructor, which the
+// reference Data decoder does not know, in every language.
 func DecodePrefix(b []byte) (PlutusData, error) {
 	return wrapDecodeError(decodePrefix(nil, b))
 }
@@ -163,10 +163,10 @@ func wrapDecodeError(v PlutusData, err error) (PlutusData, error) {
 	return v, nil
 }
 
-// decodePrefix decodes the item at the start of data, admitting Value, and
+// decodePrefix decodes the item at the start of data, rejecting Value, and
 // drops the bytes that follow it.
 func decodePrefix(d *Decoder, data []byte) (PlutusData, error) {
-	v, _, err := decodeItem(d, data, true)
+	v, _, err := decodeItem(d, data, false)
 	return v, err
 }
 

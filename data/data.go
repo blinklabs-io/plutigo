@@ -368,8 +368,11 @@ func NewMapDefIndef(useIndef bool, pairs [][2]PlutusData) PlutusData {
 	return &Map{pairs: tmpPairs, hdr: pairsHdr(useIndefPtr(useIndef))}
 }
 
-// Value is the Plutus V4 Data constructor for the built-in Value type.
-// Its payload uses the same nested map representation as V1-V3 valueData.
+// Value is a Data node holding a built-in Value, encoded as CBOR tag 1401
+// around the nested map representation that valueData produces. It is not
+// part of the reference Data type, which has only the Constr, Map, List, I
+// and B constructors: Decode, DecodePrefix and so every FLAT program decoder
+// reject tag 1401. Only DecodeWithValue and the UPLC text parser produce it.
 type Value struct {
 	Inner *Map
 }
@@ -544,7 +547,7 @@ func CheckValueQuantity(policy, token int, quantity *big.Int) error {
 	return nil
 }
 
-// NewValue creates a validated Plutus V4 Data Value constructor.
+// NewValue creates a validated Value data node.
 func NewValue(inner *Map) (*Value, error) {
 	value := &Value{Inner: inner}
 	if err := value.Validate(); err != nil {

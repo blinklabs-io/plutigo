@@ -112,9 +112,10 @@ func constantSize(con IConstant) int {
 type contextChecks struct {
 	plutusVersion builtin.PlutusVersion
 	protocolMajor uint
-	// PlutusData Value is a V4 constructor; earlier ledger languages must
-	// not carry it in any constant. valueDataItems counts constant list and
-	// array items across the program, as the decoder does.
+	// PlutusData Value, which FLAT decoding rejects but parsed and
+	// caller-built programs can carry, is rejected in ledger languages
+	// before V4. valueDataItems counts constant list and array items across
+	// the program, as the decoder does.
 	checkValueData bool
 	valueDataItems int
 }

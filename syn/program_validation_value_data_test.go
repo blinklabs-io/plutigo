@@ -74,8 +74,10 @@ func encodeValueDataProgram(t *testing.T, src string) []byte {
 
 // TestValidateProgramRejectsValueDataBeforeV4 checks that V1, V2 and V3
 // programs carrying a PlutusData Value anywhere in a constant, including
-// code evaluation never reaches, are rejected by both the text parser and the
-// FLAT decoder, while V4 programs with the same constants are accepted.
+// code evaluation never reaches, are rejected by the text parser's context
+// validation, while V4 programs with the same constants parse. The FLAT
+// decoder rejects the encoding in every language, V4 included, because the
+// reference Data decoder has no tag 1401 constructor.
 func TestValidateProgramRejectsValueDataBeforeV4(t *testing.T) {
 	for name, term := range valueDataPrograms {
 		src := `(program 1.1.0 ` + term + `)`
@@ -89,15 +91,29 @@ func TestValidateProgramRejectsValueDataBeforeV4(t *testing.T) {
 				context := valueDataContext(language)
 				_, err := ParseWithContext(src, context)
 				requireValueDataRejected(t, "ParseWithContext", language, err)
-				_, err = DecodeWithContext[DeBruijn](encoded, context)
-				requireValueDataRejected(t, "DecodeWithContext", language, err)
 			}
 			context := valueDataContext(lang.LanguageVersionV4)
 			if _, err := ParseWithContext(src, context); err != nil {
 				t.Fatalf("ParseWithContext rejected V4 program: %v", err)
 			}
-			if _, err := DecodeWithContext[DeBruijn](encoded, context); err != nil {
-				t.Fatalf("DecodeWithContext rejected V4 program: %v", err)
+			for _, language := range []lang.LanguageVersion{
+				lang.LanguageVersionV1,
+				lang.LanguageVersionV2,
+				lang.LanguageVersionV3,
+				lang.LanguageVersionV4,
+			} {
+				_, err := DecodeWithContext[DeBruijn](
+					encoded,
+					valueDataContext(language),
+				)
+				if err == nil ||
+					!strings.Contains(err.Error(), "unknown CBOR tag for PlutusData: 1401") {
+					t.Fatalf(
+						"DecodeWithContext for ledger language %v: got %v, want unknown tag 1401",
+						language,
+						err,
+					)
+				}
 			}
 		})
 	}
