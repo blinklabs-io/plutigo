@@ -107,6 +107,11 @@ func TestDecodePrefixIgnoresTrailingBytes(t *testing.T) {
 		{"01ff", NewInteger(big.NewInt(1)), true},
 		{"d87980ff", NewConstr(0), true},
 		{"d8024105", nil, false},
+		{"d90579a0", nil, false},           // tag 1401 Value
+		{"9fd90579a0ff", nil, false},       // tag 1401 inside a list
+		{"d9057a80", nil, false},           // tag 1402
+		{"d904ff80", nil, false},           // tag 1279
+		{"d9057880", NewConstr(127), true}, // tag 1400
 		{"", nil, false},
 		{"5841" + "00", nil, false}, // truncated byte string
 	}
