@@ -6,7 +6,7 @@ This document provides comprehensive guidance for AI agents working on the pluti
 
 ```bash
 # Verify environment
-go version          # Must be 1.26+
+go version          # Must be 1.26.11 or newer (see go.mod)
 make test           # Run all tests
 golangci-lint run   # Lint check
 ```
@@ -51,13 +51,29 @@ The CEK machine that executes UPLC programs.
 | `env.go` | Environment (variable bindings) |
 | `value.go` | Runtime value types |
 
-**Standard evaluation flow:**
+**Standard text evaluation flow:**
 ```go
-// language and the protocol version come from the ledger, never from the
-// program header. EvaluateText validates the program for them first.
-evalCtx, _ := cek.NewEvalContext(language, protoVersion, costModelParams)
-result, consumed, _ := cek.EvaluateText(ctx, input, language, evalCtx, budget)
+// language, protocolMajor and costModelParams come from the ledger.
+evalCtx, err := cek.NewEvalContext(
+    language,
+    cek.ProtoVersion{Major: protocolMajor},
+    costModelParams,
+)
+if err != nil {
+    return err
+}
+result, consumed, err := cek.EvaluateText(ctx, input, language, evalCtx, budget)
+if err != nil {
+    return err
+}
 ```
+
+`EvaluateText` parses and validates for the caller-supplied ledger language
+and protocol version before evaluation. For on-chain FLAT input, use
+`syn.DecodeDeBruijnForExecution` before `Machine.Run`, or use `cek.RunFlat`
+after the caller has completed ledger-language, builtin-availability, and
+execution-time program-version validation. See
+[`docs/consumer-guide.md`](docs/consumer-guide.md).
 
 ### `syn/` - Syntax and Parsing
 
@@ -86,8 +102,8 @@ CBOR encoding/decoding for Plutus data types.
 | File | Purpose |
 | ------ | ------- |
 | `version.go` | Language version constants |
-| `v1.go`, `v2.go`, `v3.go` | Cost model parameter names |
-| `v4.go` | **MISSING** - needs creation (Plan 11) |
+| `v1.go`–`v4.go` | Cost model parameter names |
+| `v4_context.go` | Plutus V4 script context data builders |
 
 ---
 
@@ -260,15 +276,21 @@ for _, log := range machine.Logs {
 
 ---
 
-## Active Work
+## Performance Investigations
 
-Current priorities:
+Before changing a hot path, establish a baseline on the exact source being
+optimized. Use the full flat-file corpus, and include `BenchmarkFlatFiles`
+and `BenchmarkFlatFilesPrepared` when evaluating decode-and-evaluate and
+prepared-program paths. Keep Go version, architecture target, CGO setting,
+corpus, and benchmark duration identical between baseline and candidate.
+Interleave repeated runs to expose host noise, and verify every script result
+before comparing timings. Capture a CPU profile to choose follow-up work, but
+do not treat an instrumented profile run as a timing result.
 
-1. **PV11 Unified Builtins** - Protocol-version-aware builtin availability (CRITICAL)
-2. **Execution Metrics** - Enables script profiling
-3. **Script Context Builders** - Simplifies consumer integration
-
-**Completed:** Typed Error System (PR #209) - see Error Recovery Playbook below
+Record enough setup and results to reproduce the comparison. Treat older
+measurements as historical unless they match the current source and benchmark
+configuration; do not carry a performance claim forward across substantial
+code changes without remeasurement.
 
 ---
 
