@@ -127,9 +127,9 @@ func Decode(b []byte) (PlutusData, error) {
 }
 
 // DecodeWithValue is Decode that also admits the tag 1401 Value
-// constructor (the Plutus V4 Value data encoding of this package), which
-// Decode rejects as the reference Data decoder does. Use it only where Value
-// data is meant to be accepted.
+// constructor, an encoding of this package that the reference Data decoder
+// does not know and Decode rejects. Use it only where Value data is meant to
+// be accepted.
 func DecodeWithValue(b []byte) (PlutusData, error) {
 	return wrapDecodeError(decodeAll(nil, b, true))
 }
