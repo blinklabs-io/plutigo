@@ -5046,6 +5046,89 @@ func assetCount[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
 	return &Constant{&syn.Integer{Inner: big.NewInt(int64(count))}}, nil
 }
 
+// policyFilterMaximumIDCount bounds the policy list of keepPolicies and
+// dropPolicies. Every element counts, including repeated and over-long IDs,
+// and the limit applies to an empty Value too.
+const policyFilterMaximumIDCount = 256
+
+// filterPolicies is the shared body of keepPolicies and dropPolicies. The
+// arguments are costed before the list-length limit is checked, as the
+// reference charges them when it unlifts.
+func filterPolicies[T syn.Eval](
+	m *Machine[T],
+	b *Builtin[T],
+	name string,
+	filter func(*syn.Value, [][]byte) (*syn.Value, error),
+) (Value[T], error) {
+	b.Args.Extract(&m.argHolder, b.ArgCount)
+	// Args: policy IDs (list bytestring), value
+	policyList, err := unwrapList[T](&syn.TByteString{}, m.argHolder[0])
+	if err != nil {
+		return nil, err
+	}
+	valConst, ok := m.argHolder[1].(*Constant)
+	if !ok {
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: name,
+			Message: "expected value constant",
+		}
+	}
+	valueConstant, _, outer, _, ok := valueShape(valConst.Constant)
+	if !ok {
+		return nil, &BuiltinError{
+			Code:    ErrCodeInvalidArgument,
+			Builtin: name,
+			Message: "expected value constant",
+		}
+	}
+	ids := policyList.List()
+	// The cost model multiplies the list length by the depth of the outer
+	// map: the bit length of its size, and 1 for an empty Value.
+	if err := m.CostTwo(&b.Func,
+		listLengthExMem(ids),
+		func() ExMem { return ExMem(max(bits.Len(uint(outer)), 1)) },
+	); err != nil {
+		return nil, err
+	}
+	if len(ids) > policyFilterMaximumIDCount {
+		return nil, &BuiltinError{
+			Code:    ErrCodeOutOfBounds,
+			Builtin: name,
+			Message: fmt.Sprintf(
+				"maximum number of policy ids (%d) exceeded",
+				policyFilterMaximumIDCount,
+			),
+		}
+	}
+	policyIDs := make([][]byte, len(ids))
+	for i, id := range ids {
+		policyID, ok := id.(*syn.ByteString)
+		if !ok {
+			return nil, &TypeError{
+				Code:     ErrCodeTypeMismatch,
+				Expected: "ByteString",
+				Got:      fmt.Sprintf("%T", id),
+				Message:  "type mismatch",
+			}
+		}
+		policyIDs[i] = policyID.Inner
+	}
+	result, err := filter(valueConstant, policyIDs)
+	if err != nil {
+		return nil, valueConstructionError("filter value policies", err)
+	}
+	return &Constant{result}, nil
+}
+
+func keepPolicies[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	return filterPolicies(m, b, "keepPolicies", (*syn.Value).KeepPolicies)
+}
+
+func dropPolicies[T syn.Eval](m *Machine[T], b *Builtin[T]) (Value[T], error) {
+	return filterPolicies(m, b, "dropPolicies", (*syn.Value).DropPolicies)
+}
+
 // valueConstructionError reports a failure to build a Value as an internal
 // error, but passes a cancellation through so callers can still match it with
 // errors.Is.

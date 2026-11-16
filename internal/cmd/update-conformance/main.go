@@ -33,8 +33,8 @@ import (
 )
 
 const (
-	plutusRevision      = "8fd7b6f345d3265ea3a128b45576685c0538f083"
-	plutusArchiveSHA256 = "8fdaa16f48f42dbeed06ea41a3b2c339e099c496485f973e898d1a059f15d331"
+	plutusRevision      = "52fc5c0a111f9ae70fae22728bfc46458f63c5ca"
+	plutusArchiveSHA256 = "9deca38df4b2a6ff74c523f648959b5c4a7ef9b92309e9d9783381beee7160ba"
 	maxArchiveBytes     = 128 << 20
 	maxArchivePayload   = 512 << 20
 	maxArchiveEntries   = 100_000

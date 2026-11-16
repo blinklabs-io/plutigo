@@ -236,6 +236,8 @@ func newBuiltins[T syn.Eval]() Builtins[T] {
 		builtin.MultiIndexArray: multiIndexArray[T],
 		builtin.Policies:        policies[T],
 		builtin.AssetCount:      assetCount[T],
+		builtin.KeepPolicies:    keepPolicies[T],
+		builtin.DropPolicies:    dropPolicies[T],
 	}
 }
 

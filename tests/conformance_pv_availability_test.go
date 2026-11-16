@@ -309,3 +309,96 @@ func TestConformanceAvailableBuiltinsEvaluateAcrossPV10AndPV11(t *testing.T) {
 		})
 	}
 }
+
+// TestConformanceBatch7AvailabilityAcrossPV11AndPV12 checks, for every ledger
+// language, that the batch 7 builtins become available at PV12 and not
+// before. The forces and arities are written out from the reference
+// definitions rather than read from the builtin table.
+func TestConformanceBatch7AvailabilityAcrossPV11AndPV12(t *testing.T) {
+	t.Parallel()
+
+	batch7 := []struct {
+		name   string
+		forces int
+		arity  int
+	}{
+		{"multiIndexArray", 1, 2},
+		{"policies", 0, 1},
+		{"assetCount", 0, 1},
+		{"keepPolicies", 0, 2},
+		{"dropPolicies", 0, 2},
+	}
+	languages := []struct {
+		name string
+		lang lang.LanguageVersion
+	}{
+		{"V1", lang.LanguageVersionV1},
+		{"V2", lang.LanguageVersionV2},
+		{"V3", lang.LanguageVersionV3},
+		{"V4", lang.LanguageVersionV4},
+	}
+	for _, language := range languages {
+		for _, fn := range batch7 {
+			for _, pv := range []uint{11, 12} {
+				available := pv >= 12
+				t.Run(
+					fmt.Sprintf("%s/%s/PV%d", language.name, fn.name, pv),
+					func(t *testing.T) {
+						t.Parallel()
+						term := "(builtin " + fn.name + ")"
+						for range fn.forces {
+							term = "(force " + term + ")"
+						}
+						term = "[ " + term +
+							strings.Repeat(" (con unit ())", fn.arity) + " ]"
+						text := "(program 1.0.0 " + term + ")"
+
+						_, validateErr := syn.ParseWithContext(
+							text,
+							syn.ProgramContext{
+								LedgerLanguage: language.lang,
+								ProtocolMajor:  pv,
+							},
+						)
+						if available && validateErr != nil {
+							t.Fatalf(
+								"phase-1 validation rejected an available builtin: %v",
+								validateErr,
+							)
+						}
+						if !available && validateErr == nil {
+							t.Fatal(
+								"phase-1 validation accepted an unavailable builtin",
+							)
+						}
+						if !available {
+							return
+						}
+
+						program, err := syn.Parse(text)
+						if err != nil {
+							t.Fatalf("Parse: %v", err)
+						}
+						dbProgram, err := syn.NameToDeBruijn(program)
+						if err != nil {
+							t.Fatalf("NameToDeBruijn: %v", err)
+						}
+						machine := cek.NewMachine[syn.DeBruijn](
+							language.lang,
+							0,
+							cek.NewDefaultEvalContext(
+								language.lang,
+								cek.ProtoVersion{Major: pv},
+							),
+						)
+						machine.ExBudget = cek.DefaultExBudget
+						_, err = machine.Run(dbProgram.Term)
+						if isUnavailableBuiltinError(err) {
+							t.Fatalf("machine rejected an available builtin: %v", err)
+						}
+					},
+				)
+			}
+		}
+	}
+}

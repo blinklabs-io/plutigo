@@ -78,9 +78,9 @@ func TestBuiltinAvailability(t *testing.T) {
 		{"valueContains in V3", ValueContains, PlutusV3, false},
 		{"valueContains in V4", ValueContains, PlutusV4, true},
 		{"multiIndexArray in V3", MultiIndexArray, PlutusV3, false},
-		{"multiIndexArray in V4", MultiIndexArray, PlutusV4, false},
-		{"policies in V4", Policies, PlutusV4, false},
-		{"assetCount in V4", AssetCount, PlutusV4, false},
+		{"multiIndexArray in V4", MultiIndexArray, PlutusV4, true},
+		{"policies in V4", Policies, PlutusV4, true},
+		{"assetCount in V4", AssetCount, PlutusV4, true},
 		{
 			"bls12_381_G1_multiScalarMul in V3",
 			Bls12_381_G1_MultiScalarMul,
@@ -108,16 +108,37 @@ func TestBuiltinAvailability(t *testing.T) {
 	}
 }
 
-func TestBatch7BuiltinsRemainUnavailableAtEveryProtocolVersion(t *testing.T) {
-	for _, fn := range []DefaultFunction{MultiIndexArray, Policies, AssetCount} {
-		for _, version := range []PlutusVersion{PlutusV1, PlutusV2, PlutusV3, PlutusV4} {
-			for _, protocolVersion := range []uint{0, 5, 11, 12} {
-				if fn.IsAvailableInWithProto(version, protocolVersion) {
-					t.Fatalf(
-						"%s is available in Plutus V%d at protocol version %d",
-						fn,
-						version,
+// batch7Names are written out from PlutusLedgerApi.Common.Versions, not read
+// from the builtin table under test, and looked up by name so that a builtin
+// missing from the table fails the assertion instead of the build.
+var batch7Names = []string{
+	"multiIndexArray",
+	"policies",
+	"assetCount",
+	"keepPolicies",
+	"dropPolicies",
+}
+
+func TestBatch7AvailabilityByLanguageAndProtocol(t *testing.T) {
+	languages := []PlutusVersion{PlutusV1, PlutusV2, PlutusV3, PlutusV4}
+	for _, name := range batch7Names {
+		fn, ok := Builtins[name]
+		if !ok {
+			t.Errorf("builtin %q is not defined", name)
+			continue
+		}
+		for _, language := range languages {
+			for _, protocolVersion := range []uint{5, 10, 11, 12, 13} {
+				want := protocolVersion >= DijkstraProtoVersion
+				got := fn.IsAvailableInWithProto(language, protocolVersion)
+				if got != want {
+					t.Errorf(
+						"%s in Plutus V%d at protocol version %d = %v, want %v",
+						name,
+						language,
 						protocolVersion,
+						got,
+						want,
 					)
 				}
 			}
@@ -168,10 +189,17 @@ func TestBuiltinAvailabilityWithProto(t *testing.T) {
 		{"batch 6 in V3 at PV10", DropList, PlutusV3, 10, false},
 		{"batch 6 in V3 at PV11", DropList, PlutusV3, 11, true},
 
-		// Plutus V4 is introduced at PV12 with batches 1 through 6.
+		// Plutus V4 is introduced at PV12 with batches 1 through 7.
 		{"batch 1 in V4 at PV11", AddInteger, PlutusV4, 11, false},
 		{"batch 6 in V4 at PV12", DropList, PlutusV4, 12, true},
-		{"batch 7 in V4 at PV12", MultiIndexArray, PlutusV4, 12, false},
+		{"batch 7 in V4 at PV11", MultiIndexArray, PlutusV4, 11, false},
+		{"batch 7 in V4 at PV12", MultiIndexArray, PlutusV4, 12, true},
+		{"batch 7 in V1 at PV11", Policies, PlutusV1, 11, false},
+		{"batch 7 in V1 at PV12", Policies, PlutusV1, 12, true},
+		{"batch 7 in V2 at PV11", AssetCount, PlutusV2, 11, false},
+		{"batch 7 in V2 at PV12", AssetCount, PlutusV2, 12, true},
+		{"batch 7 in V3 at PV11", MultiIndexArray, PlutusV3, 11, false},
+		{"batch 7 in V3 at PV12", MultiIndexArray, PlutusV3, 12, true},
 	}
 
 	for _, tt := range tests {

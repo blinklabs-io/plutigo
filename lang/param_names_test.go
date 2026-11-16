@@ -31,26 +31,26 @@ func TestCostModelParameterTablesMatchPlutus(t *testing.T) {
 		{
 			"V1",
 			CostModelParamNamesV1,
-			332,
-			"3a393171455c599367bff99e0fa96fc0f5599e0dbeae5cbdb161637047408603",
+			351,
+			"f07c1d5a2c663ba2aa0e0d381b763f4aa083b210ed4fa9a521746466cc014b4f",
 		},
 		{
 			"V2",
 			CostModelParamNamesV2,
-			332,
-			"d23d1c05c497da742d69769bb983b4fe55fa2bb84fc3d1864380b19016683ec3",
+			351,
+			"4714337805a3445669ba82ad6bdb3658484220124c171e0d3451b3d5e919a98d",
 		},
 		{
 			"V3",
 			CostModelParamNamesV3,
-			350,
-			"b3aaffbf5d43580dd0c47061dd12514b8e34447aecdab980ebc4bb5285d52df6",
+			369,
+			"67e947b488918a6200b87899b1d2333f6bc56ff7bb1e60404d2e83372b2e032e",
 		},
 		{
 			"V4",
 			CostModelParamNamesV4,
-			361,
-			"838845e67ec39c28e9e1d921e2ec1abc3fac3b6b08a030dddcd490343125b0f9",
+			369,
+			"67e947b488918a6200b87899b1d2333f6bc56ff7bb1e60404d2e83372b2e032e",
 		},
 	}
 	for _, tt := range tests {

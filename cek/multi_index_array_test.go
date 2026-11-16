@@ -367,16 +367,32 @@ func TestV4CostModelLoadsCompleteParameterList(t *testing.T) {
 	}
 }
 
-func TestMultiIndexArrayIsUnavailableWithoutProtocolVersion(t *testing.T) {
-	machine := NewMachine[syn.DeBruijn](
-		lang.LanguageVersionV4,
-		0,
-		testEvalContext(),
-	)
-	if machine.builtins[builtin.MultiIndexArray] != nil {
-		t.Fatal(
-			"multiIndexArray is available without an activating protocol version",
-		)
+func TestMultiIndexArrayAvailabilityFollowsDijkstra(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		proto uint
+		want  bool
+	}{
+		{"no protocol version", 0, true},
+		{"protocol 11", 11, false},
+		{"protocol 12", 12, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			machine := NewMachine[syn.DeBruijn](
+				lang.LanguageVersionV4,
+				0,
+				NewDefaultEvalContext(
+					lang.LanguageVersionV4,
+					ProtoVersion{Major: tt.proto},
+				),
+			)
+			got := machine.builtins[builtin.MultiIndexArray] != nil &&
+				(machine.available == nil ||
+					machine.available[builtin.MultiIndexArray])
+			if got != tt.want {
+				t.Fatalf("multiIndexArray available = %t, want %t", got, tt.want)
+			}
+		})
 	}
 }
 
