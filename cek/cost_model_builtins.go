@@ -1195,6 +1195,26 @@ var DefaultBuiltinCosts = BuiltinCosts{
 		mem: &ConstantCost{10},
 		cpu: &ConstantCost{129043},
 	},
+	builtin.KeepPolicies: &CostingFunc[Arguments]{
+		mem: &MultipliedSizesModel{MultipliedSizes{
+			intercept: 32,
+			slope:     32,
+		}},
+		cpu: &MultipliedSizesModel{MultipliedSizes{
+			intercept: 335279,
+			slope:     57077,
+		}},
+	},
+	builtin.DropPolicies: &CostingFunc[Arguments]{
+		mem: &MultipliedSizesModel{MultipliedSizes{
+			intercept: 32,
+			slope:     36,
+		}},
+		cpu: &MultipliedSizesModel{MultipliedSizes{
+			intercept: 345402,
+			slope:     57932,
+		}},
+	},
 	// Value/coin builtins
 	builtin.InsertCoin: &CostingFunc[Arguments]{
 		mem: &FourLinearInU{LinearCost{

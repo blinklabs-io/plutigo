@@ -381,4 +381,12 @@ var CostModelParamNamesV4 = []string{
 	"policies-cpu-arguments-slope",
 	"policies-memory-arguments-intercept",
 	"policies-memory-arguments-slope",
+	"keepPolicies-cpu-arguments-intercept",
+	"keepPolicies-cpu-arguments-slope",
+	"keepPolicies-memory-arguments-intercept",
+	"keepPolicies-memory-arguments-slope",
+	"dropPolicies-cpu-arguments-intercept",
+	"dropPolicies-cpu-arguments-slope",
+	"dropPolicies-memory-arguments-intercept",
+	"dropPolicies-memory-arguments-slope",
 }

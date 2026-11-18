@@ -178,6 +178,48 @@ func TestDefaultFunctionV4TagsMatchPlutusSpec(t *testing.T) {
 	}
 }
 
+// TestBatch7DefinitionsMatchPlutusSpec writes the tags, names, forces and
+// arities out from PlutusCore.Default.Builtins and looks them up by tag and
+// name, so a builtin that is not defined fails the assertion.
+func TestBatch7DefinitionsMatchPlutusSpec(t *testing.T) {
+	tests := []struct {
+		name   string
+		tag    byte
+		forces uint
+		arity  uint
+	}{
+		{"multiIndexArray", 101, 1, 2},
+		{"policies", 102, 0, 1},
+		{"assetCount", 103, 0, 1},
+		{"keepPolicies", 104, 0, 2},
+		{"dropPolicies", 105, 0, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fn, err := FromByte(tt.tag)
+			if err != nil {
+				t.Fatalf("FromByte(%d): %v", tt.tag, err)
+			}
+			if got := fn.String(); got != tt.name {
+				t.Fatalf("FromByte(%d).String() = %q, want %q", tt.tag, got, tt.name)
+			}
+			byName, ok := Builtins[tt.name]
+			if !ok || byName != fn {
+				t.Fatalf("Builtins[%q] = %v, %v; want %v", tt.name, byName, ok, fn)
+			}
+			if got := fn.ForceCount(); got != tt.forces {
+				t.Fatalf("ForceCount() = %d, want %d", got, tt.forces)
+			}
+			if got := fn.Arity(); got != tt.arity {
+				t.Fatalf("Arity() = %d, want %d", got, tt.arity)
+			}
+		})
+	}
+	if _, err := FromByte(106); err == nil {
+		t.Fatal("FromByte(106) succeeded, want DefaultFunctionNotFound")
+	}
+}
+
 func TestBuiltinsMap(t *testing.T) {
 	// Test a few key mappings
 	expectedMappings := map[string]DefaultFunction{

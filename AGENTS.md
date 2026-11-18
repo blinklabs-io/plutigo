@@ -45,7 +45,7 @@ The CEK machine that executes UPLC programs.
 | File | Purpose |
 | ------ | ------- |
 | `machine.go` | Core CEK machine loop, state management |
-| `builtins.go` | 104 builtin implementations |
+| `builtins.go` | 106 builtin implementations |
 | `cost_model.go` | Budget tracking, cost model types |
 | `cost_model_builtins.go` | Per-builtin cost functions |
 | `env.go` | Environment (variable bindings) |
@@ -88,7 +88,7 @@ execution-time program-version validation. See
 
 | File | Purpose |
 | ------ | ------- |
-| `builtins.go` | DefaultFunction enum (104 builtins) |
+| `builtins.go` | DefaultFunction enum (106 builtins) |
 | `availability.go` | Which builtins available in which version |
 | `arity.go` | Argument counts |
 | `force_count.go` | Type instantiation counts |

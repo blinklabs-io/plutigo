@@ -47,6 +47,11 @@ func isV4BuiltinTest(path string) bool {
 		"indexArray",
 		"bls12_381_G1_multiScalarMul",
 		"bls12_381_G2_multiScalarMul",
+		"multiIndexArray",
+		"policies",
+		"assetCount",
+		"keepPolicies",
+		"dropPolicies",
 	}
 	for _, b := range v4Builtins {
 		if strings.Contains(path, b) {

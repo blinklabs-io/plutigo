@@ -158,10 +158,12 @@ const (
 	UnValueData DefaultFunction = 99
 	ScaleValue  DefaultFunction = 100
 
-	// Multi-index array
+	// Batch 7: multi-index array and policy filters
 	MultiIndexArray DefaultFunction = 101
 	Policies        DefaultFunction = 102
 	AssetCount      DefaultFunction = 103
+	KeepPolicies    DefaultFunction = 104
+	DropPolicies    DefaultFunction = 105
 )
 
 var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
@@ -299,6 +301,8 @@ var Builtins map[string]DefaultFunction = map[string]DefaultFunction{
 	"multiIndexArray": MultiIndexArray,
 	"policies":        Policies,
 	"assetCount":      AssetCount,
+	"keepPolicies":    KeepPolicies,
+	"dropPolicies":    DropPolicies,
 }
 
 var defaultFunctionForceCount = [TotalBuiltinCount]uint{
@@ -426,6 +430,8 @@ var defaultFunctionForceCount = [TotalBuiltinCount]uint{
 	MultiIndexArray: 1,
 	Policies:        0,
 	AssetCount:      0,
+	KeepPolicies:    0,
+	DropPolicies:    0,
 }
 
 func (f DefaultFunction) ForceCount() uint {
@@ -557,6 +563,8 @@ var defaultFunctionArity = [TotalBuiltinCount]uint{
 	MultiIndexArray: 2,
 	Policies:        1,
 	AssetCount:      1,
+	KeepPolicies:    2,
+	DropPolicies:    2,
 }
 
 func (f DefaultFunction) Arity() uint {
@@ -688,6 +696,8 @@ var defaultFunctionToString = [TotalBuiltinCount]string{
 	MultiIndexArray: "multiIndexArray",
 	Policies:        "policies",
 	AssetCount:      "assetCount",
+	KeepPolicies:    "keepPolicies",
+	DropPolicies:    "dropPolicies",
 }
 
 func (f DefaultFunction) String() string {
@@ -698,7 +708,7 @@ func (f DefaultFunction) String() string {
 const MinDefaultFunction = 0
 
 // MaxDefaultFunction is the largest DefaultFunction tag value
-const MaxDefaultFunction = 103
+const MaxDefaultFunction = 105
 
 // TotalBuiltinCount is the total number of builtin functions
 const TotalBuiltinCount = MaxDefaultFunction + 1

@@ -163,11 +163,15 @@ var builtinIntroducedIn = [TotalBuiltinCount]PlutusVersion{
 	// Value/Data conversion builtins
 	ValueData:   PlutusV4,
 	UnValueData: PlutusV4,
+	// Batch 7 reaches every language at Dijkstra, so its legacy metadata
+	// follows the newest language.
+	MultiIndexArray: PlutusV4,
+	Policies:        PlutusV4,
+	AssetCount:      PlutusV4,
+	KeepPolicies:    PlutusV4,
+	DropPolicies:    PlutusV4,
 	// Unreleased builtins - defined but not yet available on mainnet
-	DropList:        PlutusVUnreleased,
-	MultiIndexArray: PlutusVUnreleased,
-	Policies:        PlutusVUnreleased,
-	AssetCount:      PlutusVUnreleased,
+	DropList: PlutusVUnreleased,
 }
 
 // VanRossemProtoVersion is the Cardano protocol major version at which batch 6
@@ -224,6 +228,7 @@ var (
 	batch4b = []DefaultFunction{IntegerToByteString, ByteStringToInteger}
 	batch5  = builtinRange(AndByteString, Ripemd_160)
 	batch6  = builtinRange(ExpModInteger, ScaleValue)
+	batch7  = builtinRange(MultiIndexArray, DropPolicies)
 )
 
 // builtinAvailability mirrors PlutusLedgerApi.Common.Versions. A builtin's
@@ -244,6 +249,7 @@ var builtinAvailability = map[PlutusVersion][]availabilityBatch{
 				batch6,
 			),
 		},
+		{introducedAt: dijkstraProtoVersion, functions: batch7},
 	},
 	PlutusV2: {
 		{
@@ -256,6 +262,7 @@ var builtinAvailability = map[PlutusVersion][]availabilityBatch{
 			introducedAt: VanRossemProtoVersion,
 			functions:    combineBatches(batch4a, batch5, batch6),
 		},
+		{introducedAt: dijkstraProtoVersion, functions: batch7},
 	},
 	PlutusV3: {
 		{
@@ -270,6 +277,7 @@ var builtinAvailability = map[PlutusVersion][]availabilityBatch{
 		},
 		{introducedAt: plominProtoVersion, functions: batch5},
 		{introducedAt: VanRossemProtoVersion, functions: batch6},
+		{introducedAt: dijkstraProtoVersion, functions: batch7},
 	},
 	PlutusV4: {
 		{
@@ -282,6 +290,7 @@ var builtinAvailability = map[PlutusVersion][]availabilityBatch{
 				batch4b,
 				batch5,
 				batch6,
+				batch7,
 			),
 		},
 	},
