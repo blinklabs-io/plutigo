@@ -38,6 +38,7 @@ var (
 	uplcVersion110 = lang.LanguageVersion{1, 1, 0}
 	uplcVersion120 = lang.LanguageVersion{1, 2, 0}
 	errValueData   = errors.New("Value is not a PlutusData constructor")
+	errCyclicPair  = errors.New("constant contains a cyclic pair")
 )
 
 // maxScriptConstrFields is maxConstrFields in plutus-ledger-api's
@@ -257,6 +258,50 @@ type valueDataFrame struct {
 	constants []IConstant
 	items     []data.PlutusData
 	pairs     [][2]data.PlutusData
+	leavePair *ProtoPair
+}
+
+// activePairPath keeps ordinary validation allocation-free and spills deep
+// caller-built pair graphs into a set for constant-time cycle checks.
+type activePairPath struct {
+	inline   [16]*ProtoPair
+	count    int
+	overflow map[*ProtoPair]struct{}
+}
+
+func (p *activePairPath) enter(pair *ProtoPair) bool {
+	if p.overflow != nil {
+		if _, ok := p.overflow[pair]; ok {
+			return false
+		}
+		p.overflow[pair] = struct{}{}
+		return true
+	}
+	for _, active := range p.inline[:p.count] {
+		if active == pair {
+			return false
+		}
+	}
+	if p.count < len(p.inline) {
+		p.inline[p.count] = pair
+		p.count++
+		return true
+	}
+	p.overflow = make(map[*ProtoPair]struct{}, p.count+1)
+	for _, active := range p.inline {
+		p.overflow[active] = struct{}{}
+	}
+	p.overflow[pair] = struct{}{}
+	return true
+}
+
+func (p *activePairPath) leave(pair *ProtoPair) {
+	if p.overflow != nil {
+		delete(p.overflow, pair)
+		return
+	}
+	p.count--
+	p.inline[p.count] = nil
 }
 
 // isCompositeConstant reports whether con is data or a container that can
@@ -300,8 +345,14 @@ func constantHasValueData(con IConstant, items *int) (bool, error) {
 	dataNodes := 0
 	var dataRoot data.PlutusData
 	var seenPairs map[*ProtoPair]struct{}
+	var activePairs activePairPath
 	for len(frames) > 0 {
 		frame := &frames[len(frames)-1]
+		if frame.leavePair != nil {
+			activePairs.leave(frame.leavePair)
+			frames = frames[:len(frames)-1]
+			continue
+		}
 		var (
 			constant IConstant
 			item     data.PlutusData
@@ -348,11 +399,19 @@ func constantHasValueData(con IConstant, items *int) (bool, error) {
 			case ProtoArray:
 				collection = k.Array
 			case *ProtoPair:
-				if k == nil || (maybeZeroWidthPair(k) && !firstVisit(&seenPairs, k)) {
+				if k == nil {
+					continue
+				}
+				if !activePairs.enter(k) {
+					return false, errCyclicPair
+				}
+				if maybeZeroWidthPair(k) && !firstVisit(&seenPairs, k) {
+					activePairs.leave(k)
 					continue
 				}
 				frames = append(
 					frames,
+					valueDataFrame{leavePair: k},
 					valueDataFrame{constant: k.Second},
 					valueDataFrame{constant: k.First},
 				)

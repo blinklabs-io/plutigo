@@ -176,6 +176,39 @@ func newValueData() *data.Value {
 	return &data.Value{Inner: data.NewMap(nil).(*data.Map)}
 }
 
+func TestValidateProgramRejectsCyclicPair(t *testing.T) {
+	root := &ProtoPair{
+		FstType: &TInteger{},
+		SndType: &TData{},
+		Second:  &Data{Inner: newValueData()},
+	}
+	tail := root
+	for range 20 {
+		next := &ProtoPair{
+			FstType: &TInteger{},
+			SndType: &TData{},
+			Second:  &Data{Inner: data.Integer{}},
+		}
+		tail.First = next
+		tail = next
+	}
+	tail.First = root
+
+	for _, language := range []lang.LanguageVersion{
+		lang.LanguageVersionV3,
+		lang.LanguageVersionV4,
+	} {
+		program := &Program[DeBruijn]{
+			Version: lang.LanguageVersion{1, 1, 0},
+			Term:    &Constant{Con: root},
+		}
+		err := ValidateProgram(program, valueDataContext(language))
+		if err == nil || !strings.Contains(err.Error(), "cyclic") {
+			t.Fatalf("ledger language %v: got %v, want cyclic pair error", language, err)
+		}
+	}
+}
+
 // TestValidateProgramRejectsValueDataInCallerConstants checks caller-built
 // constants the parser and decoder never produce: children that do not match
 // their container's declared type, and constants and data in value form
