@@ -372,7 +372,7 @@ func NewMapDefIndef(useIndef bool, pairs [][2]PlutusData) PlutusData {
 // around the nested map representation that valueData produces. It is not
 // part of the reference Data type, which has only the Constr, Map, List, I
 // and B constructors: Decode, DecodePrefix and so every FLAT program decoder
-// reject tag 1401. Only DecodeWithValue and the UPLC text parser produce it.
+// reject tag 1401. DecodeWithValue admits it only for explicit opt-in use.
 type Value struct {
 	Inner *Map
 }

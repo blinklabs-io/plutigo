@@ -37,6 +37,7 @@ var (
 	uplcVersion100 = lang.LanguageVersion{1, 0, 0}
 	uplcVersion110 = lang.LanguageVersion{1, 1, 0}
 	uplcVersion120 = lang.LanguageVersion{1, 2, 0}
+	errValueData   = errors.New("Value is not a PlutusData constructor")
 )
 
 // maxScriptConstrFields is maxConstrFields in plutus-ledger-api's
@@ -112,11 +113,8 @@ func constantSize(con IConstant) int {
 type contextChecks struct {
 	plutusVersion builtin.PlutusVersion
 	protocolMajor uint
-	// PlutusData Value, which FLAT decoding rejects but parsed and
-	// caller-built programs can carry, is rejected in ledger languages
-	// before V4. valueDataItems counts constant list and array items across
-	// the program, as the decoder does.
-	checkValueData bool
+	// valueDataItems counts constant list and array items across the program,
+	// as the decoder does.
 	valueDataItems int
 }
 
@@ -126,24 +124,16 @@ func newContextChecks(context ProgramContext) (contextChecks, error) {
 		return contextChecks{}, err
 	}
 	return contextChecks{
-		plutusVersion:  plutusVersion,
-		protocolMajor:  context.ProtocolMajor,
-		checkValueData: plutusVersion < builtin.PlutusV4,
+		plutusVersion: plutusVersion,
+		protocolMajor: context.ProtocolMajor,
 	}, nil
 }
 
 // constant checks a constant term's value against the context.
 func (c *contextChecks) constant(con IConstant) error {
-	if c.checkValueData && isCompositeConstant(con) {
-		found, err := constantHasValueData(con, &c.valueDataItems)
-		if err != nil {
+	if isCompositeConstant(con) {
+		if err := validateNoValueData(con, &c.valueDataItems); err != nil {
 			return err
-		}
-		if found {
-			return fmt.Errorf(
-				"Value data is not available in Plutus V%d",
-				c.plutusVersion,
-			)
 		}
 	}
 	if con != nil {
@@ -244,6 +234,17 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 		default:
 			return fmt.Errorf("unsupported term type %T", term)
 		}
+	}
+	return nil
+}
+
+func validateNoValueData(con IConstant, items *int) error {
+	found, err := constantHasValueData(con, items)
+	if err != nil {
+		return err
+	}
+	if found {
+		return errValueData
 	}
 	return nil
 }

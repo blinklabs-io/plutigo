@@ -179,7 +179,7 @@ func TestParseWithContextRejectsNonCanonicalValue(t *testing.T) {
 		ProtocolMajor:  11,
 	}
 	for name, text := range tests {
-		src := valuePrograms["con"](text)
+		src := valueProgram(text)
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			if _, err := ParseWithContext(src, ctx); err == nil {
