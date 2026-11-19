@@ -25,12 +25,11 @@ import (
 	"github.com/blinklabs-io/plutigo/lang"
 )
 
-// valueData is a V4-only PlutusData Value in UPLC text syntax.
+// valueData is the unsupported Value form in UPLC text syntax.
 const valueData = `V [(#aa, [(#bb, 1)])]`
 
-// valueDataPrograms place a PlutusData Value at the top of a data constant,
-// nested inside List, Map and Constr data, inside list, pair and array
-// constants, and in a lambda body that evaluation never reaches.
+// valueDataPrograms place a Value form at every data-constant position where
+// the parser previously accepted it.
 var valueDataPrograms = map[string]string{
 	"top level":         `(con data (` + valueData + `))`,
 	"in data list":      `(con data (List [I 1, ` + valueData + `]))`,
@@ -53,48 +52,16 @@ func valueDataContext(language lang.LanguageVersion) ProgramContext {
 	}
 }
 
-// encodeValueDataProgram parses a program without validation and returns its
-// FLAT encoding, so the decoder path can be tested with the same input.
-func encodeValueDataProgram(t *testing.T, src string) []byte {
-	t.Helper()
-	program, err := Parse(src)
-	if err != nil {
-		t.Fatalf("parse %s: %v", src, err)
-	}
-	dbProgram, err := NameToDeBruijn(program)
-	if err != nil {
-		t.Fatalf("convert %s: %v", src, err)
-	}
-	encoded, err := Encode(dbProgram)
-	if err != nil {
-		t.Fatalf("encode %s: %v", src, err)
-	}
-	return encoded
-}
-
-// TestValidateProgramRejectsValueDataBeforeV4 checks that V1, V2 and V3
-// programs carrying a PlutusData Value anywhere in a constant, including
-// code evaluation never reaches, are rejected by the text parser's context
-// validation, while V4 programs with the same constants parse. The FLAT
-// decoder rejects the encoding in every language, V4 included, because the
-// reference Data decoder has no tag 1401 constructor.
-func TestValidateProgramRejectsValueDataBeforeV4(t *testing.T) {
+func TestParseRejectsValueData(t *testing.T) {
 	for name, term := range valueDataPrograms {
 		src := `(program 1.1.0 ` + term + `)`
-		encoded := encodeValueDataProgram(t, src)
 		t.Run(name, func(t *testing.T) {
-			for _, language := range []lang.LanguageVersion{
-				lang.LanguageVersionV1,
-				lang.LanguageVersionV2,
-				lang.LanguageVersionV3,
-			} {
-				context := valueDataContext(language)
-				_, err := ParseWithContext(src, context)
-				requireValueDataRejected(t, "ParseWithContext", language, err)
-			}
-			context := valueDataContext(lang.LanguageVersionV4)
-			if _, err := ParseWithContext(src, context); err != nil {
-				t.Fatalf("ParseWithContext rejected V4 program: %v", err)
+			_, err := Parse(src)
+			if err == nil || !strings.Contains(
+				err.Error(),
+				"expected PlutusData constructor (I, B, List, Map, Constr)",
+			) {
+				t.Fatalf("Parse error = %v, want unsupported Value form", err)
 			}
 			for _, language := range []lang.LanguageVersion{
 				lang.LanguageVersionV1,
@@ -102,56 +69,60 @@ func TestValidateProgramRejectsValueDataBeforeV4(t *testing.T) {
 				lang.LanguageVersionV3,
 				lang.LanguageVersionV4,
 			} {
-				_, err := DecodeWithContext[DeBruijn](
-					encoded,
-					valueDataContext(language),
-				)
-				if err == nil ||
-					!strings.Contains(err.Error(), "unknown CBOR tag for PlutusData: 1401") {
-					t.Fatalf(
-						"DecodeWithContext for ledger language %v: got %v, want unknown tag 1401",
-						language,
-						err,
-					)
+				for _, major := range []uint{0, builtin.VanRossemProtoVersion + 1} {
+					_, err := ParseWithContext(src, ProgramContext{
+						LedgerLanguage: language,
+						ProtocolMajor:  major,
+					})
+					if err == nil || !strings.Contains(
+						err.Error(),
+						"expected PlutusData constructor (I, B, List, Map, Constr)",
+					) {
+						t.Fatalf(
+							"ParseWithContext(%v, %d) error = %v, want unsupported Value form",
+							language,
+							major,
+							err,
+						)
+					}
 				}
 			}
 		})
 	}
 }
 
-func requireValueDataRejected(
-	t *testing.T,
-	path string,
-	language lang.LanguageVersion,
-	err error,
-) {
-	t.Helper()
-	if err == nil {
-		t.Fatalf(
-			"%s accepted Value data for ledger language %v",
-			path,
-			language,
-		)
+func TestValidateProgramRejectsValueData(t *testing.T) {
+	program := &Program[DeBruijn]{
+		Version: lang.LanguageVersion{1, 1, 0},
+		Term:    &Constant{Con: &Data{Inner: newValueData()}},
 	}
-	if !strings.Contains(err.Error(), "Value data is not available") {
-		t.Fatalf(
-			"%s for ledger language %v: unexpected error %v",
-			path,
-			language,
-			err,
-		)
+	for _, language := range []lang.LanguageVersion{
+		lang.LanguageVersionV1,
+		lang.LanguageVersionV2,
+		lang.LanguageVersionV3,
+		lang.LanguageVersionV4,
+	} {
+		err := ValidateProgram(program, valueDataContext(language))
+		if !errors.Is(err, errValueData) {
+			t.Errorf(
+				"ledger language %v: got %v, want %v",
+				language,
+				err,
+				errValueData,
+			)
+		}
 	}
 }
 
-// TestValidateProgramAcceptsDataWithoutValueBeforeV4 checks that ordinary
-// nested data, which shares every container with the rejected cases, is still
-// accepted for V1, V2 and V3.
-func TestValidateProgramAcceptsDataWithoutValueBeforeV4(t *testing.T) {
+// TestValidateProgramAcceptsDataWithoutValue checks that ordinary nested data,
+// which shares every container with the rejected cases, is still accepted.
+func TestValidateProgramAcceptsDataWithoutValue(t *testing.T) {
 	src := `(program 1.1.0 [ (lam x (con (list data) [I 1, Map [(B #00, List [Constr 0 [I 2]])]])) (con (pair integer data) (1, B #00)) ])`
 	for _, language := range []lang.LanguageVersion{
 		lang.LanguageVersionV1,
 		lang.LanguageVersionV2,
 		lang.LanguageVersionV3,
+		lang.LanguageVersionV4,
 	} {
 		if _, err := ParseWithContext(src, valueDataContext(language)); err != nil {
 			t.Fatalf(
@@ -163,10 +134,10 @@ func TestValidateProgramAcceptsDataWithoutValueBeforeV4(t *testing.T) {
 	}
 }
 
-// TestValidateProgramDataTraversalUnbounded checks that the data traversal
-// for pre-V4 programs has no node limit for a tree, as the reference has
-// none, but rejects a caller-constructed constant whose containers are
-// shared, which a tree walk could take exponential time over.
+// TestValidateProgramDataTraversalUnbounded checks that the data traversal has
+// no node limit for a tree, as the reference has none, but rejects a
+// caller-constructed constant whose containers are shared, which a tree walk
+// could take exponential time over.
 func TestValidateProgramDataTraversalUnbounded(t *testing.T) {
 	item := data.NewInteger(big.NewInt(0))
 	items := make([]data.PlutusData, maxProgramNodes+1)
@@ -203,6 +174,39 @@ func valueDataV3(con IConstant) error {
 
 func newValueData() *data.Value {
 	return &data.Value{Inner: data.NewMap(nil).(*data.Map)}
+}
+
+func TestValidateProgramRejectsCyclicPair(t *testing.T) {
+	root := &ProtoPair{
+		FstType: &TInteger{},
+		SndType: &TData{},
+		Second:  &Data{Inner: newValueData()},
+	}
+	tail := root
+	for range 20 {
+		next := &ProtoPair{
+			FstType: &TInteger{},
+			SndType: &TData{},
+			Second:  &Data{Inner: data.Integer{}},
+		}
+		tail.First = next
+		tail = next
+	}
+	tail.First = root
+
+	for _, language := range []lang.LanguageVersion{
+		lang.LanguageVersionV3,
+		lang.LanguageVersionV4,
+	} {
+		program := &Program[DeBruijn]{
+			Version: lang.LanguageVersion{1, 1, 0},
+			Term:    &Constant{Con: root},
+		}
+		err := ValidateProgram(program, valueDataContext(language))
+		if err == nil || !strings.Contains(err.Error(), "cyclic") {
+			t.Fatalf("ledger language %v: got %v, want cyclic pair error", language, err)
+		}
+	}
 }
 
 // TestValidateProgramRejectsValueDataInCallerConstants checks caller-built
@@ -273,9 +277,8 @@ func TestValidateProgramRejectsValueDataInCallerConstants(t *testing.T) {
 	for name, con := range cases {
 		t.Run(name, func(t *testing.T) {
 			err := valueDataV3(con)
-			if err == nil ||
-				!strings.Contains(err.Error(), "Value data is not available") {
-				t.Fatalf("expected Value data rejection, got %v", err)
+			if !errors.Is(err, errValueData) {
+				t.Fatalf("got %v, want %v", err, errValueData)
 			}
 		})
 	}
@@ -290,9 +293,8 @@ func TestValidateProgramRejectsDeeplyNestedValueData(t *testing.T) {
 		nested = data.NewList(data.NewInteger(big.NewInt(0)), nested)
 	}
 	err := valueDataV3(&Data{Inner: nested})
-	if err == nil ||
-		!strings.Contains(err.Error(), "Value data is not available") {
-		t.Fatalf("expected Value data rejection, got %v", err)
+	if !errors.Is(err, errValueData) {
+		t.Fatalf("got %v, want %v", err, errValueData)
 	}
 }
 

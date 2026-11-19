@@ -15,6 +15,7 @@
 package syn
 
 import (
+	"errors"
 	"math/big"
 	"strings"
 	"testing"
@@ -23,11 +24,8 @@ import (
 	"github.com/blinklabs-io/plutigo/lang"
 )
 
-// valuePrograms wraps a Value literal in each text form that parses one: a
-// data Value and a builtin value constant.
-var valuePrograms = map[string]func(valueText string) string{
-	"data": func(v string) string { return `(program 1.3.0 (con data (V ` + v + `)))` },
-	"con":  func(v string) string { return `(program 1.3.0 (con value ` + v + `))` },
+func valueProgram(valueText string) string {
+	return `(program 1.3.0 (con value ` + valueText + `))`
 }
 
 func TestParsePlutusValueCanonicalForm(t *testing.T) {
@@ -47,15 +45,13 @@ func TestParsePlutusValueCanonicalForm(t *testing.T) {
 		"min quantity": `[(#aa, [(#bb, ` + minQty + `)])]`,
 		"ascending":    `[(#aa, [(#01, 1), (#02, -1)]), (#bb, [(#01, 1)])]`,
 	}
-	for form, program := range valuePrograms {
-		for name, text := range valid {
-			t.Run(form+"/accepts "+name, func(t *testing.T) {
-				t.Parallel()
-				if _, err := Parse(program(text)); err != nil {
-					t.Fatalf("Parse: %v", err)
-				}
-			})
-		}
+	for name, text := range valid {
+		t.Run("accepts "+name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := Parse(valueProgram(text)); err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+		})
 	}
 
 	invalid := map[string]string{
@@ -70,15 +66,13 @@ func TestParsePlutusValueCanonicalForm(t *testing.T) {
 		"quantity above range":  `[(#aa, [(#bb, ` + pastMax + `)])]`,
 		"quantity below range":  `[(#aa, [(#bb, ` + pastMin + `)])]`,
 	}
-	for form, program := range valuePrograms {
-		for name, text := range invalid {
-			t.Run(form+"/rejects "+name, func(t *testing.T) {
-				t.Parallel()
-				if _, err := Parse(program(text)); err == nil {
-					t.Fatal("Parse accepted a non-canonical Value")
-				}
-			})
-		}
+	for name, text := range invalid {
+		t.Run("rejects "+name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := Parse(valueProgram(text)); err == nil {
+				t.Fatal("Parse accepted a non-canonical Value")
+			}
+		})
 	}
 }
 
@@ -96,7 +90,7 @@ func TestParseValueConstantRejectsNonCanonicalEntries(t *testing.T) {
 	for name, valueText := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			if _, err := Parse(valuePrograms["con"](valueText)); err == nil {
+			if _, err := Parse(valueProgram(valueText)); err == nil {
 				t.Fatal("Parse accepted a non-canonical Value")
 			}
 		})
@@ -287,14 +281,14 @@ func valuePrettyForTest(value *Value) string {
 
 func valueTextPrettyForTest(t testing.TB, valueText string) string {
 	t.Helper()
-	program, err := Parse(valuePrograms["con"](valueText))
+	program, err := Parse(valueProgram(valueText))
 	if err != nil {
 		t.Fatalf("parse expected value: %v", err)
 	}
 	return Pretty(program)
 }
 
-func TestEncodeRejectsNonCanonicalDataValue(t *testing.T) {
+func TestEncodeRejectsMalformedDataValue(t *testing.T) {
 	t.Parallel()
 	tokens := data.WrapMap([][2]data.PlutusData{{
 		data.NewByteString([]byte{1}),
@@ -310,8 +304,8 @@ func TestEncodeRejectsNonCanonicalDataValue(t *testing.T) {
 			Inner: &data.Value{Inner: inner},
 		}},
 	})
-	if err == nil {
-		t.Fatal("Encode accepted a data Value with a zero quantity")
+	if !errors.Is(err, errValueData) {
+		t.Fatalf("Encode error = %v, want %v", err, errValueData)
 	}
 }
 
@@ -342,23 +336,18 @@ func TestParseValueRejectsInvalidPrefix(t *testing.T) {
 		},
 		"empty tokens": {`[(#aa, []), malformed]`, "empty token map"},
 	}
-	for form, program := range valuePrograms {
-		for name, tc := range invalid {
-			if form == "con" && name != "policy key" && name != "token key" &&
-				name != "quantity" {
-				continue
+	for _, name := range []string{"policy key", "token key", "quantity"} {
+		tc := invalid[name]
+		t.Run(name, func(t *testing.T) {
+			_, err := Parse(valueProgram(tc.text))
+			if err == nil || !strings.Contains(err.Error(), tc.errorText) {
+				t.Fatalf(
+					"Parse error = %v, want prefix validation error %q before malformed suffix",
+					err,
+					tc.errorText,
+				)
 			}
-			t.Run(form+"/"+name, func(t *testing.T) {
-				_, err := Parse(program(tc.text))
-				if err == nil || !strings.Contains(err.Error(), tc.errorText) {
-					t.Fatalf(
-						"Parse error = %v, want prefix validation error %q before malformed suffix",
-						err,
-						tc.errorText,
-					)
-				}
-			})
-		}
+		})
 	}
 }
 

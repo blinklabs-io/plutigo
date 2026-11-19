@@ -427,21 +427,20 @@ func TestParseOversizedInputBeforeLexer(t *testing.T) {
 }
 
 func TestParseValueNodeAccounting(t *testing.T) {
-	for _, input := range []string{"(con value [(#, [(#, 1)])])", "(con data (V [(#, [(#, 1)])]))"} {
-		for _, remaining := range []int{1, 2} {
-			p := NewParser(input)
-			p.nodes = maxProgramNodes - remaining
-			_, err := p.ParseTerm()
-			requireErrContains(t, input, err, "too many nodes")
-		}
+	input := "(con value [(#, [(#, 1)])])"
+	for _, remaining := range []int{1, 2} {
 		p := NewParser(input)
-		p.nodes = maxProgramNodes - 3
-		if _, err := p.ParseTerm(); err != nil {
-			t.Errorf(
-				"three remaining nodes should admit a term, policy and token: %v",
-				err,
-			)
-		}
+		p.nodes = maxProgramNodes - remaining
+		_, err := p.ParseTerm()
+		requireErrContains(t, input, err, "too many nodes")
+	}
+	p := NewParser(input)
+	p.nodes = maxProgramNodes - 3
+	if _, err := p.ParseTerm(); err != nil {
+		t.Errorf(
+			"three remaining nodes should admit a term, policy and token: %v",
+			err,
+		)
 	}
 }
 
@@ -477,14 +476,13 @@ func TestParseValueWidthBeforeCompletion(t *testing.T) {
 	policyItems := policies.String()
 	tokenItems := tokens.String()
 
-	for _, prefix := range []string{"(con value ", "(con data (V "} {
-		for _, input := range []string{
-			prefix + "[" + policyItems + "(",
-			prefix + "[(#00000000, [" + tokenItems + "(",
-		} {
-			_, err := NewParser(input).ParseTerm()
-			requireErrContains(t, prefix, err, "too many")
-		}
+	prefix := "(con value "
+	for _, input := range []string{
+		prefix + "[" + policyItems + "(",
+		prefix + "[(#00000000, [" + tokenItems + "(",
+	} {
+		_, err := NewParser(input).ParseTerm()
+		requireErrContains(t, prefix, err, "too many")
 	}
 }
 

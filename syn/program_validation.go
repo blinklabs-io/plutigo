@@ -37,6 +37,8 @@ var (
 	uplcVersion100 = lang.LanguageVersion{1, 0, 0}
 	uplcVersion110 = lang.LanguageVersion{1, 1, 0}
 	uplcVersion120 = lang.LanguageVersion{1, 2, 0}
+	errValueData   = errors.New("Value is not a PlutusData constructor")
+	errCyclicPair  = errors.New("constant contains a cyclic pair")
 )
 
 // maxScriptConstrFields is maxConstrFields in plutus-ledger-api's
@@ -112,11 +114,8 @@ func constantSize(con IConstant) int {
 type contextChecks struct {
 	plutusVersion builtin.PlutusVersion
 	protocolMajor uint
-	// PlutusData Value, which FLAT decoding rejects but parsed and
-	// caller-built programs can carry, is rejected in ledger languages
-	// before V4. valueDataItems counts constant list and array items across
-	// the program, as the decoder does.
-	checkValueData bool
+	// valueDataItems counts constant list and array items across the program,
+	// as the decoder does.
 	valueDataItems int
 }
 
@@ -126,24 +125,16 @@ func newContextChecks(context ProgramContext) (contextChecks, error) {
 		return contextChecks{}, err
 	}
 	return contextChecks{
-		plutusVersion:  plutusVersion,
-		protocolMajor:  context.ProtocolMajor,
-		checkValueData: plutusVersion < builtin.PlutusV4,
+		plutusVersion: plutusVersion,
+		protocolMajor: context.ProtocolMajor,
 	}, nil
 }
 
 // constant checks a constant term's value against the context.
 func (c *contextChecks) constant(con IConstant) error {
-	if c.checkValueData && isCompositeConstant(con) {
-		found, err := constantHasValueData(con, &c.valueDataItems)
-		if err != nil {
+	if isCompositeConstant(con) {
+		if err := validateNoValueData(con, &c.valueDataItems); err != nil {
 			return err
-		}
-		if found {
-			return fmt.Errorf(
-				"Value data is not available in Plutus V%d",
-				c.plutusVersion,
-			)
 		}
 	}
 	if con != nil {
@@ -248,6 +239,17 @@ func ValidateProgram[T any](program *Program[T], context ProgramContext) error {
 	return nil
 }
 
+func validateNoValueData(con IConstant, items *int) error {
+	found, err := constantHasValueData(con, items)
+	if err != nil {
+		return err
+	}
+	if found {
+		return errValueData
+	}
+	return nil
+}
+
 // valueDataFrame is one level of the constantHasValueData walk: the
 // remaining elements of a single constant, a constant list or array, a
 // PlutusData list or constructor, or a PlutusData map.
@@ -256,6 +258,50 @@ type valueDataFrame struct {
 	constants []IConstant
 	items     []data.PlutusData
 	pairs     [][2]data.PlutusData
+	leavePair *ProtoPair
+}
+
+// activePairPath keeps ordinary validation allocation-free and spills deep
+// caller-built pair graphs into a set for constant-time cycle checks.
+type activePairPath struct {
+	inline   [16]*ProtoPair
+	count    int
+	overflow map[*ProtoPair]struct{}
+}
+
+func (p *activePairPath) enter(pair *ProtoPair) bool {
+	if p.overflow != nil {
+		if _, ok := p.overflow[pair]; ok {
+			return false
+		}
+		p.overflow[pair] = struct{}{}
+		return true
+	}
+	for _, active := range p.inline[:p.count] {
+		if active == pair {
+			return false
+		}
+	}
+	if p.count < len(p.inline) {
+		p.inline[p.count] = pair
+		p.count++
+		return true
+	}
+	p.overflow = make(map[*ProtoPair]struct{}, p.count+1)
+	for _, active := range p.inline {
+		p.overflow[active] = struct{}{}
+	}
+	p.overflow[pair] = struct{}{}
+	return true
+}
+
+func (p *activePairPath) leave(pair *ProtoPair) {
+	if p.overflow != nil {
+		delete(p.overflow, pair)
+		return
+	}
+	p.count--
+	p.inline[p.count] = nil
 }
 
 // isCompositeConstant reports whether con is data or a container that can
@@ -299,8 +345,14 @@ func constantHasValueData(con IConstant, items *int) (bool, error) {
 	dataNodes := 0
 	var dataRoot data.PlutusData
 	var seenPairs map[*ProtoPair]struct{}
+	var activePairs activePairPath
 	for len(frames) > 0 {
 		frame := &frames[len(frames)-1]
+		if frame.leavePair != nil {
+			activePairs.leave(frame.leavePair)
+			frames = frames[:len(frames)-1]
+			continue
+		}
 		var (
 			constant IConstant
 			item     data.PlutusData
@@ -347,11 +399,19 @@ func constantHasValueData(con IConstant, items *int) (bool, error) {
 			case ProtoArray:
 				collection = k.Array
 			case *ProtoPair:
-				if k == nil || (maybeZeroWidthPair(k) && !firstVisit(&seenPairs, k)) {
+				if k == nil {
+					continue
+				}
+				if !activePairs.enter(k) {
+					return false, errCyclicPair
+				}
+				if maybeZeroWidthPair(k) && !firstVisit(&seenPairs, k) {
+					activePairs.leave(k)
 					continue
 				}
 				frames = append(
 					frames,
+					valueDataFrame{leavePair: k},
 					valueDataFrame{constant: k.Second},
 					valueDataFrame{constant: k.First},
 				)

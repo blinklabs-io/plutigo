@@ -15,10 +15,14 @@
 package syn
 
 import (
+	"bytes"
 	"encoding/hex"
+	"errors"
+	"math/big"
 	"strings"
 	"testing"
 
+	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/lang"
 )
 
@@ -125,21 +129,44 @@ func TestFlatDecodeRejectsDataTag1401(t *testing.T) {
 	}
 }
 
-// TestFlatDecodeRejectsEncodedValueData checks that a program encoded from
-// Value data constants, in each position the text parser accepts them, does
-// not decode in any language through the context-free decoders or the V4
-// context.
-func TestFlatDecodeRejectsEncodedValueData(t *testing.T) {
+// TestFlatDataEncodingRoundTrip checks that Encode emits only Data constants
+// that its decoder accepts.
+func TestFlatDataEncodingRoundTrip(t *testing.T) {
 	t.Parallel()
-	for name, term := range valueDataPrograms {
-		encoded := encodeValueDataProgram(t, `(program 1.1.0 `+term+`)`)
-		for decoder, decode := range flatDecoders {
-			for _, language := range flatLanguages {
-				if err := decode(encoded, language); err == nil {
-					t.Errorf("%s/%s/%v: accepted Value data", name, decoder, language)
-				}
-			}
+	program := func(inner data.PlutusData) *Program[DeBruijn] {
+		return &Program[DeBruijn]{
+			Version: lang.LanguageVersion{1, 1, 0},
+			Term:    &Constant{Con: &Data{Inner: inner}},
 		}
+	}
+
+	ordinary := program(data.NewList(data.NewInteger(big.NewInt(1))))
+	encoded, err := Encode(ordinary)
+	if err != nil {
+		t.Fatalf("Encode ordinary Data: %v", err)
+	}
+	decoded, err := DecodeDeBruijn(encoded)
+	if err != nil {
+		t.Fatalf("Decode ordinary Data: %v", err)
+	}
+	reencoded, err := Encode(decoded)
+	if err != nil {
+		t.Fatalf("re-encode ordinary Data: %v", err)
+	}
+	if !bytes.Equal(reencoded, encoded) {
+		t.Fatal("ordinary Data encoding did not round-trip")
+	}
+
+	for name, inner := range map[string]data.PlutusData{
+		"top level": newValueData(),
+		"nested":    data.NewList(data.NewInteger(big.NewInt(1)), newValueData()),
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := Encode(program(inner))
+			if !errors.Is(err, errValueData) {
+				t.Fatalf("Encode error = %v, want %v", err, errValueData)
+			}
+		})
 	}
 }
 

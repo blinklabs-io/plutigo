@@ -534,6 +534,10 @@ func encodeConstantValue(e *encoder, constant IConstant) error {
 		}
 		return encodeConstantValue(e, c.Second)
 	case *Data:
+		items := 0
+		if err := validateNoValueData(c, &items); err != nil {
+			return err
+		}
 		cborBytes, err := data.Encode(c.Inner)
 		if err != nil {
 			return err

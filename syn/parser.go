@@ -1208,8 +1208,6 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 		}
 
 		return data.NewMap(pairs), nil
-	case lex.TokenPlutusValue:
-		return p.parsePlutusValue()
 	case lex.TokenPlutusConstr:
 		p.nextToken()
 
@@ -1269,142 +1267,11 @@ func (p *Parser) parsePlutusData() (data.PlutusData, error) {
 		return data.NewConstrFromBigInt(tag, fields...), nil
 	default:
 		return nil, fmt.Errorf(
-			"expected PlutusData constructor (I, B, List, Map, V, Constr), got %v at position %d",
+			"expected PlutusData constructor (I, B, List, Map, Constr), got %v at position %d",
 			p.curToken.Type,
 			p.curToken.Position,
 		)
 	}
-}
-
-func (p *Parser) parsePlutusValue() (data.PlutusData, error) {
-	p.nextToken()
-	if err := p.expect(lex.TokenLBracket); err != nil {
-		return nil, err
-	}
-	var prevPolicy []byte
-	pairs := make([][2]data.PlutusData, 0)
-	for p.curToken.Type != lex.TokenRBracket {
-		if len(pairs) >= maxCollectionWidth {
-			return nil, errTooMany("value policy items", maxCollectionWidth)
-		}
-		if err := p.node(); err != nil {
-			return nil, err
-		}
-		if err := p.expect(lex.TokenLParen); err != nil {
-			return nil, err
-		}
-		policy, err := p.parseValueBytes("policy", len(pairs), prevPolicy)
-		if err != nil {
-			return nil, err
-		}
-		prevPolicy = policy.Inner
-		if err := p.expect(lex.TokenComma); err != nil {
-			return nil, err
-		}
-		if err := p.expect(lex.TokenLBracket); err != nil {
-			return nil, err
-		}
-		var prevToken []byte
-		tokens := make([][2]data.PlutusData, 0)
-		for p.curToken.Type != lex.TokenRBracket {
-			if len(tokens) >= maxCollectionWidth {
-				return nil, errTooMany("value token items", maxCollectionWidth)
-			}
-			if err := p.node(); err != nil {
-				return nil, err
-			}
-			if err := p.expect(lex.TokenLParen); err != nil {
-				return nil, err
-			}
-			token, err := p.parseValueBytes("token", len(tokens), prevToken)
-			if err != nil {
-				return nil, err
-			}
-			prevToken = token.Inner
-			if err := p.expect(lex.TokenComma); err != nil {
-				return nil, err
-			}
-			if p.curToken.Type != lex.TokenNumber {
-				return nil, fmt.Errorf(
-					"expected Value quantity, got %v at position %d",
-					p.curToken.Type,
-					p.curToken.Position,
-				)
-			}
-			quantity, ok := p.curToken.Value.(*big.Int)
-			if !ok {
-				return nil, fmt.Errorf(
-					"invalid Value quantity at position %d",
-					p.curToken.Position,
-				)
-			}
-			if err := data.CheckValueQuantity(len(pairs), len(tokens), quantity); err != nil {
-				return nil, err
-			}
-			p.nextToken()
-			if err := p.expect(lex.TokenRParen); err != nil {
-				return nil, err
-			}
-			tokens = append(
-				tokens,
-				[2]data.PlutusData{token, data.NewInteger(quantity)},
-			)
-			if p.curToken.Type != lex.TokenRBracket {
-				if err := p.expect(lex.TokenComma); err != nil {
-					return nil, err
-				}
-			}
-		}
-		if err := data.CheckValueTokenCount(len(pairs), len(tokens)); err != nil {
-			return nil, err
-		}
-		if err := p.expect(lex.TokenRBracket); err != nil {
-			return nil, err
-		}
-		if err := p.expect(lex.TokenRParen); err != nil {
-			return nil, err
-		}
-		pairs = append(pairs, [2]data.PlutusData{policy, data.NewMap(tokens)})
-		if p.curToken.Type != lex.TokenRBracket {
-			if err := p.expect(lex.TokenComma); err != nil {
-				return nil, err
-			}
-		}
-	}
-	if err := p.expect(lex.TokenRBracket); err != nil {
-		return nil, err
-	}
-	value, err := data.NewValue(data.WrapMap(pairs))
-	if err != nil {
-		return nil, err
-	}
-	return value, nil
-}
-
-func (p *Parser) parseValueBytes(
-	kind string,
-	index int,
-	prev []byte,
-) (*data.ByteString, error) {
-	if p.curToken.Type != lex.TokenByteString {
-		return nil, fmt.Errorf(
-			"expected Value bytestring, got %v at position %d",
-			p.curToken.Type,
-			p.curToken.Position,
-		)
-	}
-	value, ok := p.curToken.Value.([]byte)
-	if !ok {
-		return nil, fmt.Errorf(
-			"invalid Value bytestring at position %d",
-			p.curToken.Position,
-		)
-	}
-	if err := data.CheckValueKey(kind, index, value, prev); err != nil {
-		return nil, err
-	}
-	p.nextToken()
-	return &data.ByteString{Inner: value}, nil
 }
 
 func (p *Parser) parseTypeSpec() (Typ, error) {
