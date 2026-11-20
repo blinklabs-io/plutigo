@@ -1680,8 +1680,10 @@ func decodeConstantValueWithArena(
 		}
 		d.dataBytes += int64(len(cborBytes))
 		// Bytes after the first CBOR item are ignored, as the reference
-		// does (data.DecodePrefix).
-		pd, err := arena.dataDecoder.DecodePrefix(cborBytes)
+		// does (data.DecodePrefix). cborBytes is a copy in the constant
+		// arena, which is recycled with the Data values decoded from it, so
+		// their byte strings may share it.
+		pd, err := arena.dataDecoder.DecodePrefixBorrowed(cborBytes)
 		if err != nil {
 			return nil, err
 		}

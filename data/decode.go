@@ -560,6 +560,9 @@ func (d *Decoder) decodeByteStringContent(data []byte) ([]byte, []byte, error) {
 		if value > uint64(len(rest)) {
 			return nil, nil, errors.New("truncated CBOR payload")
 		}
+		if d != nil && d.borrowInput {
+			return rest[:value:value], rest[value:], nil
+		}
 		inner := d.allocBytes(int(value))
 		copy(inner, rest[:value])
 		return inner, rest[value:], nil

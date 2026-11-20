@@ -254,6 +254,9 @@ type Decoder struct {
 	bytes       arenaSlices[byte]
 	// heapBytes counts integer magnitudes allocated outside the arenas.
 	heapBytes int64
+	// borrowInput makes definite-length byte strings slices of the input
+	// instead of copies (see DecodePrefixBorrowed).
+	borrowInput bool
 }
 
 // NewDecoder returns a ready-to-use Decoder with empty internal pools.
@@ -306,6 +309,16 @@ func (d *Decoder) DecodeWithValue(data []byte) (PlutusData, error) {
 // decodes the item at the start of data and ignores any bytes after it (see
 // the package-level DecodePrefix).
 func (d *Decoder) DecodePrefix(data []byte) (PlutusData, error) {
+	return wrapDecodeError(decodePrefix(d, data))
+}
+
+// DecodePrefixBorrowed is DecodePrefix whose result may share data: each
+// definite-length byte string is a slice of data, with its capacity limited
+// to its length, rather than a copy. The caller must keep data unmodified
+// for as long as it uses the result, as it does for the Decoder's arenas.
+func (d *Decoder) DecodePrefixBorrowed(data []byte) (PlutusData, error) {
+	d.borrowInput = true
+	defer func() { d.borrowInput = false }()
 	return wrapDecodeError(decodePrefix(d, data))
 }
 
