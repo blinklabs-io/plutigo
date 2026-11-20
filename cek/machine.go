@@ -1521,11 +1521,26 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 	return m.runContext(context.Background(), false, term, nil, false)
 }
 
-// maxFlatRunSkipValidationBytes keeps RunFlat's decoder-trusted fast path
-// well below the CEK's aggregate structure-validation work cap. Collection
-// items are the densest FLAT structure, at one marker bit per item; the
-// margin also covers type tags, term nodes, and constant roots.
+// maxFlatRunSkipValidationBytes bounds the byte-based shortcut. The decoded
+// structure bound independently checks work from materialized pairs.
 const maxFlatRunSkipValidationBytes = maxDischargeWork / 64
+
+// flatRunSkipsValidation reports whether RunFlat may evaluate a program the
+// FLAT decoder returned from flatLen bytes without walking its structure
+// first. The decoder builds a well-formed, acyclic, scope-checked term
+// within the depth limit, so the walk can only fail on its node cap or
+// depth limit. Small inputs also need their decoded structure within the
+// work cap: nested pairs can expand many nodes from few bits. A larger
+// program qualifies when its structure bound (see
+// syn.DeBruijnDecoder.StructureBound) is within
+// maxDischargeDepth: the walk then visits at most that many nodes, below
+// maxDischargeWork, and no path is longer than the nodes on it. Any other
+// program is walked.
+func flatRunSkipsValidation(flatLen int, structureBound int64) bool {
+	return structureBound <= maxDischargeDepth ||
+		(flatLen <= maxFlatRunSkipValidationBytes &&
+			structureBound <= maxDischargeWork)
+}
 
 // RunFlat decodes and evaluates a FLAT-encoded De Bruijn program. The supplied
 // decoder's arenas are reused, and neither it nor the machine may be used
@@ -1533,9 +1548,9 @@ const maxFlatRunSkipValidationBytes = maxDischargeWork / 64
 // valid only until the decoder's next call.
 //
 // RunFlat checks De Bruijn scope during decoding and skips the full AST walk
-// performed by Run. Like Run, it does not perform ledger-language, builtin
-// availability, or execution-time program-version validation. Ledger callers
-// must complete those checks before evaluation.
+// only when its bounds prove the structure fits. Like Run, it does not perform
+// ledger-language, builtin-availability, or execution-time program-version
+// validation. Ledger callers must complete those checks before evaluation.
 func RunFlat(
 	machine *Machine[syn.DeBruijn],
 	decoder *syn.DeBruijnDecoder,
@@ -1566,7 +1581,7 @@ func RunFlat(
 		false,
 		program.Term,
 		nil,
-		len(flat) <= maxFlatRunSkipValidationBytes,
+		flatRunSkipsValidation(len(flat), decoder.StructureBound()),
 	)
 }
 

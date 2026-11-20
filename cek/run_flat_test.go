@@ -16,9 +16,12 @@ package cek
 
 import (
 	"bytes"
+	"errors"
 	"math/big"
+	"strings"
 	"testing"
 
+	"github.com/blinklabs-io/plutigo/data"
 	"github.com/blinklabs-io/plutigo/lang"
 	"github.com/blinklabs-io/plutigo/syn"
 )
@@ -65,45 +68,131 @@ func TestRunFlatMatchesRun(t *testing.T) {
 	}
 }
 
-func TestRunFlatUsesFullValidationForLargePrograms(t *testing.T) {
+// TestRunFlatMatchesRunForLargePrograms covers programs past the byte rule:
+// a large bytestring and a large Data constant, whose structure bounds let
+// RunFlat skip the walk, and a long bool list, which it walks.
+func TestRunFlatMatchesRunForLargePrograms(t *testing.T) {
 	value := bytes.Repeat([]byte{0x5a}, maxFlatRunSkipValidationBytes+1)
-	term := &syn.Constant{Con: &syn.ByteString{Inner: value}}
+	bools := make([]syn.IConstant, 8*maxFlatRunSkipValidationBytes/2)
+	for i := range bools {
+		bools[i] = &syn.Bool{Inner: i%2 == 0}
+	}
+	tests := []struct {
+		name     string
+		term     syn.Term[syn.DeBruijn]
+		wantSkip bool
+	}{
+		{
+			name:     "bytestring",
+			term:     &syn.Constant{Con: &syn.ByteString{Inner: value}},
+			wantSkip: true,
+		},
+		{
+			name: "bool list",
+			term: &syn.Constant{Con: syn.WrapProtoList(&syn.TBool{}, bools)},
+		},
+		{
+			name:     "data",
+			term:     &syn.Constant{Con: &syn.Data{Inner: data.NewByteString(value)}},
+			wantSkip: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			flat, err := syn.Encode(&syn.Program[syn.DeBruijn]{
+				Version: lang.LanguageVersionV3,
+				Term:    tt.term,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(flat) <= maxFlatRunSkipValidationBytes {
+				t.Fatalf(
+					"encoded program length = %d, want > %d",
+					len(flat),
+					maxFlatRunSkipValidationBytes,
+				)
+			}
+			decoder := syn.NewDeBruijnDecoder()
+			if _, err := decoder.DecodeBorrowedWithScopeCheck(flat, true); err != nil {
+				t.Fatal(err)
+			}
+			if got := flatRunSkipsValidation(len(flat), decoder.StructureBound()); got != tt.wantSkip {
+				t.Fatalf("skips validation = %v (bound %d), want %v", got, decoder.StructureBound(), tt.wantSkip)
+			}
+
+			regularMachine := newTestMachineFlow()
+			regularResult, err := regularMachine.Run(tt.term)
+			if err != nil {
+				t.Fatal(err)
+			}
+			flatMachine := newTestMachineFlow()
+			flatResult, err := RunFlat(flatMachine, decoder, flat)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, want := syn.PrettyTerm[syn.DeBruijn](flatResult), syn.PrettyTerm[syn.DeBruijn](regularResult); got != want {
+				t.Fatal("RunFlat returned a different result")
+			}
+			if flatMachine.ExBudget != regularMachine.ExBudget {
+				t.Fatalf(
+					"RunFlat remaining budget = %+v, Run remaining budget = %+v",
+					flatMachine.ExBudget,
+					regularMachine.ExBudget,
+				)
+			}
+		})
+	}
+}
+
+// TestRunFlatRejectsStructurePastWalkCap checks that a decodable program
+// whose structure exceeds the walk's node cap is still rejected: the decoder
+// counts each list item once, while the walk also counts both halves of
+// each pair.
+func TestRunFlatRejectsStructurePastWalkCap(t *testing.T) {
+	pairType := &syn.TPair{First: &syn.TInteger{}, Second: &syn.TInteger{}}
+	items := make([]syn.IConstant, maxDischargeWork/2)
+	for i := range items {
+		items[i] = &syn.ProtoPair{
+			FstType: &syn.TInteger{},
+			SndType: &syn.TInteger{},
+			First:   &syn.Integer{Inner: big.NewInt(1)},
+			Second:  &syn.Integer{Inner: big.NewInt(2)},
+		}
+	}
+	// The program discards the list and returns unit, so only the walk
+	// before evaluation sees it.
 	flat, err := syn.Encode(&syn.Program[syn.DeBruijn]{
 		Version: lang.LanguageVersionV3,
-		Term:    term,
+		Term: &syn.Apply[syn.DeBruijn]{
+			Function: &syn.Lambda[syn.DeBruijn]{Body: &syn.Constant{Con: &syn.Unit{}}},
+			Argument: &syn.Constant{Con: syn.WrapProtoList(pairType, items)},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(flat) <= maxFlatRunSkipValidationBytes {
-		t.Fatalf(
-			"encoded program length = %d, want > %d",
-			len(flat),
-			maxFlatRunSkipValidationBytes,
-		)
+	_, err = RunFlat(newTestMachineFlow(), syn.NewDeBruijnDecoder(), flat)
+	var typeErr *TypeError
+	if !errors.As(err, &typeErr) || !strings.Contains(typeErr.Message, "structure exceeds") {
+		t.Fatalf("RunFlat() error = %v, want node limit rejection", err)
 	}
+}
 
-	regularMachine := newTestMachineFlow()
-	regularResult, err := regularMachine.Run(term)
-	if err != nil {
-		t.Fatal(err)
+func TestFlatRunSkipsValidation(t *testing.T) {
+	tests := []struct {
+		flatLen int
+		bound   int64
+		want    bool
+	}{
+		{maxFlatRunSkipValidationBytes, maxDischargeWork, true},
+		{maxFlatRunSkipValidationBytes + 1, maxDischargeDepth, true},
+		{maxFlatRunSkipValidationBytes + 1, maxDischargeDepth + 1, false},
 	}
-	flatMachine := newTestMachineFlow()
-	flatResult, err := RunFlat(flatMachine, syn.NewDeBruijnDecoder(), flat)
-	if err != nil {
-		t.Fatal(err)
-	}
-	regularBytes := regularResult.(*syn.Constant).Con.(*syn.ByteString).Inner
-	flatBytes := flatResult.(*syn.Constant).Con.(*syn.ByteString).Inner
-	if !bytes.Equal(flatBytes, regularBytes) {
-		t.Fatal("RunFlat returned different bytes")
-	}
-	if flatMachine.ExBudget != regularMachine.ExBudget {
-		t.Fatalf(
-			"RunFlat remaining budget = %+v, Run remaining budget = %+v",
-			flatMachine.ExBudget,
-			regularMachine.ExBudget,
-		)
+	for _, tt := range tests {
+		if got := flatRunSkipsValidation(tt.flatLen, tt.bound); got != tt.want {
+			t.Errorf("flatRunSkipsValidation(%d, %d) = %v, want %v", tt.flatLen, tt.bound, got, tt.want)
+		}
 	}
 }
 
@@ -192,6 +281,77 @@ func TestRunFlatMatchesRunScopeRules(t *testing.T) {
 					regularMachine.ExBudget,
 					flatMachine.ExBudget,
 				)
+			}
+		})
+	}
+}
+
+func TestRunFlatRejectsRepeatedNonZeroWidthPairs(t *testing.T) {
+	var typ syn.Typ = &syn.TBool{}
+	var value syn.IConstant = &syn.Bool{Inner: true}
+	for range 240 {
+		value = &syn.ProtoPair{
+			FstType: &syn.TUnit{}, SndType: typ,
+			First: &syn.Unit{}, Second: value,
+		}
+		typ = &syn.TPair{First: &syn.TUnit{}, Second: typ}
+	}
+	for _, tc := range []struct {
+		name           string
+		width, padding int
+		exceeds        bool
+	}{
+		{"compact excess", 2300, 0, true},
+		{"padded excess", 2300, 16000, true},
+		{"compact small", 10, 0, false},
+		{"padded small", 10, 16000, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			items := make([]syn.IConstant, tc.width)
+			for i := range items {
+				items[i] = value
+			}
+			constant := &syn.ProtoPair{
+				FstType: &syn.TList{Typ: typ}, SndType: &syn.TData{},
+				First:  syn.WrapProtoList(typ, items),
+				Second: &syn.Data{Inner: data.NewByteString(make([]byte, tc.padding))},
+			}
+			flat, err := syn.Encode(&syn.Program[syn.DeBruijn]{
+				Version: lang.LanguageVersionV3,
+				Term: &syn.Apply[syn.DeBruijn]{
+					Function: &syn.Lambda[syn.DeBruijn]{Body: &syn.Constant{Con: &syn.Unit{}}},
+					Argument: &syn.Constant{Con: constant},
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (len(flat) > maxFlatRunSkipValidationBytes) != (tc.padding > 0) {
+				t.Fatalf("unexpected encoded length %d", len(flat))
+			}
+			decoder := syn.NewDeBruijnDecoder()
+			decoded, err := decoder.DecodeBorrowedWithScopeCheck(flat, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, controlErr := newTestMachineFlow().Run(decoded.Term)
+			if tc.exceeds && controlErr == nil {
+				t.Fatal("decoded control must exceed structure work cap")
+			}
+			if !tc.exceeds && controlErr != nil {
+				t.Fatal(controlErr)
+			}
+			_, err = RunFlat(newTestMachineFlow(), decoder, flat)
+			if tc.exceeds {
+				var typeErr *TypeError
+				if !errors.As(err, &typeErr) || !strings.Contains(typeErr.Message, "structure exceeds") {
+					t.Fatalf("RunFlat() error = %v, bound %d; want structure-work limit rejection", err, decoder.StructureBound())
+				}
+			} else if err != nil {
+				t.Fatalf("small pair list failed: %v", err)
+			}
+			if skipped := flatRunSkipsValidation(len(flat), decoder.StructureBound()); skipped == tc.exceeds {
+				t.Fatalf("validation skip = %v, exceeds = %v", skipped, tc.exceeds)
 			}
 		})
 	}

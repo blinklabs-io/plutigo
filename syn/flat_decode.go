@@ -150,6 +150,19 @@ func (d *DeBruijnDecoder) decodeBorrowed(
 	return program, nil
 }
 
+// StructureBound returns an upper bound on the nodes a structure walk of the
+// program last returned by DecodeBorrowed or DecodeBorrowedWithScopeCheck
+// visits: every term, counted per reference (arena nodes plus shared
+// leaves), plus a bound on the type, value and PlutusData nodes of its
+// constants (see constantStructureUnits).
+// The bound is also an upper bound on the depth of any path through the
+// program, which is acyclic. It is meaningful only after a successful
+// decode.
+func (d *DeBruijnDecoder) StructureBound() int64 {
+	terms := d.arena.terms() + d.decoder.sharedLeaves
+	return int64(terms) + d.decoder.constantUnits
+}
+
 // DeBruijnScopeError reports a variable index that is not bound at its
 // lexical scope in a decoded program.
 type DeBruijnScopeError struct {
@@ -1554,6 +1567,8 @@ func decodeConstantWithArena(
 	d *decoder,
 	arena *constantArena,
 ) (IConstant, error) {
+	startBits := d.bitPosition()
+	startDataBytes := d.dataBytes
 	var tags constantTagSeq
 	err := decodeConstantTags(d, &tags)
 	if err != nil {
@@ -1566,7 +1581,34 @@ func decodeConstantWithArena(
 	if err := d.checkConstantTypeSize(typ); err != nil {
 		return nil, err
 	}
-	return decodeConstantValueWithArena(d, typ, arena)
+	value, err := decodeConstantValueWithArena(d, typ, arena)
+	if err != nil {
+		return nil, err
+	}
+	d.constantUnits += constantStructureUnits(
+		typ,
+		d.bitPosition()-startBits,
+		d.dataBytes-startDataBytes,
+	)
+	return value, nil
+}
+
+// constantStructureUnits bounds encoded constant structure apart from pair
+// child edges, which decoding charges directly. Every PlutusData node uses
+// at least one CBOR byte. Outside Data, list markers and type tags account
+// for references, types and scalar values; eight nodes per bit bounds them.
+// Shared zero-width pair trees are covered by their encoded types.
+func constantStructureUnits(typ Typ, bits, dataBytes int64) int64 {
+	switch typ.(type) {
+	case *TList, *TArray, *TPair, *TValue:
+		return 1 + 8*(bits-8*dataBytes) + dataBytes
+	}
+	return 1 + dataBytes
+}
+
+// bitPosition is the number of input bits consumed so far.
+func (d *decoder) bitPosition() int64 {
+	return int64(d.pos)*8 + d.usedBits
 }
 
 func decodeConstantValueWithArena(
@@ -1621,6 +1663,9 @@ func decodeConstantValueWithArena(
 		if err != nil {
 			return nil, err
 		}
+		// A non-zero-width pair can expand from very few bits per list item.
+		// Charge its child edges directly; shared pairs return above.
+		d.constantUnits += 2
 		pair := arena.allocProtoPair(t.First, t.Second, first, second)
 		d.memoizeZeroWidth(t, pair)
 		return pair, nil
@@ -1629,9 +1674,12 @@ func decodeConstantValueWithArena(
 		if err != nil {
 			return nil, err
 		}
+		d.dataBytes += int64(len(cborBytes))
 		// Bytes after the first CBOR item are ignored, as the reference
-		// does (data.DecodePrefix).
-		pd, err := arena.dataDecoder.DecodePrefix(cborBytes)
+		// does (data.DecodePrefix). cborBytes is a copy in the constant
+		// arena, which is recycled with the Data values decoded from it, so
+		// their byte strings may share it.
+		pd, err := arena.dataDecoder.DecodePrefixBorrowed(cborBytes)
 		if err != nil {
 			return nil, err
 		}
@@ -2192,6 +2240,11 @@ type decoder struct {
 	// Terms consume four tag bits and collection items consume a one-bit
 	// marker, so inputs this small cannot decode more than maxProgramNodes.
 	skipNodeLimit bool
+	// constantUnits and dataBytes bound the structure in the constants
+	// decoded so far (see constantStructureUnits); dataBytes is the length
+	// of every Data constant's CBOR encoding.
+	constantUnits int64
+	dataBytes     int64
 	// zeroWidth memoizes the value of every zero-width pair type (one built
 	// solely from unit and pair) of the constant being decoded. Such a value
 	// occupies no bits, so without the memo a list of them would rebuild the
