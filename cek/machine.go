@@ -1527,6 +1527,21 @@ func (m *Machine[T]) Run(term syn.Term[T]) (syn.Term[T], error) {
 // margin also covers type tags, term nodes, and constant roots.
 const maxFlatRunSkipValidationBytes = maxDischargeWork / 64
 
+// flatRunSkipsValidation reports whether RunFlat may evaluate a program the
+// FLAT decoder returned from flatLen bytes without walking its structure
+// first. The decoder builds a well-formed, acyclic, scope-checked term
+// within the depth limit, so the walk can only fail on its node cap or
+// depth limit. Inputs of at most maxFlatRunSkipValidationBytes cannot
+// decode enough structure to reach either. A larger program qualifies when
+// its structure bound (see syn.DeBruijnDecoder.StructureBound) is within
+// maxDischargeDepth: the walk then visits at most that many nodes, below
+// maxDischargeWork, and no path is longer than the nodes on it. Any other
+// program is walked.
+func flatRunSkipsValidation(flatLen int, structureBound int64) bool {
+	return flatLen <= maxFlatRunSkipValidationBytes ||
+		structureBound <= maxDischargeDepth
+}
+
 // RunFlat decodes and evaluates a FLAT-encoded De Bruijn program. The supplied
 // decoder's arenas are reused, and neither it nor the machine may be used
 // concurrently. The returned term may reference decoder-owned data and is
@@ -1566,7 +1581,7 @@ func RunFlat(
 		false,
 		program.Term,
 		nil,
-		len(flat) <= maxFlatRunSkipValidationBytes,
+		flatRunSkipsValidation(len(flat), decoder.StructureBound()),
 	)
 }
 
