@@ -263,23 +263,23 @@ func decodeItem(
 				}
 			}
 			if done {
+				// closeFrame copies the children out of values, and values
+				// is local to this call, so the popped slots need no clearing.
 				value, rest, err = d.closeFrame(top, values[top.start:], rest)
 				if err != nil {
 					return nil, nil, err
 				}
-				clear(values[top.start:])
 				values = values[:top.start]
 				frames = frames[:n-1]
 			}
 		}
 		if value == nil {
 			var frame decodeFrame
-			var opened bool
-			value, frame, opened, rest, err = d.decodeHead(rest, allowValue)
+			value, rest, err = d.decodeHead(rest, allowValue, &frame)
 			if err != nil {
 				return nil, nil, err
 			}
-			if opened {
+			if value == nil {
 				frame.start = len(values)
 				frames = append(frames, frame)
 				continue
@@ -296,112 +296,128 @@ func decodeItem(
 }
 
 // decodeHead decodes the item at the start of data. A leaf is returned as
-// value; a container head is returned as an open frame for the caller to
-// push, with opened set.
+// value. A container head returns a nil value and fills frame with the open
+// container for the caller to push; frame is passed in rather than returned
+// so that the results fit in registers.
 func (d *Decoder) decodeHead(
 	data []byte,
 	allowValue bool,
-) (PlutusData, decodeFrame, bool, []byte, error) {
-	var frame decodeFrame
+	frame *decodeFrame,
+) (PlutusData, []byte, error) {
 	if len(data) == 0 {
-		return nil, frame, false, nil, errors.New("empty data")
+		return nil, nil, errors.New("empty data")
 	}
 	switch data[0] & CborTypeMask {
 	case CborTypeArray:
 		count, rest, indef, err := decodeCBORArray(data)
 		if err != nil {
-			return nil, frame, false, nil, err
+			return nil, nil, err
 		}
-		frame, err = openSequence(frameList, count, indef, rest)
-		return nil, frame, err == nil, rest, err
+		if err := openSequence(frameList, count, indef, rest, frame); err != nil {
+			return nil, nil, err
+		}
+		return nil, rest, nil
 	case CborTypeMap:
-		frame, rest, err := openMap(frameMap, data)
-		return nil, frame, err == nil, rest, err
+		rest, err := openMap(frameMap, data, frame)
+		return nil, rest, err
 	case CborTypeTag:
 		tag, content, err := decodeCBORTag(data)
 		if err != nil {
-			return nil, frame, false, nil, err
+			return nil, nil, err
 		}
 		switch {
 		case isConstrTag(tag):
-			frame, rest, err := openConstr(tag, content)
-			return nil, frame, err == nil, rest, err
+			rest, err := openConstr(tag, content, frame)
+			return nil, rest, err
 		case tag == valueCBORTag && allowValue:
-			frame, rest, err := openMap(frameValue, content)
-			return nil, frame, err == nil, rest, err
+			rest, err := openMap(frameValue, content, frame)
+			return nil, rest, err
 		case isBignumHead(data[0]):
 			value, rest, err := d.decodeBignum(tag, content)
-			return value, frame, false, rest, err
+			if err != nil {
+				return nil, nil, err
+			}
+			return value, rest, nil
 		default:
-			return nil, frame, false, nil, fmt.Errorf(
+			return nil, nil, fmt.Errorf(
 				"unknown CBOR tag for PlutusData: %d",
 				tag,
 			)
 		}
 	case CborTypeUnsignedInt, CborTypeNegativeInt:
 		value, rest, err := d.decodeSmallInteger(data)
-		return value, frame, false, rest, err
+		if err != nil {
+			return nil, nil, err
+		}
+		return value, rest, nil
 	case CborTypeByteString:
 		inner, rest, err := d.decodeByteStringContent(data)
 		if err != nil {
-			return nil, frame, false, nil, err
+			return nil, nil, err
 		}
-		return d.allocByteString(inner), frame, false, rest, nil
+		return d.allocByteString(inner), rest, nil
 	default:
 		if data[0] == 0xff {
-			return nil, frame, false, nil, errors.New("unexpected CBOR break")
+			return nil, nil, errors.New("unexpected CBOR break")
 		}
-		return nil, frame, false, nil, fmt.Errorf(
+		return nil, nil, fmt.Errorf(
 			"unsupported CBOR major type 0x%02x for PlutusData",
 			data[0]&CborTypeMask,
 		)
 	}
 }
 
-// openSequence opens a list-like container of count items (indef: ended by a
-// break) whose items start at rest.
+// openSequence opens, in frame, a list-like container of count items
+// (indef: ended by a break) whose items start at rest.
 func openSequence(
 	kind uint8,
 	count int,
 	indef bool,
 	rest []byte,
-) (decodeFrame, error) {
+	frame *decodeFrame,
+) error {
 	if indef {
-		return decodeFrame{kind: kind, indef: true, remaining: -1}, nil
+		*frame = decodeFrame{kind: kind, indef: true, remaining: -1}
+		return nil
 	}
 	// Each item needs at least 1 byte for a CBOR head.
 	if count > len(rest) {
-		return decodeFrame{}, fmt.Errorf(
+		return fmt.Errorf(
 			"CBOR array claims %d items but only %d bytes remain",
 			count,
 			len(rest),
 		)
 	}
-	return decodeFrame{kind: kind, remaining: count}, nil
+	*frame = decodeFrame{kind: kind, remaining: count}
+	return nil
 }
 
-// openMap opens the map at the start of data as a frame of the given kind.
-func openMap(kind uint8, data []byte) (decodeFrame, []byte, error) {
+// openMap opens, in frame, the map at the start of data as a container of
+// the given kind.
+func openMap(kind uint8, data []byte, frame *decodeFrame) ([]byte, error) {
 	pairCount, rest, indef, err := decodeCBORMap(data)
 	if err != nil {
-		return decodeFrame{}, nil, err
+		return nil, err
 	}
 	if indef {
-		return decodeFrame{kind: kind, indef: true, remaining: -1}, rest, nil
+		*frame = decodeFrame{kind: kind, indef: true, remaining: -1}
+		return rest, nil
 	}
 	// Each pair needs at least 2 bytes (one per key/value CBOR head).
 	if pairCount > len(rest)/2 {
-		return decodeFrame{}, nil, fmt.Errorf(
+		return nil, fmt.Errorf(
 			"CBOR map claims %d pairs but only %d bytes remain",
 			pairCount,
 			len(rest),
 		)
 	}
-	return decodeFrame{kind: kind, remaining: pairCount * 2}, rest, nil
+	*frame = decodeFrame{kind: kind, remaining: pairCount * 2}
+	return rest, nil
 }
 
-// openConstr opens the constructor whose tag content starts at data.
-func openConstr(tag uint64, data []byte) (decodeFrame, []byte, error) {
+// openConstr opens, in frame, the constructor whose tag content starts at
+// data.
+func openConstr(tag uint64, data []byte, frame *decodeFrame) ([]byte, error) {
 	var (
 		alternative uint64
 		outerIndef  bool
@@ -414,31 +430,30 @@ func openConstr(tag uint64, data []byte) (decodeFrame, []byte, error) {
 	default: // 102: [alternative, fields]
 		fieldCount, rest, indef, err := decodeCBORArray(data)
 		if err != nil {
-			return decodeFrame{}, nil, err
+			return nil, err
 		}
 		if !indef && fieldCount != 2 {
-			return decodeFrame{}, nil, fmt.Errorf(
+			return nil, fmt.Errorf(
 				"constructor 102 outer array has %d items, want 2",
 				fieldCount,
 			)
 		}
 		alternative, data, err = decodeCBORUint(rest)
 		if err != nil {
-			return decodeFrame{}, nil, err
+			return nil, err
 		}
 		outerIndef = indef
 	}
 	count, rest, indef, err := decodeCBORArray(data)
 	if err != nil {
-		return decodeFrame{}, nil, err
+		return nil, err
 	}
-	frame, err := openSequence(frameConstr, count, indef, rest)
-	if err != nil {
-		return decodeFrame{}, nil, err
+	if err := openSequence(frameConstr, count, indef, rest, frame); err != nil {
+		return nil, err
 	}
 	frame.tag = alternative
 	frame.outerIndef = outerIndef
-	return frame, rest, nil
+	return rest, nil
 }
 
 // closeFrame builds the container of a completed frame from its decoded
