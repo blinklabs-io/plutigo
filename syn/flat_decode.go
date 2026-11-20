@@ -1593,18 +1593,11 @@ func decodeConstantWithArena(
 	return value, nil
 }
 
-// constantStructureUnits bounds the nodes a structure walk visits in one
-// decoded constant of type typ whose encoding (type tags and value) took
-// bits, of which dataBytes bytes are Data constants' CBOR. The walk visits
-// the constant once and each type node, value node and PlutusData node below
-// it at most once per reference; every PlutusData node takes at least one
-// CBOR byte. A scalar constant is one node; the walk does not visit its
-// type. In a
-// composite constant the densest encoding outside Data is a list item, at
-// one marker bit each, and every type tag takes four bits, so eight nodes
-// per remaining bit is a generous bound: a list item is one reference, and a
-// zero-width value an item may share is counted once and is no larger than
-// its type.
+// constantStructureUnits bounds encoded constant structure apart from pair
+// child edges, which decoding charges directly. Every PlutusData node uses
+// at least one CBOR byte. Outside Data, list markers and type tags account
+// for references, types and scalar values; eight nodes per bit bounds them.
+// Shared zero-width pair trees are covered by their encoded types.
 func constantStructureUnits(typ Typ, bits, dataBytes int64) int64 {
 	switch typ.(type) {
 	case *TList, *TArray, *TPair, *TValue:
@@ -1670,6 +1663,9 @@ func decodeConstantValueWithArena(
 		if err != nil {
 			return nil, err
 		}
+		// A non-zero-width pair can expand from very few bits per list item.
+		// Charge its child edges directly; shared pairs return above.
+		d.constantUnits += 2
 		pair := arena.allocProtoPair(t.First, t.Second, first, second)
 		d.memoizeZeroWidth(t, pair)
 		return pair, nil

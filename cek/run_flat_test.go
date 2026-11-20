@@ -285,3 +285,74 @@ func TestRunFlatMatchesRunScopeRules(t *testing.T) {
 		})
 	}
 }
+
+func TestRunFlatRejectsRepeatedNonZeroWidthPairs(t *testing.T) {
+	var typ syn.Typ = &syn.TBool{}
+	var value syn.IConstant = &syn.Bool{Inner: true}
+	for range 240 {
+		value = &syn.ProtoPair{
+			FstType: &syn.TUnit{}, SndType: typ,
+			First: &syn.Unit{}, Second: value,
+		}
+		typ = &syn.TPair{First: &syn.TUnit{}, Second: typ}
+	}
+	for _, tc := range []struct {
+		name           string
+		width, padding int
+		exceeds        bool
+	}{
+		{"compact excess", 2300, 0, true},
+		{"padded excess", 2300, 16000, true},
+		{"compact small", 10, 0, false},
+		{"padded small", 10, 16000, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			items := make([]syn.IConstant, tc.width)
+			for i := range items {
+				items[i] = value
+			}
+			constant := &syn.ProtoPair{
+				FstType: &syn.TList{Typ: typ}, SndType: &syn.TData{},
+				First:  syn.WrapProtoList(typ, items),
+				Second: &syn.Data{Inner: data.NewByteString(make([]byte, tc.padding))},
+			}
+			flat, err := syn.Encode(&syn.Program[syn.DeBruijn]{
+				Version: lang.LanguageVersionV3,
+				Term: &syn.Apply[syn.DeBruijn]{
+					Function: &syn.Lambda[syn.DeBruijn]{Body: &syn.Constant{Con: &syn.Unit{}}},
+					Argument: &syn.Constant{Con: constant},
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (len(flat) > maxFlatRunSkipValidationBytes) != (tc.padding > 0) {
+				t.Fatalf("unexpected encoded length %d", len(flat))
+			}
+			decoder := syn.NewDeBruijnDecoder()
+			decoded, err := decoder.DecodeBorrowedWithScopeCheck(flat, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, controlErr := newTestMachineFlow().Run(decoded.Term)
+			if tc.exceeds && controlErr == nil {
+				t.Fatal("decoded control must exceed structure work cap")
+			}
+			if !tc.exceeds && controlErr != nil {
+				t.Fatal(controlErr)
+			}
+			_, err = RunFlat(newTestMachineFlow(), decoder, flat)
+			if tc.exceeds {
+				var typeErr *TypeError
+				if !errors.As(err, &typeErr) || !strings.Contains(typeErr.Message, "structure exceeds") {
+					t.Fatalf("RunFlat() error = %v, bound %d; want structure-work limit rejection", err, decoder.StructureBound())
+				}
+			} else if err != nil {
+				t.Fatalf("small pair list failed: %v", err)
+			}
+			if skipped := flatRunSkipsValidation(len(flat), decoder.StructureBound()); skipped == tc.exceeds {
+				t.Fatalf("validation skip = %v, exceeds = %v", skipped, tc.exceeds)
+			}
+		})
+	}
+}
